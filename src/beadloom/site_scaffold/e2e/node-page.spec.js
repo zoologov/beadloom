@@ -10,12 +10,14 @@ import {
   flaggedIds,
   fullscreenView,
   openArchitecture,
+  openEveryBox,
   parentMap,
   viewer,
   waitForViewer,
   withAncestors,
 } from "./support/viewer.js";
 import { neighbourhood } from "./support/graph.js";
+import { gesturesOnALeaf, pressEveryToolbarButton } from "./support/pointer.js";
 import { requireShape } from "./support/shape.js";
 
 const CARD = "[data-testid='node-card']";
@@ -139,6 +141,8 @@ test("a filter on a node page keeps what it keeps on the architecture page", asy
 
   await page.goto(pageOf(node));
   await waitForViewer(page);
+  // What the filter keeps, over the whole graph: every box open (`filters.spec.js`).
+  await openEveryBox(page);
   await page.getByLabel("Only flagged", { exact: true }).check();
 
   await expect.poll(() => viewer(page, "visibleIds")).toEqual(
@@ -190,10 +194,7 @@ test("a node page's toolbar offers every control the architecture page's toolbar
   expect(await toolbarControls(page)).toEqual(onArchitecturePage);
 });
 
-test("on a node page the navigation buttons zoom and fit, and Arrange turns node dragging on", async ({
-  page,
-  request,
-}) => {
+test("on a node page the navigation buttons zoom and fit", async ({ page, request }) => {
   const data = await architectureData(request);
   const node = subjectOf(data, "/domains/");
   await page.goto(pageOf(node));
@@ -207,11 +208,24 @@ test("on a node page the navigation buttons zoom and fit, and Arrange turns node
   const zoomedIn = await rounded();
   await fit.click();
   const refitted = await rounded();
-  await page.getByRole("button", { name: "Arrange", exact: true }).click();
 
-  expect({ zoomedIn: zoomedIn > fitted, refitted, arranging: await viewer(page, "arranging") }).toEqual({
-    zoomedIn: true,
-    refitted: fitted,
-    arranging: true,
+  expect({ zoomedIn: zoomedIn > fitted, refitted }).toEqual({ zoomedIn: true, refitted: fitted });
+});
+
+test("on a node page a drag and a long press on a node pan the view and move no node, whatever toolbar button was pressed", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  await page.goto(pageOf(subjectOf(data, "/domains/")));
+  await waitForViewer(page);
+  await page.getByTestId("graph-canvas").scrollIntoViewIfNeeded();
+  expect(await pressEveryToolbarButton(page)).toBeGreaterThan(3);
+
+  const outcomes = await gesturesOnALeaf(page);
+  expect(outcomes, "a leaf node the pointer reaches").not.toBeNull();
+  expect(outcomes).toEqual({
+    drag: { moved: [], panned: true },
+    "long press": { moved: [], panned: true },
   });
 });

@@ -2,10 +2,7 @@
 // beadloom:component=site-navigate-graph
 // The navigation buttons of the viewer's toolbar.
 
-defineProps({
-  arranging: { type: Boolean, default: false },
-});
-const emit = defineEmits(["zoom-in", "zoom-out", "fit", "centre", "arrange"]);
+const emit = defineEmits(["zoom-in", "zoom-out", "fit", "centre"]);
 </script>
 
 <template>
@@ -15,16 +12,6 @@ const emit = defineEmits(["zoom-in", "zoom-out", "fit", "centre", "arrange"]);
     <button type="button" aria-label="Fit" title="Fit the visible graph (0)" @click="emit('fit')">Fit</button>
     <button type="button" aria-label="Centre" title="Centre on the selection" @click="emit('centre')">
       Centre
-    </button>
-    <button
-      type="button"
-      aria-label="Arrange"
-      title="Arrange: drag nodes to move them"
-      :aria-pressed="arranging"
-      :class="{ 'bl-nav-on': arranging }"
-      @click="emit('arrange')"
-    >
-      Arrange
     </button>
   </div>
 </template>
@@ -47,9 +34,5 @@ const emit = defineEmits(["zoom-in", "zoom-out", "fit", "centre", "arrange"]);
 }
 .bl-nav button:hover {
   border-color: var(--vp-c-brand-1);
-}
-.bl-nav .bl-nav-on {
-  border-color: var(--vp-c-brand-1);
-  color: var(--vp-c-brand-1);
 }
 </style>

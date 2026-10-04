@@ -1,26 +1,27 @@
-"""Guard the site viz dev/runtime dependency contract (BDL-060 S4 ext).
+"""Guard the site viz dev/runtime dependency contract (BDL-060 S4 ext, BDL-077 E1).
 
-The interactive maps (LandscapeMap / ArchitectureMap) render with Cytoscape +
-`cytoscape-elk`, and `cytoscape-elk` pulls in `elkjs`, whose layout runs in a
-**web worker**. A prior slice shipped a viz that built fine (`docs:build` green)
-yet crashed under the VitePress **dev** server because the worker dependency
-(`web-worker`) was not declared — `docs:build` alone masked it.
+The interactive maps (LandscapeMap / ArchitectureMap) render with Cytoscape and
+are laid out by elkjs, called directly in a Web Worker of the theme's own
+(``shared/elk``). Until BDL-077 E1 the layout came through ``cytoscape-elk``,
+which ran a nested elkjs 0.9.3 of its own on the page's main thread and needed
+``web-worker`` declared for the VitePress dev server; both are gone.
 
-These are the cheap structural guards that catch that class WITHOUT needing node
-(the full `docs:build` + dev-server boot are run in the slice's VERIFY step):
+These are the cheap structural guards that catch a regression in that wiring
+WITHOUT needing node (``docs:build``, the dev-server boot and the browser cases
+under ``site/e2e/`` drive the behaviour):
 
-1. Every runtime dependency the viz worker path needs is declared in
-   ``site/package.json`` (``cytoscape`` / ``cytoscape-elk`` / ``elkjs`` /
-   ``web-worker``) — the exact gap the dev-only crash slipped through.
-2. Every relative import in the committed theme points at a file that exists
+1. Every runtime dependency the viz needs is declared (``cytoscape``, ``elkjs``),
+   ``cytoscape-elk`` is not, the lockfile holds exactly one elkjs, the pinned one,
+   and the theme loads elkjs from its worker alone, so that one is the one that runs.
+2. The layout runs in a worker Vite bundles: the worker module loads elkjs's own
+   worker script, and the client names it the way Vite recognises.
+3. Every relative import in the committed theme points at a file that exists
    (a broken relative import is a build/runtime crash, not a Python failure).
 
 BDL-076 A2 moved the theme into Feature-Sliced Design layers, so the structural
-guards below name the slice that now holds each piece of wiring. The behaviour
-itself is driven in a browser by the Playwright cases under ``site/e2e/``; these
-guards only catch a regression that drops the wiring, and each one FAILS rather
-than skips when its file is missing, because a skipped guard over a moved file
-reads exactly like a passing one.
+guards below name the slice that now holds each piece of wiring. Each one FAILS
+rather than skips when its file is missing, because a skipped guard over a moved
+file reads exactly like a passing one.
 """
 
 from __future__ import annotations
@@ -41,9 +42,12 @@ if TYPE_CHECKING:
 _SITE = _REPO_ROOT / "src" / "beadloom" / "site_scaffold"
 _THEME = _SITE / ".vitepress" / "theme"
 
-# The deps the Cytoscape+ELK viz needs at runtime — INCLUDING `web-worker`, the
-# elkjs worker shim whose absence was the dev-only crash `docs:build` masked.
-_REQUIRED_VIZ_DEPS = ("cytoscape", "cytoscape-elk", "elkjs", "web-worker")
+# The deps the Cytoscape + ELK viz needs at runtime.
+_REQUIRED_VIZ_DEPS = ("cytoscape", "elkjs")
+# The adapter that ran a nested elkjs of its own on the main thread (`beadloom-f2we`).
+_RETIRED_VIZ_DEPS = ("cytoscape-elk",)
+# A module specifier that names elkjs or a file of it, in either kind of quote.
+_ELKJS_SPECIFIER = re.compile(r"""["'](elkjs(?:/[^"']*)?)["']""")
 
 
 def _package_json() -> dict[str, object]:
@@ -53,20 +57,57 @@ def _package_json() -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def test_viz_worker_deps_declared() -> None:
-    """Every Cytoscape+ELK worker-path dependency is declared (incl. web-worker)."""
+def _declared() -> dict[str, object]:
     pkg = _package_json()
-    deps = {}
+    deps: dict[str, object] = {}
     for section in ("dependencies", "devDependencies"):
         block = pkg.get(section)
         if isinstance(block, dict):
             deps.update(block)
+    return deps
+
+
+def test_viz_deps_declared() -> None:
+    """Every runtime dependency of the viz is declared, and the retired adapter is not."""
+    deps = _declared()
     missing = [d for d in _REQUIRED_VIZ_DEPS if d not in deps]
     assert not missing, (
-        f"the scaffold's package.json is missing viz worker deps {missing}; "
+        f"the scaffold's package.json is missing viz deps {missing}; "
         "this is the class of gap that crashed the dev server while docs:build "
         "stayed green (BDL-060 S4)."
     )
+    retired = [d for d in _RETIRED_VIZ_DEPS if d in deps]
+    assert not retired, f"{retired} is declared again; the viewer calls elkjs directly"
+
+
+def test_the_lock_holds_one_elkjs_the_pinned_one() -> None:
+    """No package brings an elkjs of its own: the layout the viewer runs is the pinned one."""
+    lock = json.loads((_SITE / "package-lock.json").read_text(encoding="utf-8"))
+    elkjs = {
+        path: entry.get("version")
+        for path, entry in lock["packages"].items()
+        if path.split("node_modules/")[-1] == "elkjs"
+    }
+    assert elkjs == {"node_modules/elkjs": _declared()["elkjs"]}
+
+
+def test_the_layout_runs_in_a_worker_vite_bundles() -> None:
+    """The worker loads elkjs's worker script; the client names it the way Vite bundles it."""
+    worker = _read("shared/elk/elk.worker.js")
+    assert 'import "elkjs/lib/elk-worker.min.js";' in worker
+    client = _read("shared/elk/layOut.js")
+    assert 'new Worker(new URL("./elk.worker.js", import.meta.url), { type: "module" })' in client
+
+
+def test_the_theme_reaches_elkjs_only_through_its_worker() -> None:
+    """The one elkjs the lock holds is the one that runs: no other module loads a build of it."""
+    importers = {
+        path.relative_to(_THEME).as_posix(): specifiers
+        for path in _theme_sources()
+        if (specifiers := _ELKJS_SPECIFIER.findall(path.read_text(encoding="utf-8")))
+    }
+
+    assert importers == {"shared/elk/elk.worker.js": ["elkjs/lib/elk-worker.min.js"]}
 
 
 def _local_imports(source: str) -> list[str]:
@@ -117,13 +158,22 @@ def test_architecture_component_registered_in_theme() -> None:
 
 def test_the_layout_hands_each_node_its_lane() -> None:
     """ELK partitioning is on, and each node's layer rank reaches ELK as its partition."""
-    layout = _read("shared/cytoscape/layout.js")
+    layout = _read("shared/elk/graph.js")
     assert '"elk.partitioning.activate": "true"' in layout
     assert '"elk.direction": "DOWN"' in layout
-    assert "nodeLayoutOptions: laneOf" in layout
+    assert "layoutOptions: laneOf(node)" in layout
     assert '"elk.partitioning.partition"' in layout
     elements = _read("widgets/graph-viewer/lib/elements.js")
     assert "data.partition = node.layer_rank" in elements
+    canvas = _read("widgets/graph-viewer/model/canvasLayout.js")
+    assert 'partition: node.data("partition")' in canvas
+
+
+def test_the_layout_answers_in_root_coordinates() -> None:
+    """Every box and every edge section comes back absolute, not relative to its container."""
+    layout = _read("shared/elk/graph.js")
+    assert '"elk.json.shapeCoords": "ROOT"' in layout
+    assert '"elk.json.edgeCoords": "ROOT"' in layout
 
 
 def test_no_css_variable_reaches_cytoscape() -> None:

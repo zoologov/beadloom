@@ -11,6 +11,26 @@
 // and the entities it draws. Everything it shows comes from the data file; the
 // mode supplies the filters in its slot of the toolbar.
 //
+// ELK lays the graph out in a Web Worker. Until it answers, the canvas says it is
+// laying the graph out and the toolbar keeps working; a layout that fails is
+// reported above the canvas, as a data file that cannot be read is, with what
+// failed. No node of a graph that was not laid out has a place, so its canvas
+// stays hidden and the controls that act on the graph are turned off; the
+// panel and full screen act on the viewer and stay on.
+//
+// A node's edges are drawn bundled, several along one line. When the pointer is
+// on a line that more than one edge runs along, a note over the canvas names
+// them, since the line alone cannot say which edges it carries. A highlighted
+// edge — under the pointer, or on a selection's walk — hops over every other
+// edge it crosses, so it can be followed through a busy area.
+//
+// The graph is drawn like a map (`lib/levels.js`): at the whole-graph fit the
+// boxes at the top and one aggregated edge per pair of them, more detail where
+// the reader zooms in. A selection opens the boxes that hold its node, and those
+// of every node its walk reaches unless the node is a hub selected with nothing
+// more asked; a search opens the boxes that hold what it finds. The pointer on an
+// aggregated edge names how many edges it carries each way.
+//
 // The toolbar, the canvas, the panel and the legend are all inside one root
 // element, and that element is what goes full screen, so full screen and the
 // embedded view are one UI. The panel shows what the page puts in its `panel`
@@ -57,6 +77,7 @@ import { withAncestors } from "../../../shared/lib/index.js";
 import { useThemeTokens } from "../../../shared/theme-tokens/index.js";
 import { buildElements } from "../lib/elements.js";
 import { buildStylesheet } from "../lib/stylesheet.js";
+import { AGGREGATE, selectionReveals } from "../lib/levels.js";
 import { useGraphCanvas } from "../model/useGraphCanvas.js";
 import { keyHandler } from "../model/viewerKeys.js";
 import { exposeTestHandle } from "../model/testHandle.js";
@@ -65,6 +86,8 @@ import { DEFAULT_MODE, modeOf } from "../model/modes.js";
 
 /** The selection's value for the neighbourhood, the default; the other is `IMPACT_VIEW`. */
 const NEIGHBOURHOOD_VIEW = "neighbourhood";
+/** How many edges along a hovered line the note names before it counts the rest. */
+const NAMED_EDGES = 8;
 
 const props = defineProps({
   mode: { type: String, default: DEFAULT_MODE },
@@ -119,6 +142,18 @@ const dependents = computed(() =>
   mode.impact ? dependentsOf(edges.value, mode.impact.dependentEnds, ids.value) : new Map()
 );
 const impactMode = computed(() => Boolean(mode.impact) && state.view === IMPACT_VIEW);
+// Whether the reader asked the neighbourhood for nothing more than a selection gives.
+const neutralNeighbourhood = computed(
+  () =>
+    state.depth === NEIGHBOURHOOD_DEFAULTS.depth &&
+    state.dir === NEIGHBOURHOOD_DEFAULTS.dir &&
+    Boolean(state.hide) === NEIGHBOURHOOD_DEFAULTS.hide
+);
+// How many drawn edges a node has: a hub's walk opens only its own boxes.
+const degreeOf = (id) =>
+  (drawnAdjacency.value.out.get(id)?.length || 0) + (drawnAdjacency.value.in.get(id)?.length || 0);
+// What the search box finds, whose boxes it opens.
+const searched = computed(() => mode.searched(graph.value, state));
 
 // The walk from the selected node, or null when nothing is selected.
 const walk = computed(() => {
@@ -150,6 +185,10 @@ const selection = computed(() => {
       ? new Map([...distances].map(([id, distance]) => [id, ringOf(distance)]))
       : null,
     risks: summary.value ? new Set(summary.value.risky.map((entry) => entry.id)) : null,
+    reveal: selectionReveals(state.focus, [...distances.keys()], {
+      degree: degreeOf(state.focus),
+      wholeWalk: impactMode.value || !neutralNeighbourhood.value,
+    }),
   };
 });
 
@@ -184,6 +223,8 @@ function toggleImpact() {
 
 const canvas = useGraphCanvas(container, {
   options: NAVIGATION_OPTIONS,
+  fitZoom: () => navigation.fitZoom(),
+  background: () => tokens.value?.bg,
   onNodeTap: (id) => {
     select(id, { frame: false });
     focusCanvas();
@@ -193,6 +234,37 @@ const canvas = useGraphCanvas(container, {
     focusCanvas();
   },
 });
+// Until ELK has placed the nodes, every one stands at one point: the canvas is not shown.
+const unplaced = computed(() => canvas.layingOut.value || Boolean(canvas.layoutError.value));
+// The graph could not be laid out: there is nothing to zoom, filter or walk.
+const graphControlsOff = computed(() => Boolean(canvas.layoutError.value));
+// The edges along the line under the pointer, named, when the line carries more than one.
+const bundleNote = computed(() => {
+  const ids = canvas.hoveredEdges.value;
+  const instance = canvas.cy.value;
+  if (ids.length < 2 || !instance) return "";
+  const labelOf = (id) => nodeById.value.get(id)?.label || id;
+  const named = ids.slice(0, NAMED_EDGES).map((id) => {
+    const edge = instance.getElementById(id);
+    return `${labelOf(edge.data("source"))} → ${labelOf(edge.data("target"))}`;
+  });
+  const rest = ids.length - named.length;
+  return `${ids.length} edges along this line: ${named.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}`;
+});
+// The edges an aggregated edge under the pointer carries, each way, named by its two ends.
+const aggregateNote = computed(() => {
+  const ids = canvas.hoveredEdges.value;
+  const instance = canvas.cy.value;
+  if (ids.length !== 1 || !instance) return "";
+  const edge = instance.getElementById(ids[0]);
+  if (edge.empty() || !edge.data(AGGREGATE)) return "";
+  const labelOf = (id) => nodeById.value.get(id)?.label || id;
+  const way = (count, from, to) =>
+    count ? `${count} ${count === 1 ? "edge" : "edges"} ${labelOf(from)} → ${labelOf(to)}` : "";
+  const [a, b] = [edge.data("source"), edge.data("target")];
+  return [way(edge.data("forward"), a, b), way(edge.data("backward"), b, a)].filter(Boolean).join("; ");
+});
+
 // How much of the canvas's right edge the panel lies over: in the page it
 // overlays the canvas, in full screen it sits beside it and covers nothing.
 function coveredRight() {
@@ -208,9 +280,9 @@ const navigation = useGraphNavigation(() => canvas.cy.value, {
   getInset: () => ({ right: coveredRight() }),
 });
 
-/** Fit the selection's walk when there is one, else everything visible. */
+/** Fit the selection's walk, with the closed boxes that hold part of it, when there is one; else everything visible. */
 function frameSelection() {
-  nextTick(() => navigation.fit(selection.value ? ".in-walk" : undefined));
+  nextTick(() => navigation.fit(selection.value ? ".in-walk, .holds-walk" : undefined));
 }
 
 function refit() {
@@ -240,7 +312,8 @@ async function render() {
   });
   const mounted = await canvas.mount(elements, buildStylesheet(tokens.value));
   if (!mounted) return;
-  navigation.applyArrangePolicy();
+  navigation.panOnNodes();
+  canvas.reveal("search", searched.value);
   canvas.showOnly(visible.value.nodes, visible.value.contracts);
   canvas.markSelection(selection.value);
   frameSelection();
@@ -254,6 +327,7 @@ watch(tokens, (current, previous) => {
 });
 watch(visible, (shown) => {
   if (!canvas.ready.value) return;
+  canvas.reveal("search", searched.value);
   canvas.showOnly(shown.nodes, shown.contracts);
   navigation.fit();
 });
@@ -279,8 +353,15 @@ onMounted(() => {
     ready: () => canvas.ready.value,
     selection: () => state.focus,
     state: () => ({ ...state, mode: props.mode }),
-    arranging: () => navigation.arranging.value,
     impactSummary: () => summary.value,
+    layout: () => canvas.layout.value,
+    bundles: () => canvas.bundles.value,
+    junctions: () => canvas.junctions(),
+    bridges: () => canvas.bridges(),
+    bridgeFrames: () => canvas.bridgeFrames(),
+    hoveredEdges: () => canvas.hoveredEdges.value,
+    map: () => canvas.map(),
+    revealNodes: (ids) => canvas.revealNow("test", ids),
   });
 });
 onBeforeUnmount(() => disposeHandle());
@@ -301,28 +382,28 @@ onBeforeUnmount(() => disposeHandle());
     </p>
 
     <div role="toolbar" aria-label="Graph viewer tools" class="bl-viewer-toolbar">
-      <component
-        :is="mode.filterControls"
-        :filters="state"
-        :options="options"
-        @change="(key, value) => (state[key] = value)"
-      />
-      <NeighbourhoodControls
-        :depth="state.depth"
-        :dir="state.dir"
-        :hide="Boolean(state.hide)"
-        @change="(key, value) => (state[key] = value)"
-      />
-      <ImpactButton v-if="mode.impact" :active="impactMode" @toggle="toggleImpact" />
-      <span class="bl-viewer-spacer" />
-      <NavigationControls
-        :arranging="navigation.arranging.value"
-        @zoom-in="navigation.zoomIn"
-        @zoom-out="navigation.zoomOut"
-        @fit="navigation.fit"
-        @centre="navigation.centre(state.focus)"
-        @arrange="navigation.toggleArrange"
-      />
+      <fieldset class="bl-viewer-controls" :disabled="graphControlsOff">
+        <component
+          :is="mode.filterControls"
+          :filters="state"
+          :options="options"
+          @change="(key, value) => (state[key] = value)"
+        />
+        <NeighbourhoodControls
+          :depth="state.depth"
+          :dir="state.dir"
+          :hide="Boolean(state.hide)"
+          @change="(key, value) => (state[key] = value)"
+        />
+        <ImpactButton v-if="mode.impact" :active="impactMode" @toggle="toggleImpact" />
+        <span class="bl-viewer-spacer" />
+        <NavigationControls
+          @zoom-in="navigation.zoomIn"
+          @zoom-out="navigation.zoomOut"
+          @fit="navigation.fit"
+          @centre="navigation.centre(state.focus)"
+        />
+      </fieldset>
       <button
         type="button"
         class="bl-viewer-button"
@@ -335,10 +416,35 @@ onBeforeUnmount(() => disposeHandle());
       <FullscreenButton :active="fullscreen.active.value" @toggle="fullscreen.toggle" />
     </div>
 
+    <p v-if="canvas.layoutError.value" class="bl-viewer-note" role="alert">
+      The graph could not be laid out ({{ canvas.layoutError.value.message }}). The static summary
+      on this page is the source of truth.
+    </p>
+
     <div class="bl-viewer-body">
+      <p
+        v-if="canvas.layingOut.value"
+        class="bl-viewer-status"
+        role="status"
+        data-testid="layout-status"
+      >
+        Laying out the graph…
+      </p>
+      <p v-if="bundleNote" class="bl-viewer-bundle-note" role="status" data-testid="edge-bundle-note">
+        {{ bundleNote }}
+      </p>
+      <p
+        v-if="aggregateNote"
+        class="bl-viewer-bundle-note"
+        role="status"
+        data-testid="aggregated-edge-note"
+      >
+        {{ aggregateNote }}
+      </p>
       <div
         ref="container"
         class="bl-viewer-canvas"
+        :class="{ 'is-unplaced': unplaced }"
         data-testid="graph-canvas"
         tabindex="0"
         :aria-label="`${mode.label}: drag to pan, scroll to zoom; keys + − 0 f Esc`"
@@ -371,7 +477,7 @@ onBeforeUnmount(() => disposeHandle());
         <p v-else class="bl-viewer-hint">
           Select a node to see its card and its neighbourhood; "Depth" and "Direction" choose how
           far it reaches<template v-if="mode.impact">, and "Impact" shows everything that depends
-          on it</template>. Drag to pan and scroll to zoom; "Arrange" lets you move nodes. Keys: <kbd>+</kbd> <kbd>−</kbd> zoom, <kbd>0</kbd> fit, <kbd>f</kbd> full screen,
+          on it</template>. Drag to pan and scroll to zoom. Keys: <kbd>+</kbd> <kbd>−</kbd> zoom, <kbd>0</kbd> fit, <kbd>f</kbd> full screen,
           <kbd>Esc</kbd> clear.
         </p>
       </aside>
@@ -418,6 +524,10 @@ onBeforeUnmount(() => disposeHandle());
   align-items: center;
   gap: 8px;
 }
+/* The controls that act on the graph, one group to turn off; laid out as the toolbar's own items. */
+.bl-viewer-controls {
+  display: contents;
+}
 .bl-viewer-spacer {
   flex: 1 1 auto;
 }
@@ -455,6 +565,33 @@ onBeforeUnmount(() => disposeHandle());
 .bl-viewer:fullscreen .bl-viewer-canvas,
 .bl-viewer.is-fallback-fullscreen .bl-viewer-canvas {
   height: auto;
+}
+/* Until ELK answers, every node stands at one point; the canvas is shown once they are placed. */
+.bl-viewer-canvas.is-unplaced {
+  visibility: hidden;
+}
+.bl-viewer-status {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  margin: 0;
+  color: var(--vp-c-text-2);
+}
+.bl-viewer-bundle-note {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 2;
+  max-width: 60%;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  font-size: 12px;
+  pointer-events: none;
 }
 .bl-viewer-canvas:focus-visible {
   outline: 2px solid var(--vp-c-brand-1);

@@ -7,11 +7,13 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-la3t` (P2: the owner's look at our portal and an adopter's, then PR 2). Serialised: `beadloom waves` finds them in one node, `site-generation`.
+**Bead:** none — BDL-076 shipped; epic `beadloom-ujzb` closed.
 **Goal:** the combined tree green with no check weakened, before the selection modes and node pages.
 **A3 closed (2026-09-30):** `beadloom-7091` `60bdf1a4` — neighbourhood (depth 1–5/all, in/out/both, dim or hide), impact mode (incoming over `depends_on`/`uses`/`consumes`, rings, summary, risk marks, the graph-view statement, `why`/`impact` to copy), the node card as `widgets/node-card` with every PRD field; data file gains `repository {url, ref}` from the project's own `origin`. Playwright 29 passed (13 new, each red first); pytest 11 978 passed, 1 failed (`test_all_new_node_pairs_are_fresh`); `beadloom ci` rc 1 on 46 stale pairs → W1 `beadloom-qlii`. Three self-checks now leave out of the `architecture-layers` 90% count the edges another layer rule judges (`site-fsd-layers`); the bar is unchanged — flagged for the owner and R1.
 
 **Done when:** a project that is not this repository builds its portal from `docs site` alone, with its own identity.
+
+**Slice 2 shipped (2026-10-03):** PR #91 green on every check at `d46c16be` — `site-adopters` ran its 81 slow tests on GitHub for the first time (39 min, all passed) — squash-merged as `e7bd7671` on the owner's word.
 
 **PR #91 (2026-10-03):** opened at `5aeaf18c` after the owner's look ("Все ок") and README wording; every required check green, but the advisory `site-adopters` failed at collection (two TUI test modules import `textual` unguarded) — 0 of 81 slow tests ran. `beadloom-ujzb.26` `588dbbe2`: the two modules guarded, a self-check collects the suite in each pytest job's own extras (red on the old tree), the job unchanged. Reproduced locally in the job's extras: rc 2 before, 81 collected and passed after (two browser tests needed a rerun after a Chromium crash under load).
 
@@ -105,7 +107,7 @@
 - [x] PRD (with the impact mode), RFC, CONTEXT and PLAN approved (2026-09-30); A0 added by the owner
 - [x] Beads created: epic `beadloom-ujzb` + 17 from one plan
 - [x] Slice 1 — the viewer for the team (PR #90, `c133e0a5`, 2026-09-30)
-- [ ] Slice 2 — the portal for adopters (PR 2)
+- [x] Slice 2 — the portal for adopters (PR #91, `e7bd7671`, 2026-10-03)
 
 ## Results
 
@@ -113,7 +115,7 @@
 
 | Bead | Role | Status | Details |
 |---|---|---|---|
-| `beadloom-ujzb` | epic | ready | BDL-076 parent |
+| `beadloom-ujzb` | epic | ✓ done | BDL-076 parent |
 | `beadloom-hjr1` | J1 dev | ✓ done | relative JS/TS imports resolve; 379 edges unchanged here |
 | `beadloom-g9fb` | J2 dev | ✓ done | no false edges from a foreign scan path; `.vue` imports and `import()` read |
 | `beadloom-tmxa` | J3 dev | ✓ done | `.vue` symbols at their lines; `export const`/`default` read; `.vue` imports and `import()` NOT done (resolver file, see bead) |
@@ -161,4 +163,4 @@
 | `beadloom-19l6` | T2 test | ✓ done | slice 2 criteria |
 | `beadloom-fht7` | R2 review | ✓ done | review slice 2 |
 | `beadloom-ri5a` | W2 tech-writer | ✓ done | adopter docs |
-| `beadloom-la3t` | P2 PR 2 | in progress | owner's look; PR 2 |
+| `beadloom-la3t` | P2 PR 2 | ✓ done | owner's look; PR 2 |

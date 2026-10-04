@@ -30,6 +30,10 @@ _E2E = "src/beadloom/site_scaffold/e2e"
 
 #: Each spec and the slice whose behaviour it drives.
 SPEC_SLICE = {
+    # Bridges on highlighted edges where they cross other drawn edges (BDL-077 E5).
+    "bridges.spec.js": "site-graph-viewer",
+    # Trunks, buses and junction dots drawn over ELK's routes (BDL-077 E3).
+    "bundles.spec.js": "site-graph-viewer",
     "card.spec.js": "site-node-card",
     "colours.spec.js": "site-graph-viewer",
     "data-version.spec.js": "site-architecture-data",
@@ -42,10 +46,18 @@ SPEC_SLICE = {
     "landscape-impact.spec.js": "site-impact-view",
     "landscape.spec.js": "site-landscape-page",
     "layers.spec.js": "site-layer",
+    # ELK in a worker, its geometry and its cache are `shared/elk` (BDL-077 E1).
+    "layout.spec.js": "site-shared",
+    # The map-like overview: levels, aggregated edges, the budget (BDL-077 E4).
+    "map.spec.js": "site-graph-viewer",
     "navigation.spec.js": "site-navigate-graph",
     "neighbourhood.spec.js": "site-select-neighbourhood",
     "node-page.spec.js": "site-architecture-page",
     "node-status.spec.js": "site-graph-node",
+    # Frame time and the first drawing, timed per environment (BDL-077 review M1).
+    "performance.spec.js": "site-graph-viewer",
+    # ELK's routes and box sizes drawn by the canvas (BDL-077 E2).
+    "routes.spec.js": "site-graph-viewer",
     "shell-command.spec.js": "site-shared",
     "url-state.spec.js": "site-url-state",
 }

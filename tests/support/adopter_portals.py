@@ -254,6 +254,14 @@ FIXTURES_BY_STACK: Mapping[str, AdopterFixture] = {
     fixture.stack: fixture for fixture in (PYTHON, GO, TYPESCRIPT, JAVA, KOTLIN, SWIFT)
 }
 
+#: The environment variable that names the one part of the slow tests a run takes
+#: (``beadloom-m6k7.7``): the ``site-adopters`` job runs each part in a leg of its own.
+SLOW_PART_ENV = "BEADLOOM_SLOW_PART"
+#: The part of the slow tests that build a project of their own, not a stack's fixture.
+PROJECTS_PART = "projects"
+#: Every part: each claimed stack's slow tests, then the ones that build no stack's fixture.
+SLOW_PARTS: tuple[str, ...] = (*FIXTURES_BY_STACK, PROJECTS_PART)
+
 
 @dataclass
 class Step:

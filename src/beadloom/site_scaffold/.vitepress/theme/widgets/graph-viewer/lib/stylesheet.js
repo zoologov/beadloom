@@ -17,12 +17,28 @@
 // node or edge is dimmed, or hidden when the reader asks for it. In impact mode
 // a node's fill is its distance ring's tone, and a risky node carries a dashed
 // danger outline.
+//
+// A dimmed node is drawn see-through; a dimmed edge is drawn opaque in its colour
+// faded towards the background. Edges bundled into one trunk are drawn along the
+// same line, and see-through ones would add up there: ten at a seventh of full
+// strength draw the trunk at four fifths. Opaque faded ones draw it at the
+// strength of one. Every edge along a hovered line is drawn wider, so a trunk
+// under the pointer shows every edge it carries.
+//
+// The map (`lib/levels.js`) adds its own looks. A closed box is drawn tinted, its
+// title in the middle, or above it when the box is too narrow for it; an
+// aggregated edge is a solid line as wide as the count of edges it carries, with
+// an arrowhead at each end edges arrive at and the counts as its label. Those
+// marks keep one size on screen whatever the zoom: each multiplies its size by
+// the map's scale, which the map keeps in its data.
 
 import { mixRgb } from "../../../shared/theme-tokens/index.js";
 import { EDGE_STYLES } from "../../../entities/graph-edge/index.js";
 import { NODE_STATUSES } from "../../../entities/graph-node/index.js";
 import { LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layer/index.js";
 import { RING_TONES } from "../../../features/impact-view/index.js";
+import { AGGREGATE, COLLAPSED, HIDDEN_EDGES } from "./levels.js";
+import { MAP_MARKS, aggregateWidthOf, scaleOf, titleFits, titleOf, titleSizeOf } from "./mapMarks.js";
 
 export const GEOMETRY = Object.freeze({
   nodeWidth: 160,
@@ -43,10 +59,17 @@ const RING_FILL_SHARE = 0.55;
 const DIMMED_OPACITY = 0.14;
 
 /**
- * The edge curve style, chosen by measurement: `bezier` lets fewer edges share a
- * stretch than `taxi`, which runs every edge out of a node down one trunk.
+ * The curve style of an edge the layout did not route: Cytoscape draws an edge
+ * into the node's own box as a loop, whatever its style, and `bezier` is that
+ * loop's style.
  */
 export const CURVE_STYLE = "bezier";
+
+/** The radius of a routed edge's rounded corners, in layout units. */
+export const ROUTE_CORNER_RADIUS = 6;
+
+/** How many decimals a route's numbers keep: far below a pixel, and never in exponent form. */
+const ROUTE_DECIMALS = 6;
 
 /** How much of the full colour the source end of an edge keeps: direction reads as light to dark. */
 const SOURCE_END_SHARE = 0.35;
@@ -92,7 +115,12 @@ function nodeRules(tokens) {
         "text-halign": "center",
         "font-weight": 700,
         "border-style": "dashed",
-        padding: "12px",
+        // ELK leaves the room around a box's children, and the box is drawn at
+        // ELK's size (`geometryRules`); Cytoscape adds no padding of its own,
+        // which would push a box past ELK's where ELK's room is narrower.
+        padding: 0,
+        // A box is sized from its children's shapes; a child's label never resizes it.
+        "compound-sizing-wrt-labels": "exclude",
       },
     },
     ...tones.map((tone) => ({
@@ -125,6 +153,46 @@ function nodeRules(tokens) {
   ];
 }
 
+const decimal = (value) => value.toFixed(ROUTE_DECIMALS);
+const pixels = (value) => `${decimal(value)}px`;
+
+/**
+ * The rules that draw ELK's geometry: a box at the size ELK gave it, and an edge
+ * along ELK's route (`lib/routes.js`). Their values are read from each element's
+ * data, so a stylesheet rebuilt for another theme draws the same geometry.
+ */
+function geometryRules() {
+  const box = (node) => node.data("box");
+  const route = (edge) => edge.data("route");
+  return [
+    {
+      selector: "node[box]",
+      style: {
+        width: (node) => box(node).width,
+        height: (node) => box(node).height,
+        "min-width": (node) => box(node).width,
+        "min-height": (node) => box(node).height,
+        "min-width-bias-left": (node) => pixels(box(node).biasLeft),
+        "min-width-bias-right": (node) => pixels(box(node).biasRight),
+        "min-height-bias-top": (node) => pixels(box(node).biasTop),
+        "min-height-bias-bottom": (node) => pixels(box(node).biasBottom),
+      },
+    },
+    {
+      selector: "edge[route]",
+      style: {
+        "curve-style": "round-segments",
+        "segment-radii": ROUTE_CORNER_RADIUS,
+        "edge-distances": "endpoints",
+        "source-endpoint": (edge) => route(edge).sourceEndpoint.map(pixels).join(" "),
+        "target-endpoint": (edge) => route(edge).targetEndpoint.map(pixels).join(" "),
+        "segment-weights": (edge) => route(edge).weights.map(decimal).join(" "),
+        "segment-distances": (edge) => route(edge).distances.map(decimal).join(" "),
+      },
+    },
+  ];
+}
+
 function edgeRules(tokens) {
   const byKey = Object.entries(EDGE_STYLES).map(([key, look]) => {
     const colour = tokens[look.tone];
@@ -135,6 +203,7 @@ function edgeRules(tokens) {
       "line-gradient-stop-colors": [mixRgb(colour, tokens.bg, SOURCE_END_SHARE), colour],
       "line-gradient-stop-positions": [0, 70],
       "target-arrow-color": colour,
+      "source-arrow-color": colour,
       "target-arrow-shape": look.arrow,
     };
     if (look.dash) style["line-dash-pattern"] = look.dash;
@@ -171,6 +240,24 @@ function edgeRules(tokens) {
   ];
 }
 
+/** An edge outside the selection: its own look faded towards the background, at full opacity. */
+function dimmedEdgeRules(tokens) {
+  const fade = (colour) => mixRgb(colour, tokens.bg, DIMMED_OPACITY);
+  return Object.entries(EDGE_STYLES).map(([key, look]) => {
+    const colour = tokens[look.tone];
+    return {
+      selector: `edge.is-dimmed[styleKey = "${key}"]`,
+      style: {
+        "line-color": fade(colour),
+        "line-gradient-stop-colors": [fade(mixRgb(colour, tokens.bg, SOURCE_END_SHARE)), fade(colour)],
+        "target-arrow-color": fade(colour),
+        "source-arrow-color": fade(colour),
+        "text-opacity": DIMMED_OPACITY,
+      },
+    };
+  });
+}
+
 function selectionRules(tokens) {
   const rings = RING_TONES.flatMap((tone, ring) => [
     {
@@ -195,7 +282,49 @@ function selectionRules(tokens) {
         "outline-opacity": 1,
       },
     },
-    { selector: ".is-dimmed", style: { opacity: DIMMED_OPACITY } },
+    { selector: "node.is-dimmed", style: { opacity: DIMMED_OPACITY } },
+    ...dimmedEdgeRules(tokens),
+    { selector: "edge.is-along-hover", style: { width: GEOMETRY.walkEdgeWidth, "z-index": 11 } },
+  ];
+}
+
+/** The map's looks: a closed box and its title, an aggregated edge, a count of hidden edges. */
+function mapRules(tokens) {
+  const tones = [...LAYER_TONES, UNLAYERED_TONE];
+  return [
+    { selector: `node[${HIDDEN_EDGES}]`, style: { label: titleOf, "text-wrap": "wrap" } },
+    {
+      selector: `node.${COLLAPSED}`,
+      style: {
+        label: titleOf,
+        "text-wrap": "wrap",
+        "font-weight": 700,
+        "font-size": (node) => MAP_MARKS.boxTitle * scaleOf(node),
+        "text-valign": (node) => (titleFits(node) ? "center" : "top"),
+        "text-max-width": (node) => (titleFits(node) ? node.data("box").width : titleSizeOf(node).width + 1),
+        "background-opacity": MAP_MARKS.collapsedOpacity,
+      },
+    },
+    ...tones.map((tone) => ({
+      selector: `node.${COLLAPSED}[tone = "${tone}"]`,
+      style: { "background-color": tokens[tone] },
+    })),
+    {
+      selector: `edge[${AGGREGATE}]`,
+      style: {
+        width: aggregateWidthOf,
+        "line-style": "solid",
+        "line-fill": "solid",
+        label: "data(countLabel)",
+        "font-size": (edge) => MAP_MARKS.countLabel * scaleOf(edge),
+        "font-weight": 700,
+        "text-rotation": "none",
+        "text-background-padding": (edge) => `${2 * scaleOf(edge)}px`,
+        "source-arrow-shape": (edge) => (edge.data("backward") ? "triangle" : "none"),
+        "target-arrow-shape": (edge) => (edge.data("forward") ? "triangle" : "none"),
+        "z-index": 5,
+      },
+    },
   ];
 }
 
@@ -204,7 +333,9 @@ export function buildStylesheet(tokens) {
   return [
     ...nodeRules(tokens),
     ...edgeRules(tokens),
+    ...geometryRules(),
     ...selectionRules(tokens),
+    ...mapRules(tokens),
     { selector: ".is-hidden, .is-outside", style: { display: "none" } },
   ];
 }

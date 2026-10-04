@@ -199,17 +199,86 @@ so a picture is as current as the build that published it.
   layer rule finds against is red, dashed and thicker, exactly when `beadloom lint` reports it.
   The arrow is at the target, and the line is lighter at its source end. An edge's label shows on
   hover and on the selected node's edges.
+- **Routes.** An edge runs at right angles, around every box it does not connect, and enters its
+  target's box on a side, where the arrowhead is. An edge from a node into the box that holds it
+  is drawn as a small loop inside that box.
 - **The legend** under the canvas lists the layers, the node statuses and the edge kinds that are
   actually drawn, so it never names something the canvas does not show.
 
+### Laying out
+
+The layout is computed in the browser, in the background, so the page stays responsive meanwhile.
+Until it is ready the canvas says **Laying out the graph…**, and the toolbar already works. The
+layout is computed once per data file: the architecture page, a node page and full screen draw
+the same layout, and a page you return to without reloading does not wait for it.
+
+If the layout cannot run, a note above the canvas says so and names the error. The canvas stays
+hidden and the filters, the neighbourhood, Impact and the navigation buttons are off. Panel and
+Full screen still work, and the static summary on the page remains the source of truth.
+
+### The overview is a map
+
+At the whole-graph fit the architecture is drawn like a map: the top-level boxes, closed, and
+between two boxes one line that carries every edge between them and their contents.
+
+- **An aggregated line** shows its count each way as its label (`3 + 1`), has an arrowhead at
+  each end its edges arrive at, and is wider the more edges it carries. With the pointer on it, a
+  note says how many edges run each way between its two ends. It takes a violation's look when
+  any edge it carries is a violation.
+- **At most 100 lines.** When the map would draw more, the weakest lines are left out, and each
+  box counts its lines left out as **+N** under its title. With the pointer on a box, or the box
+  selected, all of its lines are drawn.
+- **Zooming in opens boxes.** Once you have zoomed in past 1.3 times the whole-graph fit, a box in
+  view opens when its larger side reaches about 600 pixels on screen, and closes again below about
+  480. An open box draws its children and their edges, and boxes inside it open the same way.
+  Nothing moves between levels: every box keeps its place and size.
+- **A selection opens what it needs**, at any zoom. A click on a closed box opens and selects it. A
+  node selected from the search, a link, the card or a node page is drawn with its own edges, and
+  the boxes that hold it open. The neighbourhood and Impact open the boxes of every node they
+  reach. A **hub**, a node with twenty or more drawn edges, is the exception: selected with the
+  default neighbourhood (depth 1, both directions, dimmed), it opens only its own boxes, and its
+  edges to other boxes stay aggregated. Change the depth, the direction or the hide setting, or
+  turn on Impact, to open its neighbours as well.
+- **Filters compose with the map.** The search box opens the boxes that hold its matches. Other
+  filters open nothing: a closed box stays closed, and its lines carry only the edges the filters
+  show.
+- **Labels keep their size.** A closed box's title and a line's count stay the same size on screen
+  as you zoom. A box too small for its title shows the title above it.
+
+The landscape has no boxes, so it is always drawn in full.
+
+### Shared lines: trunks and buses
+
+A node with many edges would otherwise leave its side in a staircase, one channel per edge. The
+viewer gathers them instead, without moving any node:
+
+- **A bus.** The edges that leave one side of a node in one direction start from the middle of
+  that side and run along one line before each turns off into its own lane.
+- **A trunk.** A node with twenty or more drawn edges sends its edges to one top-level box along
+  one route, up to a line along that box, where each drops in where it enters.
+- **A dot** marks each point where edges that ran together part.
+
+With the pointer on a shared line, every edge along it is drawn wider, and a note over the canvas
+names them: the first eight, then "and N more". Outside a selection, edges fade in colour rather
+than turning see-through, so a trunk of faded edges is no darker than one faded edge.
+
+### Bridges
+
+A highlighted edge, the one under the pointer or one on the selection's neighbourhood or impact
+walk, hops over every other edge it crosses, with a small half circle, so you can follow it
+through a busy area. Edges of one trunk or bus carry no bridge between them, because they read as
+one line. With nothing highlighted there are no bridges. A hop too small to see is not drawn, so
+at the whole-graph fit of a fully opened graph you zoom in to see them.
+
 ### Moving around
 
-A drag pans the canvas, inside a box too, and the scroll wheel zooms. Nodes do not move when
-dragged; **Arrange** in the toolbar turns dragging on for the leaves. The toolbar also has zoom
-in and out, **Fit** (the visible graph), **Centre** (on the selection), **Panel** (show or hide the
-panel) and **Full screen**. With focus in the viewer, `+` and `-` zoom, `0` fits, `f` toggles full
-screen and `Esc` clears the selection. Fit and centre leave out the part of the canvas the open
-panel covers.
+A drag pans the canvas, on a node or inside a box too, and the scroll wheel zooms. No gesture
+moves a node: the edges are drawn from the layout, and a moved node would leave them behind.
+Earlier versions had an **Arrange** button that made nodes draggable, and BDL-077 removed it.
+The toolbar has zoom in and out, **Fit** (the visible graph), **Centre** (on the selection),
+**Panel** (show or hide the panel) and **Full screen**. With focus in the viewer, `+` and `-`
+zoom, `0` fits, `f` toggles full screen and `Esc` clears the selection. Fit and centre leave out
+the part of the canvas the open panel covers.
 
 ### Filters
 
@@ -643,7 +712,7 @@ the Azure DevOps `raw` route is the least certain. A refused entry is named by i
 
 The portal needs `Node.js 22` or later (`engines.node: >=22` in the shipped `package.json`; an older
 Node makes `npm ci` print an `EBADENGINE` warning). Every npm dependency is pinned exactly in the
-shipped lockfile, except `web-worker`. The Python generator and the Mermaid guard stay fully
+shipped lockfile. The Python generator and the Mermaid guard stay fully
 pytest-testable without Node.
 
 ```bash
@@ -736,6 +805,16 @@ npm run test:e2e
 that deploys, under the base the `site:` block declares (`BEADLOOM_E2E_BASE` overrides it). It
 refuses to start before `beadloom docs site` has written the content.
 
+The cases that time the viewer run last, one at a time, in a Playwright project of their own
+(`performance`), and only when every other case has passed, because a case timed beside other
+browsers would time them too. Their bounds depend on where the suite runs: `ci` when the `CI`
+variable is set, `local` otherwise. The `local` bounds were measured on an Apple M1 Max. On a
+slower machine, set `BEADLOOM_E2E_ENVIRONMENT=ci` for the wider bounds. To run only them:
+
+```bash
+npx playwright test -c e2e --project performance --no-deps
+```
+
 A correct portal can lack what a case is written about: a project with no layer rule has no
 layers to colour, and a single project's landscape has no contract to walk. Such a case is
 skipped, and the report names the missing shape:
@@ -747,9 +826,10 @@ this portal's graph lacks what the case needs: fewer than two declared layers; a
 With `BEADLOOM_E2E_NO_SKIP=1` a missing shape fails the case instead. Set it for a portal that is
 meant to hold every shape, so a change that would quietly turn a check into a skip is reported
 as a failure; this repository's `site-e2e` job does. Measured on six small projects, one per
-stack (`tests/fixtures/site/`, macOS, `Node.js 22`), all 101 cases ran or skipped by shape and
-none failed: between 7 and 27 cases skipped,
-the most on the projects with no declared layers.
+stack (`tests/fixtures/site/`, macOS, `Node.js 22`), when the shape skips were introduced in
+BDL-076, all 101 cases of that suite ran or skipped by shape and none failed: between 7 and 27
+cases skipped, the most on the projects with no declared layers. The suite has grown to 182 cases
+since, and in BDL-077 it passed on each of the six (`beadloom-m6k7.5`, macOS).
 
 ## Determinism
 
@@ -811,6 +891,10 @@ reproducible and the generated tree diffable in review.
   as VitePress reads it and shown as written; the browser suite runnable on any portal. Measured
   on one small project per claimed stack (`tests/fixtures/site/`), built by the
   `site-adopters` workflow.
+- **Edges like a classic diagram (BDL-077):** ELK's right-angled routes around every box,
+  computed in a Web Worker; trunks, buses and junction dots for busy nodes; the overview as a map
+  of top-level boxes and aggregated lines that opens as you zoom in; bridges on highlighted
+  edges; Arrange removed.
 - **Deferred:** REST/OpenAPI + gRPC contracts in the federated map.
 
 See the [`beadloom docs site` CLI reference](../services/cli.md#beadloom-docs-site),

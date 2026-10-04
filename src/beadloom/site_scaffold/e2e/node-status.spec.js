@@ -6,9 +6,12 @@
 // `beadloom lint --strict` reported no error at all. Only an `error` finding is a
 // violation; a node with `warn` findings only is drawn in a look of its own, and
 // the legend names each status that is drawn.
+//
+// The statuses are read at full detail, every box open: at the whole-graph fit
+// the viewer draws only the boxes at the top (`map.spec.js`).
 
 import { test, expect } from "@playwright/test";
-import { architectureData, openArchitecture, viewer } from "./support/viewer.js";
+import { architectureData, openArchitecture, openEveryBox, viewer } from "./support/viewer.js";
 import { requireShape } from "./support/shape.js";
 
 /**
@@ -39,6 +42,7 @@ test("a node with warn findings only is drawn as a warning, not as a violation",
   requireShape(Object.values(expected).includes("warned"), "no node has warn-level findings only");
 
   await openArchitecture(page);
+  await openEveryBox(page);
 
   const drawn = Object.fromEntries(
     Object.entries(await viewer(page, "statusLooks")).map(([id, look]) => [id, look.status])
@@ -70,6 +74,7 @@ test("an error finding draws a violation, in a look apart from a warning's", asy
   await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
 
   await openArchitecture(page);
+  await openEveryBox(page);
   const looks = await viewer(page, "statusLooks");
 
   expect(looks[clean.id].status).toBe("violation");
@@ -85,6 +90,7 @@ test("the legend names each node status that is drawn, and no other", async ({ p
   const data = await architectureData(request);
 
   await openArchitecture(page);
+  await openEveryBox(page);
 
   expect(await legendStatuses(page)).toEqual([...new Set(Object.values(expectedStatuses(data)))].sort());
 });

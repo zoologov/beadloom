@@ -11,9 +11,19 @@
 # workflow nothing runs them. No stack toolchain is installed: `beadloom init`
 # parses the source, it does not build it.
 #
+# IN LEGS (beadloom-m6k7.7). One after another, six portals and six browser runs
+# took longer than the 60-minute timeout on ubuntu-latest: about 14 minutes per
+# fixture with the runner's two Playwright workers, and the run of 2026-10-04 was
+# cancelled during its third fixture. The job now runs one leg per claimed stack,
+# and one for the slow tests that build a project of their own; BEADLOOM_SLOW_PART
+# names the leg's part (tests/integration/application/site/conftest.py), and a
+# slow test belongs to exactly one part. The cases on the shipped suite's made-up
+# adopter-sized graph run on the first stack of each count of declared layers
+# only (test_the_browser_tests_pass_on_an_adopter_portal.py).
+#
 # WHEN IT RUNS (beadloom-ujzb.20, owner ruling of 2026-10-01). It builds six
-# portals and runs the browser suite on each, about sixteen minutes measured
-# locally, so it no longer runs on every pull request:
+# portals and runs the browser suite on each, so it no longer runs on every pull
+# request:
 #
 #   pull_request       only when the change touches what it tests: the paths
 #                      below. `paths:` is GitHub's own filter, decided before a
@@ -98,9 +108,18 @@ jobs:
   # NOT a required check: advisory, and filtered (see the header).
   site-adopters:
     runs-on: ubuntu-latest
-    # Six Playwright runs: about 15 minutes measured on a 10-core machine with
-    # 5 workers each; a 4-core runner gets 2 workers, so the bound is doubled.
+    # One portal and one Playwright run per leg: about 14 minutes on the runner
+    # for a stack that takes the adopter-sized cases, about 10 for one that does
+    # not (estimated from the run of 2026-10-04 and local runs with two workers).
     timeout-minutes: 60
+    strategy:
+      # Every leg reports its own result: one failing stack does not hide another.
+      fail-fast: false
+      matrix:
+        # The parts of the slow tests: every claimed stack, then `projects`
+        # (tests/support/adopter_portals.py SLOW_PARTS, which a self-check holds
+        # this list to).
+        part: [python, go, typescript, java, kotlin, swift, projects]
     steps:
       - uses: actions/checkout@v5
 
@@ -134,16 +153,19 @@ jobs:
           "require('./src/beadloom/site_scaffold/package.json').devDependencies['@playwright/test']")"
           install --with-deps chromium
 
-      - name: Build every adopter fixture and run the browser tests on each
+      - name: Build this leg's adopter fixture and run the browser tests on it
         run: uv run pytest -m slow -v --basetemp="$RUNNER_TEMP/adopters"
         env:
           BEADLOOM_RUN_SLOW: "1"
+          BEADLOOM_SLOW_PART: ${{ matrix.part }}
 
+      # Also when the leg is cancelled, at its timeout or by a newer run: a
+      # cancelled run's console output ends where it was cut off.
       - name: Upload the fixtures' Playwright results
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: site-adopters-playwright
+          name: site-adopters-playwright-${{ matrix.part }}
           path: |
             ${{ runner.temp }}/adopters/**/site/test-results/
             ${{ runner.temp }}/adopters/**/site/playwright-report/

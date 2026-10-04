@@ -4,13 +4,14 @@
 nodes:
   - ref_id: site-shared
     kind: component
-    summary: "The site's shared segments: browser checks, JSON loading, tree walks and a breadth-first walk, theme tokens resolved to literal colours, the Cytoscape and ELK loader, ECharts, and a command to copy"
+    summary: "The site's shared segments: browser checks, JSON loading, tree walks and a breadth-first walk, theme tokens resolved to literal colours, the Cytoscape loader, the ELK layout run in a Web Worker and kept per graph, ECharts, and a command to copy"
     source: src/beadloom/site_scaffold/.vitepress/theme/shared/
     tags: [fsd-shared]
     # The browser tests that drive this slice (BDL-076 R1 finding m5). Declared
     # here, a spec binds to this slice rather than to `vitepress-site`'s prefix.
     tests:
       - src/beadloom/site_scaffold/e2e/shell-command.spec.js
+      - src/beadloom/site_scaffold/e2e/layout.spec.js
     docs:
       - docs/services/vitepress-site/shared.md
 edges:

@@ -3,9 +3,14 @@
 // In an earlier version a selection marked the node and its own edges and nothing else:
 // depth and direction were carried in the URL and read by nothing, and the rest
 // of the graph stayed as it was.
+//
+// A case that reads what the walk leaves out reads it over the whole graph, every
+// box open: at the whole-graph fit the viewer draws a map, and what a selection
+// opens of it is `map.spec.js`'s. A case that reads only the walk opens nothing:
+// a walk the reader asked for opens the boxes it reaches.
 
 import { test, expect } from "@playwright/test";
-import { architectureData, openArchitecture, parentMap, viewer, withAncestors } from "./support/viewer.js";
+import { architectureData, openArchitecture, openEveryBox, parentMap, viewer, withAncestors } from "./support/viewer.js";
 import { NEIGHBOURHOOD_KINDS, edgeKey, neighbourhood } from "./support/graph.js";
 import { requireShape } from "./support/shape.js";
 
@@ -66,6 +71,7 @@ test("depth 2 outgoing shows the node, what it reaches in two steps and those ed
   await page.getByLabel("Direction", { exact: true }).selectOption("out");
 
   await expect.poll(() => viewer(page, "neighbourhood")).toEqual(expected);
+  await openEveryBox(page);
   expect(await viewer(page, "dimmedIds")).toEqual(outside(data, expected.ids));
 });
 
@@ -81,6 +87,7 @@ test("switching the direction to incoming shows the nodes that reach it", async 
   await page.getByLabel("Direction", { exact: true }).selectOption("in");
 
   await expect.poll(() => viewer(page, "neighbourhood")).toEqual(expected);
+  await openEveryBox(page);
   expect(await viewer(page, "dimmedIds")).toEqual(outside(data, expected.ids));
 });
 
@@ -134,9 +141,15 @@ test("clearing the selection shows the whole graph again", async ({ page, reques
 
 // The rest of the graph is its nodes AND its edges: an edge the walk did not
 // take is dimmed, or hidden with "Hide the rest", and every edge it took is
-// shown at full strength.
+// shown at full strength. A dimmed edge is drawn opaque in a colour faded towards
+// the background, so edges drawn along one trunk do not darken it: its line
+// colour differs from the one it is drawn in with nothing selected.
 const OUTSIDE_LOOKS = [
-  { choice: "dimmed", query: "", outside: (look) => look.visible && look.opacity < 1 },
+  {
+    choice: "dimmed",
+    query: "",
+    outside: (look, plain) => look.visible && look.opacity === 1 && look.lineColour !== plain.lineColour,
+  },
   { choice: "hidden", query: "&hide=1", outside: (look) => !look.visible },
 ];
 
@@ -155,13 +168,19 @@ for (const { choice, query, outside: looksOutside } of OUTSIDE_LOOKS) {
     requireShape(subject, "no node's two-step outgoing walk takes one drawn edge and leaves another out");
     const walked = new Set(walkedFrom(subject));
 
+    await openArchitecture(page);
+    await openEveryBox(page);
+    const plain = Object.fromEntries((await viewer(page, "edgeLooks")).map((look) => [look.key, look]));
     await openArchitecture(page, `?focus=${subject}&depth=2&dir=out${query}`);
     await expect.poll(async () => (await viewer(page, "neighbourhood")).edges.length).toBe(walked.size);
+    await openEveryBox(page);
 
     const looks = await viewer(page, "edgeLooks");
     expect(looks.length).toBeGreaterThan(walked.size);
+    const fullStrength = (look) =>
+      look.visible && look.opacity === 1 && look.lineColour === plain[look.key].lineColour;
     const wrong = looks.filter((look) =>
-      walked.has(look.key) ? !(look.visible && look.opacity === 1) : !looksOutside(look)
+      walked.has(look.key) ? !fullStrength(look) : !looksOutside(look, plain[look.key])
     );
     expect(wrong).toEqual([]);
   });

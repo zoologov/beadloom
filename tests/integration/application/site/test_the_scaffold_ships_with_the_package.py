@@ -86,9 +86,10 @@ def test_the_package_declares_its_node_version_and_an_exact_lock() -> None:
     locked = lock["packages"][""]["dependencies"] | lock["packages"][""]["devDependencies"]
     declared = package["dependencies"] | package["devDependencies"]
     assert locked == declared
-    # Exact pins, but for the one range the constraint names (CONTEXT: `web-worker`).
+    # Every pin is exact. The one range there was, `web-worker`, served the elkjs that
+    # `cytoscape-elk` loaded on the main thread, and went with it (BDL-077 E1).
     ranged = sorted(name for name, pin in declared.items() if not pin[0].isdigit())
-    assert ranged == ["web-worker"]
+    assert ranged == []
 
 
 def test_the_scaffold_is_not_a_python_package() -> None:

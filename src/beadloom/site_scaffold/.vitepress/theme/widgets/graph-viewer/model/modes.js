@@ -4,7 +4,7 @@
 // One viewer core draws both. A mode names what differs between
 // them and nothing else: the data file it reads and how that file becomes
 // nodes and edges, the filters in its slot of the toolbar and the set they
-// show, and whether the impact mode is offered. Navigation, the neighbourhood,
+// show, what its search finds, and whether the impact mode is offered. Navigation, the neighbourhood,
 // full screen, the panel, the legend and URL state are the core's, the same in
 // both.
 //
@@ -33,6 +33,7 @@ import {
   FilterControls,
   contractFilterOptions,
   filterOptions,
+  matchesQuery,
   visibleContracts,
   visibleNodeIds,
 } from "../../../features/filter-graph/index.js";
@@ -61,6 +62,9 @@ export const MODES = Object.freeze({
       nodes: visibleNodeIds(graph.nodes, filters, context),
       contracts: null,
     }),
+    // The nodes the search box finds: the viewer opens the boxes that hold them.
+    searched: (graph, filters) =>
+      filters.q ? graph.nodes.filter((node) => matchesQuery(node, filters.q)).map((node) => node.id) : [],
     // The impact walk: the end of each edge kind that depends on the other, and its summary.
     impact: Object.freeze({ dependentEnds: DEPENDENT_ENDS, summarise: impactSummary }),
   }),
@@ -72,6 +76,8 @@ export const MODES = Object.freeze({
     filterControls: ContractFilterControls,
     filterOptions: (graph) => contractFilterOptions(graph.contracts),
     visible: (graph, filters) => visibleContracts(graph, filters),
+    // The landscape draws no box, so its search opens none.
+    searched: () => [],
     impact: Object.freeze({ dependentEnds: CONTRACT_DEPENDENT_ENDS, summarise: contractImpactSummary }),
   }),
 });
