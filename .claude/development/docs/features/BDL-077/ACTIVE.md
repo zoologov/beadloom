@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-t3pw` (W, docs); then P (the owner's look, PR).
+**Bead:** `beadloom-zaba` (P: the owner's look in a browser, then the PR).
 **Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -41,10 +41,12 @@
 | `beadloom-87o6` | R | ✓ done | review |
 | `beadloom-m6k7.6` | fix | ✓ done | review findings |
 | `beadloom-m6k7.5` | fix | ✓ done | two-rank second channel |
-| `beadloom-t3pw` | W | in progress | docs |
-| `beadloom-zaba` | P | blocked | owner's look, PR |
+| `beadloom-t3pw` | W | ✓ done | docs |
+| `beadloom-zaba` | P | in progress | owner's look, PR |
 
 ## Notes
+
+- **W closed** `44b451eb`: viewer slice docs and the portal guide describe the code as built (routes, trunks and buses, the map, bridges, no Arrange, the performance bounds); stale 61 → 0 (710 pairs); `beadloom ci` rc 0; pytest 0 failed. Left: the `site-shared` node summary does not name the `ids` segment; nine surface-drift warnings.
 
 - **`beadloom-m6k7.5` closed** `df60d928`: the bus measures its first gap over the lanes that turn in it, so no edge drops past its target; ranks 1–6 all 0 over-bound sides and 0 second channels; a case per rank count 1–4. Left: on two ranks one 20-unit edge reads as more than half shared under A2 at every crossing height (a right-angle crossing) — a limit of the metric on very short edges, recorded in CONTEXT and surfaced to the owner.
 
