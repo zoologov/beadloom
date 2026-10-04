@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-m6k7.5` (two-rank second channel); then W → P.
+**Bead:** `beadloom-t3pw` (W, docs); then P (the owner's look, PR).
 **Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -40,11 +40,13 @@
 | `beadloom-m6k7.4` | fix | ✓ done | adopter-size leaves over the lane bound |
 | `beadloom-87o6` | R | ✓ done | review |
 | `beadloom-m6k7.6` | fix | ✓ done | review findings |
-| `beadloom-m6k7.5` | fix | in progress | two-rank second channel |
-| `beadloom-t3pw` | W | blocked | docs |
+| `beadloom-m6k7.5` | fix | ✓ done | two-rank second channel |
+| `beadloom-t3pw` | W | in progress | docs |
 | `beadloom-zaba` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **`beadloom-m6k7.5` closed** `df60d928`: the bus measures its first gap over the lanes that turn in it, so no edge drops past its target; ranks 1–6 all 0 over-bound sides and 0 second channels; a case per rank count 1–4. Left: on two ranks one 20-unit edge reads as more than half shared under A2 at every crossing height (a right-angle crossing) — a limit of the metric on very short edges, recorded in CONTEXT and surfaced to the owner.
 
 - **`beadloom-m6k7.6` closed** `60146073`: performance guarded — structural (long tasks during layout, the overview budget) and timed cases with per-environment bounds (local: frame 25 ms, first drawing 7,200 ms, long task 1,000 ms; CI wider, never yet measured on a runner); the budget keeps the 100 heaviest with a name tie-break; a new defect fixed — the pointer on the root box lifted the budget for every box (345 edges at the adopter overview); a failed layout hides the canvas and disables graph controls; 178 browser cases.
 
