@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-87o6` (R, review with the authors' accounts withheld); then W → P.
+**Bead:** `beadloom-m6k7.6` (review findings); then `beadloom-m6k7.5` (two-rank second channel), W → P.
 **Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -38,11 +38,14 @@
 | `beadloom-lb1v` | T | ✓ done | PRD criteria measured |
 | `beadloom-m6k7.3` | fix | ✓ done | a box hub is not bundled |
 | `beadloom-m6k7.4` | fix | ✓ done | adopter-size leaves over the lane bound |
-| `beadloom-87o6` | R | in progress | review |
+| `beadloom-87o6` | R | ✓ done | review |
+| `beadloom-m6k7.6` | fix | in progress | review findings |
 | `beadloom-t3pw` | W | blocked | docs |
 | `beadloom-zaba` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **R closed** `beadloom-87o6`: ISSUES, 0 critical, 1 major — M1 no suite guard for frame time or first render (the reviewer measured the goal holds: first render 4,330 → 3,690 ms here, fit p90 33 → 16.7 ms, 133 → 16.7 at adopter size); minor: ties at the 100 budget can empty the overview; a failed layout shows a stacked canvas; RFC rows named slices that did not change (fixed in RFC); a stale comment; bundling could move to `shared/` (not taken). → `beadloom-m6k7.6`.
 
 - **`beadloom-m6k7.4` closed** `1021f1b9`: the literal hub bound and one channel per side and direction hold for every busy node here and on the three adopter-sized graph shapes the suite draws (18/17/24 over-bound sides → 0; 15/11/13 second-channel sides → 0); excess steps here 36 → 7; no node moved; bundling 36–37 ms at adopter size (budget 50). Levers: incoming trunks, edges in two trunks, bus port shifts and fallbacks, joins. `lanesAt` treats a corner within half a unit of the line as meeting it. RFC D3 updated for the new hub-to-hub rule. Residual: a two-rank graph keeps one second channel → `beadloom-m6k7.5` (P2).
 

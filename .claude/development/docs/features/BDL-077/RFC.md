@@ -87,11 +87,11 @@ data file already carries everything the viewer needs (see the Axes rulings).
 | site-shared | `shared/cytoscape/load.js`, `layout.js`, `index.js` | **yes** | ELK called directly in a worker; `cytoscape-elk` removed |
 | site-graph-viewer | `useGraphCanvas.js`, `stylesheet.js`, `elements.js`, `GraphViewer.vue`, `testHandle.js`, `modes.js` | **yes** | routes, bundles, map levels, bridges overlay, new test-handle readers |
 | site-navigate-graph | `useGraphNavigation.js`, `NavigationControls.vue` | **yes** | Arrange removed |
-| site-select-neighbourhood | `neighbourhood.js` | **yes** | a walk opens the boxes it needs and feeds the bridge set |
-| site-impact-view | `impact.js`, `rings.js` | **yes** | same, for impact |
-| site-filter-graph | `visibleIds.js` | **yes** | filters compose with levels (a filtered box stays collapsible) |
-| site-url-state | `useUrlState.js` | **yes** | the map level is not URL state, but focus must open its boxes on load |
-| site-graph-edge | `edgeKinds.js`, `adjacency.js` | **yes** | aggregated-edge style and member counts |
+| site-select-neighbourhood | `neighbourhood.js` | no (as built) | planned yes; the walk's opening and bridge set were built in graph-viewer (`selectionReveals`) — review m4 |
+| site-impact-view | `impact.js`, `rings.js` | no (as built) | same, for impact |
+| site-filter-graph | `visibleIds.js` | no (as built) | filters compose with levels inside graph-viewer (`modes.searched`) |
+| site-url-state | `useUrlState.js` | no (as built) | focus opens its boxes through graph-viewer's selection rule |
+| site-graph-edge | `edgeKinds.js`, `adjacency.js` | no (as built) | aggregated-edge style and counts live in graph-viewer (`aggregateRoutes.js`, `mapMarks.js`) |
 | site-architecture-page, site-landscape-page | `ArchitectureMap.vue`, `LandscapeMap.vue` | **yes** | the same canvas; the landscape gets routes and bridges, no levels (no containers) |
 | site-architecture-data | `useArchitectureData.js` | no | schema unchanged |
 | vitepress-site | `package.json`, lockfile, `e2e/**`, docs | **yes** | dependency change; Arrange cases removed; new cases |
@@ -199,9 +199,9 @@ containers, so no levels.
 | `widgets/graph-viewer/model/useGraphCanvas.js` | worker layout, apply routes, level switching, `showOnly` with levels |
 | `widgets/graph-viewer/model/testHandle.js` | readers: `edgeRoutes()`, `level()`, `openBoxes()`, `aggregatedEdges()`, `bridges()`, `junctions()` |
 | `features/navigate-graph/**` | Arrange removed |
-| `features/select-neighbourhood`, `impact-view`, `url-state` | open the boxes a selection or walk needs |
-| `features/filter-graph` | filters compose with levels |
-| `entities/graph-edge` | aggregated edge kind and member counts |
+| `features/select-neighbourhood`, `impact-view`, `url-state` | unchanged as built: the opening logic sits in graph-viewer (`selectionReveals`) |
+| `features/filter-graph` | unchanged as built: filters compose with levels in graph-viewer (`modes.searched`) |
+| `entities/graph-edge` | unchanged as built: aggregated edges in graph-viewer |
 | `package.json`, lockfile | `elkjs` 0.12.0 direct; `cytoscape-elk` removed |
 | `e2e/**` | Arrange cases removed; new cases per story; metric checks |
 | `tests/self_check/docs/test_site_viz_deps.py` | dependency list and `layout.js` assertions follow the change |
