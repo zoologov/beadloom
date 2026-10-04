@@ -47,14 +47,14 @@ it holds `ui`, `model`, `lib` or `api` segments as it needs them. Each slice is 
 | `app` | [`site-app`](vitepress-site/app.md) | The theme: registers the pages and widgets the generated Markdown mounts. |
 | `pages` | [`site-architecture-page`](vitepress-site/architecture-page.md) | `ArchitectureMap`: the viewer in architecture mode with the node card, on the architecture page and every node page. |
 | `pages` | [`site-landscape-page`](vitepress-site/landscape-page.md) | `LandscapeMap`: the viewer in landscape mode with the service card. |
-| `widgets` | [`site-graph-viewer`](vitepress-site/graph-viewer.md) | The viewer core: toolbar, canvas, panel and legend, in two data modes. |
+| `widgets` | [`site-graph-viewer`](vitepress-site/graph-viewer.md) | The viewer core: toolbar, canvas, panel and legend, in two data modes; ELK's routes, trunks and buses, the map and bridges. |
 | `widgets` | [`site-node-card`](vitepress-site/node-card.md) | The architecture card: everything the data file says about one node. |
 | `widgets` | [`site-dashboard`](vitepress-site/dashboard.md) | The dashboard's panels. |
 | `widgets` | [`site-diagram-viewer`](vitepress-site/diagram-viewer.md) | Pan, zoom and full screen over Mermaid diagrams. |
 | `features` | [`site-filter-graph`](vitepress-site/filter-graph.md) | Which nodes the viewer shows: the architecture's filters and the landscape's. |
 | `features` | [`site-select-neighbourhood`](vitepress-site/select-neighbourhood.md) | A selected node's neighbourhood: depth, direction, dim or hide. |
 | `features` | [`site-impact-view`](vitepress-site/impact-view.md) | The impact mode: everything that depends on the selected node, and its summary. |
-| `features` | [`site-navigate-graph`](vitepress-site/navigate-graph.md) | Pan, zoom, fit, centre and Arrange. |
+| `features` | [`site-navigate-graph`](vitepress-site/navigate-graph.md) | Pan, zoom, fit and centre; no gesture moves a node. |
 | `features` | [`site-fullscreen`](vitepress-site/fullscreen.md) | Full screen with a CSS fallback. |
 | `features` | [`site-url-state`](vitepress-site/url-state.md) | A view's state in the query string. |
 | `entities` | [`site-architecture-data`](vitepress-site/architecture-data.md) | `architecture.data.json` and its schema version. |
@@ -63,14 +63,17 @@ it holds `ui`, `model`, `lib` or `api` segments as it needs them. Each slice is 
 | `entities` | [`site-graph-node`](vitepress-site/graph-node.md) | A node's status, its risks and its container. |
 | `entities` | [`site-graph-edge`](vitepress-site/graph-edge.md) | Edge kinds, their styles, the legend, and which edges a walk follows. |
 | `entities` | [`site-layer`](vitepress-site/layer.md) | The declared layers, and their colours. |
-| `shared` | [`site-shared`](vitepress-site/shared.md) | Browser checks, JSON loading, tree walks, shell quoting, theme tokens, Cytoscape, ECharts and the copy button. |
+| `shared` | [`site-shared`](vitepress-site/shared.md) | Browser checks, JSON loading, tree walks, shell quoting, theme tokens, Cytoscape, the ELK layout in a Web Worker, fresh ids, ECharts and the copy button. |
 
 This node keeps what belongs to no slice: `theme/index.js`, the file VitePress looks for, which
 re-exports the `app` layer; `.vitepress/config.mjs`, which reads the identity and the nav
 `docs site` generates (`site.generated.mjs`, `config.generated.mjs`); `.vitepress/generated.mjs`,
 whose `importGenerated(url)` loads a generated module as `{}` with a warning when it is not there
 yet and throws any other load error; `package.json` (`engines.node: >=22`, every dependency
-pinned exactly but `web-worker`) with its lockfile; and `scripts/`.
+pinned exactly) with its lockfile; and `scripts/`. The viewer's dependencies are Cytoscape and
+elkjs 0.12, which the viewer calls directly in a Web Worker. BDL-077 removed `cytoscape-elk`,
+which carried a nested elkjs 0.9 of its own, and `web-worker`, the one ranged pin, whose only
+user was elkjs's entry point under `cytoscape-elk`.
 
 **The layer rule.** `site-fsd-layers` in `.beadloom/_graph/rules.yml` declares the six layers by
 the tags `fsd-app` to `fsd-shared`, at `error`. Each slice carries its layer as its own tag and no
@@ -99,7 +102,7 @@ portal written by `docs site` carries them in its `e2e/`. `.beadloom/config.yml`
 `src/beadloom/site_scaffold/e2e` as a test root and names the `playwright` pattern group. This
 node declares the whole directory, and each spec is also declared in the `tests:` list of the one
 slice it drives, which is where it binds: a test file binds to one node, and a node does not
-inherit its ancestors' tests. The eighteen specs bind to sixteen slices. No spec drives
+inherit its ancestors' tests. The twenty-four specs bind to sixteen slices. No spec drives
 `site-app`, `site-dashboard`, `site-dashboard-data` or `site-landscape-data`, so those four report
 no bound tests.
 
@@ -109,6 +112,52 @@ Run them from the portal directory with `npm run test:e2e`, on `Node.js 22` or l
 `npx playwright install chromium`. The base path is read from the generated
 `site.generated.mjs`, or from `BEADLOOM_E2E_BASE`. The tests read the viewer's state through its
 test handle, `window.__beadloomViewer`, which exists only under automation.
+
+The helpers under `e2e/support/` compute their answers apart from the viewer's code, so a case
+does not ask the viewer to grade itself:
+
+- `viewer.js`: `waitForViewer`, `viewerAfter(page, navigate)` (waits for a handle other than the
+  one installed before a client-side move, because VitePress pushes the URL before it loads the
+  next page) and `openEveryBox(page)`, which a case that reads every node or edge calls first,
+  since the overview draws only the top-level boxes.
+- `adopterGraph.js`: `adopterSizedGraph(served, { layerRanks })`, a seeded graph of about four
+  hundred and fifty nodes and thirteen hundred drawn edges made from the served file's
+  declarations, laid out in the served layer ranks or in `layerRanks` of them, up to
+  `RANK_POSITIONS` (four).
+- `routeMetrics.js`: deviation from a computed route, edges through boxes and through their own
+  ends, the A2 sharing metric, channels, excess steps, lanes at a distance, branch points and
+  collinear pairs. Values a unit apart or closer count as one channel or lane.
+- `map.js`: what each level draws, derived from the data file (`treeOf`, `drawnAs`, `levelOf`,
+  `budgetLeftOut`, `degreesOf`).
+- `bridges.js`: a brute-force crossing finder over the drawn routes, the oracle of the bridge
+  cases.
+- `pointer.js`: drags and long presses on a reachable leaf, and every toolbar button pressed.
+- `environment.js`: the environment a timed case runs in, and its bound there (below).
+
+**Timed cases.** `playwright.config.js` declares two projects. `chromium` runs every case but the
+timed ones, in parallel. `performance` runs `e2e/performance.spec.js` one case at a time, after
+`chromium` has finished, and not at all when a `chromium` case fails: a case timed beside other
+browsers would time them as well. Playwright reports cases it did not run as skipped with no
+reason, which the adopter suite's skip-reason check reads as an unnamed skip. To run it alone:
+`npx playwright test -c e2e --project performance --no-deps`. A bound is stated per environment
+(`e2e/support/environment.js`). The environment is `ci` when `CI` is set and `local` otherwise,
+and `BEADLOOM_E2E_ENVIRONMENT` names it instead. An environment a case states no bound for fails
+the case, naming the ones it states.
+
+| Bound | Asserted in | `local` | `ci` |
+|-------|-------------|---------|------|
+| Mean interval between canvas drawings while panning, at the fit and at zoom 1, on both graphs | `performance.spec.js` | 25 ms | 33.4 ms |
+| First drawing of the adopter-sized graph, median of three openings | `performance.spec.js` | 7,200 ms | 15,000 ms |
+| Longest main-thread task from the data file's arrival until the graph is placed | `layout.spec.js` | 1,000 ms | 2,000 ms |
+
+The `local` bounds were calibrated on an Apple M1 Max in headless Chromium without a GPU, where
+the viewer measured 16.7 ms per frame, a first drawing of 5,707 to 5,781 ms and a longest task of
+302 to 353 ms (`beadloom-m6k7.6`). The `ci` bounds are wide on purpose: no GitHub runner had
+measured them when they were written, and they catch ELK on the main thread or the whole graph
+drawn at the fit, not a 15% slowdown. Two structural guards hold the same regressions on any
+machine: the whole-graph fit draws only the top-level boxes and at most 100 edges, and the pointer
+resting anywhere at the overview lifts the budget for one box at most (`map.spec.js`). The
+bundling's 50 ms budget at adopter size (`bundles.spec.js`) is one number for every environment.
 
 **Any project's graph** (`beadloom-ujzb.17`, `.20`). A case chooses its subject from the data the
 portal serves, never by a node id of this repository. A case written about a shape the served
@@ -122,8 +171,9 @@ shape: python 75 passed and 26 skipped, go 88 and 13, typescript 94 and 7, java 
 74 and 27, swift 74 and 27.
 
 **In CI.** The advisory `site-e2e` job runs the suite on this repository's portal after
-`site-build`, with `BEADLOOM_E2E_NO_SKIP=1`, so every case runs here: 101 of 101. It is not a
-required check. The `site-adopters` workflow builds the six fixtures and runs the suite on each,
+`site-build`, with `BEADLOOM_E2E_NO_SKIP=1`, so every case runs here: 182 cases in 24 files, 179
+in the `chromium` project and 3 in `performance`, under the `ci` bounds. It is not a required
+check. The `site-adopters` workflow builds the six fixtures and runs the suite on each,
 on pull requests that change what it tests, weekly on `main` and on demand. What it tests is its
 `paths:` filter, and a self-check holds that filter to every file the slow tests read and every
 `src/beadloom` file their `init`, `reindex` and `docs site` steps enter, traced on each fixture in
