@@ -11,16 +11,21 @@
 // edges outside a selection fade in colour, so a trunk of them does not darken.
 //
 // Every case reads the graph at full detail, every box open: at the whole-graph
-// fit the viewer draws a map of closed boxes (`map.spec.js`).
+// fit the viewer draws a map of closed boxes (`map.spec.js`). The adopter-sized
+// graph is also read in every number of layer ranks it lays out differently in:
+// a box's rank pins it to a layer, and one rank count drew a bus past an edge's
+// target and back while the others did not.
 
 import { test, expect } from "@playwright/test";
-import { adopterSizedGraph } from "./support/adopterGraph.js";
+import { RANK_POSITIONS, adopterSizedGraph } from "./support/adopterGraph.js";
 import {
   branchPoints,
   channelsOf,
   collinearPairs,
   deviation,
   distanceToPolyline,
+  edgesThroughBoxes,
+  edgesThroughTheirEnds,
   excessSteps,
   lanesAt,
   polylineOf,
@@ -66,6 +71,15 @@ const GRAPHS = [
     },
   },
 ];
+
+/**
+ * The numbers of layer ranks the adopter-sized graph is read in besides the
+ * served file's: every one it lays out differently, from one, the same layout
+ * as none, to as many as its boxes take. A box's rank pins it to a layer, so each
+ * is a different drawing of the same nodes and edges, and a portal's own ranks
+ * are one of them at most.
+ */
+const RANK_COUNTS = Array.from({ length: RANK_POSITIONS }, (_, index) => index + 1);
 
 /** The crafted graph's box with many edges, its two children, and the top-level boxes its edges lead to. */
 const BOX_HUB = "hub";
@@ -242,7 +256,7 @@ for (const graph of GRAPHS) {
       expect(excessSteps(drawn, leaves)).toBeLessThanOrEqual(STEPS_KEPT * elk);
     });
 
-    test("every route joins its own two boxes with right angles only, and an edge in no bundle keeps ELK's route", async ({
+    test("every route joins its own two boxes with right angles only, from outside them, and an edge in no bundle keeps ELK's route", async ({
       page,
       request,
     }) => {
@@ -267,6 +281,7 @@ for (const graph of GRAPHS) {
         })
         .map(({ id }) => id);
       expect(wrong).toEqual([]);
+      expect(edgesThroughTheirEnds(drawn.map(({ id, source, target }) => ({ id, source, target, points: routes[id] })), boxes)).toEqual([]);
       const rerouted = drawn
         .filter(({ id }) => !bundled.has(id) && deviation(routes[id], polylineOf(elk[id].sections)) > TOLERANCE)
         .map(({ id }) => id);
@@ -312,6 +327,29 @@ for (const graph of GRAPHS) {
       expect(stray).toEqual([]);
       expect(missing).toEqual([]);
     });
+  });
+}
+
+for (const layerRanks of RANK_COUNTS) {
+  test(`on an adopter-sized graph in ${layerRanks} layer rank(s), every busy node leaves each side in one channel per direction within its lane bound, and no route runs through a box, back into its own ends or along an edge with no common end`, async ({
+    page,
+    request,
+  }) => {
+    const data = adopterSizedGraph(await architectureData(request), { layerRanks });
+    await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+    await openArchitecture(page);
+    await openEveryBox(page);
+    const parents = parentMap(data);
+    const busy = await busyNodes(page, TRUNK_DEGREE);
+    requireShape(busy.length > 0, `no node has ${TRUNK_DEGREE} drawn edges`);
+
+    expect(await staircasesOf(page, busy)).toEqual([]);
+    expect(await lanesOverBoundOf(page, busy, parents)).toEqual([]);
+    const drawn = await drawnRoutes(page);
+    const { boxes } = await viewer(page, "elkGeometry");
+    expect(edgesThroughTheirEnds(drawn, boxes)).toEqual([]);
+    expect(edgesThroughBoxes(drawn, boxes, parents)).toEqual([]);
+    expect(collinearPairs(drawn)).toEqual([]);
   });
 }
 

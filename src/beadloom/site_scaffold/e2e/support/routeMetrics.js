@@ -5,7 +5,8 @@
 // the viewer's code:
 //
 // - how far a drawn polyline lies from the route the layout computed;
-// - which edges pass through a box they do not connect;
+// - which edges pass through a box they do not connect, and which through a box
+//   they do: an edge drawn past its own end and back enters it from inside;
 // - which edges are hard to tell apart: an edge is sampled at evenly spaced points
 //   over the middle of its length, a sample is shared when a sample of another
 //   edge lies in the same or a neighbouring small cell, and an edge is
@@ -134,6 +135,26 @@ export function edgesThroughBoxes(edges, boxes, parents) {
           break;
         }
       }
+    }
+  }
+  return found;
+}
+
+/**
+ * The edges that pass through the box of one of their own ends: `[{ edge, box }]`.
+ * An edge leaves its source's box and enters its target's at the border; one
+ * whose route runs on past the border into the box, by more than a unit, has
+ * been drawn past that end and back, and its arrowhead points out of the box.
+ * `edges` are `{ id, source, target, points }`; `boxes` map a node's id to its box.
+ */
+export function edgesThroughTheirEnds(edges, boxes) {
+  const found = [];
+  for (const edge of edges) {
+    for (const id of new Set([edge.source, edge.target])) {
+      const b = boxes[id];
+      if (!b) continue;
+      const box = { x1: b.x1 + BOX_INSET, y1: b.y1 + BOX_INSET, x2: b.x2 - BOX_INSET, y2: b.y2 - BOX_INSET };
+      if (edge.points.slice(1).some((point, i) => entersBox(edge.points[i], point, box))) found.push({ edge: edge.id, box: id });
     }
   }
   return found;

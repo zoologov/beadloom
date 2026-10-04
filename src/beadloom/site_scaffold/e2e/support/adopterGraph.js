@@ -9,9 +9,20 @@
 // deeper, edges mostly down the layers, about four in ten inside one box, and a
 // few hubs. The same seed gives the same file, so a case reads the same graph on
 // every run. Every name in it is made up here.
+//
+// The layout pins each box to its layer rank, so the graph's shape depends on
+// how many ranks the served file declares, and a portal's ranks are its
+// project's. `layerRanks` asks for a graph of a given number of ranks instead,
+// whatever the served file declares: the same boxes, nodes and edges, laid out
+// in that many ranks.
 
 /** The graph's size: boxes per layer position (and unlayered), and drawn edges. */
 const BOXES_PER_RANK = [4, 6, 18, 5];
+/**
+ * How many layer positions the boxes take: a graph of more ranks than this is
+ * laid out as one of this many, since its further ranks hold no box.
+ */
+export const RANK_POSITIONS = BOXES_PER_RANK.length;
 const UNLAYERED_BOXES = 3;
 const LEAVES_PER_BOX = [8, 14];
 const DRAWN_EDGES = 1300;
@@ -109,13 +120,21 @@ function edgesOf({ nodes, parent, rank, leaves }, random) {
   return [...edges.values()];
 }
 
-/** `served` with its nodes and edges replaced by an adopter-sized graph. */
-export function adopterSizedGraph(served) {
+/** The layers of a graph of `count` ranks, 0 to `count - 1`, each named after its rank. */
+const layersOfRanks = (count) => Array.from({ length: count }, (_, rank) => ({ name: `rank ${rank}`, rank }));
+
+/**
+ * `served` with its nodes and edges replaced by an adopter-sized graph, its
+ * boxes in the served file's layer ranks, or in `layerRanks` ranks when given
+ * (0 for none), with the served layers replaced to match.
+ */
+export function adopterSizedGraph(served, { layerRanks } = {}) {
   const random = seeded(SEED);
-  const ranks = (Array.isArray(served.layers) ? served.layers : [])
-    .map((layer) => layer.rank)
-    .filter((value) => typeof value === "number");
+  const layers =
+    typeof layerRanks === "number" ? layersOfRanks(layerRanks) : Array.isArray(served.layers) ? served.layers : [];
+  const ranks = layers.map((layer) => layer.rank).filter((value) => typeof value === "number");
   const tree = nodesOf(ranks, random);
   const containment = tree.nodes.map((n) => ({ src: n.id, dst: n.parent, kind: "part_of" }));
-  return { ...served, nodes: tree.nodes, edges: [...containment, ...edgesOf(tree, random)] };
+  const graph = { ...served, nodes: tree.nodes, edges: [...containment, ...edgesOf(tree, random)] };
+  return typeof layerRanks === "number" ? { ...graph, layers } : graph;
 }

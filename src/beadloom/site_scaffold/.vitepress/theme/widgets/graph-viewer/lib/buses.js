@@ -6,9 +6,12 @@
 // heights. A bus starts every edge that leaves one side in one direction from
 // the middle of that side, drops it to one channel, the nearest one ELK already
 // used in the first gap that no other edge runs along, and lets it leave the
-// bus where its own lane begins. When two nodes face one gap, an edge between
-// them keeps the channel the busier node's bus gave it, and the other node's bus
-// takes it along its own channel first.
+// bus where its own lane begins. The gap ends at the nearest box over any place
+// the channel runs to, a lane's as well as a port's: a channel past the border of
+// a box the bus reaches would take an edge to that box past it and back into it.
+// When two nodes face one gap, an edge between them keeps the channel the busier
+// node's bus gave it, and the other node's bus takes it along its own channel
+// first.
 //
 // Every edge of a bus runs along its channel for a while: a lane that begins
 // right below the side's middle would take its edge straight down through the
@@ -40,8 +43,9 @@ const DIRECTIONS = Object.freeze(["out", "in"]);
 
 /**
  * The first gap on one side of `node`: how far from its border the nearest box
- * lies over the span of its ports, or the border of a box that holds it. Only
- * `depth` units out are searched; past that the gap counts as open.
+ * lies over the span `[px1, px2]`, `reach` either side of it included, or the
+ * border of a box that holds it. Only `depth` units out are searched; past that
+ * the gap counts as open.
  */
 function firstGap(drawing, node, border, sign, [px1, px2], depth, reach) {
   let gap = Infinity;
@@ -59,6 +63,25 @@ function firstGap(drawing, node, border, sign, [px1, px2], depth, reach) {
     if (distance > 0 && r.x1 < px2 + reach && r.x2 > px1 - reach) gap = Math.min(gap, distance);
   });
   return gap;
+}
+
+/**
+ * The first gap over every place the bus runs above: its ports, and the lanes of
+ * the edges that turn in the gap, `turnsIn(gap)`, since the channel runs out to
+ * each of them. A box over a lane, the edge's own target among them, ends the
+ * gap as one over a port does: a channel past its border would take that edge
+ * past the box and back into it. The span only widens, so the gap only narrows,
+ * until no edge left turning in it widens the span further.
+ */
+function gapOver(ports, gapOf, turnsIn) {
+  let span = [Math.min(...ports), Math.max(...ports)];
+  for (;;) {
+    const gap = gapOf(span);
+    const lanes = turnsIn(gap).map(({ route }) => route[2].x);
+    const wider = [Math.min(span[0], ...lanes), Math.max(span[1], ...lanes)];
+    if (wider[0] === span[0] && wider[1] === span[1]) return gap;
+    span = wider;
+  }
 }
 
 /**
@@ -166,12 +189,14 @@ function busOf(drawing, node, { side, sign }, direction, options) {
   const separation = opposite ? (direction === "out" ? options.portSeparation : -options.portSeparation) : 0;
   const ports = fan.map(({ route }) => route[0].x);
   const depth = Math.max(2 * options.shallowChannel, ...fan.map(({ route }) => sign * (route[1].y - border)));
-  const gap = firstGap(drawing, node, border, sign, [Math.min(...ports), Math.max(...ports)], depth, options.gapReach);
   // An edge whose first turn lies in the gap joins the bus at its lane; one that
   // drops further first, or whose channel another bus claimed, leaves the bus at
   // its own port's place and keeps its drop to that channel.
+  const turnsIn = (gap) => fan.filter((item) => !item.claimed && sign * (item.route[1].y - border) < gap);
+  const gap = gapOver(ports, (span) => firstGap(drawing, node, border, sign, span, depth, options.gapReach), turnsIn);
+  const inGap = new Set(turnsIn(gap));
   for (const item of fan) {
-    item.inGap = !item.claimed && sign * (item.route[1].y - border) < gap;
+    item.inGap = inGap.has(item);
     item.lane = item.inGap ? item.route[2].x : item.route[0].x;
   }
   const lanes = fan.map((item) => item.lane);
