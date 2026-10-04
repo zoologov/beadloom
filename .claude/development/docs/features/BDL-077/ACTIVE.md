@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-m6k7.6` (review findings); then `beadloom-m6k7.5` (two-rank second channel), W → P.
+**Bead:** `beadloom-m6k7.5` (two-rank second channel); then W → P.
 **Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -39,11 +39,14 @@
 | `beadloom-m6k7.3` | fix | ✓ done | a box hub is not bundled |
 | `beadloom-m6k7.4` | fix | ✓ done | adopter-size leaves over the lane bound |
 | `beadloom-87o6` | R | ✓ done | review |
-| `beadloom-m6k7.6` | fix | in progress | review findings |
+| `beadloom-m6k7.6` | fix | ✓ done | review findings |
+| `beadloom-m6k7.5` | fix | in progress | two-rank second channel |
 | `beadloom-t3pw` | W | blocked | docs |
 | `beadloom-zaba` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **`beadloom-m6k7.6` closed** `60146073`: performance guarded — structural (long tasks during layout, the overview budget) and timed cases with per-environment bounds (local: frame 25 ms, first drawing 7,200 ms, long task 1,000 ms; CI wider, never yet measured on a runner); the budget keeps the 100 heaviest with a name tie-break; a new defect fixed — the pointer on the root box lifted the budget for every box (345 edges at the adopter overview); a failed layout hides the canvas and disables graph controls; 178 browser cases.
 
 - **R closed** `beadloom-87o6`: ISSUES, 0 critical, 1 major — M1 no suite guard for frame time or first render (the reviewer measured the goal holds: first render 4,330 → 3,690 ms here, fit p90 33 → 16.7 ms, 133 → 16.7 at adopter size); minor: ties at the 100 budget can empty the overview; a failed layout shows a stacked canvas; RFC rows named slices that did not change (fixed in RFC); a stale comment; bundling could move to `shared/` (not taken). → `beadloom-m6k7.6`.
 
