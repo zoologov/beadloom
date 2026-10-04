@@ -39,13 +39,15 @@ or a crash in a path adopters use (a dev server, a node id, a manifest change, f
 
 ## Goals
 
-- [ ] The overview reads at a glance: three line weights at most, counts on pills that nothing
-      paints over, every box title readable and inside or beside its box without covering marks.
+- [ ] The overview reads at a glance: one thin line weight, counts on pills that nothing paints
+      over, no two arrowheads overlapping, parallel lines separated by a visible gap, every box
+      title readable and inside or beside its box without covering marks.
 - [ ] Every arrowhead is whole: a constant size on screen, with a straight run before its box at
       least as long as the head.
-- [ ] A followed line (hover, a selection's walk) is visibly on top of what it crosses, without
-      bridges *(pending question 1)*.
-- [ ] A branch leaves its trunk exactly on the line; no mark sits off the stroke.
+- [ ] A followed line (hover, a selection's walk) is visibly on top of what it crosses; there are
+      no bridges.
+- [ ] A branch merges into its trunk with a rounded join on the stroke; there are no junction
+      dots and no mark off the stroke.
 - [ ] The node, container, edge and legend styling is consistent in light and dark, with no
       fallback colour and contrast at WCAG AA for text.
 - [ ] The activity line on the card distinguishes the project's busiest nodes from its quiet ones
@@ -59,29 +61,31 @@ or a crash in a path adopters use (a dev server, a node id, a manifest change, f
 
 - Changing the layout, the map's level rule, or the bundling rules of BDL-077.
 - Replacing Cytoscape.
-- New viewer features beyond zoom-to-selection *(pending question 7)*.
+- New viewer features beyond zoom-to-selection.
 
-## Open questions for the owner
+## Owner's rulings (2026-10-04)
 
-1. Bridges: remove (recommended), or keep restyled as gaps.
-2. Trunk junctions: square joins with a dot only at four-way junctions (recommended); small dots
-   on every join; or rounded merges with no dots.
-3. The direction gradient along an edge: drop it (recommended; arrowheads carry direction), or keep.
-4. Overview widths: three steps 1–3 / 4–15 / 16+ (recommended) or a capped continuous scale; show
-   a pill for a count of 1 or not (prototype: not).
-5. Node status: a corner mark (recommended) or a thin status border.
-6. Activity: changed lines over 30 days with levels relative to the project (recommended), or
-   "merges in 30 days" with retuned thresholds.
-7. Selecting a node at the overview zooms to its neighbourhood (recommended), or keeps the zoom.
+1. **Bridges are removed entirely.** A followed edge is drawn on top with a casing instead.
+2. **Trunk junctions are rounded merges with no dots.**
+3. **The direction gradient along an edge is dropped;** arrowheads carry direction.
+4. **No thick lines at all:** every line has one thin weight; an aggregated edge's count is on
+   its pill, not in its width.
+5. **Node status is a corner mark.**
+6. **Activity counts changed lines over 30 days, with levels relative to the project;** a box
+   rolls up its children; zero is named as no change.
+7. **Selecting a node at the overview zooms to its neighbourhood.**
+8. **The overview itself must read better** — on the prototype's screenshots too, arrowheads and
+   lines run into each other and lines get in each other's way. The approach is chosen by a
+   probe with screenshots (variants in `RND.md`), then the owner picks.
 
 ## User Stories
 
 ### US-1: Read the overview
-**As** a team member opening the architecture, **I want** thin, stepped lines with their counts on
-pills, **so that** I can read which domains depend on which.
+**As** a team member opening the architecture, **I want** thin lines that keep out of each
+other's way, with their counts on pills, **so that** I can read which domains depend on which.
 
-- [ ] At the whole-graph fit no aggregated edge is wider than the widest step, and no count pill
-      overlaps a box, a title or another pill.
+- [ ] At the whole-graph fit every line has the one thin weight; no count pill overlaps a box, a
+      title or another pill; no two arrowheads overlap; parallel runs keep a visible gap.
 - [ ] Every closed box's title is fully visible.
 
 ### US-2: Trust the marks
@@ -89,8 +93,8 @@ pills, **so that** I can read which domains depend on which.
 the picture does not look broken.
 
 - [ ] Every arrowhead has a straight run before its box at least as long as itself, and a constant
-      screen size per width step.
-- [ ] Every branch point lies on its trunk's drawn stroke (within half a pixel).
+      screen size.
+- [ ] Every branch joins its trunk on the drawn stroke with a rounded merge; no dot is drawn.
 - [ ] A hovered or walked edge is drawn above every edge it crosses.
 
 ### US-3: A card whose activity means something
