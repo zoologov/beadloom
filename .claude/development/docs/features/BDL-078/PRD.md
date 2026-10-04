@@ -87,7 +87,8 @@ or a crash in a path adopters use (a dev server, a node id, a manifest change, f
    This replaces BDL-077's rule that an edge is drawn as itself once both its ends are drawn.
 10. **One line weight, thin, always.** No bridges, no dots, no arrowheads on top of each other,
     and **no redundant arrowheads**: lines that share their last run into a box end in one
-    arrowhead, not one per line.
+    arrowhead, not one per line. Lines that reach a box side separately stay separate, with a
+    gap (the owner chose this over forcing every line on a side into one entry).
 11. **Deferred:** an overview for projects whose top level does not fit the canvas (boxes of
     about 35×10 px) — a minimum box size or another grouping tier — waits for a real large
     project.
