@@ -291,7 +291,9 @@ export function excessSteps(routes, leaves) {
  * Where `node`'s edges cross a line `distance` units out from each side they
  * leave by: `{ top, bottom }`, each `{ lanes, others }` — the lanes, distinct to
  * the unit (a unit apart or closer is one lane), and the other ends of the
- * edges that leave by that side.
+ * edges that leave by that side. An edge meets the line where it first reaches
+ * it, a corner within half a unit of it included; a run along the line counts
+ * both its ends.
  */
 export function lanesAt(routes, node, box, distance) {
   const sides = {};
@@ -310,8 +312,10 @@ export function lanesAt(routes, node, box, distance) {
         if (same(a.y, y)) sides[side].xs.push(a.x, b.x);
         continue;
       }
-      if ((a.y - y) * (b.y - y) <= 0) {
-        sides[side].xs.push(a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x));
+      // A run that ends on the line meets it there, whether Cytoscape drew its
+      // corner a fraction of a unit short of the line or past it.
+      if ((a.y - y) * (b.y - y) <= 0 || same(b.y, y)) {
+        sides[side].xs.push(same(b.y, y) ? b.x : a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x));
         break;
       }
     }

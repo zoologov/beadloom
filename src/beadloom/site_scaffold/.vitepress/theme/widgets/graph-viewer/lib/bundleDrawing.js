@@ -16,6 +16,8 @@ import { gridIndex, lineIndex, orientationOf, segmentRect } from "./spatialIndex
 
 /** Two coordinates closer than this are one. */
 export const NEAR = 0.5;
+/** Two lanes this close or closer are one. */
+export const ONE_LANE = 1;
 /** How far inside a box a segment must reach to cross it. */
 export const BOX_INSET = 1;
 /** How far two collinear segments must overlap to run along each other. */
@@ -148,6 +150,9 @@ export function drawingOf({ nodes, edges, loops = [], boxes, paths }, options) {
 }
 
 export const otherEnd = (edge, node) => (edge.source === node ? edge.target : edge.source);
+/** Whether two edges have an end in common: two that do may share a line, two that do not are drawn as one there. */
+export const sharesAnEnd = (a, b) =>
+  a.source === b.source || a.source === b.target || a.target === b.source || a.target === b.target;
 export const directionAt = (edge, node) => (edge.source === node ? "out" : "in");
 /** A route oriented away from `node`, and back: an edge into the node is read from its target end. */
 export const fromNode = (edge, node, points) => (edge.source === node ? points : [...points].reverse());
@@ -157,6 +162,45 @@ export function headFrom(edge, node, points, count) {
   const head = [];
   for (let i = points.length - 1; i >= 0 && head.length < count; i -= 1) head.push(points[i]);
   return head;
+}
+
+/** The place a route first meets the level `y` at, along it or across it, or null when it never does. */
+export function laneAt(route, y) {
+  for (let i = 1; i < route.length; i += 1) {
+    const a = route[i - 1];
+    const b = route[i];
+    if (near(a.y, b.y)) {
+      if (near(a.y, y)) return a.x;
+      continue;
+    }
+    if ((a.y - y) * (b.y - y) <= 0) return a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x);
+  }
+  return null;
+}
+
+/**
+ * The lane `points`, a route of `edge`, leaves `node` in: where, read from the
+ * node, it first meets the level `distance` out from the side it leaves by, the
+ * top or the bottom; null when it leaves by neither or never gets that far.
+ */
+export function laneOut(drawing, edge, node, points, distance) {
+  const box = drawing.boxes[node];
+  const start = headFrom(edge, node, points, 1)[0];
+  const sign = near(start.y, box.y2) ? 1 : near(start.y, box.y1) ? -1 : 0;
+  if (!sign) return null;
+  return laneAt(fromNode(edge, node, points), start.y + sign * distance);
+}
+
+/**
+ * Whether `points`, a new route for `edge`, leaves `node` in the lane its route
+ * leaves it in now, `distance` out: a unit apart or closer is one lane, and a
+ * route that does not get that far keeps it only when the new one does not either.
+ */
+export function keepsLane(drawing, edge, node, points, distance) {
+  const before = laneOut(drawing, edge, node, drawing.routes.get(edge.id), distance);
+  const after = laneOut(drawing, edge, node, points, distance);
+  if (before === null || after === null) return before === after;
+  return Math.abs(after - before) <= ONE_LANE;
 }
 
 /** Whether the segment from `a` to `b` crosses a box `allowed` does not accept. */

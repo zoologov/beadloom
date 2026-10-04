@@ -14,9 +14,13 @@
 // - A **trunk** on a node with many edges: its edges to one top-level box share
 //   one member's route, ELK's own, to a distribution line just outside that box,
 //   and each drops off the line where ELK had it enter the box. An edge between
-//   two such nodes belongs to its source's trunk only.
+//   two such nodes is in both trunks: its source's out of the source's box, its
+//   target's from there on.
+// - A **join** where a trunk left such an edge in a lane of its own: it rides
+//   the lane most of that box's edges leave in out past the distance a node's
+//   lanes are counted at, then turns across to its own route.
 // - The **fallback**: an edge keeps its own route wherever a new segment would
-//   cross a box or run along an edge that has nothing to do with it.
+//   cross a box or run along an edge that has no end in common with it.
 //
 // A node is a leaf or a box alike: a box's edges leave its border as a leaf's
 // do, and a box with many edges would otherwise leave its side in a staircase as
@@ -24,15 +28,18 @@
 // box's edges into its own children, a node's into a box that holds it), though
 // a loop is never rerouted.
 //
-// The trunks are drawn first and the buses on top of them, the busiest nodes
-// first (`trunks.js`, `buses.js`), over one drawing whose routes they rewrite
-// (`bundleDrawing.js`). The layered layout runs downwards, so edges leave a node
+// The trunks are drawn first, the ones leading out of a node before the ones
+// leading in, then the joins, the busiest nodes first, and the buses on top of
+// them, the busiest nodes first (`trunks.js`, `joins.js`, `buses.js`), over one
+// drawing whose routes they rewrite (`bundleDrawing.js`). A join is reported
+// with the trunks, as the short trunk it is. The layered layout runs downwards, so edges leave a node
 // through its top and bottom sides, and those are the sides bundled. Every
 // threshold is a parameter (`BUNDLE_OPTIONS`); nothing here knows a project's
 // names. Everything is pure: routes in, routes out.
 
 import { busesAt } from "./buses.js";
 import { drawingOf } from "./bundleDrawing.js";
+import { joinsAt } from "./joins.js";
 import { trunksOf } from "./trunks.js";
 
 /** What the bundling is tuned by, in layout units unless named otherwise. */
@@ -49,6 +56,10 @@ export const BUNDLE_OPTIONS = Object.freeze({
   trunkLineTries: 4,
   /** How far either side of a side's middle the two buses start when a side carries both directions. */
   portSeparation: 8,
+  /** How far a bus's port moves off its place when an edge's lane begins right there. */
+  portShift: 3,
+  /** How far, at least, every edge of a bus runs along its channel. */
+  channelRun: 2,
   /** How far either side of a bus's ports a box still ends the first gap. */
   gapReach: 400,
   /** How close another edge may run to a bus channel and leave it free. */
@@ -59,6 +70,12 @@ export const BUNDLE_OPTIONS = Object.freeze({
   alongClearance: 3,
   /** How close another edge may run along a distribution line and leave it free. */
   lineClearance: 4,
+  /** How far out from a busy node its lanes are counted: a join rides its lane that far, a trunk keeps them there. */
+  laneReach: 150,
+  /** How far apart the levels lie that a joined edge may turn off its lane at, past `laneReach`. */
+  joinStep: 6,
+  /** How many such levels are tried before the edge keeps a lane of its own. */
+  joinTries: 40,
   /** The side of a cell of the index over the boxes. */
   cellSize: 512,
   /** The width of a band of the index over the routes' segments. */
@@ -73,15 +90,19 @@ export const BUNDLE_OPTIONS = Object.freeze({
  * the same way, counted in a node's degree and never rerouted; `boxes` map a node's
  * id to its box `{ x1, y1, x2, y2 }`, and `paths` an edge's id to its route, a
  * polyline of `{ x, y }`. `paths` in the answer holds every routed edge's route,
- * bundled or as it was; `trunks` and `buses` say which edges share which.
+ * bundled or as it was; `trunks` and `buses` say which edges share which, a
+ * join counted with the trunks (its `direction` "both" when its edges lead both
+ * ways).
  * `overrides` replace any of `BUNDLE_OPTIONS`.
  */
 export function bundleRoutes(drawing, overrides = {}) {
   const options = { ...BUNDLE_OPTIONS, ...overrides };
   const state = drawingOf(drawing, options);
   const hubs = state.nodesWithDegree(options.trunkDegree);
-  const hubSet = new Set(hubs);
-  const trunks = hubs.flatMap((hub) => trunksOf(state, hub, hubSet, options));
+  const busy = new Set(hubs);
+  const trunksLeading = (direction) => hubs.flatMap((hub) => trunksOf(state, hub, direction, busy, options));
+  const trunks = [...trunksLeading("out"), ...trunksLeading("in")];
+  const joins = state.nodesByDegree(options.trunkDegree).flatMap((hub) => joinsAt(state, hub, busy, options));
   const buses = state.nodesByDegree(options.busDegree).flatMap((node) => busesAt(state, node, options));
-  return { paths: Object.fromEntries(state.routes), trunks, buses };
+  return { paths: Object.fromEntries(state.routes), trunks: [...trunks, ...joins], buses };
 }

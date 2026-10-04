@@ -44,19 +44,10 @@ const TOLERANCE = 0.5;
 const CLEARANCE_PX = 12;
 /** The zoom steps that bring the canvas from the fit to full size, at most. */
 const ZOOM_STEPS = 20;
-/**
- * Why the two cases about every busy node are expected to fail on an
- * adopter-sized graph: there some busy leaves keep a second channel and more
- * lanes than the bound. A case marked so passes while it fails, and fails the run
- * the day it passes, so the mark goes with the fix.
- */
-const KNOWN_STAIRCASES = "known: busy leaves of an adopter-sized graph keep a second channel and exceed the lane bound";
-
-/** The graphs a bundled drawing is read on; `knownStaircases` names why its busy nodes are expected to fail. */
+/** The graphs a bundled drawing is read on. */
 const GRAPHS = [
   {
     name: "this portal's architecture graph",
-    knownStaircases: null,
     open: async (page, request) => {
       const data = await architectureData(request);
       await openArchitecture(page);
@@ -66,7 +57,6 @@ const GRAPHS = [
   },
   {
     name: "an adopter-sized architecture graph",
-    knownStaircases: KNOWN_STAIRCASES,
     open: async (page, request) => {
       const data = adopterSizedGraph(await architectureData(request));
       await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
@@ -169,23 +159,20 @@ async function busyNodes(page, threshold) {
 }
 
 /**
- * The drawn routes of `node`'s own edges: every one but an edge another node's
- * trunk carries. A busy node's edge to another busy node rides its source's trunk
- * and arrives at the target in a lane of its own, so it counts at its source.
+ * The drawn routes of `node`'s edges, every one of them: an edge another busy
+ * node's trunk carries counts here too, since the bound is about the lines a
+ * reader sees leave the node, whoever bundled them.
  */
-function ownRoutes(drawn, node, trunks) {
-  const carried = new Set(trunks.filter((t) => t.node !== node).flatMap((t) => t.members));
-  const mine = new Set(trunks.filter((t) => t.node === node).flatMap((t) => t.members));
-  return drawn.filter((r) => (r.source === node || r.target === node) && (mine.has(r.id) || !carried.has(r.id)));
+function routesAt(drawn, node) {
+  return drawn.filter((r) => r.source === node || r.target === node);
 }
 
 /** Every side a busy node of `busy` leaves in more than one channel in one direction: `["node side: N channels"]`. */
 async function staircasesOf(page, busy) {
   const drawn = await drawnRoutes(page);
-  const { trunks } = await viewer(page, "bundles");
   const { boxes } = await viewer(page, "elkGeometry");
   return busy.flatMap(([node]) =>
-    [...channelsOf(ownRoutes(drawn, node, trunks), node, boxes[node])]
+    [...channelsOf(routesAt(drawn, node), node, boxes[node])]
       .filter(([, heights]) => heights.size > 1)
       .map(([side, heights]) => `${node} ${side}: ${heights.size} channels`)
   );
@@ -198,12 +185,11 @@ async function staircasesOf(page, busy) {
  */
 async function lanesOverBoundOf(page, busy, parents) {
   const drawn = await drawnRoutes(page);
-  const { trunks } = await viewer(page, "bundles");
   const { boxes } = await viewer(page, "elkGeometry");
   const topBox = topBoxOf(parents);
   return busy.flatMap(([node]) => {
     const own = topBox(node);
-    return Object.entries(lanesAt(ownRoutes(drawn, node, trunks), node, boxes[node], LANE_DISTANCE))
+    return Object.entries(lanesAt(routesAt(drawn, node), node, boxes[node], LANE_DISTANCE))
       .map(([side, { lanes, others }]) => {
         const bound =
           new Set(others.map(topBox).filter((top) => top !== own)).size + others.filter((o) => topBox(o) === own).length;
@@ -291,7 +277,6 @@ for (const graph of GRAPHS) {
       page,
       request,
     }) => {
-      test.fail(Boolean(graph.knownStaircases), graph.knownStaircases);
       await graph.open(page, request);
       const busy = await busyNodes(page, TRUNK_DEGREE);
       requireShape(busy.length > 0, `no node has ${TRUNK_DEGREE} drawn edges`);
@@ -303,7 +288,6 @@ for (const graph of GRAPHS) {
       page,
       request,
     }) => {
-      test.fail(Boolean(graph.knownStaircases), graph.knownStaircases);
       const parents = parentMap(await graph.open(page, request));
       const busy = await busyNodes(page, TRUNK_DEGREE);
       requireShape(busy.length > 0, `no node has ${TRUNK_DEGREE} drawn edges`);

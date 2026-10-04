@@ -9,6 +9,13 @@
 // bus where its own lane begins. When two nodes face one gap, an edge between
 // them keeps the channel the busier node's bus gave it, and the other node's bus
 // takes it along its own channel first.
+//
+// Every edge of a bus runs along its channel for a while: a lane that begins
+// right below the side's middle would take its edge straight down through the
+// channel to turn further out, a second channel, so the bus's port moves off it.
+// An edge whose lane cannot be reached along the channel, a box or an unrelated
+// edge in the way, leaves the bus at its own port's place instead, as an edge
+// that drops further does, and keeps its route only when that fails too.
 
 import {
   NEAR,
@@ -20,6 +27,7 @@ import {
   near,
   otherEnd,
   runsAlongAnother,
+  sharesAnEnd,
   simplify,
 } from "./bundleDrawing.js";
 
@@ -94,24 +102,45 @@ function busChannel(drawing, fan, { border, sign, gap, span, options }) {
 }
 
 /**
+ * The port's place at `x`, or `options.portShift` to either side of it when a
+ * lane begins nearer than `options.channelRun`: the edge there would not run
+ * along the channel at all.
+ */
+function portOffLanes(x, lanes, options) {
+  const free = (place) => lanes.every((lane) => Math.abs(lane - place) >= options.channelRun);
+  return [x, x + options.portShift, x - options.portShift].find(free) ?? x;
+}
+
+/**
  * Reroute one edge of `node`'s fan onto its bus, from `port` down to `channel`,
- * along it to the edge's lane and on as before; true when it joined. It stays
- * as it was when a new segment would cross a box other than its ends' and their
- * holders', or run along an edge that does not end at `node`, and when another
+ * along it and on as before; true when it joined. An edge whose first turn lies
+ * in the gap runs along the channel to its lane, and failing that, as every other
+ * edge does, to its own port's place, to drop to its first turn from there. It
+ * stays as it was when every way would cross a box other than its ends' and their
+ * holders', or run along an edge with no end in common with it, and when another
  * bus claimed its channel nearer the node than this one.
  */
-function joinBus(drawing, node, { edge, route, inGap, lane, claimed }, { port, channel, sign, options }) {
-  if (claimed && sign * (route[1].y - channel) < NEAR) return false;
-  const turn = inGap ? { x: lane, y: route[1].y } : route[1];
-  const points = [port, { x: port.x, y: channel }, { x: lane, y: channel }, turn];
+function joinBus(drawing, node, { edge, route, inGap, claimed }, { port, channel, sign, options }) {
+  const down = { x: port.x, y: channel };
+  const ways = [];
+  if (inGap) ways.push([port, down, { x: route[2].x, y: channel }, { x: route[2].x, y: route[1].y }]);
+  // Down to the channel and back would not be a drop: only an edge that turns
+  // beyond the channel takes it, or one ELK already dropped past the gap.
+  const beyond = sign * (route[1].y - channel) >= NEAR;
+  if (beyond || !(inGap || claimed)) ways.push([port, down, { x: route[0].x, y: channel }, route[1]]);
   const nodeAndHolders = drawing.withHolders(node);
   const otherAndHolders = drawing.withHolders(otherEnd(edge, node));
   const allowed = (id) => nodeAndHolders.has(id) || otherAndHolders.has(id);
-  const atNode = (other) => other.source === node || other.target === node;
-  for (let i = 1; i < points.length; i += 1) {
-    if (crossesABox(drawing, points[i - 1], points[i], allowed)) return false;
-    if (runsAlongAnother(drawing, points[i - 1], points[i], options.alongClearance, atNode)) return false;
-  }
+  const related = (other) => sharesAnEnd(other, edge);
+  const fits = (points) =>
+    points.every(
+      (point, i) =>
+        i === 0 ||
+        (!crossesABox(drawing, points[i - 1], point, allowed) &&
+          !runsAlongAnother(drawing, points[i - 1], point, options.alongClearance, related))
+    );
+  const points = ways.find(fits);
+  if (!points) return false;
   drawing.setRoute(edge, fromNode(edge, node, simplify([...points, ...route.slice(2)])));
   drawing.channels.set(edge.id, { node, y: channel });
   return true;
@@ -135,8 +164,6 @@ function busOf(drawing, node, { side, sign }, direction, options) {
         near(headFrom(edge, node, drawing.routes.get(edge.id), 1)[0].y, border)
     );
   const separation = opposite ? (direction === "out" ? options.portSeparation : -options.portSeparation) : 0;
-  const port = { x: centreX(box) + separation, y: border };
-
   const ports = fan.map(({ route }) => route[0].x);
   const depth = Math.max(2 * options.shallowChannel, ...fan.map(({ route }) => sign * (route[1].y - border)));
   const gap = firstGap(drawing, node, border, sign, [Math.min(...ports), Math.max(...ports)], depth, options.gapReach);
@@ -148,6 +175,7 @@ function busOf(drawing, node, { side, sign }, direction, options) {
     item.lane = item.inGap ? item.route[2].x : item.route[0].x;
   }
   const lanes = fan.map((item) => item.lane);
+  const port = { x: portOffLanes(centreX(box) + separation, [...lanes, ...ports], options), y: border };
   const span = [Math.min(...lanes, port.x), Math.max(...lanes, port.x)];
   const channel = busChannel(drawing, fan, { border, sign, gap, span, options });
 
