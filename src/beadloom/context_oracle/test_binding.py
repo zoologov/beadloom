@@ -29,7 +29,15 @@ path prefixes in its YAML, resolved by the same ownership rule over those
 prefixes. A declaration wins over the mirror: it is the statement a person made
 about that one file.
 
-Nothing is guessed. A test file outside the mirrored folders is ``unplaced`` —
+A Python test directly under a root, in no kind folder — ``tests/test_invoice.py``,
+the layout most Python projects keep — binds only when the layout declares
+``flat_tests`` (BDL-078 ``beadloom-76mk``; ``init`` declares it for a Python
+project). It binds to the node owning the module its name names, when exactly one
+node owns a module of that name (``named``), else to the one node its imports reach
+(``imported``), else to nothing. The declaration is what makes the name a statement
+the project made rather than a guess this module takes.
+
+Nothing else is guessed. A test file outside the mirrored folders is ``unplaced`` —
 recorded and counted, so a node with no bound test reads differently from a
 repository whose tests are not laid out yet — and a mirror whose code no node
 owns is ``unowned``. The heuristic this replaced (``test_mapper``, retired by
@@ -62,7 +70,9 @@ from beadloom.infrastructure.repository import (
     most_specific_owner,
 )
 from beadloom.infrastructure.repository import PLACEMENT_BESIDE_CODE as PLACEMENT_BESIDE_CODE
+from beadloom.infrastructure.repository import PLACEMENT_IMPORTED as PLACEMENT_IMPORTED
 from beadloom.infrastructure.repository import PLACEMENT_MIRROR as PLACEMENT_MIRROR
+from beadloom.infrastructure.repository import PLACEMENT_NAMED as PLACEMENT_NAMED
 from beadloom.infrastructure.repository import PLACEMENT_OTHER_KIND as PLACEMENT_OTHER_KIND
 from beadloom.infrastructure.repository import PLACEMENT_OVERRIDE as PLACEMENT_OVERRIDE
 from beadloom.infrastructure.repository import PLACEMENT_UNOWNED as PLACEMENT_UNOWNED
@@ -98,6 +108,9 @@ _TEST_AFFIXES = {
 #: SwiftPM names a test target after the target it tests, plus this suffix.
 _TEST_TARGET_SUFFIX = "Tests"
 _PACKAGE_MARKER = "__init__.py"
+#: The suffix of the only tests a flat test's name or imports can bind: the module
+#: name is a Python convention, and the imports are read for Python alone.
+_FLAT_SUFFIX = _PY_SUFFIX
 _TEST_PREFIX = "test_"
 _TEST_SUFFIX = "_test"
 
@@ -134,15 +147,18 @@ def bind_test_file(
     node_sources: Iterable[tuple[str, str]],
     overrides: Iterable[tuple[str, str]],
     layout: TestLayout = _DEFAULT_LAYOUT,
+    imported_refs: Iterable[str] = (),
 ) -> BoundTestFile:
     """Bind the test file at *path* (relative to the project root) to a node.
 
     *code_files* are the project's indexed code paths, *node_sources* and
     *overrides* ``(ref_id, source-or-prefix)`` pairs, *layout* the project's test
-    layout. The declaration wins; then, under a root, the mirror for a mirrored
-    kind; outside every root, the node whose source covers the file, when the
-    layout reads tests beside the code; everything else binds to nothing and
-    says why.
+    layout, *imported_refs* the nodes the file's imports resolve to. The
+    declaration wins; then, under a root, the mirror for a mirrored kind, or for a
+    Python file directly in the root, its name and then its imports when the
+    layout declares ``flat_tests``; outside every root, the node whose source
+    covers the file, when the layout reads tests beside the code; everything else
+    binds to nothing and says why.
     """
     located = layout.locate(path)
     kind, under_kind = located if located is not None else (None, "")
@@ -160,6 +176,8 @@ def bind_test_file(
     if located is None:
         return _beside_code(path, node_sources, layout)
     if kind is None:
+        if layout.flat_tests and layout.is_flat(path):
+            return _flat(path, code_files, node_sources, imported_refs)
         return BoundTestFile(path, None, None, PLACEMENT_UNPLACED)
     if kind not in MIRRORED_KINDS:
         return BoundTestFile(path, kind, None, PLACEMENT_OTHER_KIND)
@@ -178,6 +196,46 @@ def _beside_code(
     if owner is None:
         return BoundTestFile(path, None, None, PLACEMENT_UNPLACED)
     return BoundTestFile(path, None, owner, PLACEMENT_BESIDE_CODE)
+
+
+def _flat(
+    path: str,
+    code_files: Collection[str],
+    node_sources: Iterable[tuple[str, str]],
+    imported_refs: Iterable[str],
+) -> BoundTestFile:
+    """A Python test directly in a root: the one owner of its named module, else of its imports."""
+    posix = PurePosixPath(path)
+    if posix.suffix != _FLAT_SUFFIX:
+        return BoundTestFile(path, None, None, PLACEMENT_UNPLACED)
+    sources = tuple(node_sources)
+    named = {
+        owner
+        for code_file in _modules_named(_module_stem(posix.name), code_files)
+        if (owner := most_specific_owner(sources, code_file)) is not None
+    }
+    if len(named) == 1:
+        return BoundTestFile(path, None, named.pop(), PLACEMENT_NAMED)
+    imported = set(imported_refs)
+    if len(imported) == 1:
+        return BoundTestFile(path, None, imported.pop(), PLACEMENT_IMPORTED)
+    return BoundTestFile(path, None, None, PLACEMENT_UNPLACED)
+
+
+def _modules_named(module: str, code_files: Collection[str]) -> list[str]:
+    """The Python files that are the module *module*: ``<module>.py``, ``<module>/__init__.py``.
+
+    Plain string work, because it runs once per flat test over every code file.
+    """
+    as_file = f"{module}{_PY_SUFFIX}"
+    as_package = f"{module}/{_PACKAGE_MARKER}"
+    return [
+        code_file
+        for code_file in code_files
+        if code_file.rpartition("/")[2] == as_file
+        or code_file == as_package
+        or code_file.endswith(f"/{as_package}")
+    ]
 
 
 def mirrored_code_path(

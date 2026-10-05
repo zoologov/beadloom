@@ -1489,6 +1489,55 @@ def _echo_beside_modules(beside: CodeBesideModules | None, *, prefix: str) -> No
         click.echo(f"{prefix}{sentence}")
 
 
+def _echo_test_binding(project_root: Path, *, prefix: str) -> None:
+    """State how init's reindex bound the test files, and name each it could not.
+
+    The ``Tests:`` line is the one ``reindex`` prints; below it every test file
+    bound to no node, by path and placement, so the adopter can lay it out under
+    the mirror or declare it (BDL-078 ``beadloom-76mk``: a node card read "no
+    bound tests" and nothing init printed said why). Silent for a project with no
+    test file, and for an index without the test tables.
+    """
+    import sqlite3
+
+    from beadloom.application.reindex.test_index import (
+        describe_placements,
+        kind_counts,
+        placement_counts,
+        unbound_test_files,
+    )
+
+    db_path = project_root / ".beadloom" / "beadloom.db"
+    if not db_path.exists():
+        return
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    try:
+        counts = placement_counts(conn)
+        kinds = kind_counts(conn)
+        unbound = unbound_test_files(conn)
+    finally:
+        conn.close()
+    if not counts:
+        return
+    click.echo(f"{prefix}Tests: {describe_placements(counts, kinds)}")
+    if not unbound:
+        return
+    # Indented rather than prefixed: under `--bootstrap` the prefix is a check
+    # mark, which would mark a list of files init could not bind as done.
+    click.echo(
+        f"{_UNBOUND_HEADING_INDENT}{len(unbound)} test file(s) bound to no node - lay each "
+        "out under the mirror of the code it tests, or name it in that node's `tests:` list:"
+    )
+    for path, placement in unbound:
+        click.echo(f"{_UNBOUND_FILE_INDENT}{path} ({placement})")
+
+
+#: The indent of the line that introduces the test files bound to no node, and of each file.
+_UNBOUND_HEADING_INDENT = "  "
+_UNBOUND_FILE_INDENT = "    "
+
+
 # beadloom:domain=onboarding
 @main.command()
 @click.option("--bootstrap", is_flag=True, help="Bootstrap: generate graph from code.")
@@ -1590,6 +1639,7 @@ def init(
         if result.get("reindex"):
             ri = result["reindex"]
             click.echo(f"  Index: {ri['symbols']} symbols, {ri['imports']} imports")
+            _echo_test_binding(project_root, prefix="  ")
         if result.get("import"):
             click.echo(f"  Imported: {len(result['import'])} documents")
         # Every mode is judged, `import` included. The guard used to be
@@ -1676,6 +1726,7 @@ def init(
             f"{ri.imports_indexed} imports"
             + (f", {dep_count} dependency edges" if dep_count else "")
         )
+        _echo_test_binding(project_root, prefix="\u2713 ")
 
         # Warn about missing language parsers when symbols == 0.
         if ri.symbols_indexed == 0:
@@ -1746,4 +1797,6 @@ def init(
             from beadloom.application.reindex import reindex as do_reindex
 
             do_reindex(project_root)
+        if "reindex" in result:
+            _echo_test_binding(project_root, prefix="  ")
         _verdict_on_the_generated_graph(project_root, graph_before=graph_before)

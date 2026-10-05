@@ -48,6 +48,10 @@ from beadloom.onboarding.scanner.types import child_directory, cluster_directory
 if TYPE_CHECKING:
     from pathlib import Path
 
+#: The language entry, as the project scan records it, of a project whose tests
+#: `init` declares `flat_tests` for.
+_PYTHON_SUFFIX = ".py"
+
 
 def bootstrap_project(
     project_root: Path,
@@ -371,8 +375,18 @@ def bootstrap_project(
     # it tests, so a test binds to its package or target; written whole, both
     # together, because a declared mapping replaces the test layout's default one.
     mirrors = {**jvm.mirrors, **swift.mirrors}
+    tests: dict[str, Any] = {}
     if mirrors:
-        config["tests"] = {"mirrors": dict(sorted(mirrors.items()))}
+        tests["mirrors"] = dict(sorted(mirrors.items()))
+    # A Python project keeps its tests directly under `tests/` more often than
+    # under `tests/unit/`, where the mirror reads them; declaring `flat_tests`
+    # binds such a test by the module it names, then by its imports (BDL-078
+    # `beadloom-76mk`). Declared, not defaulted, so a project that keeps its
+    # flat tests unbound by choice says so by removing the key.
+    if _PYTHON_SUFFIX in config["languages"]:
+        tests["flat_tests"] = True
+    if tests:
+        config["tests"] = tests
     write_yaml_atomic(
         beadloom_dir / "config.yml",
         config,
