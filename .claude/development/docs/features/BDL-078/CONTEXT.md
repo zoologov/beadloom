@@ -74,6 +74,8 @@ history, and five open defects fixed.
 | 2026-10-05 | A box opens when its nodes are readable (≥ 24 px tall), not at 600 px | Owner ruling 12 |
 | 2026-10-05 | Loops from a node to its own container stay drawn | Owner ruling 13; the owner looks before the merge |
 | 2026-10-04 | Deferred: an overview for projects whose top level does not fit the canvas | Owner ruling 11 |
+| 2026-10-05 | Activity levels rank boxes among boxes and leaves among leaves; lock files and generated files do not count as change (`beadloom-btkd.1`) | Owner, after F-activity: 7 of 10 hot nodes were boxes; `package-lock.json` was 3,912 of vitepress-site's 17,714 lines |
+| 2026-10-05 | Flat Python tests bind through `tests: {flat_tests: true}`, written by `init`; not a default | `beadloom-76mk`; binding by name stays opt-in (2026-09-28 ruling); surfaced to the owner, not objected |
 
 ## Related Files
 

@@ -31,8 +31,9 @@
 | `beadloom-0gyz` | V2 | blocked | the overview |
 | `beadloom-hnff` | V3 | blocked | levels |
 | `beadloom-lw56` | F-activity | ✓ done | activity by changed lines |
-| `beadloom-nh7h` | F-nh7h | in progress | incremental vs fresh import resolution |
-| `beadloom-jcng` | F-jcng | blocked | manifests as inputs |
+| `beadloom-btkd.1` | dev | in progress | activity: boxes among boxes, generated files excluded (owner) |
+| `beadloom-nh7h` | F-nh7h | ✓ done | incremental vs fresh import resolution |
+| `beadloom-jcng` | F-jcng | ready | manifests as inputs |
 | `beadloom-76mk` | F-76mk | ✓ done | flat Python tests bind |
 | `beadloom-stcx` | F-stcx | ✓ done | `vitepress dev` loads |
 | `beadloom-q63p` | T | blocked | PRD criteria measured |
