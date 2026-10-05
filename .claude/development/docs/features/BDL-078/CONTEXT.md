@@ -77,6 +77,7 @@ history, and five open defects fixed.
 | 2026-10-05 | Activity levels rank boxes among boxes and leaves among leaves; lock files and generated files do not count as change (`beadloom-btkd.1`) | Owner, after F-activity: 7 of 10 hot nodes were boxes; `package-lock.json` was 3,912 of vitepress-site's 17,714 lines |
 | 2026-10-05 | Flat Python tests bind through `tests: {flat_tests: true}`, written by `init`; not a default | `beadloom-76mk`; binding by name stays opt-in (2026-09-28 ruling); surfaced to the owner, not objected |
 | 2026-10-05 | A line enters its arrowhead correctly at every zoom at which the edge is drawn; 'correct' is defined by geometry AND confirmed on rendered pixels (`beadloom-btkd.2`, between V2 and V3) | Owner, after looking at V1: «все равно стрелки сломаны, линия должна заходить в наконечник стрелки правильно»; V1's measure (0 of 139 broken at zoom 1) passed what the owner sees as broken |
+| 2026-10-05 | At the overview every top-level node is a well-formed box with its title inside; a small node is drawn at a minimum size that holds its title, and the plate beside the box is the exception, counted (`beadloom-btkd.3`, after the arrowheads, before V3) | Owner, after looking at V2: «у tui, mcp_server, ai_agents - кривые блоки нод, а надписи вне блока ноды… Это надо поправить»; the overview itself he accepted: «Стало значительно лучше» |
 
 ## Related Files
 

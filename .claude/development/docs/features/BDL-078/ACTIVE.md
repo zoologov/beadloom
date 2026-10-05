@@ -30,6 +30,7 @@
 | `beadloom-xv87` | V1 | ✓ done | the base look: `584b9677`, `e152a493`, `562551ed` |
 | `beadloom-0gyz` | V2 | ✓ done | the overview: own routes, pills, titles, calm hover: `18e447cf`, `6a9f9620`, `8b87b4f1`, `a710da95`, `86fa44ae`, `82af814a`; head overlaps 12 -> 0, narrowest gap 8.24 px; readings for the owner in the bead |
 | `beadloom-btkd.2` | dev | in progress | a line enters its arrowhead correctly (owner, after V1) |
+| `beadloom-btkd.3` | dev | blocked | small top-level nodes are proper boxes with the title inside (owner, after V2) |
 | `beadloom-hnff` | V3 | blocked | levels |
 | `beadloom-lw56` | F-activity | ✓ done | activity by changed lines |
 | `beadloom-btkd.1` | dev | ✓ done | activity: boxes among boxes, generated files excluded (owner) |
