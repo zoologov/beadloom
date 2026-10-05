@@ -39,8 +39,12 @@ const LINE_PX = 1.35;
 const ON_AXIS_PX = 0.35;
 /** Two last runs whose directions' cosine is at least this arrive the same way: a few degrees apart at most. */
 const SAME_WAY = 0.998;
-/** Two tips closer than this, in pixels, are one tip; and so are two a layout unit apart, the precision a route is drawn to. */
-const SAME_TIP_PX = 0.75;
+/**
+ * Two tips a layout unit apart or closer are one tip, the precision a route is
+ * drawn to. Two further apart are two ends, each with its own head, however
+ * near on screen: lines that reach a node separately stay separate (ruling 10),
+ * and two heads that then overlap are heads the drawing leaves no room for.
+ */
 const SAME_TIP_UNITS = 1;
 /** How little a measured length may fall short of the one it is held to, in pixels: a route's numbers are rounded at six decimals. */
 const SLACK_PX = 0.05;
@@ -354,7 +358,7 @@ export function headsOf(looks, view, { head, smallest, step }) {
     }))
   );
   const segments = segmentIndexOf(lines);
-  const sameTip = Math.max(SAME_TIP_PX, SAME_TIP_UNITS * view.zoom);
+  const sameTip = SAME_TIP_UNITS * view.zoom;
   const tipCell = (point) => `${Math.floor(point.x / sameTip)},${Math.floor(point.y / sameTip)}`;
   const byTip = new Map();
   for (const end of ends) {

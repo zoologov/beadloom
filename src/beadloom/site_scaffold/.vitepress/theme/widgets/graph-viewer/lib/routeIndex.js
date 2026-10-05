@@ -93,7 +93,8 @@ export function routeIndexOf(routes) {
       const lo = Math.min(tip[moving], from[moving]);
       const hi = Math.max(tip[moving], from[moving]);
       let nearest = Infinity;
-      index.along(vertical ? "horizontal" : "vertical", (lo + hi) / 2, (hi - lo) / 2, tip[fixed], tip[fixed], (route, a, b) => {
+      // A route that turns off the run ends on it, to within the precision routes are drawn to.
+      index.along(vertical ? "horizontal" : "vertical", (lo + hi) / 2, (hi - lo) / 2, tip[fixed] - ON_ROUTE, tip[fixed] + ON_ROUTE, (route, a, b) => {
         const away = Math.abs(a[moving] - tip[moving]);
         if (away < beyond) return;
         nearest = Math.min(nearest, away);

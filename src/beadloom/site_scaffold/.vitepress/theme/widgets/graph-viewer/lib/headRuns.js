@@ -26,7 +26,7 @@
 // Everything here is pure over the bundling's drawing (`bundleDrawing.js`):
 // routes in, routes out.
 
-import { BOX_INSET, near, runsAlongAnother, sharesAnEnd, simplify } from "./bundleDrawing.js";
+import { BOX_INSET, near, sharesAnEnd, simplify } from "./bundleDrawing.js";
 
 const distance = (p, q) => Math.hypot(q.x - p.x, q.y - p.y);
 
@@ -47,17 +47,19 @@ const shifted = (p, way, by) => ({ x: p.x - way.x * by, y: p.y - way.y * by });
 function arrivalGroups(drawing) {
   const groups = new Map();
   for (const [id, points] of drawing.routes) {
-    const edge = drawing.edgeOf(id);
-    if (!edge || points.length < 2) continue;
     const n = points.length;
+    if (n < 2) continue;
     const way = axisWay(points[n - 2], points[n - 1]);
-    if (!way) continue;
+    const edge = way && drawing.edgeOf(id);
+    if (!edge) continue;
     const tip = points[n - 1];
-    const key = `${Math.round(tip.x)},${Math.round(tip.y)}|${way.x},${way.y}`;
-    if (!groups.has(key)) groups.set(key, { way, members: [] });
-    groups.get(key).members.push({ edge, points });
+    // A number for the tip to the unit and the way, cheaper to file than a string.
+    const key = (Math.round(tip.x) * 1048576 + Math.round(tip.y)) * 4 + (way.x ? 1 + way.x : 2 + way.y);
+    let group = groups.get(key);
+    if (!group) groups.set(key, (group = { way, members: [] }));
+    group.members.push({ edge, points });
   }
-  return [...groups.values()];
+  return groups.values();
 }
 
 /**
@@ -93,67 +95,69 @@ function movedBack(members, way, by) {
  *   than `clearance`, or crosses a box other than its ends' and their holders';
  * - the gained run runs along such an edge, crosses such a box, or is crossed by
  *   such an edge, which would then run under the head.
+ *
+ * And it refuses every distance where a line outside the group runs along a
+ * member's segment as it stands, a source's bus or a trunk: moving the segment
+ * would part the channel they share.
  */
 function freeOf(drawing, members, way, furthest, clearance) {
-  const refusals = [];
+  // Refused distances: open intervals, and everything from `below` up.
+  const refused = [];
+  let below = Infinity;
+  const ids = new Set(members.map(({ edge }) => edge.id));
+  let shared = false;
   const back = -(way.x + way.y);
   const across = way.x === 0 ? "horizontal" : "vertical";
+  const along = across === "horizontal" ? "vertical" : "horizontal";
   const [fixed, moving] = across === "horizontal" ? ["y", "x"] : ["x", "y"];
   for (const { edge, points } of members) {
     const n = points.length;
     const [from, bend] = [points[n - 3], points[n - 2]];
     const related = (other) => sharesAnEnd(other, edge);
-    const allowed = (id) => drawing.withHolders(edge.source).has(id) || drawing.withHolders(edge.target).has(id);
+    const [sourceAndHolders, targetAndHolders] = [drawing.withHolders(edge.source), drawing.withHolders(edge.target)];
     // Where a coordinate along the way lies, as a distance moved back from the bend.
     const byAt = (value) => (value - bend[fixed]) * back;
     const lo = Math.min(from[moving], bend[moving]);
     const hi = Math.max(from[moving], bend[moving]);
+    const line = bend[moving];
     const reach = { lo: bend[fixed] + Math.min(0, back * furthest), hi: bend[fixed] + Math.max(0, back * furthest) };
     // The moved segment beside a parallel segment of an unrelated edge, and the gained
     // run, along the last run's line past the bend, crossed by one.
-    const line = bend[moving];
-    const along = across === "horizontal" ? "vertical" : "horizontal";
     drawing.segmentsAlong(across, (reach.lo + reach.hi) / 2, (reach.hi - reach.lo) / 2 + clearance, lo, hi, (other, c, d) => {
-      if (related(other)) return;
-      const [c1, c2] = [Math.min(c[moving], d[moving]), Math.max(c[moving], d[moving])];
+      const [c1, c2] = c[moving] < d[moving] ? [c[moving], d[moving]] : [d[moving], c[moving]];
       const at = byAt(c[fixed]);
-      if (Math.min(hi, c2) - Math.max(lo, c1) > 1) refusals.push((by) => Math.abs(by - at) < clearance);
-      if (at > 0 && c1 < line - 1 && c2 > line + 1) refusals.push((by) => by >= at);
+      const overlap = Math.min(hi, c2) - Math.max(lo, c1);
+      // A line outside the group on the segment itself, a source's bus or a trunk: moving the segment would part them.
+      if (overlap > 1 && Math.abs(at) < 1 && !ids.has(other.id)) shared = true;
+      if (related(other)) return;
+      if (overlap > 1) refused.push(at - clearance, at + clearance);
+      if (at > 0 && c1 < line - 1 && c2 > line + 1) below = Math.min(below, at);
     });
     drawing.segmentsAlong(along, line, clearance, reach.lo, reach.hi, (other, c, d) => {
       if (related(other)) return;
-      const ends = [byAt(c[fixed]), byAt(d[fixed])];
-      const nearest = Math.max(0, Math.min(...ends));
-      if (Math.max(...ends) > 0) refusals.push((by) => by - nearest > 1);
+      const [e1, e2] = [byAt(c[fixed]), byAt(d[fixed])];
+      if (Math.max(e1, e2) > 0) below = Math.min(below, Math.max(0, Math.min(e1, e2)) + 1 + 1e-9);
     });
     // Boxes in the way of the moved segment or of the gained run.
-    const swept = across === "horizontal"
-      ? { x1: Math.min(lo, line), x2: Math.max(hi, line), y1: reach.lo, y2: reach.hi }
-      : { x1: reach.lo, x2: reach.hi, y1: Math.min(lo, line), y2: Math.max(hi, line) };
+    const swept =
+      across === "horizontal"
+        ? { x1: Math.min(lo, line), x2: Math.max(hi, line), y1: reach.lo, y2: reach.hi }
+        : { x1: reach.lo, x2: reach.hi, y1: Math.min(lo, line), y2: Math.max(hi, line) };
     drawing.boxesIn(swept, (id, box) => {
-      if (allowed(id)) return;
+      if (sourceAndHolders.has(id) || targetAndHolders.has(id)) return;
       const [b1, b2, c1, c2] = across === "horizontal" ? [box.y1, box.y2, box.x1, box.x2] : [box.x1, box.x2, box.y1, box.y2];
       const [inner1, inner2] = [byAt(b1 + BOX_INSET), byAt(b2 - BOX_INSET)];
-      const [from1, to1] = [Math.min(inner1, inner2), Math.max(inner1, inner2)];
-      if (hi > c1 + BOX_INSET && lo < c2 - BOX_INSET) refusals.push((by) => by > from1 && by < to1);
-      if (line > c1 + BOX_INSET && line < c2 - BOX_INSET) refusals.push((by) => by > from1);
+      const [from1, to1] = inner1 < inner2 ? [inner1, inner2] : [inner2, inner1];
+      if (hi > c1 + BOX_INSET && lo < c2 - BOX_INSET) refused.push(from1, to1);
+      if (line > c1 + BOX_INSET && line < c2 - BOX_INSET) below = Math.min(below, from1 + 1e-9);
     });
   }
-  return (by) => !refusals.some((refuses) => refuses(by));
-}
-
-/**
- * Whether a line outside `members` runs along the segment each member would
- * move: a source's bus or a trunk shares it, and moving one member's would part
- * the channel they share.
- */
-function sharedBeyond(drawing, members) {
-  const ids = new Set(members.map(({ edge }) => edge.id));
-  const inGroup = (other) => ids.has(other.id);
-  return members.some(({ points }) => {
-    const n = points.length;
-    return n >= 4 && runsAlongAnother(drawing, points[n - 3], points[n - 2], 1, inGroup);
-  });
+  if (shared) return () => false;
+  return (by) => {
+    if (by >= below) return false;
+    for (let i = 0; i < refused.length; i += 2) if (by > refused[i] && by < refused[i + 1]) return false;
+    return true;
+  };
 }
 
 /**
@@ -171,7 +175,7 @@ export function lengthenHeadRuns(drawing, options) {
     if (shortest >= options.headRun - options.headRunStep - 1e-6) continue;
     // Only the lines that bend nearest the tip move; one that joins further back limits how far.
     const nearest = members.filter((_, i) => runs[i] < shortest + 1);
-    if (nearest.some(({ points }) => points.length < 4) || sharedBeyond(drawing, nearest)) continue;
+    if (nearest.some(({ points }) => points.length < 4)) continue;
     const further = runs.filter((run) => run >= shortest + 1);
     const limit = Math.min(...further, Infinity) - shortest;
     const wanted = Math.min(options.headRun - shortest, limit);
