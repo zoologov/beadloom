@@ -29,8 +29,10 @@
 | `beadloom-ytcg` | F-ytcg | ✓ done | a node named `__proto__` is drawn |
 | `beadloom-xv87` | V1 | ✓ done | the base look: `584b9677`, `e152a493`, `562551ed` |
 | `beadloom-0gyz` | V2 | ✓ done | the overview: own routes, pills, titles, calm hover: `18e447cf`, `6a9f9620`, `8b87b4f1`, `a710da95`, `86fa44ae`, `82af814a`; head overlaps 12 -> 0, narrowest gap 8.24 px; readings for the owner in the bead |
-| `beadloom-btkd.2` | dev | in progress | a line enters its arrowhead correctly (owner, after V1): last bends moved back for room, heads sized to their room (6 px, down to 4), shared lines end at the head's base, dashes end inside the head; heads the viewer draws wrong 85-95 -> 0 at every zoom from 0.3 to 2, every box open, this portal; heads with no room for any head reported, not failed (7 at 0.545, 0 from 0.8); readings for the owner in the bead |
-| `beadloom-btkd.3` | dev | blocked | small top-level nodes are proper boxes with the title inside (owner, after V2) |
+| `beadloom-btkd.2` | dev | ✓ done | a line enters its arrowhead correctly (owner, after V1): last bends moved back for room, heads sized to their room (6 px, down to 4), shared lines end at the head's base, dashes end inside the head; heads the viewer draws wrong 85-95 -> 0 at every zoom from 0.3 to 2, every box open, this portal; heads with no room for any head reported, not failed (7 at 0.545, 0 from 0.8); readings for the owner in the bead |
+| `beadloom-btkd.4` | chore | ✓ done | the roadmap and the issue log hold open work only (owner) |
+| `beadloom-btkd.5` | fix | in progress | the issue-log self-check after the trim |
+| `beadloom-btkd.3` | dev | in progress | small top-level nodes are proper boxes with the title inside (owner, after V2) |
 | `beadloom-hnff` | V3 | blocked | levels |
 | `beadloom-lw56` | F-activity | ✓ done | activity by changed lines |
 | `beadloom-btkd.1` | dev | ✓ done | activity: boxes among boxes, generated files excluded (owner) |
@@ -44,6 +46,8 @@
 | `beadloom-hpat` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **Wave 6 closed (2026-10-05):** `beadloom-btkd.2` `9e6123f4`, `92273729`, `65fe573c` — a line enters its head straight: the last bend of an arrival group moves back along its run, a line that gave its head away stops before the shared head, dotted lines meet the vee; heads 6 px down to 4 px by the room they have. Heads the viewer draws wrong, every box open, zoom 0.3 to 2: this portal 84-95 -> 0, adopter-sized 163-234 -> 0; reported and not failed: heads with no room for 4 px (41 at 0.3, 7 at 0.545 here) and loop diagonals -> V3. Gate owner on the tree: 13,372 passed, 1 failed (the issue-log self-check, broken by the coordinator's log trim -> `beadloom-btkd.5`); ruff, mypy, lint, doctor clean; Playwright 226 of 226 + performance 5 of 5 (bundling 43 ms of 50, once 50.3); adopters 86; `beadloom ci` rc 1 on sync-check alone (238 pairs). Also this wave: `beadloom-btkd.4` `105a36e2`, `8570b081` — ROADMAP.md and BDL-UX-Issues.md cut to open work by the owner's word. Next: `beadloom-btkd.3` beside `beadloom-btkd.5`.
 
 - **Wave 5 closed (2026-10-05):** `beadloom-0gyz` (V2) `18e447cf`, `6a9f9620`, `8b87b4f1`, `a710da95`, `86fa44ae`, `82af814a` — the overview's own router (tracks >= 8 px apart, a straight run of >= 12 px into each box), pills over lines, titles inside the box or on a plate beside it, calm hover, "in N · out M". This portal at the fit: overlapping head pairs 12 -> 0, narrowest gap 8.24 px. Gate owner 0gyz on the tree at `82af814a`: 13,369 passed, 0 failed; ruff, mypy, lint, doctor clean; Playwright 225 of 225; adopter portals 86 passed (python and typescript at `a710da95`); planning 16 ms here, 223 ms on the slowest graph (bound 250); `beadloom ci` rc 1 on sync-check alone (235 stale pairs -> W). Nine surfaced decisions in the bead's SURFACED comment (relayed to the owner). Coordinator's look: the selected view at the fit still draws unreadable inner edges with diagonals -> V3 (noted on `beadloom-hnff`). `beadloom-btkd.2` (arrowheads) launched.
 
