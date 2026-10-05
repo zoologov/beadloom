@@ -59,7 +59,8 @@ def test_lines_tell_apart_what_one_commit_each_cannot(squashed: dict[str, GitAct
     parser, ui = squashed["parser"], squashed["ui"]
     assert (parser.commits_30d, ui.commits_30d) == (1, 1)
     assert (parser.lines_30d, ui.lines_30d) == (PARSER_LINES, UI_LINES)
-    assert parser.activity_level == "warm"
+    # Leaves rank among leaves (`beadloom-btkd.1`): parser 300, api 10, ui 2.
+    assert parser.activity_level == "hot"
     assert ui.activity_level == "cool"
 
 
@@ -76,12 +77,13 @@ def test_a_box_rolls_up_lines_commits_and_dates_of_its_descendants(
     assert app.last_commit_date == (_NOW - timedelta(days=5)).date().isoformat()
 
 
-def test_a_box_with_no_change_of_its_own_takes_its_parts_level(
+def test_a_box_with_no_change_of_its_own_is_ranked_by_its_parts_lines(
     squashed: dict[str, GitActivity],
 ) -> None:
     core = squashed["core"]
     assert core.lines_30d == PARSER_LINES
-    assert core.activity_level == "warm"
+    # Ranked among boxes (`beadloom-btkd.1`): "app" (312) is hot, "core" (300) cool.
+    assert core.activity_level == "cool"
 
 
 def test_no_change_in_30_days_is_quiet_and_none_in_90_is_dormant(

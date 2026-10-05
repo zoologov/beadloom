@@ -171,3 +171,11 @@ def build_squash_merged_project(root: Path, *, now: datetime | None = None) -> S
     repo = build_squash_merged_repo(root, now=now)
     write_graph(root)
     return repo
+
+
+def exclude_from_activity(root: Path, *patterns: str) -> None:
+    """Declare *patterns* under ``activity: {exclude: [...]}`` in the project's config."""
+    entries = "".join(f"    - '{pattern}'\n" for pattern in patterns)
+    (root / ".beadloom" / "config.yml").write_text(
+        f"activity:\n  exclude:\n{entries}", encoding="utf-8"
+    )

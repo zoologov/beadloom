@@ -62,6 +62,6 @@ def _levels(
     assert {ref: levels[ref] for ref in expected} == expected
 
 
-@then(parsers.parse('the node "{ref}" is warm although none of its own files changed'))
-def _box_level(world: dict[str, Any], ref: str) -> None:
-    assert world["activity"][ref].activity_level == "warm"
+@then(parsers.parse('the node "{ref}" is {level} although none of its own files changed'))
+def _box_level(world: dict[str, Any], ref: str, level: str) -> None:
+    assert world["activity"][ref].activity_level == level

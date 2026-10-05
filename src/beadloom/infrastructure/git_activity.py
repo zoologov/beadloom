@@ -35,6 +35,21 @@ A **box rolls up its descendants**: given the ``part_of`` containers, a node's
 counts are its own files' plus every node it contains. Each file is attributed
 to exactly one node (the most specific source), so the roll-up never counts a
 line twice; one commit touching two parts is one commit of the box.
+
+BDL-078 ``beadloom-btkd.1`` (the owner, after F-activity) refined two things:
+
+- **Boxes rank among boxes, leaves among leaves.** A box — a node another node
+  is ``part_of`` — holds its parts' lines, so in one population with the leaves
+  it outranks them (7 of one project's 10 ``hot`` nodes were boxes). Each
+  population takes the same tenths on its own.
+- **A file a machine wrote is not change**: neither its lines nor its commit
+  count. That is a dependency lock file (:data:`LOCK_FILES`, by file name), a
+  file git's attributes mark ``linguist-generated`` or ``binary``, and a file
+  matching a pattern the project declares (*excluded*). A pattern without a
+  ``/`` matches a file name anywhere; a pattern with one matches the whole path
+  from the project root, ``*`` crossing directories. A binary file that no
+  attribute marks is still a change of zero lines, as above: git detected it,
+  nobody declared it generated.
 """
 
 # beadloom:domain=infrastructure
@@ -44,8 +59,10 @@ from __future__ import annotations
 
 import subprocess
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
+from fnmatch import fnmatchcase
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from beadloom.infrastructure.node_source import NodeSource
@@ -67,6 +84,43 @@ HISTORY_DAYS = 90
 _HOT_TENTHS = 1
 _WARM_TENTHS = 4
 _TENTHS = 10
+
+#: Dependency lock files, by file name: a package manager writes them, nobody authors them.
+LOCK_FILES = frozenset(
+    {
+        # JavaScript
+        "package-lock.json",
+        "npm-shrinkwrap.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "bun.lock",
+        "bun.lockb",
+        # Python
+        "uv.lock",
+        "poetry.lock",
+        "Pipfile.lock",
+        "pdm.lock",
+        # Rust, Go, Ruby, PHP
+        "Cargo.lock",
+        "go.sum",
+        "Gemfile.lock",
+        "composer.lock",
+        # Swift, Objective-C, Dart, Elixir
+        "Package.resolved",
+        "Podfile.lock",
+        "pubspec.lock",
+        "mix.lock",
+        # JVM, .NET
+        "gradle.lockfile",
+        "packages.lock.json",
+    }
+)
+
+#: The git attributes that mark a file machine-written, and the values that set them.
+_GENERATED_ATTRIBUTES: dict[str, frozenset[str]] = {
+    "linguist-generated": frozenset({"set", "true"}),
+    "binary": frozenset({"set"}),
+}
 
 #: How many contributors a node records.
 _TOP_CONTRIBUTORS = 3
@@ -95,22 +149,36 @@ def rank_activity_levels(
     *,
     changed_90d: Collection[str],
     nodes: Iterable[str] = (),
+    boxes: Collection[str] = (),
 ) -> dict[str, str]:
     """The level of every node, relative to the project.
 
     *changed_30d* maps each node with a change in the last 30 days to its changed
     lines; *changed_90d* names the nodes with a change in 90 days; *nodes* names
     any further node, which is ``dormant`` unless one of the two says otherwise.
-    The rule and its edges are in the module docstring.
+    *boxes* names the nodes that contain others: they are ranked among
+    themselves, every other node among the rest. The rule and its edges are in
+    the module docstring.
     """
+    levels: dict[str, str] = {}
+    for ref_id in {*nodes, *changed_90d}:
+        levels[ref_id] = "quiet" if ref_id in changed_90d else "dormant"
+    for is_box in (True, False):
+        population = {
+            ref_id: lines for ref_id, lines in changed_30d.items() if (ref_id in boxes) is is_box
+        }
+        levels.update(_rank_changed(population))
+    return levels
+
+
+def _rank_changed(changed_30d: Mapping[str, int]) -> dict[str, str]:
+    """``hot``, ``warm`` or ``cool`` for each node of one population, by its lines."""
     population = len(changed_30d)
     hot_cut = -(-population * _HOT_TENTHS // _TENTHS)
     warm_cut = -(-population * _WARM_TENTHS // _TENTHS)
     ordered = sorted(changed_30d.values(), reverse=True)
 
     levels: dict[str, str] = {}
-    for ref_id in {*nodes, *changed_90d}:
-        levels[ref_id] = "quiet" if ref_id in changed_90d else "dormant"
     for ref_id, lines in changed_30d.items():
         rank = _count_above(ordered, lines)
         if lines > 0 and rank < hot_cut:
@@ -294,6 +362,76 @@ def _read_history(project_root: Path, since: datetime) -> list[_CommitInfo] | No
     return _parse_git_log(result.stdout)
 
 
+def _matches_declared(path: str, patterns: Collection[str]) -> bool:
+    """Whether *path* matches a pattern: by file name without a ``/``, by path with one."""
+    name = PurePosixPath(path).name
+    return any(fnmatchcase(path if "/" in pattern else name, pattern) for pattern in patterns)
+
+
+def _marked_by_attributes(project_root: Path, paths: Collection[str]) -> set[str]:
+    """The *paths* git's attributes mark generated or binary; none when git cannot say.
+
+    ``git check-attr`` reads ``.gitattributes`` as the working tree holds it, so a
+    file is judged by what the project declares now, not when it was committed.
+
+    The codec is stated both ways, UTF-8 with ``replace``, for the reason
+    ``_read_history`` gives: the paths are the ones that call decoded, and no
+    ambient codec has a say.
+    """
+    if not paths:
+        return set()
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["git", "check-attr", "-z", "--stdin", *_GENERATED_ATTRIBUTES],  # noqa: S607
+            cwd=str(project_root),
+            input="".join(f"{path}\0" for path in paths),
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        # The same degradation as ``_read_history``: without git's answer no
+        # file is taken for generated, and every change counts.
+        return set()
+    if result.returncode != 0:
+        return set()
+    # ``-z`` output is ``path NUL attribute NUL value NUL`` per attribute asked.
+    fields = result.stdout.split("\0")
+    marked: set[str] = set()
+    for index in range(0, len(fields) - 2, 3):
+        path, attribute, value = fields[index : index + 3]
+        if value in _GENERATED_ATTRIBUTES.get(attribute, frozenset()):
+            marked.add(path)
+    return marked
+
+
+def _machine_written(
+    project_root: Path, commits: list[_CommitInfo], excluded: Collection[str]
+) -> set[str]:
+    """The changed paths that are not authored: lock files, marked files, declared patterns."""
+    paths = {change.path for commit in commits for change in commit.changes}
+    by_name = {
+        path
+        for path in paths
+        if PurePosixPath(path).name in LOCK_FILES or _matches_declared(path, excluded)
+    }
+    return by_name | _marked_by_attributes(project_root, paths - by_name)
+
+
+def _authored_only(
+    project_root: Path, commits: list[_CommitInfo], excluded: Collection[str]
+) -> list[_CommitInfo]:
+    """*commits* without their machine-written changes; a commit of only those changes none."""
+    machine = _machine_written(project_root, commits, excluded)
+    if not machine:
+        return commits
+    return [
+        replace(commit, changes=tuple(c for c in commit.changes if c.path not in machine))
+        for commit in commits
+    ]
+
+
 @dataclass
 class _Tally:
     """One node's commits (by hash) and changed lines in the two windows."""
@@ -387,6 +525,7 @@ def analyze_git_activity(
     containers: Mapping[str, Collection[str]] | None = None,
     *,
     now: datetime | None = None,
+    excluded: Collection[str] = (),
 ) -> dict[str, GitActivity]:
     """Analyze git history for each node's source directory.
 
@@ -403,6 +542,9 @@ def analyze_git_activity(
         to its own containers and gets no entry.
     now:
         The instant the windows end at; the current time when omitted.
+    excluded:
+        The project's own patterns of machine-written files, beside the lock
+        files and the files git's attributes mark; see the module docstring.
 
     Returns
     -------
@@ -422,9 +564,12 @@ def analyze_git_activity(
         return {}
     # ``--since`` already filters; the instant is applied here too, so the window
     # is the one stated rather than whatever git's date parsing made of it.
-    commits = [commit for commit in history if commit.landed >= history_since]
+    commits = _authored_only(
+        project_root, [commit for commit in history if commit.landed >= history_since], excluded
+    )
 
-    rolled = _roll_up(_own_tallies(commits, source_dirs, recent_since), containers or {})
+    containers = containers or {}
+    rolled = _roll_up(_own_tallies(commits, source_dirs, recent_since), containers)
     levels = rank_activity_levels(
         {
             ref_id: tally.lines_30d
@@ -433,6 +578,7 @@ def analyze_git_activity(
         },
         changed_90d={ref_id for ref_id, tally in rolled.items() if tally.commits},
         nodes=rolled,
+        boxes={box for held_by in containers.values() for box in held_by},
     )
     return {
         ref_id: _activity_of(tally, recent_since, levels[ref_id])

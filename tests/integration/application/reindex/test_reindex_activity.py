@@ -194,10 +194,29 @@ class TestReindexStoresActivityByChangedLines:
         assert stored["app"]["lines_30d"] == PARSER_LINES + API_BRANCH_COMMITS + UI_LINES
         assert stored["config"]["lines_90d"] == 4
         levels = {ref: stored[ref]["level"] for ref in ("app", "core", "api", "config", "legacy")}
+        # BDL-078 `beadloom-btkd.1`: boxes (app, core) rank among boxes, leaves among leaves.
         assert levels == {
             "app": "hot",
-            "core": "warm",
-            "api": "cool",
+            "core": "cool",
+            "api": "warm",
             "config": "quiet",
             "legacy": "dormant",
         }
+
+    def test_the_files_the_project_excludes_are_not_stored_as_change(
+        self, tmp_path: Path
+    ) -> None:
+        from tests.support.squash_merged_repo import (
+            build_squash_merged_project,
+            exclude_from_activity,
+        )
+
+        root = build_squash_merged_project(tmp_path / "repo").root
+        exclude_from_activity(root, "src/app/config/*")
+        reindex(root)
+
+        conn = open_db(index_path(root))
+        row = conn.execute("SELECT extra FROM nodes WHERE ref_id = ?", ("config",)).fetchone()
+        conn.close()
+        stored = json.loads(row["extra"])["activity"]
+        assert (stored["lines_90d"], stored["commits_90d"], stored["level"]) == (0, 0, "dormant")

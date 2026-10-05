@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from beadloom.application.gate import GateStep
+    from beadloom.doc_sync.declarations import Refusal
     from beadloom.onboarding.agentic_flow_setup import ScaffoldResult
     from beadloom.onboarding.config_sync import (
         ConfigDrift,
@@ -588,8 +589,9 @@ def config_check(*, fix: bool, project: Path | None) -> None:
     _echo_role_map_limits(project_root)
 
     site_refused = _echo_site_config_refusals(project_root)
+    activity_refused = _echo_activity_setting_refusals(project_root)
 
-    if not blocking and not site_refused:
+    if not blocking and not site_refused and not activity_refused:
         # A warning is a real finding and is printed above; it does not block,
         # because a green project going red on upgrade is how a check gets
         # switched off wholesale.
@@ -625,9 +627,27 @@ def _echo_site_config_refusals(project_root: Path) -> bool:
     from beadloom.application.site.site_config import read_site_config
 
     _, refusals = read_site_config(project_root)
+    return _echo_block_refusals("site", refusals)
+
+
+def _echo_activity_setting_refusals(project_root: Path) -> bool:
+    """Print every entry of the ``activity:`` block activity cannot use; ``True`` if any.
+
+    BDL-078 ``beadloom-btkd.1``. It blocks for the reason the ``site:`` block
+    does: a mistyped ``exlude:`` counts every generated line as work without a
+    word, and no project declared the block before it existed.
+    """
+    from beadloom.application.activity_settings import read_activity_exclusions
+
+    _, refusals = read_activity_exclusions(project_root)
+    return _echo_block_refusals("activity", refusals)
+
+
+def _echo_block_refusals(block: str, refusals: Sequence[Refusal]) -> bool:
+    """Print the refusals of one block of ``.beadloom/config.yml``; ``True`` if any."""
     if not refusals:
         return False
-    click.echo(f"The `site:` block of .beadloom/config.yml ({len(refusals)}):", err=True)
+    click.echo(f"The `{block}:` block of .beadloom/config.yml ({len(refusals)}):", err=True)
     for refusal in refusals:
         click.echo(f"  - {refusal.where}: {refusal.why}", err=True)
         click.echo(f"    -> {refusal.remediation}", err=True)

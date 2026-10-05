@@ -63,11 +63,13 @@ from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Sequence
     from pathlib import Path
 
     from beadloom.application.doctor import Check
     from beadloom.application.guards.contract import WorkTracker
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
+    from beadloom.doc_sync.declarations import Refusal
     from beadloom.doc_sync.doc_quality import QualityFinding
     from beadloom.doc_sync.issue_numbers import IssueNumberReport, NumberFinding
 
@@ -1031,13 +1033,22 @@ def _step_config_check(project_root: Path) -> GateStep:
     # `docs site`, and no project declared the block before it existed.
     site = _site_config_findings(project_root)
     findings.extend(site)
+    # The `activity:` block (BDL-078 `beadloom-btkd.1`) blocks for the same
+    # reason: a mistyped key counts every generated line as work without a word.
+    activity = _activity_setting_findings(project_root)
+    findings.extend(activity)
     blocking = [d for d in drifts if d.severity == "error"]
     warned = len(drifts) - len(blocking) + len(scope)
-    passed = not blocking and not site
+    passed = not blocking and not site and not activity
     # Three states, three summaries. `agent-config in sync` printed over a
     # reported-but-non-blocking finding is the shape BDL-061 S2b spent itself on.
-    if site:
-        summary = f"{len(site)} unusable `site:` value(s)"
+    if site or activity:
+        unusable = [
+            f"{len(found)} unusable `{block}:` value(s)"
+            for block, found in (("site", site), ("activity", activity))
+            if found
+        ]
+        summary = " + ".join(unusable)
         if blocking:
             summary += f" + {len(blocking)} drifted artifact(s)"
         if warned:
@@ -1372,10 +1383,23 @@ def _site_config_findings(project_root: Path) -> list[Finding]:
     from beadloom.application.site.site_config import read_site_config
 
     _, refusals = read_site_config(project_root)
+    return _config_block_findings("site-config", refusals)
+
+
+def _activity_setting_findings(project_root: Path) -> list[Finding]:
+    """Every entry of the ``activity:`` block activity could not use, as blocking findings."""
+    from beadloom.application.activity_settings import read_activity_exclusions
+
+    _, refusals = read_activity_exclusions(project_root)
+    return _config_block_findings("activity-settings", refusals)
+
+
+def _config_block_findings(rule: str, refusals: Sequence[Refusal]) -> list[Finding]:
+    """One blocking finding per refusal of a block of ``.beadloom/config.yml``."""
     return [
         {
             "kind": "config-check",
-            "rule": "site-config",
+            "rule": rule,
             "severity": "error",
             "locations": [{"file": ".beadloom/config.yml"}],
             "why": f"{refusal.where}: {refusal.why}",

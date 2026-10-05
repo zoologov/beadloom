@@ -5,6 +5,9 @@
 # with four commits. The owner's ruling 6: count changed lines over 30 days, rank
 # nodes relative to the project, roll a box up from its parts, name zero as no change.
 #
+# `beadloom-btkd.1` refined the levels: a box is ranked among boxes and a leaf among
+# leaves, so "parser" is hot and "core", the smaller of two boxes, is cool.
+#
 # The repository below reaches main only through squash merges: a ten-commit branch
 # and a two-line change each land as one commit.
 
@@ -17,11 +20,11 @@ Feature: activity separates busy nodes from quiet ones on a squash-merged histor
     Then the nodes "parser", "api" and "ui" each have 1 commit in 30 days
     And the node "parser" has 300 lines changed in 30 days
     And the node "api" has 10 lines changed in 30 days
-    And the levels are "app" hot, "parser" warm, "api" cool, "config" quiet and "legacy" dormant
+    And the levels are "parser" hot, "api" warm, "ui" cool, "config" quiet and "legacy" dormant
 
   Scenario: a box rolls up the nodes it holds
     Given a repository whose history reaches main only through squash merges
     When its activity is analysed
     Then the node "core" has 300 lines changed in 30 days
     And the node "app" has 312 lines changed in 30 days
-    And the node "core" is warm although none of its own files changed
+    And the node "core" is cool although none of its own files changed

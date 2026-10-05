@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from beadloom.application.activity_settings import activity_exclusions
 from beadloom.application.reindex.models import _EXT_TO_LANG
 from beadloom.infrastructure.node_source import NodeSource
 from beadloom.infrastructure.repository import get_node_sources, get_part_of_containers
@@ -136,7 +137,8 @@ def _store_git_activity(
     """Analyze git activity and store results in ``nodes.extra["activity"]``.
 
     Builds a ``source_dirs`` mapping from nodes that have a ``source`` field and
-    the ``part_of`` containers, so a box's activity rolls up its parts, runs
+    the ``part_of`` containers, so a box's activity rolls up its parts, and the
+    project's ``activity.exclude`` patterns (``beadloom-btkd.1``), runs
     ``analyze_git_activity``, and merges activity data into the existing
     ``extra`` JSON column for each matching node.
 
@@ -152,7 +154,10 @@ def _store_git_activity(
         return
 
     activities = _pkg.analyze_git_activity(
-        project_root, source_dirs, get_part_of_containers(conn)
+        project_root,
+        source_dirs,
+        get_part_of_containers(conn),
+        excluded=activity_exclusions(project_root),
     )
 
     for ref_id, activity in activities.items():

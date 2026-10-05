@@ -297,6 +297,7 @@ class ActivityDataProvider:
     def refresh(self) -> None:
         """Re-analyze git activity and cache results."""
         from beadloom.application import graph_reads
+        from beadloom.application.activity_settings import activity_exclusions
 
         # Build source_dirs from the graph index via the application facade.
         source_dirs = graph_reads.get_node_sources(self.conn)
@@ -310,9 +311,14 @@ class ActivityDataProvider:
             # `tui-no-direct-infra` boundary forbids it — and, since BDL-UX #150,
             # actually says so.
             # With the part_of containers, so a box reads with its parts as the
-            # node card reads it (BDL-078 F-activity).
+            # node card reads it (BDL-078 F-activity), and without the files the
+            # project declares machine-written, as the reindex reads them
+            # (`beadloom-btkd.1`).
             self._activities = graph_reads.analyze_git_activity(
-                self.project_root, source_dirs, graph_reads.get_part_of_containers(self.conn)
+                self.project_root,
+                source_dirs,
+                graph_reads.get_part_of_containers(self.conn),
+                excluded=activity_exclusions(self.project_root),
             )
         except (OSError, ValueError) as exc:
             logger.warning("Git activity analysis failed: %s", exc)

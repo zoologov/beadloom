@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from beadloom.application.activity_settings import activity_exclusions
 from beadloom.application.debt_report.models import DebtData, DebtWeights
 from beadloom.context_oracle.test_binding import (
     describe_test_file_recognition,
@@ -169,7 +170,8 @@ def _count_dormant(
 
     A box is read with its ``part_of`` parts, as the node card reads it
     (BDL-078 F-activity): a box whose parts changed is not dormant because its
-    own files stood still.
+    own files stood still. A change only to files the project declares
+    machine-written is no change (``beadloom-btkd.1``).
 
     Returns (count, list_of_ref_ids).
     """
@@ -184,7 +186,10 @@ def _count_dormant(
 
     try:
         activities = analyze_git_activity(
-            project_root, source_dirs, get_part_of_containers(conn)
+            project_root,
+            source_dirs,
+            get_part_of_containers(conn),
+            excluded=activity_exclusions(project_root),
         )
     except (OSError, ValueError):
         return 0, []
