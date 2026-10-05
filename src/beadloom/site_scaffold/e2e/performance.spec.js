@@ -43,12 +43,12 @@ const FRAME_MS = { local: 25, ci: 33.4 };
 const FIRST_DRAWING_MS = { local: 7200, ci: 15000 };
 /**
  * The longest the overview's routes may take to plan, at the first drawing, in
- * ms, on this portal's graph and on an adopter-sized one (RFC V2: 50 and 250
- * locally). Measured on an Apple M1 Max, no GPU, the median of three openings:
- * 16 ms on this repository's graph and 121 ms on its adopter-sized one, and 223
- * ms on the adopter-sized graph built from the TypeScript fixture's layers, the
- * slowest of the stacks' (it holds a box no route reaches). A build server is
- * unmeasured: its bound catches a plan four times slower than the local one.
+ * ms, on this portal's graph and on an adopter-sized one. Measured on an Apple
+ * M1 Max, no GPU, the median of three openings, on the portal these cases were
+ * written on: 16 ms on its graph and 121 ms on its adopter-sized one; and 223 ms
+ * on the slowest adopter-sized graph measured, built from another portal's
+ * layers, which holds a box no route reaches. A build server is unmeasured: its
+ * bound catches a plan four times slower than the local one.
  */
 const PLAN_MS = { own: { local: 50, ci: 200 }, adopter: { local: 250, ci: 1000 } };
 
