@@ -3,19 +3,18 @@
 //
 // The browser tests assert state rather than pixels, and read it here: the
 // visible node ids, the selection, node positions, the viewport, the colours
-// Cytoscape resolved, each node's status and its border, the edge styles it drew — each edge's arrows, the colours
-// along its line and its opacity — and what a selection marked —
-// the neighbourhood, the dimmed nodes, the impact rings and risks, and the
-// impact summary the panel shows — and the layout: whether ELK ran for it or it
-// was already laid out, and ELK's geometry, a box for every node and a route for
-// every edge in the graph's coordinates — and the same drawn: each node's box
-// and each edge's route as Cytoscape draws them — and the bundles: the routes
-// with each node's fans bundled, the trunks and buses, the junction dots for the
-// edges drawn now, and the edges along a hovered line — and the bridges: where
-// each highlighted edge crosses another drawn edge, and what drawing them cost
-// per frame — and the map: the boxes
-// open and closed, each aggregated edge with what it carries each way and
-// whether the budget draws it, and the counts of hidden edges on the boxes.
+// Cytoscape resolved, each node's look — its fill, its border, its title and
+// its status mark — and each line's — its weight, dash, colour, arrowheads and
+// corners — and what a selection marked — the neighbourhood, the dimmed nodes,
+// the impact rings and risks, and the impact summary the panel shows — and the
+// layout: whether ELK ran for it or it was already laid out, and ELK's geometry,
+// a box for every node and a route for every edge in the graph's coordinates —
+// and the same drawn: each node's box and each edge's route as Cytoscape draws
+// them — and the bundles: the routes with each node's fans bundled, the trunks
+// and buses, and the edges along a hovered line — and the followed lines drawn
+// on top, the passes they are drawn in and what each frame cost — and the map:
+// the boxes open and closed, each aggregated edge with what it carries each way
+// and whether the budget draws it, and the counts of hidden edges on the boxes.
 //
 // It does one thing besides reading: `revealNodes(ids)` draws the nodes in `ids`
 // as themselves with their own edges, opening every box that holds one and each
@@ -28,7 +27,7 @@
 import { idRecord } from "../../../shared/ids/index.js";
 import { isLoop } from "./canvasLayout.js";
 import { DISTANCE_DATA } from "./canvasMarks.js";
-import { AGGREGATE, HIDDEN_EDGES } from "../lib/levels.js";
+import { AGGREGATE, COLLAPSED, HIDDEN_EDGES } from "../lib/levels.js";
 import { titleFits } from "../lib/mapMarks.js";
 
 const HANDLE = "__beadloomViewer";
@@ -37,7 +36,7 @@ const idsOf = (collection) => collection.map((element) => element.id()).sort();
 
 const COLOUR_PROPERTIES = {
   nodes: ["background-color", "border-color", "color"],
-  edges: ["line-color", "target-arrow-color", "line-gradient-stop-colors"],
+  edges: ["line-color", "target-arrow-color", "source-arrow-color"],
 };
 
 function pageBox(element, rect) {
@@ -110,6 +109,53 @@ function aggregateOf({ element, pair }, map) {
   };
 }
 
+/** A number list of a style, as Cytoscape gives it in one string. */
+const numbersOf = (value) => String(value).split(/\s+/).filter(Boolean).map(parseFloat);
+
+/** An edge's look as the handle reports it (`lineLooks`). */
+function lineLookOf(edge) {
+  return {
+    id: edge.id(),
+    key: edge.data("key") ?? null,
+    aggregated: isAggregate(edge),
+    styleKey: edge.data("styleKey") ?? null,
+    width: parseFloat(edge.style("width")),
+    lineStyle: edge.style("line-style"),
+    dash: edge.style("line-style") === "dashed" ? numbersOf(edge.style("line-dash-pattern")) : [],
+    lineFill: edge.style("line-fill"),
+    colour: edge.style("line-color"),
+    sourceArrow: edge.style("source-arrow-shape"),
+    targetArrow: edge.style("target-arrow-shape"),
+    arrowScale: parseFloat(edge.style("arrow-scale")),
+    arrowColour: edge.style("target-arrow-color"),
+    cornerRadii: edge.data("route") ? numbersOf(edge.style("segment-radii")) : [],
+    walk: edge.hasClass("is-walk-edge"),
+    dimmed: edge.hasClass("is-dimmed"),
+    points: drawnRouteOf(edge).points,
+  };
+}
+
+/** A node's look as the handle reports it (`nodeLooks`). */
+function nodeLookOf(node) {
+  return {
+    id: node.id(),
+    parent: node.isChild() ? node.parent().id() : null,
+    isParent: node.isParent(),
+    collapsed: node.hasClass(COLLAPSED),
+    status: node.data("status") || null,
+    borderWidth: parseFloat(node.style("border-width")),
+    borderColour: node.style("border-color"),
+    borderStyle: node.style("border-style"),
+    fill: node.style("background-color"),
+    fillOpacity: parseFloat(node.style("background-opacity")),
+    labelColour: node.style("color"),
+    labelValign: node.style("text-valign"),
+    labelMarginY: parseFloat(node.style("text-margin-y")),
+    fontSize: parseFloat(node.style("font-size")),
+    mark: String(node.style("background-image")),
+  };
+}
+
 function readers(source) {
   const cy = () => source.cy();
   const rect = () => source.container().getBoundingClientRect();
@@ -151,7 +197,7 @@ function readers(source) {
           .map((node) => [node.id(), node.data(DISTANCE_DATA)])
       ),
     riskIds: () => idsOf(cy().nodes(".is-risk")),
-    // Each node drawn with a status, the status and the border it is drawn with.
+    // Each node drawn with a status, the status, the border it is drawn with and its corner mark.
     statusLooks: () =>
       idRecord(
         cy()
@@ -163,6 +209,7 @@ function readers(source) {
               status: node.data("status"),
               borderColour: node.style("border-color"),
               borderStyle: node.style("border-style"),
+              mark: String(node.style("background-image")),
             },
           ])
       ),
@@ -252,21 +299,19 @@ function readers(source) {
       const { ms, paths: routes, trunks, buses } = bundles;
       return JSON.parse(JSON.stringify({ ms, routes, trunks, buses }));
     },
-    // The junction dots drawn now, `[{ x, y, edges }]`: where the routes of the
-    // edges drawn part, and which edges part there.
-    junctions: () => source.junctions(),
-    // The bridges drawn now, one entry per highlighted edge drawn along a route:
-    // `[{ edge, crossings }]`, each crossing `{ x, y, crossed, colour,
-    // crossedColour, under }`: where, in graph coordinates, the edge crosses the
-    // drawn edge `crossed`, the colours both lines have there, and the colour
-    // under the crossing the hop is drawn over. Empty when nothing is highlighted.
-    bridges: () => JSON.parse(JSON.stringify(source.bridges())),
-    // What drawing the bridges cost: `{ findMs, paintMs, frames }`, how long the
-    // crossings took to find the last time they changed and their colours to
-    // read the last time, and for each recent frame `{ at, ms, drawn }`, when it
-    // was drawn (`performance.now()`), how long the bridges took to draw and how
-    // many were drawn.
-    bridgeFrames: () => JSON.parse(JSON.stringify(source.bridgeFrames())),
+    // The lines drawn on top now, followed under the pointer or on a selection's
+    // walk: `{ edges, passes }`, each line `{ id, colour, casing, width }` — its
+    // colour, the colour of the casing it is drawn over and its width in layout
+    // units — and each pass of a frame in order, `{ name, edges }`, with the ids
+    // it draws. Empty when nothing is followed.
+    followed: () => JSON.parse(JSON.stringify(source.followed())),
+    // What drawing the layer over the canvas cost, at Cytoscape's every drawing:
+    // `{ frames }`, each recent frame `{ at, ms, drawn }`, when it was drawn
+    // (`performance.now()`), how long it took and how many lines it drew.
+    frames: () => JSON.parse(JSON.stringify(source.frames())),
+    // The line ends that draw no arrowhead because another line on their last
+    // run draws it: `[{ id, end }]`, `end` "source" or "target".
+    droppedHeads: () => JSON.parse(JSON.stringify(source.droppedHeads())),
     // The ids of the edges drawn along the line under the pointer.
     hoveredEdges: () => [...source.hoveredEdges()].sort(),
     drawnEdgeKinds: () => [...new Set(originals().flatMap((edge) => [edge.data("kind"), edge.data("styleKey")]))].sort(),
@@ -275,12 +320,10 @@ function readers(source) {
       if (!edge) return null;
       return { lineStyle: edge.style("line-style"), width: parseFloat(edge.style("width")), colour: edge.style("line-color") };
     },
-    // Every edge of the data file drawn now, and its look: its arrow ends, the
-    // colours along its line from the source end to the target end and where each
-    // stop sits along it (as Cytoscape resolved them, in percent), and whether it
-    // is shown and how opaque. How direction reads, and what a selection leaves
-    // out, are here. An aggregated edge is not an edge of the file
-    // (`aggregatedEdges`).
+    // Every edge of the data file drawn now, and its look: its arrow ends, its
+    // colour, and whether it is shown and how opaque. What a selection leaves
+    // out is here. An aggregated edge is not an edge of the file
+    // (`aggregatedEdges`); every drawn line's whole look is `lineLooks`.
     edgeLooks: () =>
       originals()
         .map((edge) => ({
@@ -289,13 +332,28 @@ function readers(source) {
           sourceArrow: edge.style("source-arrow-shape"),
           targetArrow: edge.style("target-arrow-shape"),
           lineColour: edge.style("line-color"),
-          stops: String(edge.style("line-gradient-stop-colors")).split(/\s+(?=rgb|#|hsl)/),
-          stopPositions: String(edge.style("line-gradient-stop-positions")).split(/\s+/),
           visible: edge.visible(),
           opacity: parseFloat(edge.style("opacity")),
         }))
         .sort((a, b) => String(a.key).localeCompare(String(b.key))),
-    shownEdgeLabels: () => cy().edges().filter((edge) => Boolean(edge.style("label"))).map((edge) => edge.id()),
+    // Every edge drawn now, of the data file or of the map, and its look as
+    // Cytoscape resolved it: `{ id, key, aggregated, styleKey, width, lineStyle,
+    // dash, lineFill, colour, sourceArrow, targetArrow, arrowScale, arrowColour,
+    // cornerRadii, walk, dimmed, points }`. Sizes are in layout units; `dash` is
+    // the dash pattern a dashed line is drawn with, `cornerRadii` the radius of
+    // each corner of a routed edge, and `points` its route as drawn (`edgeRoutes`).
+    lineLooks: () => cy().edges().filter((edge) => edge.visible()).map(lineLookOf),
+    // Every node drawn now and its look: `{ id, parent, isParent, collapsed,
+    // status, borderWidth, borderColour, borderStyle, fill, fillOpacity,
+    // labelColour, labelValign, labelMarginY, fontSize, mark }`, `mark` the
+    // corner image a status is drawn with, or "none".
+    nodeLooks: () => cy().nodes().filter((node) => node.visible()).map(nodeLookOf),
+    // The canvases the viewer draws over Cytoscape's, by name, in the order they lie on the page.
+    overlayLayers: () => [...source.container().querySelectorAll("canvas[data-layer]")].map((canvas) => canvas.dataset.layer),
+    // The edges whose label is drawn: a count or a badge Cytoscape draws, and the
+    // label of the line under the pointer, drawn on top (`followed`).
+    shownEdgeLabels: () =>
+      [...new Set([...cy().edges().filter((edge) => Boolean(edge.style("label"))).map((edge) => edge.id()), ...source.labelled()])].sort(),
     edgeMidpoint: () => {
       const r = rect();
       const leaves = cy().nodes().filter((node) => !node.isParent() && node.visible()).map((node) => pageBox(node, r));
@@ -323,8 +381,9 @@ function readers(source) {
  *
  * `source` gives `cy()`, `container()`, `ready()`, `selection()`, `state()`,
  * `impactSummary()`, `layout()`, the canvas's last layout run, `bundles()`, its
- * routes with the fans bundled, `junctions()`, the dots drawn now, `bridges()`
- * and `bridgeFrames()`, the bridges drawn now and their cost,
+ * routes with the fans bundled, `followed()`, `labelled()` and `frames()`, the
+ * lines drawn on top, the ones labelled and what drawing them cost,
+ * `droppedHeads()`, the ends that leave their arrowhead to another,
  * `hoveredEdges()`, the ids of the edges along the line under the pointer,
  * `map()`, the map drawn now (`canvasMap.js`), and `revealNodes(ids)`, which draws
  * the nodes in `ids` as themselves.

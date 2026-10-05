@@ -1,8 +1,8 @@
 // beadloom:component=site-graph-viewer
 // Indexes over a drawing: what lies near a place, without looking at everything.
 //
-// The edge bundling (`bundles.js`) and the junction finder (`junctions.js`) ask
-// two questions many times over one drawing: which boxes lie in this small
+// The edge bundling (`bundles.js`) and the route index a hover reads
+// (`routeIndex.js`) ask two questions many times over one drawing: which boxes lie in this small
 // window, and which segments run along this line. Asked of every box and every
 // segment, each costs the size of the graph, and at an adopter's size (some 450
 // boxes and 1,300 routes) the bundling took 100 to 230 ms that way.

@@ -1,12 +1,18 @@
 <script setup>
 // beadloom:component=site-layer
-// The legend of the layers, top to bottom, in their colours.
+// The legend of the layers, top to bottom, in their colours: a small card per layer, as the canvas draws its nodes.
 
 import { TOKEN_VARIABLES } from "../../../shared/theme-tokens/index.js";
 
 defineProps({
   layers: { type: Array, required: true },
 });
+
+/** A layer's sample: a card with a border in the layer's tone over a light tint of it, as its boxes are drawn. */
+function sampleOf(layer) {
+  const tone = `var(${TOKEN_VARIABLES[layer.tone]})`;
+  return { borderColor: tone, background: `color-mix(in srgb, ${tone} 16%, var(--vp-c-bg))` };
+}
 </script>
 
 <template>
@@ -18,7 +24,7 @@ defineProps({
       class="bl-legend-item"
       :data-legend-layer="layer.name"
     >
-      <span class="bl-legend-swatch" :style="{ background: `var(${TOKEN_VARIABLES[layer.tone]})` }" />
+      <span class="bl-legend-swatch" :style="sampleOf(layer)" />
       {{ layer.name }}
     </span>
   </template>
@@ -36,8 +42,9 @@ defineProps({
 }
 .bl-legend-swatch {
   display: inline-block;
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 12px;
+  border: 1.5px solid;
   border-radius: 3px;
 }
 </style>

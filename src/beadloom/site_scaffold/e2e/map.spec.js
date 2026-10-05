@@ -40,6 +40,8 @@ const HUB_DEGREE = 20;
 /** The screen size a map mark keeps, in pixels, within one zoom step of the restyle. */
 const STEP = 1.25;
 const COUNT_LABEL_PX = 11;
+/** The one weight every line is drawn at, in pixels on screen (`look.spec.js`). */
+const LINE_PX = 1.35;
 const BOX_TITLE_PX = 14;
 /** The most zoom steps a case takes before it gives up. */
 const ZOOM_STEPS = 30;
@@ -561,9 +563,8 @@ test("the map's marks keep their size on screen as the view zooms", async ({ pag
   }
   for (const { zoom, edges, collapsed } of readings) {
     expect(edges.length + collapsed.length).toBeGreaterThan(0);
-    const one = edges.find((e) => e.weight === 1) || edges[0];
-    const base = one ? one.width / (1.5 + 1.1 * Math.log2(one.weight)) : null;
-    if (one) expect(within(base * zoom, 1), `edge width at zoom ${zoom}`).toBe(true);
+    // One weight whatever the count an aggregated edge carries: the count is its label.
+    expect(edges.filter((e) => !within(e.width * zoom, LINE_PX)).map((e) => `${e.id} at zoom ${zoom}`)).toEqual([]);
     expect(edges.filter((e) => !within(e.fontSize * zoom, COUNT_LABEL_PX)).map((e) => e.id)).toEqual([]);
     expect(collapsed.filter((b) => !within(b.fontSize * zoom, BOX_TITLE_PX)).map((b) => b.id)).toEqual([]);
   }

@@ -14,14 +14,16 @@ import { idRecord } from "../../../shared/ids/index.js";
 const ERROR_SEVERITY = "error";
 
 /**
- * The statuses a node is drawn with, most severe first: its theme tone, its
- * border style and the legend's words. Only an error finding is a violation; a
- * node with warn findings only is drawn in a look of its own.
+ * The statuses a node is drawn with, most severe first: its theme tone, the
+ * mark it puts in the node's corner — `filled`, or a `ring` — and the legend's
+ * words. A status never changes the node's border, which is its layer's. Only an
+ * error finding is a violation; a node with warn findings only is drawn in a
+ * look of its own, a ring, apart from the filled marks of what needs fixing.
  */
 export const NODE_STATUSES = Object.freeze({
-  violation: Object.freeze({ tone: "danger", border: "solid", legend: "rule violation (error)" }),
-  stale: Object.freeze({ tone: "warning", border: "solid", legend: "stale docs" }),
-  warned: Object.freeze({ tone: "warning", border: "double", legend: "rule warning" }),
+  violation: Object.freeze({ tone: "danger", mark: "filled", legend: "rule violation (error)" }),
+  stale: Object.freeze({ tone: "warning", mark: "filled", legend: "stale docs" }),
+  warned: Object.freeze({ tone: "warning", mark: "ring", legend: "rule warning" }),
 });
 
 /**

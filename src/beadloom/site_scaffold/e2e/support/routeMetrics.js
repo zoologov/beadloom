@@ -346,63 +346,6 @@ export function lanesAt(routes, node, box, distance) {
   );
 }
 
-/** The compass directions a polyline leaves `point` in, when the point lies on it; empty when not. */
-function directionsAt(points, point) {
-  const directions = new Set();
-  for (let i = 1; i < points.length; i += 1) {
-    const a = points[i - 1];
-    const b = points[i];
-    if (distanceToSegment(point, a, b) > SAME) continue;
-    for (const end of [a, b]) {
-      const dx = end.x - point.x;
-      const dy = end.y - point.y;
-      if (Math.abs(dx) < SAME && Math.abs(dy) < SAME) continue;
-      directions.add(Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "E" : "W") : dy > 0 ? "S" : "N");
-    }
-  }
-  return directions;
-}
-
-/**
- * Where drawn routes branch: `[{ x, y, edges }]`. A point branches when two
- * routes through it share a direction out of it and differ in another — they ran
- * together and part there. Two routes that cross share no direction, and two
- * that run on together differ in none. Read by comparing every route with every
- * other at every corner, the slow way, so it checks a faster finder.
- */
-export function branchPoints(routes) {
-  const found = [];
-  const boxes = routes.map(({ points }) => ({
-    x1: Math.min(...points.map((p) => p.x)) - SAME,
-    x2: Math.max(...points.map((p) => p.x)) + SAME,
-    y1: Math.min(...points.map((p) => p.y)) - SAME,
-    y2: Math.max(...points.map((p) => p.y)) + SAME,
-  }));
-  for (const route of routes) {
-    for (const point of route.points.slice(1, -1)) {
-      if (found.some((f) => Math.abs(f.x - point.x) < SAME && Math.abs(f.y - point.y) < SAME)) continue;
-      const through = [];
-      routes.forEach((other, i) => {
-        const b = boxes[i];
-        if (point.x < b.x1 || point.x > b.x2 || point.y < b.y1 || point.y > b.y2) return;
-        const directions = directionsAt(other.points, point);
-        if (directions.size) through.push({ id: other.id, directions });
-      });
-      const edges = new Set();
-      for (const a of through) {
-        for (const b of through) {
-          if (a === b) continue;
-          const shared = [...a.directions].some((d) => b.directions.has(d));
-          const differ = a.directions.size !== b.directions.size || [...a.directions].some((d) => !b.directions.has(d));
-          if (shared && differ) edges.add(a.id);
-        }
-      }
-      if (edges.size) found.push({ x: point.x, y: point.y, edges: [...edges].sort() });
-    }
-  }
-  return found;
-}
-
 /**
  * The pairs of edges with no common endpoint whose routes run along one line for
  * more than a unit: `["a|b", …]`, sorted. Edges that share an end may share a

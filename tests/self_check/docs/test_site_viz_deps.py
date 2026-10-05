@@ -195,7 +195,7 @@ def test_the_viewer_renders_a_legend_derived_from_the_data() -> None:
     """The legend lists the layers and the drawn edge kinds, both read off the data."""
     viewer = _read("widgets/graph-viewer/ui/GraphViewer.vue")
     assert '<LayerLegend :layers="layers" />' in viewer
-    assert '<EdgeLegend :keys="legendKeys" />' in viewer
+    assert '<EdgeLegend :keys="legendKeys"' in viewer
     assert "legendKeysOf(" in viewer
 
 

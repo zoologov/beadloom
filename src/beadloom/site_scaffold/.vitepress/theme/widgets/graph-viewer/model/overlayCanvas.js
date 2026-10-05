@@ -1,10 +1,10 @@
 // beadloom:component=site-graph-viewer
 // A canvas over Cytoscape's, for what the viewer draws on top of the graph in the graph's coordinates.
 //
-// What Cytoscape cannot draw itself — a dot where bundled routes part, a bridge
-// where a highlighted edge crosses another — is drawn on a canvas of its own,
-// laid over the container, that takes no pointer event, so it never takes one
-// from the graph. Its owner draws on it whenever Cytoscape renders; `begin`
+// What Cytoscape cannot draw itself — a followed line on top of everything it
+// crosses, every casing under every line (`followedOverlay.js`) — is drawn on a
+// canvas of its own, laid over the container, that takes no pointer event, so it
+// never takes one from the graph. Its owner draws on it whenever Cytoscape renders; `begin`
 // sizes it to the container at the screen's pixel ratio and wipes what it last
 // drew. A canvas left empty since it was last wiped is not wiped again, so an
 // overlay with nothing to show costs no fill per frame.

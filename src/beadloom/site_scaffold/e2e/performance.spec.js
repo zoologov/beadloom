@@ -82,8 +82,8 @@ async function openOver(page, data) {
  * own rate, and the frames between two moves would be timed with nothing to draw.
  * The frames the canvas was drawn in are timed rather than every frame, because
  * the canvas skips frames when a drawing takes long, and a reader sees drawings.
- * A frame was drawn in when the canvas reported a drawing (`bridgeFrames`, which
- * its every drawing reaches) between its start and the next frame's.
+ * A frame was drawn in when the canvas reported a drawing (`frames`: the layer
+ * over the canvas is drawn at its every drawing) between its start and the next frame's.
  */
 async function panIntervals(page) {
   const { starts, drawings } = await page.evaluate(
@@ -98,7 +98,7 @@ async function panIntervals(page) {
       const frameStarts = [];
       // The handle keeps the last drawings only, so they are collected as the pan goes.
       const drawn = new Set();
-      const collect = () => window.__beadloomViewer.bridgeFrames().frames.forEach((frame) => drawn.add(frame.at));
+      const collect = () => window.__beadloomViewer.frames().frames.forEach((frame) => drawn.add(frame.at));
       // The pointer comes to rest on the canvas before it is pressed, as a reader's does.
       const nextFrames = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
       fire("mousemove", centre.x, centre.y);

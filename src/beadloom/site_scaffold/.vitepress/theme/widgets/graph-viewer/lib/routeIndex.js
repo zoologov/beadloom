@@ -1,22 +1,22 @@
 // beadloom:component=site-graph-viewer
-// Where drawn routes branch, and which routes run through a point: read from the routes alone.
+// Which drawn routes run through a point, and which run along one route there: read from the routes alone.
 //
-// A trunk or a bus draws several edges along one line, and a reader can only
-// tell where one of them leaves the others if the place is marked. A junction is
-// a point where two routes that run together part: they share a direction out of
-// the point and differ in another. Two routes that merely cross share no
-// direction there, and two that run on together share all of theirs, so neither
-// is a junction. Only the routes given are read, so a junction is found for the
-// edges drawn now: one whose second branch a filter hid is no junction.
+// A trunk or a bus draws several edges along one line, and Cytoscape reports the
+// one edge under the pointer, whichever member it drew last. The edges a reader
+// points at are every drawn route that runs through that point along the same
+// line (`routesAlong`). Only the routes given are read, so a filter that hides a
+// member leaves it out.
 //
-// Every function here is pure: routes in, points out.
+// Where two routes that ran together part, the rounded corner of the one that
+// turns is the merge; nothing else marks it. A dot at the corner point sits
+// beside the rounded stroke rather than on it.
+//
+// Every function here is pure: routes in, ids out.
 
 import { lineIndex } from "./spatialIndex.js";
 
 /** How close a point must lie to a route to be on it, in layout units. */
 const ON_ROUTE = 0.5;
-/** Steps of `ON_ROUTE` a point key reserves for its second coordinate, so a point's key is one number. */
-const KEY_SPAN = 1 << 24;
 /** The width of a band of the index over the routes' segments. */
 const BAND_WIDTH = 2;
 
@@ -77,51 +77,6 @@ export function routeIndexOf(routes) {
       return found;
     },
   };
-}
-
-
-/**
- * The edges that branch at `point` among `through` (`routeIndexOf`'s answer):
- * every route that shares a direction with another route there and differs from
- * it in another. Empty when nothing branches.
- */
-function branchingAt(through) {
-  if (through.length < 2) return [];
-  const branching = new Set();
-  for (let i = 0; i < through.length; i += 1) {
-    for (let j = i + 1; j < through.length; j += 1) {
-      const a = through[i].directions;
-      const b = through[j].directions;
-      if ((a & b) !== 0 && a !== b) {
-        branching.add(through[i].id);
-        branching.add(through[j].id);
-      }
-    }
-  }
-  return [...branching].sort();
-}
-
-/**
- * The junctions of `routes` (`[{ id, points }]`): `[{ x, y, edges }]`, every
- * point where routes that run together part, with the ids of the routes that
- * branch there. A route branches only at a corner of one of them, so only
- * corners are read.
- */
-export function junctionsOf(routes) {
-  const index = routeIndexOf(routes);
-  const seen = new Set();
-  const junctions = [];
-  for (const { points } of routes) {
-    for (let i = 1; i < points.length - 1; i += 1) {
-      const point = points[i];
-      const key = Math.round(point.x / ON_ROUTE) * KEY_SPAN + Math.round(point.y / ON_ROUTE);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const edges = branchingAt(index.throughPoint(point));
-      if (edges.length) junctions.push({ x: point.x, y: point.y, edges });
-    }
-  }
-  return junctions;
 }
 
 /**

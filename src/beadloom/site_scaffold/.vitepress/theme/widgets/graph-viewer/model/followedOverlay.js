@@ -1,0 +1,312 @@
+// beadloom:component=site-graph-viewer
+// The followed lines drawn over the canvas: every edge along a hovered line and on a selection's walk, on top of what they cross.
+//
+// A reader follows one line through a busy area by seeing it whole. The lines
+// the canvas marks as followed (`canvasMarks.js`, `HIGHLIGHTED_EDGES`) are drawn
+// again on a canvas of their own above Cytoscape's (`overlayCanvas.js`), in their
+// full colour, over a casing in the canvas's background colour that clears what
+// they cross. A hop drawn on the followed line where it crosses another, as a
+// classic diagram draws one, erases a notch out of the line it hops and reads as
+// a repair; a line drawn whole on top of the others does not.
+//
+// The drawing goes in passes: every casing, then every line, then the
+// arrowheads, then the label of the line under the pointer, the one line that
+// shows its kind. A bundle's lines run together and part, and a line drawn with
+// its own casing would cut a slit into the one drawn before it where they part;
+// drawn in passes, every casing lies under every line. A followed line is drawn
+// as Cytoscape draws it — the same route, the same corners, the same sizes on
+// screen (`lib/lineMarks.js`) — and always with its arrowhead, also where it
+// shares its last run with a line that carries the head at rest.
+//
+// What is followed is read again on `refresh`, whenever the hover, the
+// selection, the level, the filters or the theme change, and drawn whenever
+// Cytoscape renders, so it moves with every pan and zoom; a line out of view is
+// skipped. The time each frame took is kept for the test handle (`frames`), and
+// so is what the last refresh made of the lines followed (`followed`).
+
+import { EDGE_STYLES, dashOf } from "../../../entities/graph-edge/index.js";
+import { edgePaletteOf } from "../lib/edgePalette.js";
+import { headEndsOf } from "../lib/heads.js";
+import { AGGREGATE } from "../lib/levels.js";
+import { LINE_MARKS, cornerRadiiOf, headLengthOf, lineWidthOf, routePointsOf } from "../lib/lineMarks.js";
+import { scaleOf } from "../lib/mapMarks.js";
+import { HIGHLIGHTED_EDGES, HOVERED } from "./canvasMarks.js";
+import { overlayCanvas } from "./overlayCanvas.js";
+
+/** How many of the last frames' drawing times are kept. */
+const FRAMES_KEPT = 240;
+/** The passes a frame is drawn in, in order. */
+const PASSES = Object.freeze(["casings", "lines", "heads", "labels"]);
+/** A label's size and its plate's padding, in pixels on screen. */
+const LABEL = Object.freeze({ size: 11, padding: 2, plateOpacity: 0.9 });
+/** The arrowhead a line of the map's draws, whatever the edges it carries. */
+const AGGREGATE_ARROW = "triangle";
+
+const distance = (p, q) => Math.hypot(q.x - p.x, q.y - p.y);
+const point = ({ x, y }) => ({ x, y });
+
+/** The unit vector from `from` towards `to`. */
+function unit(from, to) {
+  const length = distance(from, to) || 1;
+  return { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
+}
+
+/**
+ * How `edge` is drawn, in the graph's coordinates: a routed line is its ends and
+ * corners with each corner's radius, a curve (a loop) its ends and Cytoscape's
+ * control points.
+ */
+function shapeOf(edge) {
+  if (edge.data("route")) {
+    return { routed: true, points: routePointsOf(edge) };
+  }
+  const controls = edge.controlPoints() || [];
+  return { routed: false, points: [edge.sourceEndpoint(), ...controls, edge.targetEndpoint()].map(point) };
+}
+
+/** The rectangle around `points`, grown by `margin`. */
+function boundsOf(points, margin) {
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  return { x1: Math.min(...xs) - margin, y1: Math.min(...ys) - margin, x2: Math.max(...xs) + margin, y2: Math.max(...ys) + margin };
+}
+
+/** The radius a corner of `radius` is drawn at between its runs: Cytoscape keeps a rounding within half of either run. */
+function clampedRadius(before, corner, after, radius) {
+  const [u, v] = [unit(corner, before), unit(corner, after)];
+  const half = Math.acos(Math.max(-1, Math.min(1, u.x * v.x + u.y * v.y))) / 2;
+  if (half < 1e-3 || Math.PI / 2 - half < 1e-3) return 0;
+  const tangent = Math.tan(half);
+  const limit = Math.min(distance(corner, before), distance(corner, after)) / 2;
+  return Math.min(radius, limit * tangent);
+}
+
+/** Trace a routed line through `points`, its corners rounded by `radii`, ending `cut` short of each end named. */
+function traceRoute(context, points, radii, cut) {
+  const n = points.length;
+  const start = cut.source ? along(points[0], points[1], cut.source) : points[0];
+  const end = cut.target ? along(points[n - 1], points[n - 2], cut.target) : points[n - 1];
+  context.moveTo(start.x, start.y);
+  for (let i = 1; i < n - 1; i += 1) {
+    const r = clampedRadius(points[i - 1], points[i], points[i + 1], radii[i - 1] || 0);
+    if (r > 0) context.arcTo(points[i].x, points[i].y, points[i + 1].x, points[i + 1].y, r);
+    else context.lineTo(points[i].x, points[i].y);
+  }
+  context.lineTo(end.x, end.y);
+}
+
+/** Trace a curve as Cytoscape draws one through control points: quadratic pieces through their middles. */
+function traceCurve(context, points) {
+  const [start, ...rest] = points;
+  const end = rest.pop();
+  context.moveTo(start.x, start.y);
+  if (!rest.length) {
+    context.lineTo(end.x, end.y);
+    return;
+  }
+  for (let i = 0; i < rest.length - 1; i += 1) {
+    const middle = { x: (rest[i].x + rest[i + 1].x) / 2, y: (rest[i].y + rest[i + 1].y) / 2 };
+    context.quadraticCurveTo(rest[i].x, rest[i].y, middle.x, middle.y);
+  }
+  const last = rest[rest.length - 1];
+  context.quadraticCurveTo(last.x, last.y, end.x, end.y);
+}
+
+/** The point `length` from `from` towards `to`. */
+function along(from, to, length) {
+  const d = unit(from, to);
+  return { x: from.x + d.x * length, y: from.y + d.y * length };
+}
+
+/** The outline of an arrowhead `length` long with its tip at `tip`, arriving from `from`: a triangle, or a vee. */
+function headOutline(tip, from, length, shape) {
+  const d = unit(from, tip);
+  const n = { x: -d.y, y: d.x };
+  const base = { x: tip.x - d.x * length, y: tip.y - d.y * length };
+  const left = { x: base.x + (n.x * length) / 2, y: base.y + (n.y * length) / 2 };
+  const right = { x: base.x - (n.x * length) / 2, y: base.y - (n.y * length) / 2 };
+  if (shape !== "vee") return [tip, left, right];
+  return [tip, left, { x: tip.x - (d.x * length) / 2, y: tip.y - (d.y * length) / 2 }, right];
+}
+
+/**
+ * The layer of followed lines over `cy`, in `container`: `{ refresh, followed,
+ * labelled, frames, destroy }`.
+ *
+ * `tokens()` gives the resolved theme tokens now (`shared/theme-tokens`). Call
+ * `refresh()` whenever the followed lines, the lines drawn or their looks change.
+ * `followed()` gives `{ edges, passes }`: each followed line `{ id, colour,
+ * casing, width }` and each pass with the ids it draws; `labelled()` the ids of
+ * the lines whose label is drawn; `frames()` `{ frames }`, each recent frame
+ * `{ at, ms, drawn }`: when it was drawn (`performance.now()`), how long it took,
+ * and how many lines it drew.
+ */
+export function followedOverlay(cy, container, { tokens }) {
+  const layer = overlayCanvas(container, "followed");
+  const frames = [];
+  let lines = [];
+  let look = null;
+
+  /** What `edge` is drawn as when it is followed, read once per refresh. */
+  function lineOf(edge, palette) {
+    const shape = shapeOf(edge);
+    const styleKey = edge.data("styleKey");
+    const aggregated = Boolean(edge.data(AGGREGATE));
+    const heads = shape.routed ? headEndsOf(edge) : { source: false, target: true };
+    const label = aggregated ? edge.data("countLabel") : edge.hasClass(HOVERED) ? edge.data("label") : "";
+    return {
+      edge,
+      id: edge.id(),
+      shape,
+      heads,
+      label,
+      arrow: aggregated ? AGGREGATE_ARROW : EDGE_STYLES[styleKey]?.arrow || AGGREGATE_ARROW,
+      dash: aggregated ? [] : dashOf(EDGE_STYLES[styleKey] || {}),
+      colour: palette[styleKey]?.full || look.text1,
+    };
+  }
+
+  function refresh() {
+    look = tokens();
+    if (!look) {
+      lines = [];
+    } else {
+      const palette = edgePaletteOf(look);
+      lines = cy
+        .edges(HIGHLIGHTED_EDGES)
+        .filter((edge) => edge.visible())
+        .map((edge) => lineOf(edge, palette))
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    }
+    draw();
+  }
+
+  /** The sizes `line` is drawn at now, in layout units, at the map's scale its edge carries. */
+  function sizesOf(line) {
+    const scale = scaleOf(line.edge);
+    const head = headLengthOf(line.edge);
+    return {
+      scale,
+      width: lineWidthOf(line.edge),
+      casing: LINE_MARKS.casing * scale,
+      head,
+      radii: line.shape.routed ? cornerRadiiOf(line.shape.points, scale, line.heads) : [],
+      cut: { source: line.heads.source ? head / 2 : 0, target: line.heads.target ? head / 2 : 0 },
+    };
+  }
+
+  function trace(context, line, sizes) {
+    context.beginPath();
+    if (line.shape.routed) traceRoute(context, line.shape.points, sizes.radii, sizes.cut);
+    else traceCurve(context, line.shape.points);
+  }
+
+  /** The arrowheads of `line`, each an outline. */
+  function headsOf(line, sizes) {
+    const points = line.shape.points;
+    const n = points.length;
+    const outlines = [];
+    if (line.heads.target) outlines.push(headOutline(points[n - 1], points[n - 2], sizes.head, line.arrow));
+    if (line.heads.source) outlines.push(headOutline(points[0], points[1], sizes.head, line.arrow));
+    return outlines;
+  }
+
+  function fillOutline(context, outline) {
+    context.beginPath();
+    context.moveTo(outline[0].x, outline[0].y);
+    for (const corner of outline.slice(1)) context.lineTo(corner.x, corner.y);
+    context.closePath();
+  }
+
+  function drawLabel(context, line, sizes) {
+    const middle = line.edge.midpoint();
+    const size = LABEL.size * sizes.scale;
+    const padding = LABEL.padding * sizes.scale;
+    context.font = `600 ${size}px ${look.font}`;
+    const width = context.measureText(line.label).width;
+    context.globalAlpha = LABEL.plateOpacity;
+    context.fillStyle = look.bg;
+    context.fillRect(middle.x - width / 2 - padding, middle.y - size / 2 - padding, width + 2 * padding, size + 2 * padding);
+    context.globalAlpha = 1;
+    context.fillStyle = look.text1;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(line.label, middle.x, middle.y);
+  }
+
+  function draw() {
+    const started = performance.now();
+    const context = layer.begin();
+    let drawn = 0;
+    if (lines.length && look) {
+      const extent = cy.extent();
+      const shown = lines
+        .map((line) => ({ line, sizes: sizesOf(line) }))
+        .filter(({ line, sizes }) => {
+          const box = boundsOf(line.shape.points, sizes.head + sizes.casing);
+          return box.x2 >= extent.x1 && box.x1 <= extent.x2 && box.y2 >= extent.y1 && box.y1 <= extent.y2;
+        });
+      if (shown.length) {
+        layer.inGraph(cy);
+        context.lineJoin = "round";
+        context.lineCap = "butt";
+        context.strokeStyle = look.bg;
+        context.fillStyle = look.bg;
+        for (const { line, sizes } of shown) {
+          context.setLineDash([]);
+          context.lineWidth = sizes.width + 2 * sizes.casing;
+          trace(context, line, sizes);
+          context.stroke();
+          context.lineWidth = 2 * sizes.casing;
+          for (const outline of headsOf(line, sizes)) {
+            fillOutline(context, outline);
+            context.fill();
+            context.stroke();
+          }
+        }
+        for (const { line, sizes } of shown) {
+          context.strokeStyle = line.colour;
+          context.lineWidth = sizes.width;
+          context.setLineDash(line.dash.map((length) => length * sizes.scale));
+          trace(context, line, sizes);
+          context.stroke();
+        }
+        context.setLineDash([]);
+        for (const { line, sizes } of shown) {
+          context.fillStyle = line.colour;
+          for (const outline of headsOf(line, sizes)) {
+            fillOutline(context, outline);
+            context.fill();
+          }
+        }
+        for (const { line, sizes } of shown) if (line.label) drawLabel(context, line, sizes);
+        drawn = shown.length;
+        layer.drew();
+      }
+    }
+    frames.push({ at: started, ms: performance.now() - started, drawn });
+    if (frames.length > FRAMES_KEPT) frames.shift();
+  }
+
+  cy.on("render", draw);
+  return {
+    refresh,
+    followed: () => {
+      const ids = (pick) => lines.filter(pick).map((line) => line.id);
+      const casing = look?.bg || null;
+      return {
+        edges: lines.map((line) => ({ id: line.id, colour: line.colour, casing, width: lineWidthOf(line.edge) })),
+        passes: PASSES.map((name) => ({
+          name,
+          edges: name === "labels" ? ids((line) => Boolean(line.label)) : name === "heads" ? ids((line) => line.heads.source || line.heads.target) : ids(() => true),
+        })),
+      };
+    },
+    labelled: () => lines.filter((line) => line.label).map((line) => line.id),
+    frames: () => ({ frames: frames.map((frame) => ({ ...frame })) }),
+    destroy() {
+      cy.removeListener("render", draw);
+      layer.remove();
+    },
+  };
+}

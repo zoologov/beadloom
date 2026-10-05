@@ -30,9 +30,7 @@ _E2E = "src/beadloom/site_scaffold/e2e"
 
 #: Each spec and the slice whose behaviour it drives.
 SPEC_SLICE = {
-    # Bridges on highlighted edges where they cross other drawn edges (BDL-077 E5).
-    "bridges.spec.js": "site-graph-viewer",
-    # Trunks, buses and junction dots drawn over ELK's routes (BDL-077 E3).
+    # Trunks and buses drawn over ELK's routes (BDL-077 E3).
     "bundles.spec.js": "site-graph-viewer",
     "card.spec.js": "site-node-card",
     "colours.spec.js": "site-graph-viewer",
@@ -48,6 +46,8 @@ SPEC_SLICE = {
     "landscape-impact.spec.js": "site-impact-view",
     "landscape.spec.js": "site-landscape-page",
     "layers.spec.js": "site-layer",
+    # The base look: one line weight, whole arrowheads, followed lines on top, cards and boxes (BDL-078 V1).
+    "look.spec.js": "site-graph-viewer",
     # ELK in a worker, its geometry and its cache are `shared/elk` (BDL-077 E1).
     "layout.spec.js": "site-shared",
     # The map-like overview: levels, aggregated edges, the budget (BDL-077 E4).

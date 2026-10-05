@@ -20,9 +20,9 @@
 //
 // A node's edges are drawn bundled, several along one line. When the pointer is
 // on a line that more than one edge runs along, a note over the canvas names
-// them, since the line alone cannot say which edges it carries. A highlighted
-// edge — under the pointer, or on a selection's walk — hops over every other
-// edge it crosses, so it can be followed through a busy area.
+// them, since the line alone cannot say which edges it carries. A followed
+// edge — under the pointer, or on a selection's walk — is drawn on top of every
+// edge it crosses, over a casing, so it can be followed through a busy area.
 //
 // The graph is drawn like a map (`lib/levels.js`): at the whole-graph fit the
 // boxes at the top and one aggregated edge per pair of them, more detail where
@@ -77,6 +77,7 @@ import { withAncestors } from "../../../shared/lib/index.js";
 import { useThemeTokens } from "../../../shared/theme-tokens/index.js";
 import { buildElements } from "../lib/elements.js";
 import { buildStylesheet } from "../lib/stylesheet.js";
+import { edgePaletteOf } from "../lib/edgePalette.js";
 import { AGGREGATE, selectionReveals } from "../lib/levels.js";
 import { useGraphCanvas } from "../model/useGraphCanvas.js";
 import { keyHandler } from "../model/viewerKeys.js";
@@ -199,6 +200,12 @@ const panelId = usePanelId();
 // The panel opens when a node is selected; the toolbar's "Panel" button toggles it.
 const panelOpen = ref(Boolean(state.focus));
 const { tokens } = useThemeTokens(root);
+// The colour of each edge style at rest, as the canvas draws it: the legend draws its samples in them.
+const legendColours = computed(() =>
+  tokens.value
+    ? Object.fromEntries(Object.entries(edgePaletteOf(tokens.value)).map(([key, colours]) => [key, colours.rest]))
+    : {}
+);
 
 // A selection made anywhere but on the canvas — the URL, the card, the impact
 // list, the toolbar — is framed, so what the reader asked for is in view. A tap
@@ -224,7 +231,7 @@ function toggleImpact() {
 const canvas = useGraphCanvas(container, {
   options: NAVIGATION_OPTIONS,
   fitZoom: () => navigation.fitZoom(),
-  background: () => tokens.value?.bg,
+  tokens: () => tokens.value,
   onNodeTap: (id) => {
     select(id, { frame: false });
     focusCanvas();
@@ -356,9 +363,10 @@ onMounted(() => {
     impactSummary: () => summary.value,
     layout: () => canvas.layout.value,
     bundles: () => canvas.bundles.value,
-    junctions: () => canvas.junctions(),
-    bridges: () => canvas.bridges(),
-    bridgeFrames: () => canvas.bridgeFrames(),
+    followed: () => canvas.followed(),
+    labelled: () => canvas.labelled(),
+    frames: () => canvas.frames(),
+    droppedHeads: () => canvas.droppedHeads(),
     hoveredEdges: () => canvas.hoveredEdges.value,
     map: () => canvas.map(),
     revealNodes: (ids) => canvas.revealNow("test", ids),
@@ -486,7 +494,7 @@ onBeforeUnmount(() => disposeHandle());
     <div class="bl-viewer-legend" aria-label="Legend">
       <LayerLegend :layers="layers" />
       <NodeStatusLegend :statuses="statuses" />
-      <EdgeLegend :keys="legendKeys" />
+      <EdgeLegend :keys="legendKeys" :colours="legendColours" />
     </div>
   </div>
 </template>
@@ -555,6 +563,8 @@ onBeforeUnmount(() => disposeHandle());
   flex: 1 1 auto;
 }
 .bl-viewer-canvas {
+  /* The layer of followed lines lies over Cytoscape's drawing, inside the same border. */
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
   height: var(--bl-viewer-height);

@@ -3,10 +3,12 @@
 
 export {
   CONTAINMENT_KIND,
+  DOT_PATTERN,
   DRAWN_KINDS,
   EDGE_STYLES,
   VIOLATION_KEY,
   contractStyleKey,
+  dashOf,
   isDrawnKind,
   isViolation,
   legendKeysOf,

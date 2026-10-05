@@ -1,9 +1,9 @@
 // beadloom:component=site-graph-viewer
 // The names a selection and a hover mark the canvas with: the classes and the data, named once.
 //
-// The canvas sets them (`useGraphCanvas.js`), the bridges read which edges they
-// highlight (`bridgeOverlay.js`), and the test handle reads them back
-// (`testHandle.js`). Kept apart from the canvas, they can be read without
+// The canvas sets them (`useGraphCanvas.js`), the layer over the canvas reads
+// which edges they mark as followed (`followedOverlay.js`), and the test handle
+// reads them back (`testHandle.js`). Kept apart from the canvas, they can be read without
 // loading it, which is how the handle stays loadable on a page of its own.
 
 /** Every class a selection puts on the canvas, removed before the next one is marked. */

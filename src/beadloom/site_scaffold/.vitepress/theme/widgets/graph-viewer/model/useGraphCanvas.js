@@ -4,14 +4,14 @@
 // It creates the graph, has ELK lay it out in a worker (`shared/elk`) while the
 // page stays responsive, draws it as ELK laid it out — every node in its place,
 // every box at its size, every edge along its route with its node's fans bundled
-// (`canvasLayout.js`), a dot where bundled routes part (`bundleOverlay.js`) and a
-// bridge wherever a highlighted edge crosses another (`bridgeOverlay.js`) —
-// reports taps, labels a hovered edge and marks every edge along the hovered
-// line, shows only a set of node ids (and of contracts), marks a selection — the
-// selected node, the nodes and edges its walk reached, their distance rings and
-// risks, and what lies outside — and swaps the stylesheet when the theme
-// changes. It decides nothing about which nodes are visible or selected: the
-// viewer's state does.
+// (`canvasLayout.js`) and one arrowhead where lines share their last run
+// (`sharedLines.js`) — draws the followed lines on top of everything they cross,
+// with the label of the one under the pointer (`followedOverlay.js`), reports
+// taps, marks every edge along the hovered line, shows only a set of node ids
+// (and of contracts), marks a selection — the selected node, the nodes and edges
+// its walk reached, their distance rings and risks, and what lies outside — and
+// swaps the stylesheet when the theme changes. It decides nothing about which
+// nodes are visible or selected: the viewer's state does.
 //
 // The layout's run (`layout`) keeps ELK's geometry — a box for every node and a
 // route for every edge, in the graph's coordinates — beside the canvas, so what
@@ -28,24 +28,23 @@
 import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { loadCytoscape } from "../../../shared/cytoscape/index.js";
 import { elkGraphOf, layOut, warmUpLayout } from "../../../shared/elk/index.js";
-import { bridgeOverlay } from "./bridgeOverlay.js";
-import { bundleOverlay } from "./bundleOverlay.js";
 import { ALONG_HOVER, DISTANCE_DATA, HOVERED, SELECTION_CLASSES } from "./canvasMarks.js";
 import { applyGeometry, fitCompounds, layoutInputOf } from "./canvasLayout.js";
 import { canvasMap } from "./canvasMap.js";
-import { siblingsOf } from "../lib/bridges.js";
+import { followedOverlay } from "./followedOverlay.js";
+import { sharedLines } from "./sharedLines.js";
 import { COLLAPSED } from "../lib/levels.js";
 
 /** Cytoscape's layout that places nothing, run when the graph is created. */
 const UNPLACED = Object.freeze({ name: "null" });
 
 /**
- * `{ cy, ready, layingOut, layout, bundles, hoveredEdges, layoutError, junctions,
- * bridges, bridgeFrames, map, mount, setStyle, reveal, showOnly, markSelection,
- * resize }` over the container in `containerRef`.
+ * `{ cy, ready, layingOut, layout, bundles, hoveredEdges, layoutError, followed,
+ * labelled, frames, droppedHeads, map, mount, setStyle, reveal, showOnly,
+ * markSelection, resize }` over the container in `containerRef`.
  *
- * `background()` gives the colour the canvas is drawn on, in which a bridge
- * erases the line it hops with.
+ * `tokens()` gives the resolved theme tokens now, which the followed lines are
+ * drawn in.
  * `fitZoom()` gives the zoom of the whole-graph fit now, which the map's levels
  * are measured from. `reveal(source, ids)` draws the nodes in `ids` as themselves
  * with their own edges for `source` ("search", or a test), opening every box that
@@ -57,12 +56,12 @@ const UNPLACED = Object.freeze({ name: "null" });
  * source, ms }` (`shared/elk`, `layOut`), or null; `bundles` is its routes with
  * the fans bundled, `{ paths, trunks, buses, ms }` (`canvasLayout.js`), or null;
  * `hoveredEdges` the ids of the edges along the line under the pointer;
- * `layoutError` is the error a failed run gave, or null; `junctions()` the dots
- * drawn where routes part, `[{ x, y, edges }]`; `bridges()` the bridges drawn on
- * the highlighted edges and `bridgeFrames()` what drawing them cost
- * (`bridgeOverlay.js`).
+ * `layoutError` is the error a failed run gave, or null; `followed()` the lines
+ * drawn on top, `labelled()` the ones whose label is drawn and `frames()` what
+ * drawing them cost (`followedOverlay.js`); `droppedHeads()` the line ends that
+ * leave their arrowhead to another on their last run (`sharedLines.js`).
  */
-export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundTap, fitZoom, background }) {
+export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundTap, fitZoom, tokens }) {
   const cy = shallowRef(null);
   const ready = ref(false);
   const layingOut = ref(false);
@@ -70,8 +69,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   const bundles = shallowRef(null);
   const hoveredEdges = shallowRef([]);
   const layoutError = shallowRef(null);
-  let overlay = null;
-  let bridges = null;
+  let shared = null;
+  let followed = null;
   let map = null;
   let generation = 0;
   // What the filters show and what the selection marks, kept to mark again on
@@ -85,7 +84,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     cy.value?.edges(`.${HOVERED}`).removeClass(HOVERED);
     cy.value?.edges(`.${ALONG_HOVER}`).removeClass(ALONG_HOVER);
     hoveredEdges.value = [];
-    bridges?.refresh();
+    followed?.refresh();
     hoverNode(null);
   }
 
@@ -97,18 +96,18 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   // Cytoscape reports the one edge under the pointer; on a shared line every
   // edge drawn along it is what the reader points at.
   function hoverAlong(edge, position) {
-    const ids = overlay ? overlay.along(edge.id(), position) : [edge.id()];
+    const ids = shared ? shared.along(edge.id(), position) : [edge.id()];
     cy.value.batch(() => {
       cy.value.edges(`.${ALONG_HOVER}`).removeClass(ALONG_HOVER);
       for (const id of ids) cy.value.getElementById(id).addClass(ALONG_HOVER);
     });
     hoveredEdges.value = ids;
-    bridges?.refresh();
+    followed?.refresh();
   }
 
   function refreshOverlay() {
-    overlay?.refresh();
-    bridges?.refresh();
+    shared?.refresh();
+    followed?.refresh();
   }
 
   function destroy() {
@@ -118,10 +117,9 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     bundles.value = null;
     hoveredEdges.value = [];
     containerRef.value?.removeEventListener("mouseleave", clearHover);
-    overlay?.destroy();
-    overlay = null;
-    bridges?.destroy();
-    bridges = null;
+    shared = null;
+    followed?.destroy();
+    followed = null;
     map?.destroy();
     map = null;
     shown = { ids: null, contracts: null };
@@ -144,6 +142,11 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
       layout: UNPLACED,
       ...options,
     });
+    // Cytoscape keeps each edge's drawn path keyed by its points alone. A line's
+    // corners round at a size on screen, so they change with the zoom where its
+    // points do not — a line with no arrowhead keeps its points — and a cached
+    // path would keep the rounding it was first drawn with.
+    instance.renderer().path2dEnabled(false);
     instance.on("tap", "node", (event) => onNodeTap(event.target.id()));
     instance.on("tap", (event) => {
       if (event.target === instance) onBackgroundTap();
@@ -169,9 +172,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
       if (mine !== generation) return false;
       const drawn = await applyGeometry(instance, run.geometry);
       if (mine !== generation) return false;
-      overlay = bundleOverlay(instance, containerRef.value, drawn.paths);
-      overlay.refresh();
-      bridges = bridgeOverlay(instance, containerRef.value, { siblings: siblingsOf(drawn), background });
+      shared = sharedLines(instance, drawn.paths);
+      followed = followedOverlay(instance, containerRef.value, { tokens });
       map = canvasMap(instance, run.geometry, { fitZoom, onLevel: redraw });
       layout.value = run;
       bundles.value = drawn;
@@ -333,9 +335,10 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     bundles,
     hoveredEdges,
     layoutError,
-    junctions: () => overlay?.junctions() || [],
-    bridges: () => bridges?.bridges() || [],
-    bridgeFrames: () => bridges?.frames() || { findMs: 0, paintMs: 0, frames: [] },
+    followed: () => followed?.followed() || { edges: [], passes: [] },
+    labelled: () => followed?.labelled() || [],
+    frames: () => followed?.frames() || { frames: [] },
+    droppedHeads: () => shared?.droppedHeads() || [],
     map: () => map,
     mount,
     setStyle,

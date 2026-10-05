@@ -17,11 +17,12 @@
 // as well, and each end it would join carries the count (`hiddenEdges`); while
 // the pointer is on an end, or the end is selected, all of its edges are drawn.
 //
-// What a box or an aggregated edge says on screen — an aggregated edge's width
-// and count, a closed box's title — keeps one size on screen whatever the zoom:
-// each carries the map's scale in its data, a power of 1.25 near 1 / zoom, and
-// the stylesheet multiplies by it, so a zoom gesture restyles only these few
-// elements, and only when the zoom crosses a step.
+// What a box or a line says on screen — every line's weight, arrowheads and
+// corners, an aggregated edge's count, a closed box's title — keeps one size on
+// screen whatever the zoom: each carries the map's scale in its data, a power of
+// 1.25 near 1 / zoom, and the stylesheet multiplies by it, so a zoom gesture
+// restyles these elements only when the zoom crosses a step. An edge out of the
+// graph is given the scale too, so it comes back at the size of the rest.
 //
 // Which boxes are open follows the view: on every change of the viewport, once
 // per frame at most, the boxes in view are worked out again, and when they differ
@@ -204,6 +205,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
         return element;
       });
       putBack(drawn);
+      for (const edge of edges.values()) if (edge.data(MAP_SCALE) !== scale) edge.data(MAP_SCALE, scale);
       for (const id of level.nodes) {
         const node = nodes.get(id);
         node.toggleClass(COLLAPSED, tree.boxes.has(id) && !nextOpen.has(id));
@@ -221,7 +223,10 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     const next = scaleAt(cy.zoom());
     if (next === scale) return;
     scale = next;
-    cy.batch(() => cy.elements(`.${COLLAPSED}, edge[${AGGREGATE}], node[${HIDDEN_EDGES}]`).data(MAP_SCALE, scale));
+    cy.batch(() => {
+      cy.elements(`.${COLLAPSED}, edge[${AGGREGATE}], node[${HIDDEN_EDGES}]`).data(MAP_SCALE, scale);
+      for (const edge of edges.values()) edge.data(MAP_SCALE, scale);
+    });
   }
 
   /** Work out the boxes in view again, and have the level drawn again when they differ. */

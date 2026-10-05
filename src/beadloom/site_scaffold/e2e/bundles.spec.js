@@ -6,9 +6,11 @@
 // the graph, and the fans of the whole drawing had 396 steps more than two per
 // node. The routes are now rewritten after ELK, which moves no node: a node's
 // edges that leave one side in one direction share one channel, and a busy node's
-// edges to one top-level box share one route to a line along that box. Where two
-// routes part, a dot marks it; hovering a shared line names every edge on it; and
-// edges outside a selection fade in colour, so a trunk of them does not darken.
+// edges to one top-level box share one route to a line along that box. Hovering a
+// shared line names every edge on it, and edges outside a selection fade in
+// colour, so a trunk of them does not darken. Where two routes part, the rounded
+// corner of the one that turns is the merge, and no dot is drawn
+// (`look.spec.js`).
 //
 // Every case reads the graph at full detail, every box open: at the whole-graph
 // fit the viewer draws a map of closed boxes (`map.spec.js`). The adopter-sized
@@ -19,7 +21,6 @@
 import { test, expect } from "@playwright/test";
 import { ADOPTER_SIZED, RANK_POSITIONS, adopterSizedGraph } from "./support/adopterGraph.js";
 import {
-  branchPoints,
   channelsOf,
   collinearPairs,
   deviation,
@@ -228,15 +229,6 @@ async function lanesOverBoundOf(page, busy, parents) {
   });
 }
 
-/** Whether every junction lies by a point of `expected`, and every point of `expected` by a junction. */
-function sameJunctions(junctions, expected) {
-  const by = (point) => (other) => Math.hypot(point.x - other.x, point.y - other.y) <= 1;
-  return {
-    stray: junctions.filter((j) => !expected.some(by(j))),
-    missing: expected.filter((p) => !junctions.some(by(p))),
-  };
-}
-
 for (const graph of GRAPHS) {
   test.describe(`on ${graph.name}`, { tag: graph.tag }, () => {
     test("no node or box moves: every leaf stands at its ELK box's centre and every box keeps ELK's size", async ({
@@ -330,16 +322,6 @@ for (const graph of GRAPHS) {
       requireShape(drawn.length > 1, "fewer than two drawn edges");
 
       expect(collinearPairs(drawn)).toEqual([]);
-    });
-
-    test("a junction dot marks every point where drawn routes part, and no other", async ({ page, request }) => {
-      await graph.open(page, request);
-      const expected = branchPoints(await drawnRoutes(page));
-      requireShape(expected.length > 0, "no two drawn routes run together and part");
-
-      const { stray, missing } = sameJunctions(await viewer(page, "junctions"), expected);
-      expect(stray).toEqual([]);
-      expect(missing).toEqual([]);
     });
   });
 }
@@ -467,38 +449,6 @@ test("a node's bus leaves its side in one channel when an edge of its own child 
   const channels = [...channelsOf(routes, "box", drawing.boxes.box)].map(([side, heights]) => [side, heights.size]);
   expect(channels).toEqual([["bottom/out", 1]]);
   expect(collinearPairs(routes)).toEqual([]);
-});
-
-test("junction dots follow the edges drawn now: a filter and a hidden neighbourhood remove the ones they part", async ({
-  page,
-  request,
-}) => {
-  const data = await GRAPHS[0].open(page, request);
-  const parents = parentMap(data);
-  const before = await viewer(page, "junctions");
-  const [busiest] = busiestOf(await drawnRoutes(page), leavesOf(parents));
-  const kinds = [...new Set(data.nodes.map((n) => n.kind))].sort();
-  requireShape(before.length > 0 && kinds.length > 1, "no junction, or a single node kind to filter by");
-
-  // The kind whose filter leaves routes drawn and removes the most junctions.
-  let removed = 0;
-  for (const kind of kinds) {
-    await page.getByLabel("Kind", { exact: true }).selectOption(kind);
-    await expect.poll(async () => (await viewer(page, "visibleIds")).length).toBeLessThan(data.nodes.length);
-    const drawn = await drawnRoutes(page);
-    const { stray, missing } = sameJunctions(await viewer(page, "junctions"), branchPoints(drawn));
-    expect(stray, kind).toEqual([]);
-    expect(missing, kind).toEqual([]);
-    removed = Math.max(removed, before.length - (await viewer(page, "junctions")).length);
-  }
-  expect(removed).toBeGreaterThan(0);
-
-  await openArchitecture(page, `?focus=${encodeURIComponent(busiest)}&depth=1&hide=1`);
-  await expect.poll(async () => (await viewer(page, "neighbourhood")).ids.length).toBeGreaterThan(0);
-  const shown = await drawnRoutes(page);
-  const { stray, missing } = sameJunctions(await viewer(page, "junctions"), branchPoints(shown));
-  expect(stray).toEqual([]);
-  expect(missing).toEqual([]);
 });
 
 /** The middles of the stretches two members of one bundle share, longest first, in graph coordinates. */
