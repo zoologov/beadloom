@@ -37,6 +37,8 @@ SPEC_SLICE = {
     "card.spec.js": "site-node-card",
     "colours.spec.js": "site-graph-viewer",
     "data-version.spec.js": "site-architecture-data",
+    # Nodes named `__proto__`, `constructor` and the like drawn like any other (BDL-078 F-ytcg).
+    "data-ids.spec.js": "site-graph-viewer",
     "diagram-links.spec.js": "site-diagram-viewer",
     "edges.spec.js": "site-graph-edge",
     "filters.spec.js": "site-filter-graph",

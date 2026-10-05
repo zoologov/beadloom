@@ -17,6 +17,7 @@
 // beside that layout: a node page or full screen that draws the same layout
 // draws the same bundles without computing them again.
 
+import { idRecord } from "../../../shared/ids/index.js";
 import { bundleRoutes } from "../lib/bundles.js";
 import { centreOf, compoundSizeOf, pathOf, segmentsOf } from "../lib/routes.js";
 
@@ -118,7 +119,7 @@ function drawingOf(cy, geometry) {
   const ends = (edge) => ({ id: edge.id(), source: edge.source().id(), target: edge.target().id() });
   const edges = laidOut.filter((edge) => !isLoop(edge)).map(ends);
   const loops = laidOut.filter(isLoop).map(ends);
-  const paths = Object.fromEntries(edges.map(({ id }) => [id, pathOf(geometry.routes[id])]));
+  const paths = idRecord(edges.map(({ id }) => [id, pathOf(geometry.routes[id])]));
   return { nodes, edges, loops, boxes: geometry.boxes, paths };
 }
 

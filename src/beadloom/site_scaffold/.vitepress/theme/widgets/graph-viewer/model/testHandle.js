@@ -25,6 +25,7 @@
 // true, which a real reader's browser never reports, so the tested bundle and
 // the deployed one are the same bundle.
 
+import { idRecord } from "../../../shared/ids/index.js";
 import { isLoop } from "./canvasLayout.js";
 import { DISTANCE_DATA } from "./canvasMarks.js";
 import { AGGREGATE, HIDDEN_EDGES } from "../lib/levels.js";
@@ -121,12 +122,12 @@ function readers(source) {
     // Every node's position, whether it is drawn or inside a closed box, which
     // keeps it where it was: no level moves a node.
     positions: () =>
-      Object.fromEntries((source.map()?.allNodes() || cy().nodes()).map((node) => [node.id(), { ...node.position() }])),
+      idRecord((source.map()?.allNodes() || cy().nodes()).map((node) => [node.id(), { ...node.position() }])),
     pan: () => ({ ...cy().pan() }),
     zoom: () => cy().zoom(),
     boxes: () => {
       const r = rect();
-      return Object.fromEntries(
+      return idRecord(
         cy().nodes().map((node) => [
           node.id(),
           { ...pageBox(node, r), isParent: node.isParent(), parent: node.parent().nonempty() ? node.parent().id() : null },
@@ -135,7 +136,7 @@ function readers(source) {
     },
     // Each node's box as drawn, in the graph's coordinates: its shape and its
     // border, without its label or Cytoscape's margin for antialiasing.
-    nodeBoxes: () => Object.fromEntries(cy().nodes().map((node) => [node.id(), drawnBoxOf(node)])),
+    nodeBoxes: () => idRecord(cy().nodes().map((node) => [node.id(), drawnBoxOf(node)])),
     colours: () => colourEntries(cy()),
     neighbourhood: () => ({
       ids: idsOf(cy().nodes(".in-walk")),
@@ -143,7 +144,7 @@ function readers(source) {
     }),
     dimmedIds: () => idsOf(cy().nodes(".is-dimmed")),
     rings: () =>
-      Object.fromEntries(
+      idRecord(
         cy()
           .nodes()
           .filter((node) => node.data(DISTANCE_DATA) !== undefined)
@@ -152,7 +153,7 @@ function readers(source) {
     riskIds: () => idsOf(cy().nodes(".is-risk")),
     // Each node drawn with a status, the status and the border it is drawn with.
     statusLooks: () =>
-      Object.fromEntries(
+      idRecord(
         cy()
           .nodes()
           .filter((node) => Boolean(node.data("status")))
@@ -231,7 +232,7 @@ function readers(source) {
     },
     // Each drawn node whose aggregated edges the budget leaves out: `{ id: { count, label } }`.
     hiddenEdgeCounts: () =>
-      Object.fromEntries(
+      idRecord(
         cy()
           .nodes()
           .filter((node) => node.data(HIDDEN_EDGES) > 0)

@@ -8,6 +8,8 @@
 // findings' severities for the node's status. A field a version 1 file does not
 // carry is no risk, because nothing says it is one.
 
+import { idRecord } from "../../../shared/ids/index.js";
+
 /** The severity of a finding that breaks a rule; every other severity warns. */
 const ERROR_SEVERITY = "error";
 
@@ -49,7 +51,8 @@ export function isFlagged(node) {
 }
 
 /**
- * Each node's container, `{ id: parentId | null }`.
+ * Each node's container, `{ id: parentId | null }`, a record without a prototype
+ * (`idRecord`), so a node named `__proto__` or `constructor` is a key like any other.
  *
  * A parent that is not itself a node of the file, or a node that names itself
  * (the root service is `part_of` itself), has none: Cytoscape rejects a dangling
@@ -57,7 +60,7 @@ export function isFlagged(node) {
  */
 export function parentMapOf(nodes) {
   const ids = new Set(nodes.map((n) => n.id));
-  const parents = {};
+  const parents = idRecord();
   for (const n of nodes) {
     parents[n.id] = n.parent && n.parent !== n.id && ids.has(n.parent) ? n.parent : null;
   }

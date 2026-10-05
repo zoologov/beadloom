@@ -37,6 +37,7 @@
 // threshold is a parameter (`BUNDLE_OPTIONS`); nothing here knows a project's
 // names. Everything is pure: routes in, routes out.
 
+import { idRecord } from "../../../shared/ids/index.js";
 import { busesAt } from "./buses.js";
 import { drawingOf } from "./bundleDrawing.js";
 import { joinsAt } from "./joins.js";
@@ -104,5 +105,5 @@ export function bundleRoutes(drawing, overrides = {}) {
   const trunks = [...trunksLeading("out"), ...trunksLeading("in")];
   const joins = state.nodesByDegree(options.trunkDegree).flatMap((hub) => joinsAt(state, hub, busy, options));
   const buses = state.nodesByDegree(options.busDegree).flatMap((node) => busesAt(state, node, options));
-  return { paths: Object.fromEntries(state.routes), trunks: [...trunks, ...joins], buses };
+  return { paths: idRecord(state.routes), trunks: [...trunks, ...joins], buses };
 }
