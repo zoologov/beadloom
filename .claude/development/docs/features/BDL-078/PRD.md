@@ -1,6 +1,6 @@
 # PRD: BDL-078 — The viewer looks finished, and five defects are fixed
 
-> **Status:** Draft
+> **Status:** Approved
 > **Created:** 2026-10-04
 > **Source:** the owner's look at the portals after BDL-077 (2026-10-04); diagnosis and prototype in `RND.md`.
 
