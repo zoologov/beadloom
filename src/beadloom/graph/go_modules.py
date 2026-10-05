@@ -211,21 +211,44 @@ class GoModules:
         return found
 
     @cached_property
-    def modules(self) -> tuple[GoModule, ...]:
-        """Every module of the project, in directory order.
+    def _module_texts(self) -> dict[str, str]:
+        """The text of every ``go.mod`` of the project, keyed by its directory.
 
         A module a ``go.work`` uses counts even where the search does not look,
         since the ``go`` command reads it from there.
         """
-        found = {
-            directory: _module(directory, text) for directory, text in self._declarations[_GO_MOD]
-        }
+        found = dict(self._declarations[_GO_MOD])
         for workspace in self._workspaces:
             for used in sorted(workspace.uses - found.keys()):
                 text = _read(self._root / used / _GO_MOD)
                 if text is not None:
-                    found[used] = _module(used, text)
-        return tuple(found[directory] for directory in sorted(found))
+                    found[used] = text
+        return found
+
+    @cached_property
+    def modules(self) -> tuple[GoModule, ...]:
+        """Every module of the project, in directory order."""
+        texts = self._module_texts
+        return tuple(_module(directory, texts[directory]) for directory in sorted(texts))
+
+    @cached_property
+    def manifests(self) -> tuple[tuple[str, str], ...]:
+        """``(path, text)`` of every ``go.mod`` and ``go.work`` an answer here rests on.
+
+        In path order, so two readings of one tree compare equal. An import
+        resolved through this reading changes its answer only when one of these
+        changes, which is what makes them inputs of the files they govern
+        (``beadloom-jcng``).
+        """
+        files = [
+            (posixpath.join(directory, _GO_MOD), text)
+            for directory, text in self._module_texts.items()
+        ]
+        files += [
+            (posixpath.join(directory, _GO_WORK), text)
+            for directory, text in self._declarations[_GO_WORK]
+        ]
+        return tuple(sorted(files))
 
     @cached_property
     def _workspaces(self) -> tuple[_Workspace, ...]:

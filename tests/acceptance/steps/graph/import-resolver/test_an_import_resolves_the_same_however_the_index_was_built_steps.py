@@ -3,21 +3,19 @@
 BDL-078 (`beadloom-nh7h`). The fixture holds the shape measured on this repository: a
 module made of re-exports, which has no symbol, sourced as a node of its own inside the
 domain folder that holds it. The index is built the way an adopter builds it, edited, and
-compared with a fresh index of a copy of the same tree. The shared When/Then steps are in
-this folder's `conftest.py`.
+compared with a fresh index of a copy of the same tree. The shared Given/When/Then steps,
+that comparison among them, are in this folder's `conftest.py`.
 
 The module is named `test_*` so default pytest collection picks the scenarios up.
 """
 
 from __future__ import annotations
 
-import shutil
-import sqlite3
 from typing import TYPE_CHECKING, Any
 
-from pytest_bdd import given, scenarios, then, when
+from pytest_bdd import given, scenarios, when
 
-from beadloom.application.reindex import incremental_reindex, reindex
+from beadloom.application.reindex import incremental_reindex
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -65,17 +63,6 @@ _FILES: dict[str, str] = {
     ),
 }
 
-_IMPORTS = "SELECT file_path, line_number, import_path, resolved_ref_id FROM code_imports"
-_EDGES = "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'depends_on'"
-
-
-def _rows(root: Path, sql: str) -> list[tuple[object, ...]]:
-    conn = sqlite3.connect(root / ".beadloom" / "beadloom.db")
-    try:
-        return sorted(tuple(row) for row in conn.execute(sql).fetchall())
-    finally:
-        conn.close()
-
 
 @given("a project whose screen imports a facade module that only re-exports")
 def _with_facade(tmp_path: Path, state: dict[str, Any], write_project: WriteProject) -> None:
@@ -91,11 +78,6 @@ def _without_facade(tmp_path: Path, state: dict[str, Any], write_project: WriteP
     state["root"] = root
 
 
-@given("the project is indexed")
-def _indexed_first(state: dict[str, Any]) -> None:
-    reindex(state["root"])
-
-
 @when("the facade module is written and the index is updated")
 def _facade_written(state: dict[str, Any]) -> None:
     (state["root"] / _FACADE_PATH).write_text(_FACADE, encoding="utf-8")
@@ -106,13 +88,3 @@ def _facade_written(state: dict[str, Any]) -> None:
 def _facade_deleted(state: dict[str, Any]) -> None:
     (state["root"] / _FACADE_PATH).unlink()
     incremental_reindex(state["root"])
-
-
-@then("every resolved import and every derived edge equals a fresh index of the same tree")
-def _equals_fresh(tmp_path: Path, state: dict[str, Any]) -> None:
-    root: Path = state["root"]
-    fresh = tmp_path / "fresh"
-    shutil.copytree(root, fresh, ignore=shutil.ignore_patterns("beadloom.db*"))
-    reindex(fresh)
-    assert _rows(root, _IMPORTS) == _rows(fresh, _IMPORTS)
-    assert _rows(root, _EDGES) == _rows(fresh, _EDGES)

@@ -50,6 +50,7 @@ from beadloom.application.reindex.test_index import (
     is_test_index_current,
     needs_full_test_reindex,
 )
+from beadloom.graph.import_manifests import manifests_changed
 from beadloom.infrastructure.db import create_schema, get_meta, open_db, set_meta
 from beadloom.infrastructure.doc_roots import SPACE_TO_BE
 from beadloom.infrastructure.health import take_snapshot
@@ -135,9 +136,19 @@ def incremental_reindex(
 
     changed, added, deleted = _diff_files(current_files, stored_files)
 
+    # A go.mod, go.work or Package.swift is not a source file, and an import
+    # resolved through it changes its answer when it changes (beadloom-jcng).
+    manifests_moved = manifests_changed(project_root, conn)
+
     # Test files are not in file_index (they must not become code), so a
     # test-only change is seen by comparing the test index against the disk.
-    if not changed and not added and not deleted and is_test_index_current(project_root, conn):
+    if (
+        not changed
+        and not added
+        and not deleted
+        and not manifests_moved
+        and is_test_index_current(project_root, conn)
+    ):
         # Nothing changed — just update timestamp.
         now = datetime.now(tz=timezone.utc).isoformat()
         set_meta(conn, "last_reindex_at", now)
@@ -248,7 +259,15 @@ def incremental_reindex(
     # documented loop — report a clean boundary over a real violation, because
     # every import rule reads an index frozen at the last FULL rebuild
     # (BDL-UX #142).
-    _refresh_imports(project_root, conn, current_files, changed, added, deleted)
+    _refresh_imports(
+        project_root,
+        conn,
+        current_files,
+        changed,
+        added,
+        deleted,
+        manifests_moved=manifests_moved,
+    )
 
     # Re-extract routes after code changes and update nodes.extra.
     _extract_and_store_routes(project_root, conn)
@@ -331,18 +350,22 @@ def _refresh_imports(
     changed: Iterable[str],
     added: Iterable[str],
     deleted: Iterable[str],
+    *,
+    manifests_moved: bool,
 ) -> None:
     """Re-extract imports for the code files this run touched.
 
     Docs and graph YAML carry no imports, so only ``kind == "code"`` entries are
-    passed on; when none of them moved, the import graph is already current and
-    nothing is rebuilt.
+    passed on. When no code file moved and no manifest an import is resolved
+    through changed, the import graph is already current and nothing is rebuilt;
+    a manifest change alone re-resolves every stored import without re-reading
+    a file, since what a file imports does not depend on a manifest.
     """
     from beadloom.graph.import_resolver import reindex_file_imports
 
     touched = [p for p in (*changed, *added) if current_files.get(p, ("", ""))[1] == "code"]
     removed = [p for p in deleted if p not in current_files]
-    if not touched and not removed:
+    if not touched and not removed and not manifests_moved:
         return
 
     reindex_file_imports(project_root, conn, touched=touched, removed=removed)

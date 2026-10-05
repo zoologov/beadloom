@@ -347,14 +347,37 @@ class SwiftPackages:
         self._root = project_root
 
     @cached_property
-    def packages(self) -> tuple[SwiftPackage, ...]:
-        """Every package of the project, in folder order."""
-        found: list[SwiftPackage] = []
+    def _manifest_texts(self) -> tuple[tuple[str, str], ...]:
+        """``(folder, text)`` of every readable ``Package.swift``, in folder order."""
+        found: list[tuple[str, str]] = []
         for directory in self._manifest_directories():
             try:
                 text = (self._root / directory / MANIFEST).read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
+            found.append((directory, text))
+        return tuple(found)
+
+    @cached_property
+    def manifests(self) -> tuple[tuple[str, str], ...]:
+        """``(path, text)`` of every ``Package.swift`` an answer here rests on, by path.
+
+        An import resolved through this reading changes its answer only when one
+        of these changes, or when a folder a target names appears or vanishes,
+        which a source file under it does too (``beadloom-jcng``).
+        """
+        return tuple(
+            sorted(
+                (posixpath.join(directory, MANIFEST), text)
+                for directory, text in self._manifest_texts
+            )
+        )
+
+    @cached_property
+    def packages(self) -> tuple[SwiftPackage, ...]:
+        """Every package of the project, in folder order."""
+        found: list[SwiftPackage] = []
+        for directory, text in self._manifest_texts:
             targets = tuple(
                 SwiftTarget(
                     declared.name,

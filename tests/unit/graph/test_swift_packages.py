@@ -258,3 +258,17 @@ class TestTheModuleAnImportNames:
     ) -> None:
         assert packages.declares("Kit")
         assert not packages.declares("Logging")
+
+
+class TestTheManifestsTheReadingRestsOn:
+    """``beadloom-jcng``: every manifest whose text decides an answer, so its change is seen."""
+
+    def test_every_package_swift_with_its_text_in_path_order(self, tmp_path: Path) -> None:
+        root = _package('        .target(name: "App"),', name="App")
+        kit = _package('        .target(name: "Core"),')
+        packages = _tree(tmp_path, {"Package.swift": root, "Packages/Kit/Package.swift": kit})
+
+        assert packages.manifests == (("Package.swift", root), ("Packages/Kit/Package.swift", kit))
+
+    def test_a_project_with_no_package_swift_rests_on_nothing(self, tmp_path: Path) -> None:
+        assert _tree(tmp_path, {"main.swift": "print(1)\n"}).manifests == ()

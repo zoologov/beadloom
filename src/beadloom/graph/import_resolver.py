@@ -15,6 +15,7 @@ from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config, script_blocks
 from beadloom.graph.go_modules import GoModules
+from beadloom.graph.import_manifests import record_manifests
 from beadloom.graph.jvm_packages import JVM_EXTENSIONS, JvmPackages, read_jvm_packages
 from beadloom.graph.rules.layers import part_of_ancestors
 from beadloom.graph.swift_packages import SwiftPackages
@@ -38,9 +39,11 @@ _TS_ALIAS_MAP: dict[str, str] = {
     "~/": "src/",
 }
 
-# Go standard library packages with no '/' in their path are not recorded at
-# all (heuristic); the others are recorded and stay unresolved, because
-# ``resolve_go_import`` maps only the modules the project holds.
+# Every Go import is recorded, the standard library's too: which path names the
+# standard library is the resolver's answer, because ``resolve_go_import`` maps
+# only the modules the project holds. A path with no '/' is not always the
+# standard library — ``module tidewater`` is imported as ``"tidewater"`` — and
+# the extractor, which reads no ``go.mod``, cannot tell (``beadloom-jcng``).
 
 
 @dataclass(frozen=True)
@@ -210,7 +213,7 @@ def _extract_ts_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
 
 
 def _extract_go_import_spec(spec: TSNode, file_path: str) -> ImportInfo | None:
-    """Extract a single Go import spec, returning None for stdlib imports."""
+    """Extract a single Go import spec, returning None for an empty path."""
     # Find the interpreted_string_literal
     for child in spec.children:
         if child.type == "interpreted_string_literal":
@@ -219,9 +222,6 @@ def _extract_go_import_spec(spec: TSNode, file_path: str) -> ImportInfo | None:
                 if sub.type == "interpreted_string_literal_content":
                     path = sub.text.decode("utf-8") if sub.text else ""
                     if not path:
-                        return None
-                    # Skip stdlib: no '/' in path
-                    if "/" not in path:
                         return None
                     return ImportInfo(
                         file_path=file_path,
@@ -1453,6 +1453,7 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     tree = _read_import_tree(project_root, files)
     total = sum(_index_one_file(file_path, tree, conn) for file_path in files)
     conn.commit()
+    record_manifests(conn, tree.go_modules, tree.swift_packages)
 
     # Create depends_on edges from resolved imports.
     refresh_import_edges(conn)
@@ -1478,10 +1479,12 @@ def reindex_file_imports(
 
     Every other file's imports are then resolved again against the same tree,
     without parsing them, because a touched or removed file can change what an
-    untouched one's import names (``beadloom-nh7h``). The result equals a fresh
-    index of the tree. The derived ``depends_on`` edge set is rebuilt
-    afterwards, so an import that disappeared stops being a dependency instead
-    of lingering.
+    untouched one's import names (``beadloom-nh7h``), and so can a manifest: a
+    caller that saw only a manifest change passes both lists empty
+    (``beadloom-jcng``). The result equals a fresh index of the tree, and the
+    fingerprint of the manifests it was read through is recorded. The derived
+    ``depends_on`` edge set is rebuilt afterwards, so an import that disappeared
+    stops being a dependency instead of lingering.
 
     Returns the number of imports indexed for the touched files.
     """
@@ -1499,6 +1502,7 @@ def reindex_file_imports(
     _reresolve_stored_imports(tree, conn, skip=frozenset(touched))
 
     conn.commit()
+    record_manifests(conn, tree.go_modules, tree.swift_packages)
     refresh_import_edges(conn)
     return total
 

@@ -332,6 +332,7 @@ class TestGoImportsResolveThroughTheirModule:
     ) -> None:
         index_imports(tmp_path, go_conn)
         assert _imports(go_conn) == {
+            ("cmd/quay/main.go", "fmt", None),
             ("cmd/quay/main.go", "net/http", None),
             ("cmd/quay/main.go", "example.org/quay/internal/berths", "berths"),
             ("cmd/quay/main.go", "github.com/google/uuid", None),

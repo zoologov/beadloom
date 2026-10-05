@@ -261,14 +261,19 @@ class TestExtractImportsGo:
     """Go import extraction."""
 
     @pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
-    def test_stdlib_import_skipped(self, tmp_path: Path) -> None:
-        """`import "fmt"` is skipped (stdlib, no slash)."""
+    def test_a_path_with_no_slash_is_recorded(self, tmp_path: Path) -> None:
+        """`import "fmt"` is recorded: a path with no '/' is also a module named so.
+
+        ``beadloom-jcng``: ``module tidewater`` is imported as ``"tidewater"``, and
+        the extractor dropped it as the standard library before any ``go.mod`` was
+        read. Which import names the standard library is the resolver's answer.
+        """
         from beadloom.graph.import_resolver import extract_imports
 
         go = tmp_path / "main.go"
         go.write_text('package main\n\nimport "fmt"\n')
         results = extract_imports(go)
-        assert len(results) == 0
+        assert [r.import_path for r in results] == ["fmt"]
 
     @pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
     def test_third_party_import(self, tmp_path: Path) -> None:
@@ -283,15 +288,16 @@ class TestExtractImportsGo:
 
     @pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
     def test_grouped_imports(self, tmp_path: Path) -> None:
-        """Grouped import block extracts multiple entries, skipping stdlib."""
+        """Grouped import block extracts every entry, each on its own line."""
         from beadloom.graph.import_resolver import extract_imports
 
         go = tmp_path / "main.go"
         go.write_text('package main\n\nimport (\n    "os"\n    "github.com/other/lib"\n)\n')
         results = extract_imports(go)
-        # "os" is skipped (stdlib), only "github.com/other/lib" remains
-        assert len(results) == 1
-        assert results[0].import_path == "github.com/other/lib"
+        assert [(r.import_path, r.line_number) for r in results] == [
+            ("os", 4),
+            ("github.com/other/lib", 5),
+        ]
 
     @pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
     def test_aliased_import(self, tmp_path: Path) -> None:
