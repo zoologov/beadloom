@@ -31,9 +31,9 @@
 | `beadloom-0gyz` | V2 | blocked | the overview |
 | `beadloom-hnff` | V3 | blocked | levels |
 | `beadloom-lw56` | F-activity | ✓ done | activity by changed lines |
-| `beadloom-btkd.1` | dev | in progress | activity: boxes among boxes, generated files excluded (owner) |
+| `beadloom-btkd.1` | dev | ✓ done | activity: boxes among boxes, generated files excluded (owner) |
 | `beadloom-nh7h` | F-nh7h | ✓ done | incremental vs fresh import resolution |
-| `beadloom-jcng` | F-jcng | ready | manifests as inputs |
+| `beadloom-jcng` | F-jcng | in progress | manifests as inputs |
 | `beadloom-76mk` | F-76mk | ✓ done | flat Python tests bind |
 | `beadloom-stcx` | F-stcx | ✓ done | `vitepress dev` loads |
 | `beadloom-q63p` | T | blocked | PRD criteria measured |
@@ -42,6 +42,8 @@
 | `beadloom-hpat` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **`beadloom-btkd.1` closed (2026-10-05)** `98d938ee` — boxes rank among boxes, leaves among leaves; lock files (20 names), files git attributes mark generated or binary, and the project's `activity: {exclude: [...]}` patterns count neither lines nor commits. This repository: boxes 7 hot / 4 warm / 1 cool -> 2 / 3 / 7; leaves 3 hot / 24 warm / 56 cool / 21 quiet / 14 dormant -> 9 / 25 / 49 / 21 / 14. Measured on the shared tree: 13,332 passed, only the stale-docs self-check red. Correction: the wave-2 note's "`package-lock.json` is 3,912 of 17,714 lines" was not reproduced — the dev measured 59 of 18,005 in 30 days; the exclusion changes no level here. Six readings (a)-(f) of the ruling are in the bead's comments, for the owner. Incident, recovered: a stray `git stash` held the tree's tracked changes for seconds. `beadloom-jcng` launched beside `beadloom-xv87`.
 
 - **Wave 3 closed (2026-10-05):** `beadloom-nh7h` `80095d60` — an import resolves against the tree's source files, so the incremental and the fresh index agree (`tui -> graph-reads`). `beadloom-ytcg` `05dad0e8` — every record keyed by a node or edge id has no prototype (`idRecord` in `shared/ids`); positions and routes byte-identical over a frozen data file (130 nodes, 453 edges). Gate owner ytcg on the combined tree at `353097b0`: 13,291 passed, 0 failed; ruff, mypy (3.10-3.13), lint, doctor clean; Playwright 205 passed; `beadloom ci` rc 1 on 48 stale pairs from HEAD (31 + 4 + 13) -> W, the run also saw `beadloom-btkd.1`'s uncommitted files. Next: `beadloom-xv87` (V1) launched beside `beadloom-btkd.1`; `beadloom-jcng` waits for `beadloom-btkd.1` (`beadloom waves`: reindex -> git-activity).
 
