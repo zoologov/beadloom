@@ -29,6 +29,7 @@
 | `beadloom-ytcg` | F-ytcg | ✓ done | a node named `__proto__` is drawn |
 | `beadloom-xv87` | V1 | ✓ done | the base look: `584b9677`, `e152a493`, `562551ed` |
 | `beadloom-0gyz` | V2 | in progress | the overview |
+| `beadloom-btkd.2` | dev | blocked | a line enters its arrowhead correctly (owner, after V1) |
 | `beadloom-hnff` | V3 | blocked | levels |
 | `beadloom-lw56` | F-activity | ✓ done | activity by changed lines |
 | `beadloom-btkd.1` | dev | ✓ done | activity: boxes among boxes, generated files excluded (owner) |
