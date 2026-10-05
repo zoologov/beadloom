@@ -75,16 +75,18 @@ async function offWeight(page) {
 }
 
 /**
- * The drawn arrowheads whose length on screen is not the one size, or with
- * `room` not between the smallest and the one size, named with what they measure.
+ * The drawn arrowheads whose length on screen is not between the smallest and
+ * the one size, named with what they measure; with `full`, a line of the map's
+ * (whose route keeps a run long enough for a whole head) not at the one size.
  */
-async function offHead(page, { room = false } = {}) {
+async function offHead(page, { full = false } = {}) {
   const zoom = await viewer(page, "zoom");
   const half = Math.sqrt(1.25);
-  const off = (px) => (room ? px < SMALLEST_HEAD_PX / half - 1e-6 || px > HEAD_PX * half + 1e-6 : !withinAStep(px, HEAD_PX));
+  const off = (look, px) =>
+    full && look.aggregated ? !withinAStep(px, HEAD_PX) : px < SMALLEST_HEAD_PX / half - 1e-6 || px > HEAD_PX * half + 1e-6;
   return (await viewer(page, "lineLooks"))
     .filter((look) => look.targetArrow !== "none" || look.sourceArrow !== "none")
-    .filter((look) => off(headLength(look) * zoom))
+    .filter((look) => off(look, headLength(look) * zoom))
     .map((look) => `${look.id}: ${(headLength(look) * zoom).toFixed(2)} px`);
 }
 
@@ -133,19 +135,19 @@ test("every drawn line has one weight on screen: at the overview, zoomed in, at 
   requireShape(dimmed > 0, "the busiest node's neighbourhood takes every drawn edge");
 });
 
-test("every arrowhead has one size on screen at the overview, and zoomed in and at full detail is never larger, nor smaller than the smallest", async ({
+test("every arrowhead of the overview's own lines has one size on screen, and no arrowhead is ever larger, nor smaller than the smallest", async ({
   page,
   request,
 }) => {
   await serveEveryEdgeKind(page, request);
   await openArchitecture(page);
-  expect(await offHead(page)).toEqual([]);
+  expect(await offHead(page, { full: true })).toEqual([]);
   await zoomIn(page, 3);
-  expect(await offHead(page, { room: true })).toEqual([]);
+  expect(await offHead(page)).toEqual([]);
   await openEveryBox(page);
-  expect(await offHead(page, { room: true })).toEqual([]);
+  expect(await offHead(page)).toEqual([]);
   await zoomToOne(page);
-  expect(await offHead(page, { room: true })).toEqual([]);
+  expect(await offHead(page)).toEqual([]);
 });
 
 test("at full size every arrowhead sits on a straight run at least as long as itself", async ({ page }) => {
