@@ -30,6 +30,13 @@
 // line and keeps off every arrowhead. No box moves; a line nothing can route
 // even so keeps no route here, and its caller draws its medoid instead.
 //
+// A box can be drawn larger than its layout, to hold its title
+// (`grownBoxes.js`): the drawn box is the obstacle, its ports lie only where a
+// straight run reaches the laid-out box inside it, and the line is carried on
+// along that run to the laid-out box's border. The drawn box may shrink back
+// towards the laid-out one as the view is zoomed in, and the line, cut where it
+// enters the drawn box, then only grows longer along its last run.
+//
 // Everything here is pure and deterministic for its input: boxes, plates, pairs
 // and lines in, routes out.
 
@@ -436,6 +443,16 @@ function markFixed({ xs, ys, nx, ny, cellAt }, owner, fixed) {
   }
 }
 
+/**
+ * `end` of a line, on the border of a box drawn larger than its laid-out box
+ * `core`, carried on along the line's last run, from `before`, to the core's
+ * border: a port of such a box lies on a track through the core.
+ */
+function intoCore(end, before, core) {
+  if (Math.abs(before.x - end.x) < EPS) return { x: end.x, y: before.y < end.y ? core.y1 : core.y2 };
+  return { x: before.x < end.x ? core.x1 : core.x2, y: end.y };
+}
+
 /** The polyline of a routed line, from its first box's border to its second's. */
 function polylineOf(grid, routed) {
   const { xs, nx, ys } = grid;
@@ -451,20 +468,24 @@ function polylineOf(grid, routed) {
 
 /**
  * The routes of the overview for `input`, every length in layout units:
- * `{ unit, boxes: [{ id, x1, y1, x2, y2 }], plates: [{ x1, y1, x2, y2 }],
+ * `{ unit, boxes: [{ id, x1, y1, x2, y2, core }], plates: [{ x1, y1, x2, y2 }],
  * pairs: [{ name, a, b, forward, backward }], fixed: [[{ x, y }]] }`. `unit` is
- * how many layout units a pixel is where the overview is planned; `a` and `b` are
- * box ids, `forward` and `backward` how many edges the pair carries each way;
- * `fixed` the routes of lines drawn as themselves, which no planned line runs
- * along. `marks` are the sizes on screen (`OVERVIEW_MARKS`).
+ * how many layout units a pixel is where the overview is planned; a box is the
+ * box drawn, and `core`, where it has one, the laid-out box inside it that a
+ * box drawn larger to hold its title was laid out as; `a` and `b` are box ids,
+ * `forward` and `backward` how many edges the pair carries each way; `fixed` the
+ * routes of lines drawn as themselves, which no planned line runs along. `marks`
+ * are the sizes on screen (`OVERVIEW_MARKS`).
  *
  * `{ paths, failed }`: each routed pair's polyline by its name, from a border of
- * box `a` to a border of box `b`; and the names of the pairs no route was found for.
+ * box `a` to a border of box `b`, of its core where it has one; and the names of
+ * the pairs no route was found for.
  */
 export function planOverview(input, marks = OVERVIEW_MARKS) {
   const unit = input.unit || 1;
   const inPixels = (box) => ({ x1: box.x1 / unit, y1: box.y1 / unit, x2: box.x2 / unit, y2: box.y2 / unit });
   const boxes = input.boxes.map(inPixels);
+  const cores = input.boxes.map((box) => (box.core ? inPixels(box.core) : null));
   const plates = (input.plates || []).map(inPixels);
   const indexOf = new Map(input.boxes.map((box, b) => [box.id, b]));
   const known = input.pairs.filter((pair) => indexOf.has(pair.a) && indexOf.has(pair.b) && pair.a !== pair.b);
@@ -475,7 +496,7 @@ export function planOverview(input, marks = OVERVIEW_MARKS) {
 
   const degree = new Map();
   for (const pair of pairs) for (const b of [pair.a, pair.b]) degree.set(b, (degree.get(b) || 0) + 1);
-  const grid = { ...gridOf(boxes, plates, marks, (b) => degree.get(b) || 0), boxes };
+  const grid = { ...gridOf(boxes, plates, marks, (b) => degree.get(b) || 0, cores), boxes };
   const fixed = (input.fixed || []).map((path) => path.map((p) => ({ x: p.x / unit, y: p.y / unit })));
   const router = routerOn(grid, pairs, fixed, marks);
   const byName = (p, q) => (pairs[p].name < pairs[q].name ? -1 : pairs[p].name > pairs[q].name ? 1 : 0);
@@ -505,7 +526,11 @@ export function planOverview(input, marks = OVERVIEW_MARKS) {
       failed.push(pair.name);
       return;
     }
-    paths.set(pair.name, polylineOf(grid, routes[e]).map((p) => ({ x: p.x * unit, y: p.y * unit })));
+    const path = polylineOf(grid, routes[e]);
+    const n = path.length;
+    if (cores[pair.a]) path[0] = intoCore(path[0], path[1], cores[pair.a]);
+    if (cores[pair.b]) path[n - 1] = intoCore(path[n - 1], path[n - 2], cores[pair.b]);
+    paths.set(pair.name, path.map((p) => ({ x: p.x * unit, y: p.y * unit })));
   });
   return { paths, failed: failed.sort() };
 }

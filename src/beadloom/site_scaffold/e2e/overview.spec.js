@@ -173,6 +173,49 @@ async function drawnAggregates(page) {
   return Object.fromEntries((await viewer(page, "aggregatedEdges")).filter((e) => e.drawn).map((e) => [e.ends.join("|"), e]));
 }
 
+/** The nodes at the top of the containment tree: under the box that holds everything, or the roots when none does. */
+const topLevelOf = (tree) => Object.keys(tree.parents).filter((id) => id !== tree.wrapper && tree.parents[id] === tree.wrapper).sort();
+const centreOf = (r) => ({ x: (r.x1 + r.x2) / 2, y: (r.y1 + r.y2) / 2 });
+/** Whether rectangle `r` lies within `box`, half a unit either way. */
+const within = (r, box) => r.x1 >= box.x1 - 0.5 && r.x2 <= box.x2 + 0.5 && r.y1 >= box.y1 - 0.5 && r.y2 <= box.y2 + 0.5;
+
+/** `points` without a point in the middle of a straight run: Cytoscape draws a line with no corner through its midpoint. */
+function cornersOf(points) {
+  const out = [];
+  for (const p of points) {
+    out.push(p);
+    while (out.length >= 3) {
+      const [a, b, c] = out.slice(-3);
+      if (Math.abs((b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)) > 1e-6) break;
+      out.splice(out.length - 2, 1);
+    }
+  }
+  return out;
+}
+
+/**
+ * What moved of line `line` (`aggregatedEdges`) since it was drawn as `before`,
+ * in words: nothing may, but an end at a node of `grown`, drawn larger than its
+ * layout, along the line's last run, and onto that node's border in `boxes`.
+ */
+function movedBeyondItsLastRuns(name, before, line, grown, boxes) {
+  const [p, q] = [cornersOf(before.points), cornersOf(line.points)];
+  if (p.length !== q.length) return [`${name} has ${q.length} corners and ends, ${p.length} before`];
+  const same = (u, v) => Math.abs(u.x - v.x) < 1e-6 && Math.abs(u.y - v.y) < 1e-6;
+  const wrong = [];
+  for (let k = 1; k < p.length - 1; k += 1) if (!same(p[k], q[k])) wrong.push(`${name} moved its corner ${k}`);
+  for (const [k, next, end] of [[0, 1, line.ends[0]], [p.length - 1, p.length - 2, line.ends[1]]]) {
+    if (same(p[k], q[k])) continue;
+    const along = Math.abs(q[next].x - q[k].x) < 1e-6 ? Math.abs(q[k].x - p[k].x) < 1e-6 : Math.abs(q[k].y - p[k].y) < 1e-6;
+    const r = boxes[end];
+    const onBorder =
+      within({ x1: q[k].x, y1: q[k].y, x2: q[k].x, y2: q[k].y }, r) &&
+      Math.min(Math.abs(q[k].x - r.x1), Math.abs(q[k].x - r.x2), Math.abs(q[k].y - r.y1), Math.abs(q[k].y - r.y2)) <= ON_BORDER;
+    if (!grown.includes(end) || !along || !onBorder) wrong.push(`${name}'s end at ${end} moved off its last run or off its border`);
+  }
+  return wrong;
+}
+
 for (const graph of GRAPHS) {
   test.describe(`on ${graph.name}`, { tag: graph.tag }, () => {
     test("at the whole-graph fit every line between two top-level ends is routed square from the border of one to the border of the other, through no box", async ({
@@ -310,21 +353,30 @@ for (const graph of GRAPHS) {
       expect(hovered.length).toBeGreaterThan(0);
     });
 
-    test("the overview's routes are planned once: a zoom and a box opening move no line between two closed boxes", async ({ page, request }) => {
+    test("the overview's routes are planned once: a zoom and a box opening move no line between two closed boxes, and a line into a node drawn larger than its layout at most runs on along its last run", async ({
+      page,
+      request,
+    }) => {
       const data = await graph.open(page, request);
       const tree = treeOf(data);
       const before = await drawnAggregates(page);
       requireShape(Object.keys(before).length > 1, "fewer than two lines between top-level ends");
-      const moved = (after) =>
-        Object.entries(after)
+      const { grown } = await viewer(page, "overviewPlan");
+      // The same zoom draws every line where it was; a box opened lets a node drawn larger than its
+      // layout, that an edge of the file is now drawn into, take its laid-out size, and a line into it
+      // runs on along its last run to that box's border.
+      const moved = async (after) => {
+        const boxes = await viewer(page, "nodeBoxes");
+        return Object.entries(after)
           .filter(([name]) => before[name])
-          .filter(([name, e]) => JSON.stringify(e.points) !== JSON.stringify(before[name].points))
-          .map(([name]) => name);
+          .flatMap(([name, line]) => movedBeyondItsLastRuns(name, before[name], line, grown, boxes));
+      };
 
       await page.getByRole("button", { name: "Zoom in", exact: true }).click();
       await page.getByRole("button", { name: "Zoom out", exact: true }).click();
       await twoFrames(page);
-      expect(moved(await drawnAggregates(page))).toEqual([]);
+      const again = await drawnAggregates(page);
+      expect(Object.keys(again).filter((name) => before[name] && JSON.stringify(again[name].points) !== JSON.stringify(before[name].points))).toEqual([]);
 
       // The box with the most lines opened: every line between two other boxes keeps its route.
       const lines = Object.values(before);
@@ -333,7 +385,7 @@ for (const graph of GRAPHS) {
       await expect.poll(async () => (await viewer(page, "openBoxes")).includes(busiest)).toBe(true);
       const others = Object.fromEntries(Object.entries(await drawnAggregates(page)).filter(([, e]) => !e.ends.some((end) => withAncestors([end], tree.parents).has(busiest))));
       requireShape(Object.keys(others).length > 0, "every line between top-level ends touches the busiest box");
-      expect(moved(others)).toEqual([]);
+      expect(await moved(others)).toEqual([]);
     });
   });
 }
@@ -394,6 +446,149 @@ test("zoomed out from the fit, no line runs under a title: a title keeps to the 
   const segments = segmentsOf(await viewer(page, "lineLooks"), await viewOf(page));
   const under = titles.filter((t) => !t.inside).flatMap((t) => segments.filter((s) => segmentInRect(s.a, s.b, t, 1)).map((s) => `${s.id} under ${t.id}`));
   expect(under).toEqual([]);
+});
+
+/** The room a title keeps from its box's edges, in pixels on screen; a line of a title is this share of its size tall. */
+const TITLE_INSET_PX = 6;
+const TITLE_LINE_HEIGHT = 1.25;
+/** What a status mark takes at each end of a title's line, at most, in pixels: the mark and its inset from the corner. */
+const MARK_ROOM_PX = 7 + 4;
+/** A plate's padding and border around its title, in pixels at the size the plate was laid out at. */
+const PLATE_FRAME_PX = 3 + 1;
+/** The least room a box drawn larger than its layout keeps from every other box, in pixels. */
+const NEIGHBOUR_GAP_PX = 3;
+
+
+test("at the fit every top-level node is a box with its title inside: one too small for its title is drawn larger, centred on its laid-out box and clear of every other box, and a title stands on a plate only where even the smallest box for it would come within a few pixels of another", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const tree = treeOf(data);
+  await openArchitecture(page);
+  const view = await viewOf(page);
+  const top = topLevelOf(tree);
+  const drawn = await nodeRects(page, view);
+  const { boxes: elk } = await viewer(page, "elkGeometry");
+  const laid = Object.fromEntries(top.filter((id) => elk[id]).map((id) => [id, boxOnScreen(elk[id], view)]));
+  const titles = Object.fromEntries((await viewer(page, "titles")).map((t) => [t.id, t]));
+  requireShape(top.some((id) => titles[id]), "no top-level node takes the map's title at the fit");
+  const marked = new Set((await viewer(page, "nodeLooks")).filter((look) => look.status).map((look) => look.id));
+
+  // A box drawn larger than its layout holds its laid-out box and shares its centre: no node moves.
+  const off = Object.keys(laid).filter((id) => {
+    const [a, b] = [centreOf(laid[id]), centreOf(drawn[id])];
+    return !within(laid[id], drawn[id]) || Math.hypot(a.x - b.x, a.y - b.y) > 0.5;
+  });
+  expect(off).toEqual([]);
+  // No two top-level boxes overlap, and none covers another's title.
+  const overlapping = top.flatMap((id, k) => top.slice(k + 1).filter((other) => rectsOverlap(drawn[id], drawn[other], 0.5)).map((other) => `${id} and ${other}`));
+  expect(overlapping).toEqual([]);
+  const covered = Object.values(titles).flatMap((t) => top.filter((id) => id !== t.id && rectsOverlap(t, drawn[id], 0.5)).map((id) => `the title of ${t.id} under ${id}`));
+  expect(covered).toEqual([]);
+
+  // The smallest box that holds a title on a plate inside it at the smallest size, centred where its
+  // node is: its text, its inset from the box's edges, and the room of a status mark at each end.
+  const smallestBoxOf = (id) => {
+    const t = titles[id];
+    const frame = PLATE_FRAME_PX * (t.fontSize / t.sizePx);
+    const text = (t.x2 - t.x1 - 2 * frame) * (Math.min(...TITLE_PX) / t.fontSize);
+    const width = text + 2 * (marked.has(id) ? MARK_ROOM_PX : TITLE_INSET_PX);
+    const height = String(t.text).split("\n").length * TITLE_LINE_HEIGHT * Math.min(...TITLE_PX) + TITLE_INSET_PX;
+    const { x, y } = centreOf(drawn[id]);
+    return { x1: x - width / 2, y1: y - height / 2, x2: x + width / 2, y2: y + height / 2 };
+  };
+  const crowded = (id) => {
+    const r = smallestBoxOf(id);
+    const reach = { x1: r.x1 - NEIGHBOUR_GAP_PX, y1: r.y1 - NEIGHBOUR_GAP_PX, x2: r.x2 + NEIGHBOUR_GAP_PX, y2: r.y2 + NEIGHBOUR_GAP_PX };
+    return top.some((other) => other !== id && rectsOverlap(reach, drawn[other]));
+  };
+  const outside = top.filter((id) => titles[id] && !(titles[id].inside && within(titles[id], drawn[id])));
+  test.info().annotations.push({
+    type: "measured",
+    description: `${top.filter((id) => titles[id]).length - outside.length} of ${top.filter((id) => titles[id]).length} top-level titles inside their box; on a plate: ${outside.join(", ") || "none"}`,
+  });
+  expect(outside.filter((id) => !crowded(id))).toEqual([]);
+  // The plan names the plates it stood titles on, and they are the ones drawn.
+  expect((await viewer(page, "overviewPlan")).plates).toEqual(outside);
+});
+
+/** How many toolbar steps a case zooms in, at most, for a box drawn larger than its layout to meet it. */
+const MEETING_STEPS = 16;
+
+test("zoomed in from the fit, a node drawn larger than its layout keeps its centre and, while the level stays, about its size on screen and its title inside, until its laid-out box is as large; its lines keep their routes, a last run into it only longer along itself and ending on its border", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const tree = treeOf(data);
+  await openArchitecture(page);
+  const top = topLevelOf(tree);
+  const { boxes: elk } = await viewer(page, "elkGeometry");
+  const larger = (boxes) => top.filter((id) => elk[id] && boxes[id] && ["x1", "y1", "x2", "y2"].some((side) => Math.abs(boxes[id][side] - elk[id][side]) > ON_BORDER));
+  const grown = larger(await viewer(page, "nodeBoxes"));
+  requireShape(grown.length > 0, "no top-level node is drawn larger than its layout at the fit");
+  const atFit = await drawnAggregates(page);
+  const sizeOnScreen = (box, zoom) => ({ width: (box.x2 - box.x1) * zoom, height: (box.y2 - box.y1) * zoom });
+  /** What a step is compared with: the zoom, the boxes open, and each node's size on screen, its title's text and whether an edge of the file is drawn into it. */
+  const stateAt = async () => {
+    const zoom = await viewer(page, "zoom");
+    const boxes = await viewer(page, "nodeBoxes");
+    const titles = Object.fromEntries((await viewer(page, "titles")).map((t) => [t.id, t]));
+    const ownLines = (await viewer(page, "edgeRoutes")).filter((r) => !r.aggregated);
+    const nodes = Object.fromEntries(
+      grown.filter((id) => boxes[id]).map((id) => [id, { size: sizeOnScreen(boxes[id], zoom), text: titles[id]?.text ?? null, own: ownLines.some((r) => r.source === id || r.target === id) }])
+    );
+    return { zoom, boxes, titles, open: JSON.stringify(await viewer(page, "openBoxes")), nodes };
+  };
+
+  const wrong = [];
+  const resized = [];
+  let last = await stateAt();
+  let still = grown;
+  for (let step = 1; step <= MEETING_STEPS && still.length; step += 1) {
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await twoFrames(page);
+    const now = await stateAt();
+    const view = await viewOf(page);
+    for (const id of grown.filter((id) => now.nodes[id])) {
+      const box = now.boxes[id];
+      const [a, b] = [centreOf(box), centreOf(elk[id])];
+      if (!within(elk[id], box) || Math.hypot(a.x - b.x, a.y - b.y) > ON_BORDER) wrong.push(`step ${step}: ${id} does not hold its laid-out box around its centre`);
+      // An edge of the file drawn as itself into it ends on its laid-out border: the node is drawn at that size.
+      if (now.nodes[id].own) {
+        if (larger(now.boxes).includes(id)) wrong.push(`step ${step}: ${id} is drawn larger than its layout with an edge drawn as itself into it`);
+        continue;
+      }
+      const title = now.titles[id];
+      if (title && !(title.inside && within(title, boxOnScreen(box, view)))) wrong.push(`step ${step}: ${id}'s title is outside its box`);
+      // While the level stays — the same boxes open, the same title, no edge drawn into it — on screen
+      // it neither shrinks nor grows faster than the zoom: no step reads as a move. A level that changes
+      // can give its title a line or take one, or draw an edge into it, and its box follows.
+      const before = last.nodes[id];
+      const size = now.nodes[id].size;
+      if (!before || before.own || before.text !== now.nodes[id].text || last.open !== now.open) {
+        if (before && ["width", "height"].some((side) => Math.abs(size[side] - before.size[side] * (now.zoom / last.zoom)) > 0.5)) resized.push(`step ${step}: ${id}`);
+        continue;
+      }
+      for (const side of ["width", "height"]) {
+        if (size[side] < before.size[side] - 0.5 || size[side] > before.size[side] * (now.zoom / last.zoom) + 0.5) wrong.push(`step ${step}: ${id}'s ${side} ${before.size[side].toFixed(1)} -> ${size[side].toFixed(1)} px`);
+      }
+    }
+    // A line between two top-level ends keeps its route; only an end at a node drawn larger than its
+    // layout may move, along its last run, and it ends on that node's border.
+    for (const [name, line] of Object.entries(await drawnAggregates(page))) {
+      if (atFit[name]) wrong.push(...movedBeyondItsLastRuns(name, atFit[name], line, grown, now.boxes).map((what) => `step ${step}: ${what}`));
+    }
+    still = larger(now.boxes);
+    last = now;
+  }
+  test.info().annotations.push({
+    type: "measured",
+    description: `${grown.join(", ")} drawn larger at the fit; ${still.length ? `still larger after ${MEETING_STEPS} steps: ${still.join(", ")}` : "every one met its laid-out box"}; resized where the level changed: ${resized.join(", ") || "none"}`,
+  });
+  expect(wrong).toEqual([]);
+  expect(still).toEqual([]);
 });
 
 test("calm by default: hovering a box draws its lines and pills in front and fades every other line and pill; the pointer gone, all are back at rest", async ({
@@ -526,6 +721,37 @@ test("a title plate is routed around and no line ends on it: the line ends on it
   const end = path[path.length - 1];
   const b = input.boxes[1];
   expect(end.x >= b.x1 && end.x <= b.x2 && end.y >= b.y1 && end.y <= b.y2).toBe(true);
+});
+
+test("a box drawn larger than its laid-out box is routed around, and a line into it runs straight through the room it adds and ends on the laid-out border", async ({
+  page,
+}) => {
+  await openThemeModules(page);
+  // b is laid out 10 by 4 and drawn 60 by 24 around it, to hold its title; a stands to its left, c above it.
+  const core = { x1: 225, y1: 110, x2: 235, y2: 114 };
+  const drawnB = { x1: 200, y1: 100, x2: 260, y2: 124 };
+  const input = {
+    unit: 1,
+    boxes: [box("a", 0, 100, 40, 130), { ...box("b", drawnB.x1, drawnB.y1, drawnB.x2, drawnB.y2), core }, box("c", 140, 0, 180, 30)],
+    pairs: [
+      { name: "a\nb", a: "a", b: "b", forward: 1, backward: 0 },
+      { name: "b\nc", a: "b", b: "c", forward: 1, backward: 1 },
+    ],
+  };
+  const { paths, failed } = await plan(page, input);
+  expect(failed).toEqual([]);
+  const wrong = [];
+  for (const [name, path] of Object.entries(paths)) {
+    // The line from its end at b: on the laid-out border, then straight out across the drawn box.
+    const fromB = name.endsWith("\nb") ? [...path].reverse() : path;
+    const [end, next] = [fromB[0], fromB[1]];
+    const onCore = end.x >= core.x1 && end.x <= core.x2 && end.y >= core.y1 && end.y <= core.y2 && [end.x - core.x1, core.x2 - end.x, end.y - core.y1, core.y2 - end.y].some((d) => Math.abs(d) < 1e-6);
+    if (!onCore) wrong.push(`${name} ends at (${end.x}, ${end.y}), not on b's laid-out border`);
+    const straightOut = (Math.abs(next.x - end.x) < 1e-6 && (end.y === core.y1 ? next.y <= drawnB.y1 : next.y >= drawnB.y2)) || (Math.abs(next.y - end.y) < 1e-6 && (end.x === core.x1 ? next.x <= drawnB.x1 : next.x >= drawnB.x2));
+    if (!straightOut) wrong.push(`${name}'s last run into b does not run straight across the drawn box`);
+    if (fromB.slice(2).some((p, k) => segmentInRect(fromB[k + 1], p, drawnB, 0.01))) wrong.push(`${name} runs through the drawn box`);
+  }
+  expect(wrong).toEqual([]);
 });
 
 test("a straight line with an arrowhead at each end is at least two arrowheads long, however near its two boxes stand", async ({ page }) => {

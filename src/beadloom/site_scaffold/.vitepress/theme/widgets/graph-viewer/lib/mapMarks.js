@@ -12,7 +12,10 @@
 // rectangle with a thin border, so no line is read through it — or below the
 // box, or beside it, where above it would cover another box or another plate. The overview's
 // routes keep clear of every plate (`overviewRoutes.js`), and the plate is where
-// `plateOf` says: a title's width is measured with the font it is drawn in.
+// `plateOf` says: a title's width is measured with the font it is drawn in. At
+// the overview a top-level node too small for its title is drawn at the least
+// box that holds it (`titleBoxOf`, `grownBoxes.js`), and a plate is left only
+// where no such box fits.
 //
 // Every function here is pure: sizes and a text in, a size or a place out.
 
@@ -41,6 +44,8 @@ export const MAP_MARKS = Object.freeze({
 
 /** The data a node of the map carries for its title: `{ px, inside, width, side, scale }` (`mapTitleOf`), `scale` the one it was laid out at. */
 export const MAP_TITLE = "mapTitle";
+/** The data a node of the map drawn larger than its layout carries: its drawn box's `{ width, height }`, layout units, its border included (`grownBoxes.js`). */
+export const MAP_BOX = "mapBox";
 /** The data a closed box carries for what its edges do: `{ incoming, outgoing }`. */
 export const TALLY = "tally";
 
@@ -83,6 +88,22 @@ export function mapTitleOf(lines, box, scale, measure, { reserved = 0, natural =
   return { ...layout, width: widthOf(lines, layout.px, measure) * scale };
 }
 
+/** How much larger than exact the least box for a title is made, as a share: so a title measured to fit it does, whatever the rounding. */
+const LEAST_BOX_SLACK = 1e-6;
+
+/**
+ * The least box, `{ width, height }` in layout units at `scale`, that holds a
+ * title of `lines` inside at `px`, as `titleLayoutOf` fits one: its widest line
+ * and the room it keeps from the box's edges, or at each end the room
+ * `reservedAt(height)` says a status mark takes in a box that tall.
+ */
+export function titleBoxOf(lines, px, scale, measure, reservedAt = () => 0) {
+  const inset = MAP_MARKS.titleInset * scale;
+  const height = lines.length * MAP_MARKS.lineHeight * px * scale + inset;
+  const width = widthOf(lines, px, measure) * scale + 2 * Math.max(inset, reservedAt(height));
+  return { width: width * (1 + LEAST_BOX_SLACK), height: height * (1 + LEAST_BOX_SLACK) };
+}
+
 /** How far a title on a plate is drawn above its box's top, in layout units: its plate's border, padding and gap. */
 export const plateLiftOf = (scale) => (MAP_MARKS.plateBorder + MAP_MARKS.platePadding + MAP_MARKS.plateGap) * scale;
 
@@ -112,7 +133,7 @@ export function plateOf(box, side, lines, px, scale, measure) {
 const MARK_HEIGHT_SHARE = 0.3;
 const MARK_INSET_SHARE = 0.12;
 
-const boxHeightOf = (node) => node.data("box")?.height ?? Infinity;
+const boxHeightOf = (node) => node.data(MAP_BOX)?.height ?? node.data("box")?.height ?? Infinity;
 
 /** A closed box's status mark's side at `scale` for a box `height` tall, in layout units: its size on screen, within a share of the box. */
 export const statusMarkOf = (scale, height) => Math.min(MAP_MARKS.statusMark * scale, MARK_HEIGHT_SHARE * height);

@@ -25,6 +25,7 @@
 // while a loop ended short of its tip would bend away from the head it left.
 
 import { HEAD_ROOM, NO_SOURCE_HEAD, NO_TARGET_HEAD, SAME_END, droppedHeadsOf, headEndsOf, headRoomsOf } from "../lib/heads.js";
+import { AGGREGATE } from "../lib/levels.js";
 import { routePointsOf } from "../lib/lineMarks.js";
 import { routeIndexOf, routesAlong } from "../lib/routeIndex.js";
 
@@ -106,7 +107,11 @@ export function sharedLines(cy, paths) {
   function refresh() {
     const drawn = cy.edges().filter((edge) => edge.visible());
     const routed = drawn.filter((edge) => paths[edge.id()]);
-    const ids = drawn.filter((edge) => edge.data("route")).map((edge) => edge.id()).join("\n");
+    // The map's own lines can be routed again, or drawn to another end, with the same ids drawn.
+    const ids = drawn
+      .filter((edge) => edge.data("route"))
+      .map((edge) => (edge.data(AGGREGATE) ? `${edge.id()} ${JSON.stringify(edge.data("route"))}` : edge.id()))
+      .join("\n");
     if (ids !== drawnIds) {
       drawnIds = ids;
       index = routeIndexOf(routed.map((edge) => ({ id: edge.id(), points: paths[edge.id()] })));

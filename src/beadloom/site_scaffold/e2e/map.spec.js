@@ -130,7 +130,7 @@ for (const graph of GRAPHS) {
       expect(drawn.filter((r) => !top.has(r.source) || !top.has(r.target)).map((r) => r.id)).toEqual([]);
     });
 
-    test("an aggregated edge has an arrowhead at each end its edges arrive at, its counts in its label, and a square route from the border of one of its boxes to the other's through no other box", async ({
+    test("an aggregated edge has an arrowhead at each end its edges arrive at, its counts in its label, and a square route from the border of one of its boxes, as drawn, to the other's through no other box", async ({
       page,
       request,
     }) => {
@@ -138,7 +138,8 @@ for (const graph of GRAPHS) {
       const tree = treeOf(data);
       const edges = (await viewer(page, "aggregatedEdges")).filter((e) => e.drawn);
       requireShape(edges.length > 0, "no edge between two boxes at the top of the containment tree");
-      const { boxes } = await viewer(page, "elkGeometry");
+      // As drawn: at the overview a node too small for its title is drawn larger than ELK laid it out (`overview.spec.js`).
+      const boxes = await viewer(page, "nodeBoxes");
 
       // An end its edges arrive at draws a head, unless it shares its last run with a line that draws it.
       const dropped = new Set((await viewer(page, "droppedHeads")).map((d) => `${d.id}:${d.end}`));
@@ -185,17 +186,29 @@ for (const graph of GRAPHS) {
       const levels = Array.from({ length: deepest + 1 }, (_, index) => index);
       const orders = [levels, [...levels].reverse(), [levels[levels.length - 1], ...levels.slice(0, -1)]];
 
+      // A box keeps its centre, and its sides but where it is drawn larger than its layout: a
+      // top-level node too small for its title at the overview, and the box that holds it, drawn
+      // around it (`overview.spec.js`). Such a box still holds the box it was laid out as.
+      const top = new Set(Object.keys(tree.parents).filter((id) => tree.parents[id] === tree.wrapper));
       let largest = 0;
+      const shrunk = [];
       for (const order of orders) {
         for (const level of order) {
           await reveal(page, [...tree.boxes].filter((id) => tree.depth(id) === level));
           const drawn = await viewer(page, "nodeBoxes");
           for (const [id, box] of Object.entries(drawn)) {
-            for (const side of ["x1", "y1", "x2", "y2"]) largest = Math.max(largest, Math.abs(box[side] - reference[id][side]));
+            const was = reference[id];
+            largest = Math.max(largest, Math.abs(box.x1 + box.x2 - was.x1 - was.x2) / 2, Math.abs(box.y1 + box.y2 - was.y1 - was.y2) / 2);
+            const larger = top.has(id) || id === tree.wrapper;
+            for (const side of ["x1", "y1", "x2", "y2"]) {
+              const outward = side.endsWith("1") ? was[side] - box[side] : box[side] - was[side];
+              if (larger ? outward < -DISPLACEMENT : Math.abs(outward) > DISPLACEMENT) shrunk.push(`${id} ${side} at level ${level}`);
+            }
           }
         }
       }
       expect(largest).toBeLessThanOrEqual(DISPLACEMENT);
+      expect(shrunk).toEqual([]);
     });
   });
 }
@@ -578,7 +591,7 @@ test("the map's marks keep their size on screen as the view zooms", async ({ pag
   }
 });
 
-test("a box too small for its title shows the title outside it", async ({ page, request }) => {
+test("a box too small for its title is drawn larger around its laid-out box, its title inside", async ({ page, request }) => {
   const served = await architectureData(request);
   const node = (id, parent) => ({ id, label: id, kind: parent ? "component" : "domain", parent: parent || id, findings: [], doc_status: "fresh", lint_clean: true });
   const small = "a-box-whose-title-is-far-longer-than-the-one-node-it-holds";
@@ -599,7 +612,13 @@ test("a box too small for its title shows the title outside it", async ({ page, 
   await openArchitecture(page);
 
   const titles = Object.fromEntries((await viewer(page, "level")).collapsed.map((b) => [b.id, b.outside]));
-  expect(titles).toEqual({ [small]: true, big: false });
+  expect(titles).toEqual({ [small]: false, big: false });
+  const { boxes: elk } = await viewer(page, "elkGeometry");
+  const drawn = await viewer(page, "nodeBoxes");
+  const width = (box) => box.x2 - box.x1;
+  expect(width(drawn[small])).toBeGreaterThan(width(elk[small]));
+  expect(width(drawn.big)).toBeCloseTo(width(elk.big), 6);
+  expect((await viewer(page, "overviewPlan")).grown).toEqual([small]);
 });
 
 test("the landscape has no boxes, so no levels: every service is drawn", async ({ page, request }) => {

@@ -35,7 +35,9 @@
 // The map (`lib/levels.js`) adds its own looks. A closed box is drawn tinted; a
 // closed box's title, and a top-level node's while the map titles it, is drawn
 // at the size its data names, inside its box or above it on a plate with a
-// border (`lib/mapMarks.js`); an aggregated edge is a solid line with an
+// border (`lib/mapMarks.js`); a top-level node too small for its title is drawn
+// at the size its data names, around its laid-out box (`lib/grownBoxes.js`); an
+// aggregated edge is a solid line with an
 // arrowhead at each end edges arrive at, its count on a pill drawn over the
 // canvas (`model/pillOverlay.js`). Every size that keeps one size on screen
 // whatever the zoom multiplies by the map's scale, which every mark of the map
@@ -50,7 +52,7 @@ import { DIMMED_SHARE, edgePaletteOf } from "./edgePalette.js";
 import { NO_SOURCE_HEAD, NO_TARGET_HEAD } from "./heads.js";
 import { AGGREGATE, COLLAPSED, HIDDEN_EDGES } from "./levels.js";
 import { arrowScaleOf, dashOffsetOf, dashOnScreen, edgeCornerRadiiOf, endHeadLength, lineWidthOf } from "./lineMarks.js";
-import { MAP_MARKS, MAP_TITLE, boxMarkInsetOf, boxMarkOf, plateLiftOf, scaleOf, titleOf } from "./mapMarks.js";
+import { MAP_BOX, MAP_MARKS, MAP_TITLE, boxMarkInsetOf, boxMarkOf, plateLiftOf, scaleOf, titleOf } from "./mapMarks.js";
 
 /**
  * A node's sizes, in layout units. `outerWidth` and `outerHeight` are a leaf's
@@ -382,7 +384,10 @@ function mapTitleRule(tokens) {
   };
 }
 
-/** The map's looks: a closed box and its title, a top-level node's title, an aggregated edge, a count of hidden edges. */
+/** The border a node of the map is drawn with at rest: a closed box's, or a card's. */
+const borderOf = (node) => (node.hasClass(COLLAPSED) ? GEOMETRY.boxBorder : GEOMETRY.cardBorder);
+
+/** The map's looks: a closed box and its title, a top-level node's title and size, an aggregated edge, a count of hidden edges. */
 function mapRules(tokens) {
   const tones = [...LAYER_TONES, UNLAYERED_TONE];
   return [
@@ -393,6 +398,14 @@ function mapRules(tokens) {
         "background-opacity": MAP_MARKS.collapsedOpacity,
         // A closed box's border is an open box's, so a box is drawn at ELK's size either way.
         "border-width": GEOMETRY.boxBorder,
+      },
+    },
+    {
+      // A node drawn larger than its layout: the size its data names, its border included, around its centre.
+      selector: `node[${MAP_BOX}]`,
+      style: {
+        width: (node) => node.data(MAP_BOX).width - borderOf(node),
+        height: (node) => node.data(MAP_BOX).height - borderOf(node),
       },
     },
     mapTitleRule(tokens),

@@ -90,10 +90,23 @@ export function pathOfSegments(segments, sourceCentre, targetCentre) {
  * the size of a compound with no child drawn; each bias is the room left on
  * that side of the children, which is how Cytoscape spreads a minimum size
  * larger than the children around them.
+ *
+ * ELK's box holds every child as ELK laid it out. A child the overview draws
+ * larger than its layout, to hold its title, can reach past it, and so can
+ * `reach`, the room the compound holds besides its children as drawn (or null);
+ * the compound is then drawn that much larger on both sides, so it keeps the
+ * centre ELK gave it and no node moves.
  */
-export function compoundSizeOf(box, childrenBox, inset) {
-  const inner = { x1: box.x1 + inset, y1: box.y1 + inset, x2: box.x2 - inset, y2: box.y2 - inset };
-  const children = childrenBox || inner;
+export function compoundSizeOf(box, childrenBox, inset, reach = null) {
+  const fitted = { x1: box.x1 + inset, y1: box.y1 + inset, x2: box.x2 - inset, y2: box.y2 - inset };
+  const children = childrenBox || fitted;
+  const held = reach ? { x1: Math.min(children.x1, reach.x1), y1: Math.min(children.y1, reach.y1), x2: Math.max(children.x2, reach.x2), y2: Math.max(children.y2, reach.y2) } : children;
+  // How far what it holds reaches past ELK's box on each axis, at most: the box grows that much on both sides.
+  const over = {
+    x: Math.max(0, fitted.x1 - held.x1, held.x2 - fitted.x2),
+    y: Math.max(0, fitted.y1 - held.y1, held.y2 - fitted.y2),
+  };
+  const inner = over.x || over.y ? { x1: fitted.x1 - over.x, y1: fitted.y1 - over.y, x2: fitted.x2 + over.x, y2: fitted.y2 + over.y } : fitted;
   return {
     width: Math.max(0, inner.x2 - inner.x1),
     height: Math.max(0, inner.y2 - inner.y1),

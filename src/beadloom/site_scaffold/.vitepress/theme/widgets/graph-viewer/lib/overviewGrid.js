@@ -20,7 +20,10 @@
 // at a plate.
 //
 // A port is where a line leaves or reaches a box: the first cell outside the box
-// on a track through one of its sides, a little in from its corners. Its stem is
+// on a track through one of its sides, a little in from its corners. A box drawn
+// larger than its layout to hold its title has ports only on the tracks through
+// its laid-out box, its core, so a line into it runs straight on to the core
+// however much of the drawn box is left around it (`grownBoxes.js`). Its stem is
 // the stretch of cells straight out of it that a line of that box does not bend
 // on, long enough for an arrowhead and a rounded corner.
 //
@@ -119,7 +122,9 @@ function extentOf(obstacles) {
 /**
  * The grid for `boxes` and `plates` (each `{ x1, y1, x2, y2 }`, pixels) with
  * `marks` (`{ pitch, halo, run, corner }`); `degree(b)` is how many lines box
- * `b` takes, so the busiest boxes get the first tracks through their middles.
+ * `b` takes, so the busiest boxes get the first tracks through their middles;
+ * `cores[b]`, where there is one, is the laid-out box inside box `b`, drawn
+ * larger, whose sides its ports and its tracks are taken from.
  *
  * `{ xs, ys, nx, ny, interior, inside, covered, band, bandAxis, band2, band2Axis,
  * crowded, near, ports, lead, stem, cellAt }`: the tracks; per cell, the box whose
@@ -132,12 +137,12 @@ function extentOf(obstacles) {
  * whose way in it lies on (-1 for none), where an arriving line's arrowhead is;
  * per cell, the box whose stem it is on; and the cell nearest a point.
  */
-export function gridOf(boxes, plates, marks, degree) {
+export function gridOf(boxes, plates, marks, degree, cores = []) {
   const { pitch } = marks;
   const obstacles = [...boxes, ...plates];
   const { minX, minY, maxX, maxY } = extentOf(obstacles);
   const pad = MARGIN_PITCHES * pitch;
-  const busiestFirst = boxes.map((box, b) => ({ box, b })).sort((p, q) => degree(q.b) - degree(p.b) || p.b - q.b);
+  const busiestFirst = boxes.map((box, b) => ({ box: cores[b] || box, b })).sort((p, q) => degree(q.b) - degree(p.b) || p.b - q.b);
   const xs = tracksOf(minX - pad, maxX + pad, busiestFirst.map(({ box }) => [box.x1, box.x2]), pitch);
   const ys = tracksOf(minY - pad, maxY + pad, busiestFirst.map(({ box }) => [box.y1, box.y2]), pitch);
   const nx = xs.length;
@@ -167,8 +172,9 @@ export function gridOf(boxes, plates, marks, degree) {
   obstacles.forEach((box, b) => {
     const isPlate = b >= boxes.length;
     const [hTop, hRight, hBottom, hLeft] = isPlate ? [0, 0, 0, 0] : haloOf(box, obstacles, marks.halo);
-    const [portX1, portX2] = sideRange(box, 0);
-    const [portY1, portY2] = sideRange(box, 1);
+    const portBox = (!isPlate && cores[b]) || box;
+    const [portX1, portX2] = sideRange(portBox, 0);
+    const [portY1, portY2] = sideRange(portBox, 1);
     const i0 = lowerBound(xs, box.x1 - Math.max(hLeft, half) - EPS);
     const j0 = lowerBound(ys, box.y1 - Math.max(hTop, half) - EPS);
     for (let i = i0; i < nx && xs[i] <= box.x2 + Math.max(hRight, half) + EPS; i += 1) {
@@ -199,7 +205,7 @@ export function gridOf(boxes, plates, marks, degree) {
   });
 
   const lead = new Int32Array(cells).fill(-1);
-  const ports = boxes.map((box, b) => portsOf(box, b, { xs, ys, nx, ny, interior }, lead));
+  const ports = boxes.map((box, b) => portsOf(box, b, { xs, ys, nx, ny, interior }, lead, cores[b] || box));
   const stem = new Int32Array(cells).fill(-1);
   const reachNeeded = marks.run - marks.corner / 2;
   ports.forEach((list, b) => {
@@ -221,14 +227,14 @@ export function gridOf(boxes, plates, marks, degree) {
 }
 
 /**
- * The ports of `box`, obstacle `b` of `grid`: on each track through a side, the
- * first cell outside it. Each margin cell between the side and a port is noted in
- * `lead` with the port's cell.
+ * The ports of `box`, obstacle `b` of `grid`: on each track through a side of
+ * `core`, the box it was laid out as, the first cell outside `box`. Each margin
+ * cell between the side and a port is noted in `lead` with the port's cell.
  */
-function portsOf(box, b, { xs, ys, nx, ny, interior }, lead) {
+function portsOf(box, b, { xs, ys, nx, ny, interior }, lead, core) {
   const ports = [];
-  const [portX1, portX2] = sideRange(box, 0);
-  const [portY1, portY2] = sideRange(box, 1);
+  const [portX1, portX2] = sideRange(core, 0);
+  const [portY1, portY2] = sideRange(core, 1);
   const centre = { x: (box.x1 + box.x2) / 2, y: (box.y1 + box.y2) / 2 };
   for (let i = lowerBound(xs, portX1 - EPS); i < nx && xs[i] <= portX2 + EPS; i += 1) {
     for (const dir of [0, 2]) {

@@ -61,6 +61,9 @@ const loopsOf = (routes, parents) =>
     .map((r) => r.id)
     .sort();
 
+/** How far two drawings may place one node apart, in layout units: the rounding of a sum, a millionth of a pixel at zoom 1. */
+const CENTRE_ROUNDING = 1e-6;
+
 /** The ids of the boxes in `ids` whose drawn sides lie further than the tolerance from ELK's. */
 function misdrawnBoxes(ids, drawn, elk) {
   return ids.filter((id) =>
@@ -220,5 +223,11 @@ test("the page, full screen and a node page share one layout, whatever the canva
 
   expect((await viewer(page, "layoutRun")).source).toBe("cache");
   expect(await viewer(page, "elkGeometry")).toEqual(geometry);
-  expect(await viewer(page, "positions")).toEqual(positions);
+  // The same places, but for the last bits of a box's centre where the box is drawn larger around a
+  // node the overview draws larger than its layout: each canvas's shape gives the overview its own
+  // scale, and Cytoscape centres the larger box by another sum.
+  const now = await viewer(page, "positions");
+  expect(Object.keys(now).sort()).toEqual(Object.keys(positions).sort());
+  const apart = Object.keys(positions).filter((id) => Math.abs(now[id].x - positions[id].x) > CENTRE_ROUNDING || Math.abs(now[id].y - positions[id].y) > CENTRE_ROUNDING);
+  expect(apart).toEqual([]);
 });

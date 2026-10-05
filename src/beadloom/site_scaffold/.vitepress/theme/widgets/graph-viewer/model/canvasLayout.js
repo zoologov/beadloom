@@ -93,14 +93,18 @@ function childrenBoxOf(compound) {
  * them, and its box is computed again at once. The deepest boxes go first,
  * since a box's children include the boxes inside it, and each box's place is
  * fixed before all of its children can be hidden.
+ *
+ * `reachOf(id)` gives the room a compound holds besides its children as drawn,
+ * or null: the most the overview's boxes drawn larger than their layout ever
+ * take (`canvasMap.js`), so a compound is the same size at every zoom.
  */
-export function fitCompounds(cy, geometry) {
+export function fitCompounds(cy, geometry, reachOf = () => null) {
   cy.nodes()
     .filter((node) => node.isParent() && geometry.boxes[node.id()])
     .sort((a, b) => b.ancestors().length - a.ancestors().length)
     .forEach((compound) => {
       const box = geometry.boxes[compound.id()];
-      compound.data("box", compoundSizeOf(box, childrenBoxOf(compound), insetOf(compound)));
+      compound.data("box", compoundSizeOf(box, childrenBoxOf(compound), insetOf(compound), reachOf(compound.id())));
       compound.updateCompoundBounds(true);
     });
 }

@@ -224,7 +224,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   // A box is drawn around the children shown; whenever that set changes, every
   // box is sized to ELK's again.
   function fitBoxes() {
-    if (cy.value && layout.value) fitCompounds(cy.value, layout.value.geometry);
+    if (cy.value && layout.value) fitCompounds(cy.value, layout.value.geometry, (id) => map?.reachOf(id) ?? null);
   }
 
   /** Whether an edge of the data file is shown by the filters: both its ends, and its contract. */

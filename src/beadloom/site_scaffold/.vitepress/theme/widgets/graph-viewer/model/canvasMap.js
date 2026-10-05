@@ -32,6 +32,15 @@
 // out again at each step of the scale. A top-level node that is not a box takes
 // the map's title only while its own label would read smaller.
 //
+// A top-level node the overview's plan draws larger than its layout, to hold its
+// title (`overviewPlan.js`, `lib/grownBoxes.js`), carries its drawn box in its
+// data (`mapBox`) while it is drawn closed, or as a leaf with its map title, and
+// no edge of the file is drawn as itself into it, whose end the box would cover.
+// The box is worked out again at each step of the scale: it keeps about its size
+// on screen, as its title does, down to its laid-out box. Every line drawn into
+// it, the overview's own or along a medoid, is drawn up to where it enters the
+// box.
+//
 // Which boxes are open follows the view: on every change of the viewport, once
 // per frame at most, the boxes in view are worked out again, and when they differ
 // the canvas is told to draw the level again (`onLevel`).
@@ -52,7 +61,8 @@ import {
   levelOf,
   openInView,
 } from "../lib/levels.js";
-import { MAP_TITLE, TALLY, mapTitleOf, statusMarkInsetOf, statusMarkOf } from "../lib/mapMarks.js";
+import { pathOutside } from "../lib/grownBoxes.js";
+import { MAP_BOX, MAP_TITLE, TALLY, mapTitleOf, statusMarkInsetOf, statusMarkOf, titleBoxOf } from "../lib/mapMarks.js";
 import { routePointsOf } from "../lib/lineMarks.js";
 import { pathOf, segmentsOf } from "../lib/routes.js";
 import { GEOMETRY } from "../lib/stylesheet.js";
@@ -121,11 +131,15 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
   let inView = new Set();
   let open = new Set();
   let pairs = [];
-  let scale = scaleAt(cy.zoom());
+  // The scale of the whole-graph fit until the view is fitted, so the first fit measures the map as the overview draws it.
+  let scale = scaleAt(fitZoom());
   let queued = false;
   let destroyed = false;
   let version = 0;
   let hiddenAt = new Map();
+  // The nodes an edge of the file is drawn as itself into, and the box each node drawn larger than its layout is drawn as now.
+  let ownEnds = new Set();
+  let grownNow = new Map();
   const measure = titleMeasurer(cy);
   const planner = overviewPlanner(cy, {
     tree,
@@ -133,22 +147,58 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     plainEdges,
     routePointsOf: (id) => (edges.get(id)?.data("route") ? routePointsOf(edges.get(id)) : null),
     titleOf: (id, at, hidden) => titleLookOf(id, at, hidden),
+    // A box is drawn at least as tall as it was laid out, and its status mark takes room by the height it is drawn at.
+    leastBoxOf: (id, px, at, hidden) =>
+      titleBoxOf(linesOf(id, hidden), px, at, measure, (height) => reservedOf(id, at, Math.max(height, geometry.boxes[id].y2 - geometry.boxes[id].y1))),
     measure,
     scaleAt,
     budget: options.budget,
   });
 
-  /** The title node `id` is drawn with at `at` when `hidden` of its lines are left out, or null for its own label. */
-  function titleLookOf(id, at, hidden) {
+  /** A node's title as lines: its label, and the count of its lines left out when there are any. */
+  const linesOf = (id, hidden) => [String(nodes.get(id).data("label")), ...(hidden ? [`+${hidden}`] : [])];
+
+  /** The room node `id`'s status mark takes at each end of its title at `at` in a box `height` tall, in layout units. */
+  function reservedOf(id, at, height) {
+    if (!nodes.get(id).data("status")) return 0;
+    return tree.boxes.has(id) ? statusMarkOf(at, height) + statusMarkInsetOf(at, height) : GEOMETRY.statusMark + GEOMETRY.statusMarkInset;
+  }
+
+  /**
+   * The title node `id` is drawn with at `at` when `hidden` of its lines are left
+   * out, in `drawn`, the box it is drawn as, or its laid-out box; null for its own label.
+   */
+  function titleLookOf(id, at, hidden, drawn = null) {
     const node = nodes.get(id);
-    const box = geometry.boxes[id];
+    const box = drawn || geometry.boxes[id];
     if (!node || !box) return null;
     const isBox = tree.boxes.has(id);
     const size = { width: box.x2 - box.x1, height: box.y2 - box.y1 };
-    const marked = Boolean(node.data("status"));
-    const reserved = !marked ? 0 : isBox ? statusMarkOf(at, size.height) + statusMarkInsetOf(at, size.height) : GEOMETRY.statusMark + GEOMETRY.statusMarkInset;
-    const lines = [String(node.data("label")), ...(hidden ? [`+${hidden}`] : [])];
-    return mapTitleOf(lines, size, at, measure, { reserved, natural: isBox ? null : GEOMETRY.nodeTitle });
+    const reserved = reservedOf(id, at, size.height);
+    return mapTitleOf(linesOf(id, hidden), size, at, measure, { reserved, natural: isBox ? null : GEOMETRY.nodeTitle });
+  }
+
+  /** The scale node `id`'s marks are laid out at now: the map's, or the overview plan's when the view is zoomed out past it. */
+  function titleScaleOf(id) {
+    const planned = planner.titleScale();
+    return planner.isTop(id) && planned ? Math.min(scale, planned) : scale;
+  }
+
+  /**
+   * The box each node the plan draws larger than its layout is drawn as now,
+   * among the nodes `drawn` with the boxes `openNow` open: while it is closed or
+   * a leaf with its map title, and no edge of the file is drawn into it.
+   */
+  function grownBoxesNow(drawn, openNow) {
+    const now = new Map();
+    for (const id of drawn) {
+      if (!planner.isGrown(id) || ownEnds.has(id) || (tree.boxes.has(id) && openNow.has(id))) continue;
+      const at = titleScaleOf(id);
+      const box = planner.drawnBoxAt(id, at, hiddenAt.get(id) || 0);
+      if (!tree.boxes.has(id) && !titleLookOf(id, at, hiddenAt.get(id) || 0, box)) continue;
+      now.set(id, box);
+    }
+    return now;
   }
 
   /**
@@ -161,11 +211,17 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
   function dressTitle(node) {
     const id = node.id();
     const mapped = node.hasClass(COLLAPSED) || (planner.isTop(id) && !tree.boxes.has(id));
-    const planned = planner.titleScale();
-    const at = planner.isTop(id) && planned ? Math.min(scale, planned) : scale;
-    const title = mapped ? titleLookOf(id, at, hiddenAt.get(id) || 0) : null;
+    const at = titleScaleOf(id);
+    const title = mapped ? titleLookOf(id, at, hiddenAt.get(id) || 0, grownNow.get(id)) : null;
     if (title) node.data({ [MAP_TITLE]: { ...title, side: planner.plateSideOf(id), scale: at }, [MAP_SCALE]: scale });
     else node.removeData(MAP_TITLE);
+  }
+
+  /** Give the drawn node `node` the box it is drawn as now when the plan draws it larger than its layout. */
+  function dressBox(node) {
+    const box = grownNow.get(node.id());
+    if (box) node.data(MAP_BOX, { width: box.x2 - box.x1, height: box.y2 - box.y1 });
+    else node.removeData(MAP_BOX);
   }
 
   /** Whether `id` is one of `ids` or inside one: a box's edges are those of everything in it. */
@@ -180,7 +236,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     return next;
   }
 
-  /** The route of the pair `pair` between its two drawn ends, or null; cached by its members. */
+  /** The path of the pair `pair` between its two drawn ends' laid-out boxes, or null; cached by its members. */
   function routeOf(pair) {
     const signature = `${pair.name}\n${pair.forward.join(",")}\n${pair.backward.join(",")}`;
     if (!routes.has(signature)) routes.set(signature, computeRoute(pair));
@@ -193,8 +249,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     const holds = (outer, inner) => boxesHolding(tree, [inner]).has(outer);
     if (holds(a, b) || holds(b, a)) return null;
     const member = (id, reversed) => ({ path: geometry.routes[id] ? pathOf(geometry.routes[id]) : null, reversed });
-    const path = aggregateRouteOf([...forward.map((id) => member(id, false)), ...backward.map((id) => member(id, true))], from, to);
-    return path ? segmentsOf(path, nodes.get(a).position(), nodes.get(b).position()) : null;
+    return aggregateRouteOf([...forward.map((id) => member(id, false)), ...backward.map((id) => member(id, true))], from, to);
   }
 
   /** The element that draws `pair`, made the first time the pair is drawn. */
@@ -221,9 +276,11 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
       styleKey: styleKeyOf(members),
       [MAP_SCALE]: scale,
     };
-    const planned = planner.routeOf(pair);
-    const at = (id) => nodes.get(id).position();
-    const route = planned ? segmentsOf(planned, at(pair.ends[0]), at(pair.ends[1])) : routeOf(pair);
+    const path = planner.routeOf(pair) || routeOf(pair);
+    const [a, b] = pair.ends;
+    // Drawn up to where it enters an end drawn larger than its layout: on its last run, for a planned line.
+    const shown = path && (pathOutside(path, grownNow.get(a) || null, grownNow.get(b) || null) || path);
+    const route = shown ? segmentsOf(shown, nodes.get(a).position(), nodes.get(b).position()) : null;
     element.data(data);
     if (route) element.data("route", route);
     else element.removeData("route");
@@ -261,6 +318,8 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     planner.current(kept);
     const drawnPairs = new Set(weighed.filter((pair) => !pair.hidden).map((pair) => pair.name));
     const originals = new Set(level.originals);
+    ownEnds = new Set(level.originals.flatMap((id) => [edges.get(id).data("source"), edges.get(id).data("target")]));
+    grownNow = grownBoxesNow(level.nodes, nextOpen);
 
     cy.batch(() => {
       takeOut([...aggregates.values()].filter(({ pair }) => !drawnPairs.has(pair.name)).map(({ element }) => element));
@@ -284,6 +343,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
         // A box no line comes into or goes out of has nothing to say.
         if (node.hasClass(COLLAPSED) && tallies.has(id)) node.data(TALLY, tallies.get(id));
         else node.removeData(TALLY);
+        dressBox(node);
         dressTitle(node);
       }
     });
@@ -306,10 +366,17 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     return tallies;
   }
 
-  /** Restyle the map's marks when the zoom has crossed a step. */
+  /** Whether two maps of drawn boxes (`grownBoxesNow`) draw the same boxes. */
+  const sameBoxes = (a, b) => a.size === b.size && [...a].every(([id, box]) => JSON.stringify(b.get(id)) === JSON.stringify(box));
+
+  /**
+   * Restyle the map's marks when the zoom has crossed a step; true when a node
+   * drawn larger than its layout is drawn at another size now, so the lines into
+   * it, and every mark found from them, are to be drawn again.
+   */
   function rescale() {
     const next = scaleAt(cy.zoom());
-    if (next === scale) return;
+    if (next === scale) return false;
     scale = next;
     cy.batch(() => {
       cy.elements(`.${COLLAPSED}, edge[${AGGREGATE}], node[${HIDDEN_EDGES}]`).data(MAP_SCALE, scale);
@@ -317,15 +384,16 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
       cy.nodes().forEach(dressTitle);
     });
     version += 1;
+    return !sameBoxes(grownNow, grownBoxesNow(cy.nodes().map((node) => node.id()), open));
   }
 
-  /** Work out the boxes in view again, and have the level drawn again when they differ. */
+  /** Work out the boxes in view again, and have the level drawn again when they differ or a drawn box changed size. */
   function evaluate() {
     if (destroyed) return;
-    rescale();
+    const resized = rescale();
     const view = { zoom: cy.zoom(), fitZoom: fitZoom(), extent: cy.extent() };
     const next = openInView(tree, geometry.boxes, open, view, options);
-    if (sameSet(next, inView)) return;
+    if (sameSet(next, inView) && !resized) return;
     inView = next;
     onLevel();
   }
@@ -389,8 +457,19 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     scale: () => scale,
     /** A number that changes whenever what the map draws or the scale it draws at changes. */
     version: () => version,
-    /** What the overview's last plan was (`overviewPlan.js`): `{ ms, unit, routed, failed }`. */
+    /** What the overview's last plan was (`overviewPlan.js`): `{ ms, unit, routed, failed, grown, plates }`. */
     plan: () => planner.report(),
+    /**
+     * The room box `id` holds besides its children as drawn, or null: for the box
+     * that holds everything, the most the nodes drawn larger than their layout at
+     * this level ever take, so it is one size at every zoom of a level
+     * (`canvasLayout.js`, `fitCompounds`).
+     */
+    reachOf(id) {
+      const boxes = id === tree.wrapper ? [...grownNow.keys()].map((grown) => planner.plannedBoxOf(grown)) : [];
+      if (!boxes.length) return null;
+      return boxes.reduce((a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) }));
+    },
     fitZoom,
     destroy() {
       destroyed = true;

@@ -332,9 +332,11 @@ function readers(source) {
         .map((entry) => aggregateOf(entry, map))
         .sort((a, b) => a.ends.join("|").localeCompare(b.ends.join("|")));
     },
-    // The overview's last plan: `{ ms, unit, routed, failed }`, how long it took,
-    // the layout units a pixel was at its scale, and the names of the pairs it
-    // routed and of those it found no route for.
+    // The overview's last plan: `{ ms, unit, routed, failed, grown, plates }`, how
+    // long it took, the layout units a pixel was at its scale, the names of the
+    // pairs it routed and of those it found no route for, the top-level nodes it
+    // draws larger than their layout to hold their titles, and those whose title
+    // stands on a plate beside its box because no such box fits.
     overviewPlan: () => source.map()?.plan() || null,
     // The pills drawn last: `{ pills, dropped }`, each pill `{ id, text, x1, y1,
     // x2, y2, fontSize, faded }` on the canvas in pixels, `id` its line's, and
