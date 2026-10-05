@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** wave 1 — the beads `beadloom waves` allows together out of F-ytcg, F-activity, F-nh7h, F-76mk, F-stcx; then V1 → V2 → V3 (one widget, one after another), F-jcng after F-nh7h; then T → R → W → P.
+**Bead:** wave 2 — `beadloom-lw56` (F-activity); then wave 3 `beadloom-nh7h` ∥ `beadloom-ytcg`; F-jcng after F-nh7h; V1 → V2 → V3; T → R → W → P.
 **Goal:** a viewer without visual artefacts, an activity metric that means something, five defects fixed.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -30,16 +30,18 @@
 | `beadloom-xv87` | V1 | blocked | the base look |
 | `beadloom-0gyz` | V2 | blocked | the overview |
 | `beadloom-hnff` | V3 | blocked | levels |
-| `beadloom-lw56` | F-activity | ready | activity by changed lines |
+| `beadloom-lw56` | F-activity | in progress | activity by changed lines |
 | `beadloom-nh7h` | F-nh7h | ready | incremental vs fresh import resolution |
 | `beadloom-jcng` | F-jcng | blocked | manifests as inputs |
-| `beadloom-76mk` | F-76mk | ready | flat Python tests bind |
-| `beadloom-stcx` | F-stcx | ready | `vitepress dev` loads |
+| `beadloom-76mk` | F-76mk | ✓ done | flat Python tests bind |
+| `beadloom-stcx` | F-stcx | ✓ done | `vitepress dev` loads |
 | `beadloom-q63p` | T | blocked | PRD criteria measured |
 | `beadloom-ak1i` | R | blocked | review |
 | `beadloom-1hle` | W | blocked | docs |
 | `beadloom-hpat` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **Wave 1 closed (2026-10-05):** `beadloom-76mk` `27010d00` — flat Python tests bind through `tests: {flat_tests: true}`, which `init` writes for a Python project (opt-in: binding by name stays off by default, per the 2026-09-28 ruling; this repository's 747 bindings unchanged; surfaced to the owner); `init` names unbound test files. `beadloom-stcx` `0c43021c` — the shipped config pre-bundles mermaid and the ELK worker engine; the dev check opens a Mermaid page and the architecture page (both failed before); six adopter portals load under the dev server. Gate owner stcx on the combined tree: 13,246 passed, 0 failed; ruff, mypy, lint clean; `beadloom ci` rc 1 on 13 stale pairs of 76mk → W.
 
 - The branch carries BDL-077's close-out commit `fd3d3f1a`.
