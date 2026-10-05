@@ -46,7 +46,7 @@ SPEC_SLICE = {
     "landscape-impact.spec.js": "site-impact-view",
     "landscape.spec.js": "site-landscape-page",
     "layers.spec.js": "site-layer",
-    # The base look: one line weight, whole arrowheads, followed lines on top, cards and boxes (BDL-078 V1).
+    # The base look: one line weight, whole arrowheads, followed lines on top (BDL-078 V1).
     "look.spec.js": "site-graph-viewer",
     # ELK in a worker, its geometry and its cache are `shared/elk` (BDL-077 E1).
     "layout.spec.js": "site-shared",
