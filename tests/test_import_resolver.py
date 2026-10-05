@@ -424,7 +424,7 @@ class TestResolveImportToNode:
         )
         conn.commit()
 
-        result = resolve_import_to_node("beadloom.auth.tokens", tmp_path, conn)
+        result = resolve_import_to_node("beadloom.auth.tokens", tmp_path, conn, source_files=())
         assert result == "domain:auth"
 
     def test_resolves_via_node_source(
@@ -441,7 +441,7 @@ class TestResolveImportToNode:
         )
         conn.commit()
 
-        result = resolve_import_to_node("beadloom.api", tmp_path, conn)
+        result = resolve_import_to_node("beadloom.api", tmp_path, conn, source_files=())
         assert result == "service:api"
 
     def test_returns_none_when_no_match(
@@ -452,7 +452,7 @@ class TestResolveImportToNode:
         """Returns None if no node matches the import path."""
         from beadloom.graph.import_resolver import resolve_import_to_node
 
-        result = resolve_import_to_node("unknown.module", tmp_path, conn)
+        result = resolve_import_to_node("unknown.module", tmp_path, conn, source_files=())
         assert result is None
 
 
@@ -619,6 +619,7 @@ class TestHierarchicalResolution:
             "apps.accounts.models",
             tmp_path,
             conn,
+            source_files=(),
             scan_paths=["backend"],
         )
         assert result == "apps-accounts"
@@ -645,6 +646,7 @@ class TestHierarchicalResolution:
             "apps.core.models",
             tmp_path,
             conn,
+            source_files=(),
             scan_paths=["backend"],
         )
         assert result == "apps-core"
@@ -667,6 +669,7 @@ class TestHierarchicalResolution:
             "@/shared/utils",
             tmp_path,
             conn,
+            source_files=(),
             scan_paths=["frontend"],
             is_ts=True,
         )
@@ -684,6 +687,7 @@ class TestHierarchicalResolution:
             "vue",
             tmp_path,
             conn,
+            source_files=(),
             is_ts=True,
         )
         assert result is None
@@ -706,6 +710,7 @@ class TestHierarchicalResolution:
             "~/hooks/useSomething",
             tmp_path,
             conn,
+            source_files=(),
             scan_paths=["frontend"],
             is_ts=True,
         )

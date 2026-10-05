@@ -248,8 +248,9 @@ def index_test_files(
     """Rebuild the test tables and every node's ``extra["tests"]`` from the binding.
 
     *code_files* are the project's indexed code paths, which the mirror resolves
-    against. Imports are resolved by the code-import resolver, so this runs after
-    ``code_symbols`` and ``file_index`` are populated. A file whose hash matches
+    against, and the code-import resolver reads an imported module's existence
+    from them. It runs after ``code_symbols`` is populated, which the resolver's
+    annotation fallback reads. A file whose hash matches
     the one recorded is not parsed again: the incremental reindex runs this on
     every change, and re-reading an unchanged suite is the cost it must not pay.
     """
@@ -269,7 +270,7 @@ def index_test_files(
             "SELECT ref_id, prefix FROM test_overrides ORDER BY ref_id, prefix"
         ).fetchall()
     ]
-    resolve = _memoised_resolver(project_root, conn, scan_paths, layout.roots[0])
+    resolve = _memoised_resolver(project_root, conn, scan_paths, layout.roots[0], code_files)
 
     conn.execute("DELETE FROM test_files")
     conn.execute("DELETE FROM test_imports")
@@ -364,20 +365,27 @@ def _recorded_contents(conn: sqlite3.Connection) -> dict[str, tuple[str, TestFil
 
 
 def _memoised_resolver(
-    project_root: Path, conn: sqlite3.Connection, scan_paths: list[str], root: str
+    project_root: Path,
+    conn: sqlite3.Connection,
+    scan_paths: list[str],
+    root: str,
+    code_files: Collection[str],
 ) -> Callable[[str], str | None]:
     """Resolve a dotted import to its owning node, once per import path.
 
     A suite imports the same few hundred modules thousands of times, and the
     resolver's answer for a Python import depends on the import path alone.
+    Whether an imported module exists is read from *code_files*, the tree this
+    run indexed, and not from a table an earlier run filled (``beadloom-nh7h``).
     """
+    source_files = frozenset(code_files)
     anchor = project_root / root
     cache: dict[str, str | None] = {}
 
     def resolve(import_path: str) -> str | None:
         if import_path not in cache:
             cache[import_path] = resolve_import_to_node(
-                import_path, anchor, conn, scan_paths=scan_paths
+                import_path, anchor, conn, scan_paths=scan_paths, source_files=source_files
             )
         return cache[import_path]
 

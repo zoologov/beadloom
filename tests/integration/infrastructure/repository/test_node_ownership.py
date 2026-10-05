@@ -206,9 +206,56 @@ class TestImportTargetOwnership:
             __import__("pathlib").Path("src/beadloom/context_oracle/why.py"),
             conn,
             scan_paths=["src"],
+            source_files={"src/beadloom/context_oracle/builder.py"},
         )
 
         assert resolved == "context-builder"
+
+    def test_a_module_with_no_symbol_resolves_to_the_node_owning_its_file(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """A module of re-exports holds no symbol and is still the imported file.
+
+        ``beadloom-nh7h``: existence was read from ``code_symbols`` or ``file_index``,
+        so this import resolved to the domain on a fresh index and to the feature on
+        the next one.
+        """
+        from beadloom.graph.import_resolver import resolve_import_to_node
+
+        _node(conn, "application", "src/beadloom/application/")
+        _node(conn, "graph-reads", "src/beadloom/application/graph_reads.py")
+        conn.commit()
+
+        resolved = resolve_import_to_node(
+            "beadloom.application.graph_reads",
+            __import__("pathlib").Path("src/beadloom/tui/app.py"),
+            conn,
+            scan_paths=["src"],
+            source_files={"src/beadloom/application/graph_reads.py"},
+        )
+
+        assert resolved == "graph-reads"
+
+    def test_a_module_the_tree_does_not_hold_is_not_read_from_the_index(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """A row an earlier run left behind does not make a file exist."""
+        from beadloom.graph.import_resolver import resolve_import_to_node
+
+        _node(conn, "context-oracle", "src/beadloom/context_oracle/")
+        _node(conn, "context-builder", "src/beadloom/context_oracle/builder.py")
+        _symbol(conn, "src/beadloom/context_oracle/builder.py", "build_context")
+        conn.commit()
+
+        resolved = resolve_import_to_node(
+            "beadloom.context_oracle.builder",
+            __import__("pathlib").Path("src/beadloom/context_oracle/why.py"),
+            conn,
+            scan_paths=["src"],
+            source_files=frozenset(),
+        )
+
+        assert resolved == "context-oracle"
 
     def test_import_of_an_unowned_file_falls_back_to_the_enclosing_node(
         self, conn: sqlite3.Connection
@@ -225,6 +272,7 @@ class TestImportTargetOwnership:
             __import__("pathlib").Path("src/beadloom/other.py"),
             conn,
             scan_paths=["src"],
+            source_files={"src/beadloom/context_oracle/search.py"},
         )
 
         assert resolved == "context-oracle"
@@ -243,6 +291,7 @@ class TestImportTargetOwnership:
             __import__("pathlib").Path("src/beadloom/context_oracle/why.py"),
             conn,
             scan_paths=["src"],
+            source_files=frozenset(),
         )
 
         assert resolved is None
