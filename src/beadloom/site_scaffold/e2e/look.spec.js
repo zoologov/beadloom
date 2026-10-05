@@ -8,7 +8,8 @@
 // has one thin weight at every zoom, arrowheads have one size on screen with one
 // head where lines share their last run, there are no bridges and no dots,
 // corners are rounded at one size on screen, and a followed line is drawn on top
-// of everything with a casing.
+// of everything with a casing. A status is a mark in a node's corner rather than
+// a wider border, so a finding no longer moves every node of the layout.
 //
 // What the cases cannot see. A line's sizes are restyled when the zoom crosses a
 // step of 1.25, so a size on screen is held within half a step of its own. ELK
@@ -250,6 +251,32 @@ test("a selection's walk is drawn on top with casings, and a selected line shows
   const followed = await viewer(page, "followed");
   expect(followed.edges.map((edge) => edge.id).sort()).toEqual(walked);
   expect(await viewer(page, "shownEdgeLabels")).toEqual([]);
+});
+
+test("a node's status moves nothing: every node and box is laid out where it is when no node has a status", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const flagged = (node) => (node.findings || []).length || node.doc_status === "stale" || node.lint_clean === false;
+  requireShape(data.nodes.some(flagged), "no node has a finding or a stale doc");
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  await openArchitecture(page);
+  const flaggedLayout = { positions: await viewer(page, "positions"), boxes: (await viewer(page, "elkGeometry")).boxes };
+
+  const calm = {
+    ...data,
+    nodes: data.nodes.map((node) => ({ ...node, findings: [], doc_status: "fresh", lint_clean: true })),
+  };
+  await page.unroute("**/architecture.data.json");
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: calm }));
+  await openArchitecture(page);
+  const calmLayout = { positions: await viewer(page, "positions"), boxes: (await viewer(page, "elkGeometry")).boxes };
+
+  const apart = (a, b) => Math.max(...Object.keys(a).map((key) => Math.abs(a[key] - b[key])));
+  const moved = Object.keys(calmLayout.positions).filter((id) => apart(calmLayout.positions[id], flaggedLayout.positions[id]) > ROUNDING);
+  const resized = Object.keys(calmLayout.boxes).filter((id) => apart(calmLayout.boxes[id], flaggedLayout.boxes[id]) > ROUNDING);
+  expect({ moved, resized }).toEqual({ moved: [], resized: [] });
 });
 
 test("an open box is drawn with a thin solid border, a light tint and its title inside at the top", async ({ page, request }) => {

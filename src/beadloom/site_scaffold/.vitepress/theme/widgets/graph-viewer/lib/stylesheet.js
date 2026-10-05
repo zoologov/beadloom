@@ -50,8 +50,8 @@ import { MAP_MARKS, boxMarkInsetOf, boxMarkOf, scaleOf, titleFits, titleOf, titl
 
 /**
  * A node's sizes, in layout units. `outerWidth` and `outerHeight` are a leaf's
- * size with its border, the size the layout places it by: unchanged since the
- * border was 3 units wide, so the cards are laid out where the nodes were.
+ * size with its border, the size the layout places it by, and the same whatever
+ * its status: a status is a mark inside the card, so a finding moves no node.
  */
 export const GEOMETRY = Object.freeze({
   outerWidth: 163,
