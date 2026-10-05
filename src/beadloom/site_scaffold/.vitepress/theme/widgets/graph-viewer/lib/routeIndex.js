@@ -1,5 +1,5 @@
 // beadloom:component=site-graph-viewer
-// Which drawn routes run through a point, and which run along one route there: read from the routes alone.
+// Which drawn routes run through a point, which run along one route there, and which cross a run: read from the routes alone.
 //
 // A trunk or a bus draws several edges along one line, and Cytoscape reports the
 // one edge under the pointer, whichever member it drew last. The edges a reader
@@ -10,6 +10,10 @@
 // Where two routes that ran together part, the rounded corner of the one that
 // turns is the merge; nothing else marks it. A dot at the corner point sits
 // beside the rounded stroke rather than on it.
+//
+// A route that crosses the last run of another near its end, or turns off it
+// there, would run under that end's arrowhead or bend into it; the nearest such
+// place is part of the room the head has (`nearestCrossing`).
 //
 // Every function here is pure: routes in, ids out.
 
@@ -74,6 +78,51 @@ export function routeIndexOf(routes) {
       };
       index.along("horizontal", point.y, ON_ROUTE, point.x - ON_ROUTE, point.x + ON_ROUTE, visit);
       index.along("vertical", point.x, ON_ROUTE, point.y - ON_ROUTE, point.y + ON_ROUTE, visit);
+      return found;
+    },
+    /**
+     * How far from `tip` the nearest route crosses the axis-aligned run from
+     * `tip` to `from`, or meets it from the side, as a line that runs along the
+     * run and turns off it does: anything nearer the tip than `beyond` is the
+     * tip's own border. Infinity when none does.
+     */
+    nearestCrossing(tip, from, beyond = ON_ROUTE) {
+      const vertical = Math.abs(tip.x - from.x) < ON_ROUTE;
+      if (!vertical && Math.abs(tip.y - from.y) >= ON_ROUTE) return Infinity;
+      const [fixed, moving] = vertical ? ["x", "y"] : ["y", "x"];
+      const lo = Math.min(tip[moving], from[moving]);
+      const hi = Math.max(tip[moving], from[moving]);
+      let nearest = Infinity;
+      index.along(vertical ? "horizontal" : "vertical", (lo + hi) / 2, (hi - lo) / 2, tip[fixed], tip[fixed], (route, a, b) => {
+        const away = Math.abs(a[moving] - tip[moving]);
+        if (away < beyond) return;
+        nearest = Math.min(nearest, away);
+      });
+      return nearest;
+    },
+    /**
+     * The nearest route beside the axis-aligned run from `tip` to `from`, within
+     * `reach` of it, running alongside it there or up to `beyond` past the tip:
+     * `{ beside, arrival }`, how far it lies and whether it ends within `beyond`
+     * of the tip's level, arriving about where the run does, its head beside
+     * this one; `{ beside: Infinity }` when none does. A route on the run itself,
+     * or closer to it than `shared`, shares it and is not beside it.
+     */
+    nearestBeside(tip, from, reach, shared = ON_ROUTE, beyond = 0) {
+      const vertical = Math.abs(tip.x - from.x) < ON_ROUTE;
+      if (!vertical && Math.abs(tip.y - from.y) >= ON_ROUTE) return { beside: Infinity, arrival: false };
+      const [fixed, moving] = vertical ? ["x", "y"] : ["y", "x"];
+      const back = Math.sign(from[moving] - tip[moving]) || 1;
+      const past = tip[moving] - back * beyond;
+      const lo = Math.min(past, from[moving]);
+      const hi = Math.max(past, from[moving]);
+      let found = { beside: Infinity, arrival: false };
+      index.along(vertical ? "vertical" : "horizontal", tip[fixed], reach, lo, hi, (route, a, b) => {
+        const beside = Math.abs(a[fixed] - tip[fixed]);
+        if (beside < shared || beside >= found.beside) return;
+        const arrival = [a, b].some((end) => Math.abs(end[moving] - tip[moving]) <= beyond + ON_ROUTE);
+        found = { beside, arrival };
+      });
       return found;
     },
   };

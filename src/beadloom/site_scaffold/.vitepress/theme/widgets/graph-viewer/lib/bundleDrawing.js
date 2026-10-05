@@ -83,6 +83,7 @@ export function drawingOf({ nodes, edges, loops = [], boxes, paths }, options) {
   };
 
   const routed = edges.filter((e) => paths[e.id]?.length >= 2 && boxes[e.source] && boxes[e.target]);
+  const routedById = new Map(routed.map((edge) => [edge.id, edge]));
   const atNode = new Map();
   const order = [];
   for (const edge of routed) {
@@ -126,6 +127,8 @@ export function drawingOf({ nodes, edges, loops = [], boxes, paths }, options) {
     topBox,
     routes,
     setRoute,
+    /** The routed edge `{ id, source, target }` with the id `id`. */
+    edgeOf: (id) => routedById.get(id),
     edgesAt: (id) => atNode.get(id) || [],
     /**
      * The nodes, leaves and boxes alike, that route an edge and draw at least

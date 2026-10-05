@@ -17,8 +17,9 @@
 // its own casing would cut a slit into the one drawn before it where they part;
 // drawn in passes, every casing lies under every line. A followed line is drawn
 // as Cytoscape draws it — the same route, the same corners, the same sizes on
-// screen (`lib/lineMarks.js`) — and always with its arrowhead, also where it
-// shares its last run with a line that carries the head at rest.
+// screen, a dashed line's pattern ending a dash inside its head
+// (`lib/lineMarks.js`) — and always with its arrowhead, also where it shares its
+// last run with a line that carries the head at rest.
 //
 // What is followed is read again on `refresh`, whenever the hover, the
 // selection, the level, the filters or the theme change, and drawn whenever
@@ -28,9 +29,9 @@
 
 import { EDGE_STYLES, dashOf } from "../../../entities/graph-edge/index.js";
 import { edgePaletteOf } from "../lib/edgePalette.js";
-import { headEndsOf } from "../lib/heads.js";
+import { NO_SOURCE_HEAD, NO_TARGET_HEAD, headEndsOf } from "../lib/heads.js";
 import { AGGREGATE } from "../lib/levels.js";
-import { LINE_MARKS, cornerRadiiOf, headLengthOf, lineWidthOf, routePointsOf } from "../lib/lineMarks.js";
+import { LINE_MARKS, cornerRadiiOf, dashOffsetOf, endHeadLength, headLengthOf, lineWidthOf, routePointsOf } from "../lib/lineMarks.js";
 import { scaleOf } from "../lib/mapMarks.js";
 import { HIGHLIGHTED_EDGES, HOVERED } from "./canvasMarks.js";
 import { overlayCanvas } from "./overlayCanvas.js";
@@ -120,6 +121,16 @@ function along(from, to, length) {
   return { x: from.x + d.x * length, y: from.y + d.y * length };
 }
 
+/**
+ * How far short of its end at `end` a followed line is drawn: halfway into its
+ * own head, at the base of another line's head where it starts at one, and
+ * otherwise all the way.
+ */
+function cutAt(line, end, head) {
+  if (line.heads[end]) return head / 2;
+  return line.shape.routed && line.edge.hasClass(end === "source" ? NO_SOURCE_HEAD : NO_TARGET_HEAD) ? endHeadLength(line.edge, end) : 0;
+}
+
 /** The outline of an arrowhead `length` long with its tip at `tip`, arriving from `from`: a triangle, or a vee. */
 function headOutline(tip, from, length, shape) {
   const d = unit(from, tip);
@@ -192,8 +203,9 @@ export function followedOverlay(cy, container, { tokens }) {
       width: lineWidthOf(line.edge),
       casing: LINE_MARKS.casing * scale,
       head,
-      radii: line.shape.routed ? cornerRadiiOf(line.shape.points, scale, line.heads) : [],
-      cut: { source: line.heads.source ? head / 2 : 0, target: line.heads.target ? head / 2 : 0 },
+      radii: line.shape.routed ? cornerRadiiOf(line.shape.points, scale, line.heads, head) : [],
+      cut: { source: cutAt(line, "source", head), target: cutAt(line, "target", head) },
+      dashOffset: line.dash.length ? dashOffsetOf(line.edge, line.dash.map((length) => length * scale), line.arrow, { pullback: head / 2 }) : 0,
     };
   }
 
@@ -270,10 +282,12 @@ export function followedOverlay(cy, container, { tokens }) {
           context.strokeStyle = line.colour;
           context.lineWidth = sizes.width;
           context.setLineDash(line.dash.map((length) => length * sizes.scale));
+          context.lineDashOffset = sizes.dashOffset;
           trace(context, line, sizes);
           context.stroke();
         }
         context.setLineDash([]);
+        context.lineDashOffset = 0;
         for (const { line, sizes } of shown) {
           context.fillStyle = line.colour;
           for (const outline of headsOf(line, sizes)) {

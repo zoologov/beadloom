@@ -14,10 +14,11 @@
 // What the cases cannot see. A line's sizes are restyled when the zoom crosses a
 // step of 1.25, so a size on screen is held within half a step of its own. ELK
 // ends a line 10 layout units after its last bend where the line arrives from the
-// layer above (on a portal of 436 routes, a quarter of them; the shortest 6): a
-// head of 6 px sits on a straight run of its own at full size, which is where the
-// head case reads them, and not below about zoom 0.6, where such a run is shorter
-// than the head. Lengthening those runs would change the layout.
+// layer above (on a portal of 436 routes, a quarter of them; the shortest 6). A
+// head now keeps a straight run of its own and half a head more: the last bend
+// moves back where nothing is in the way, and a head whose run has no room for
+// its full size is drawn smaller, down to a smallest size. How a line enters its
+// head at every zoom is `heads.spec.js`'s; the head case here holds the sizes.
 
 import { test, expect } from "@playwright/test";
 import {
@@ -36,8 +37,10 @@ import { requireShape } from "./support/shape.js";
 
 /** The one weight every line is drawn at, in pixels on screen. */
 const LINE_PX = 1.35;
-/** The one length every arrowhead is drawn at, in pixels on screen. */
+/** The one length every arrowhead is drawn at, in pixels on screen, where its run has room for it. */
 const HEAD_PX = 6;
+/** The smallest length an arrowhead is drawn at, in pixels on screen, where its run has no room for more (`heads.spec.js`). */
+const SMALLEST_HEAD_PX = 4;
 /** The radius every rounded corner is drawn at, in pixels on screen, where its runs leave room for it. */
 const CORNER_PX = 6;
 /**
@@ -71,12 +74,17 @@ async function offWeight(page) {
     .map((look) => `${look.id} ${look.styleKey}: ${(look.width * zoom).toFixed(2)} px`);
 }
 
-/** The drawn arrowheads whose length on screen is not the one size, named with what they measure. */
-async function offHead(page) {
+/**
+ * The drawn arrowheads whose length on screen is not the one size, or with
+ * `room` not between the smallest and the one size, named with what they measure.
+ */
+async function offHead(page, { room = false } = {}) {
   const zoom = await viewer(page, "zoom");
+  const half = Math.sqrt(1.25);
+  const off = (px) => (room ? px < SMALLEST_HEAD_PX / half - 1e-6 || px > HEAD_PX * half + 1e-6 : !withinAStep(px, HEAD_PX));
   return (await viewer(page, "lineLooks"))
     .filter((look) => look.targetArrow !== "none" || look.sourceArrow !== "none")
-    .filter((look) => !withinAStep(headLength(look) * zoom, HEAD_PX))
+    .filter((look) => off(headLength(look) * zoom))
     .map((look) => `${look.id}: ${(headLength(look) * zoom).toFixed(2)} px`);
 }
 
@@ -125,16 +133,19 @@ test("every drawn line has one weight on screen: at the overview, zoomed in, at 
   requireShape(dimmed > 0, "the busiest node's neighbourhood takes every drawn edge");
 });
 
-test("every arrowhead has one size on screen, at the overview, zoomed in and at full detail", async ({ page, request }) => {
+test("every arrowhead has one size on screen at the overview, and zoomed in and at full detail is never larger, nor smaller than the smallest", async ({
+  page,
+  request,
+}) => {
   await serveEveryEdgeKind(page, request);
   await openArchitecture(page);
   expect(await offHead(page)).toEqual([]);
   await zoomIn(page, 3);
-  expect(await offHead(page)).toEqual([]);
+  expect(await offHead(page, { room: true })).toEqual([]);
   await openEveryBox(page);
-  expect(await offHead(page)).toEqual([]);
+  expect(await offHead(page, { room: true })).toEqual([]);
   await zoomToOne(page);
-  expect(await offHead(page)).toEqual([]);
+  expect(await offHead(page, { room: true })).toEqual([]);
 });
 
 test("at full size every arrowhead sits on a straight run at least as long as itself", async ({ page }) => {

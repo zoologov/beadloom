@@ -42,6 +42,8 @@ SPEC_SLICE = {
     "filters.spec.js": "site-filter-graph",
     "fullscreen.spec.js": "site-fullscreen",
     "graph-viewer-instances.spec.js": "site-graph-viewer",
+    # How a line enters its arrowhead, at every zoom it is drawn at (BDL-078, beadloom-btkd.2).
+    "heads.spec.js": "site-graph-viewer",
     "impact.spec.js": "site-impact-view",
     "landscape-impact.spec.js": "site-impact-view",
     "landscape.spec.js": "site-landscape-page",

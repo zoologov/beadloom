@@ -29,6 +29,7 @@ import {
   edgesThroughTheirEnds,
   excessSteps,
   lanesAt,
+  lastBendMovedBack,
   polylineOf,
 } from "./support/routeMetrics.js";
 import { architectureData, openArchitecture, openEveryBox, parentMap, viewer } from "./support/viewer.js";
@@ -262,13 +263,15 @@ for (const graph of GRAPHS) {
       expect(excessSteps(drawn, leaves)).toBeLessThanOrEqual(STEPS_KEPT * elk);
     });
 
-    test("every route joins its own two boxes with right angles only, from outside them, and an edge in no bundle keeps ELK's route", async ({
+    test("every route joins its own two boxes with right angles only, from outside them, and an edge in no bundle keeps ELK's route, its last bend at most moved back along its last run", async ({
       page,
       request,
     }) => {
       await graph.open(page, request);
       const { boxes, routes: elk } = await viewer(page, "elkGeometry");
-      const { routes, trunks, buses } = await viewer(page, "bundles");
+      const { routes, trunks, buses, headRuns } = await viewer(page, "bundles");
+      // Where an arrowhead had too short a run, the last bend moved back along it (`heads.spec.js`).
+      const movedBy = new Map(headRuns.flatMap((group) => group.members.map((id) => [id, group.by])));
       const drawn = await drawnRoutes(page);
       const bundled = new Set([...trunks, ...buses].flatMap((bundle) => bundle.members));
       requireShape(bundled.size > 0, "no node has two edges that leave one side in one direction");
@@ -289,7 +292,7 @@ for (const graph of GRAPHS) {
       expect(wrong).toEqual([]);
       expect(edgesThroughTheirEnds(drawn.map(({ id, source, target }) => ({ id, source, target, points: routes[id] })), boxes)).toEqual([]);
       const rerouted = drawn
-        .filter(({ id }) => !bundled.has(id) && deviation(routes[id], polylineOf(elk[id].sections)) > TOLERANCE)
+        .filter(({ id }) => !bundled.has(id) && deviation(routes[id], lastBendMovedBack(polylineOf(elk[id].sections), movedBy.get(id))) > TOLERANCE)
         .map(({ id }) => id);
       expect(rerouted).toEqual([]);
     });

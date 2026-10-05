@@ -46,6 +46,21 @@ export function polylineOf(sections) {
   return points;
 }
 
+/**
+ * The route `points` with its last bend, and the corner before it, moved `by`
+ * back along its last run: the change the viewer may make to give an arrowhead
+ * room (`lib/headRuns.js`).
+ */
+export function lastBendMovedBack(points, by) {
+  const n = points.length;
+  if (n < 4 || !by) return points;
+  const [bend, tip] = [points[n - 2], points[n - 1]];
+  const length = Math.hypot(tip.x - bend.x, tip.y - bend.y) || 1;
+  const back = { x: ((bend.x - tip.x) / length) * by, y: ((bend.y - tip.y) / length) * by };
+  const moved = (p) => ({ x: p.x + back.x, y: p.y + back.y });
+  return [...points.slice(0, n - 3), moved(points[n - 3]), moved(bend), tip];
+}
+
 /** The distance from `point` to the segment from `a` to `b`. */
 function distanceToSegment(point, a, b) {
   const dx = b.x - a.x;

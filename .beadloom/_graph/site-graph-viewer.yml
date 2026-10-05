@@ -14,6 +14,7 @@ nodes:
       - src/beadloom/site_scaffold/e2e/colours.spec.js
       - src/beadloom/site_scaffold/e2e/data-ids.spec.js
       - src/beadloom/site_scaffold/e2e/graph-viewer-instances.spec.js
+      - src/beadloom/site_scaffold/e2e/heads.spec.js
       - src/beadloom/site_scaffold/e2e/look.spec.js
       - src/beadloom/site_scaffold/e2e/map.spec.js
       - src/beadloom/site_scaffold/e2e/overview.spec.js

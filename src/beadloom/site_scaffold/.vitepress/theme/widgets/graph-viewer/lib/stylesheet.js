@@ -18,8 +18,9 @@
 // Every line has one thin weight, at every zoom, whatever its kind, its count or
 // its state; kinds differ by colour and dash. A line is one colour from end to
 // end (`lib/edgePalette.js`), and its arrowhead carries the direction: one size
-// on screen, on a straight run of its own, and one head where lines share their
-// last run (`lib/lineMarks.js`, `lib/heads.js`). A followed line is drawn again
+// on screen where its run has room for it, on a straight run of its own, and one
+// head where lines share their last run, the others ending at its base
+// (`lib/lineMarks.js`, `lib/heads.js`). A followed line is drawn again
 // on top by the layer over the canvas, with its label when it is under the
 // pointer (`model/followedOverlay.js`); Cytoscape draws no edge label but a
 // landscape badge. While the pointer rests on a node, its lines are drawn on
@@ -48,7 +49,7 @@ import { RING_TONES } from "../../../features/impact-view/index.js";
 import { DIMMED_SHARE, edgePaletteOf } from "./edgePalette.js";
 import { NO_SOURCE_HEAD, NO_TARGET_HEAD } from "./heads.js";
 import { AGGREGATE, COLLAPSED, HIDDEN_EDGES } from "./levels.js";
-import { arrowScaleOf, dashOnScreen, edgeCornerRadiiOf, lineWidthOf } from "./lineMarks.js";
+import { arrowScaleOf, dashOffsetOf, dashOnScreen, edgeCornerRadiiOf, endHeadLength, lineWidthOf } from "./lineMarks.js";
 import { MAP_MARKS, MAP_TITLE, boxMarkInsetOf, boxMarkOf, plateLiftOf, scaleOf, titleOf } from "./mapMarks.js";
 
 /**
@@ -235,11 +236,18 @@ function geometryRules() {
   ];
 }
 
-/** A line's style as Cytoscape draws its dash: a dotted line is a pattern of dots in pixels on screen. */
+/**
+ * A line's style as Cytoscape draws its dash: a dotted line is a pattern of dots
+ * in pixels on screen, shifted to end a dash inside its head (`dashOffsetOf`).
+ */
 function dashStyle(look) {
   const pattern = dashOf(look);
   if (!pattern.length) return { "line-style": "solid" };
-  return { "line-style": "dashed", "line-dash-pattern": (edge) => dashOnScreen(pattern, edge) };
+  return {
+    "line-style": "dashed",
+    "line-dash-pattern": (edge) => dashOnScreen(pattern, edge),
+    "line-dash-offset": (edge) => dashOffsetOf(edge, dashOnScreen(pattern, edge), look.arrow),
+  };
 }
 
 function edgeRules(tokens, palette) {
@@ -404,10 +412,15 @@ function mapRules(tokens) {
   ];
 }
 
-/** The ends that draw no arrowhead because another line on their last run draws it (`lib/heads.js`). */
+/**
+ * The ends that draw no arrowhead because another line on their last run draws
+ * it (`lib/heads.js`), or that start where another line arrives along its last
+ * run: such a line ends at that head's base rather than on into the head, past
+ * its sides near the tip and in its own colour across it.
+ */
 const SHARED_HEAD_RULES = [
-  { selector: `edge.${NO_TARGET_HEAD}`, style: { "target-arrow-shape": "none" } },
-  { selector: `edge.${NO_SOURCE_HEAD}`, style: { "source-arrow-shape": "none" } },
+  { selector: `edge.${NO_TARGET_HEAD}`, style: { "target-arrow-shape": "none", "target-distance-from-node": (edge) => endHeadLength(edge, "target") } },
+  { selector: `edge.${NO_SOURCE_HEAD}`, style: { "source-arrow-shape": "none", "source-distance-from-node": (edge) => endHeadLength(edge, "source") } },
 ];
 
 /** The whole stylesheet for resolved `tokens` (see `shared/theme-tokens`). */

@@ -31,6 +31,7 @@ import { isLoop } from "./canvasLayout.js";
 import { BEHIND, DISTANCE_DATA, IN_FRONT } from "./canvasMarks.js";
 import { AGGREGATE, COLLAPSED, HIDDEN_EDGES } from "../lib/levels.js";
 import { MAP_TITLE } from "../lib/mapMarks.js";
+import { pathOfSegments } from "../lib/routes.js";
 
 const HANDLE = "__beadloomViewer";
 
@@ -72,6 +73,30 @@ function drawnBoxOf(node) {
 /** Whether `edge` is an aggregated edge of the map rather than an edge of the data file. */
 const isAggregate = (edge) => Boolean(edge.data(AGGREGATE));
 
+/**
+ * A drawn edge's points, its ends where its line would end with a head of its
+ * own, whether or not the line is drawn all the way there (a line that leaves its
+ * arrowhead to another ends at that head's base): a routed edge's route, and any
+ * other edge's ends and control points as Cytoscape draws them.
+ */
+function drawnPointsOf(edge) {
+  const corners = edge.segmentPoints();
+  if (corners && edge.data("route")) return pathOfSegments(edge.data("route"), edge.source().position(), edge.target().position()).map(pointOf);
+  const middle = (corners || edge.controlPoints() || []).map(pointOf);
+  const [source, target] = [pointOf(edge.sourceEndpoint()), pointOf(edge.targetEndpoint())];
+  // Cytoscape pulls an end back towards its neighbour by its distance from the node: put it back.
+  const putBack = (end, neighbour, by) => {
+    const length = Math.hypot(end.x - neighbour.x, end.y - neighbour.y) || 1;
+    return { x: end.x + ((end.x - neighbour.x) / length) * by, y: end.y + ((end.y - neighbour.y) / length) * by };
+  };
+  const distanceAt = (end) => edge.pstyle(`${end}-distance-from-node`).pfValue || 0;
+  return [
+    putBack(source, middle[0] || target, distanceAt("source")),
+    ...middle,
+    putBack(target, middle[middle.length - 1] || source, distanceAt("target")),
+  ];
+}
+
 function drawnRouteOf(edge) {
   const corners = edge.segmentPoints();
   return {
@@ -82,7 +107,7 @@ function drawnRouteOf(edge) {
     aggregated: isAggregate(edge),
     routed: Boolean(corners),
     loop: isLoop(edge),
-    points: [edge.sourceEndpoint(), ...(corners || edge.controlPoints() || []), edge.targetEndpoint()].map(pointOf),
+    points: drawnPointsOf(edge),
     label: pointOf(edge.midpoint()),
   };
 }
@@ -123,11 +148,14 @@ function lineLookOf(edge) {
     width: parseFloat(edge.style("width")),
     lineStyle: edge.style("line-style"),
     dash: edge.style("line-style") === "dashed" ? numbersOf(edge.style("line-dash-pattern")) : [],
+    dashOffset: edge.style("line-style") === "dashed" ? parseFloat(edge.style("line-dash-offset")) || 0 : 0,
     lineFill: edge.style("line-fill"),
     colour: edge.style("line-color"),
     sourceArrow: edge.style("source-arrow-shape"),
     targetArrow: edge.style("target-arrow-shape"),
     arrowScale: parseFloat(edge.style("arrow-scale")),
+    sourceDistance: parseFloat(edge.style("source-distance-from-node")) || 0,
+    targetDistance: parseFloat(edge.style("target-distance-from-node")) || 0,
     arrowColour: edge.style("target-arrow-color"),
     cornerRadii: edge.data("route") ? numbersOf(edge.style("segment-radii")) : [],
     walk: edge.hasClass("is-walk-edge"),
@@ -336,15 +364,17 @@ function readers(source) {
     // box that holds one and each one that is a box, until it is called again;
     // `[]` lets them close.
     revealNodes: (ids) => source.revealNodes(ids),
-    // The routes with each node's fans bundled: `{ ms, routes, trunks, buses }`.
-    // `routes` maps each routed edge's id to its polyline, graph coordinates;
-    // a trunk is `{ node, box, direction, side, members }`, a bus `{ node, side,
-    // direction, channel, members }`; `ms` is how long the bundling took.
+    // The routes with each node's fans bundled: `{ ms, routes, trunks, buses,
+    // headRuns }`. `routes` maps each routed edge's id to its polyline, graph
+    // coordinates; a trunk is `{ node, box, direction, side, members }`, a bus
+    // `{ node, side, direction, channel, members }`, a head's run `{ members,
+    // by }`, the edges whose last bend moved back `by` units along their last
+    // run; `ms` is how long the bundling took.
     bundles: () => {
       const bundles = source.bundles();
       if (!bundles) return null;
-      const { ms, paths: routes, trunks, buses } = bundles;
-      return JSON.parse(JSON.stringify({ ms, routes, trunks, buses }));
+      const { ms, paths: routes, trunks, buses, headRuns } = bundles;
+      return JSON.parse(JSON.stringify({ ms, routes, trunks, buses, headRuns }));
     },
     // The lines drawn on top now, followed under the pointer or on a selection's
     // walk: `{ edges, passes }`, each line `{ id, colour, casing, width }` — its
@@ -385,10 +415,13 @@ function readers(source) {
         .sort((a, b) => String(a.key).localeCompare(String(b.key))),
     // Every edge drawn now, of the data file or of the map, and its look as
     // Cytoscape resolved it: `{ id, key, aggregated, styleKey, width, lineStyle,
-    // dash, lineFill, colour, sourceArrow, targetArrow, arrowScale, arrowColour,
-    // cornerRadii, walk, dimmed, front, behind, forward, backward, points }`.
-    // Sizes are in layout units; `dash` is the dash pattern a dashed line is drawn
-    // with, `cornerRadii` the radius of each corner of a routed edge; `front` and
+    // dash, dashOffset, lineFill, colour, sourceArrow, targetArrow, arrowScale,
+    // sourceDistance, targetDistance, arrowColour, cornerRadii, walk, dimmed,
+    // front, behind, forward, backward, points }`. Sizes are in layout units;
+    // `sourceDistance` and `targetDistance` how far short of its route's end the
+    // line is drawn at each end, besides its head's own gap; `dash` is the dash
+    // pattern a dashed line is drawn with and `dashOffset` how far into the
+    // pattern it starts, `cornerRadii` the radius of each corner of a routed edge; `front` and
     // `behind` whether it is a line of the node under the pointer or one falling
     // back behind them; `forward` and `backward` how many edges a line of the
     // map's carries each way (null for an edge of the file); and `points` its

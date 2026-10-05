@@ -29,7 +29,7 @@
 | `beadloom-ytcg` | F-ytcg | ✓ done | a node named `__proto__` is drawn |
 | `beadloom-xv87` | V1 | ✓ done | the base look: `584b9677`, `e152a493`, `562551ed` |
 | `beadloom-0gyz` | V2 | ✓ done | the overview: own routes, pills, titles, calm hover: `18e447cf`, `6a9f9620`, `8b87b4f1`, `a710da95`, `86fa44ae`, `82af814a`; head overlaps 12 -> 0, narrowest gap 8.24 px; readings for the owner in the bead |
-| `beadloom-btkd.2` | dev | in progress | a line enters its arrowhead correctly (owner, after V1) |
+| `beadloom-btkd.2` | dev | in progress | a line enters its arrowhead correctly (owner, after V1): last bends moved back for room, heads sized to their room (6 px, down to 4), shared lines end at the head's base, dashes end inside the head; heads the viewer draws wrong 85-95 -> 0 at every zoom from 0.3 to 2, every box open, this portal; heads with no room for any head reported, not failed (7 at 0.545, 0 from 0.8); readings for the owner in the bead |
 | `beadloom-btkd.3` | dev | blocked | small top-level nodes are proper boxes with the title inside (owner, after V2) |
 | `beadloom-hnff` | V3 | blocked | levels |
 | `beadloom-lw56` | F-activity | ✓ done | activity by changed lines |
