@@ -44,8 +44,9 @@ _AUTHOR_EMAIL = "ada@example.invalid"
 #: The data files the site publishes, one per screen, under ``public/``.
 _DATA_FILES = ("architecture.data.json", "dashboard.data.json", "landscape.data.json")
 
-#: The activity keys the node card shows (BDL-076 R1 finding M2).
-_CARD_ACTIVITY_KEYS = {"commits_30d", "level"}
+#: The activity keys the node card shows (BDL-076 R1 finding M2; ``lines_30d`` since
+#: BDL-078 F-activity).
+_CARD_ACTIVITY_KEYS = {"commits_30d", "lines_30d", "level"}
 
 
 def _split(listing: str) -> list[str]:

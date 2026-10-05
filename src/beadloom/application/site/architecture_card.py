@@ -55,7 +55,7 @@ PUBLIC_SYMBOL_CAP = 50
 
 #: The activity keys the node card shows, and the only ones the data file carries.
 #: A key the reindex adds reaches the published file by being listed here.
-CARD_ACTIVITY_KEYS = ("commits_30d", "level")
+CARD_ACTIVITY_KEYS = ("commits_30d", "lines_30d", "level")
 
 #: A doc the index holds with no sync pair: nothing has been checked against it.
 DOC_UNPAIRED = "unpaired"

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from beadloom.application.reindex.models import _EXT_TO_LANG
 from beadloom.infrastructure.node_source import NodeSource
+from beadloom.infrastructure.repository import get_node_sources, get_part_of_containers
 
 if TYPE_CHECKING:
     import sqlite3
@@ -134,8 +135,9 @@ def _store_git_activity(
 ) -> None:
     """Analyze git activity and store results in ``nodes.extra["activity"]``.
 
-    Builds a ``source_dirs`` mapping from nodes that have a ``source`` field,
-    runs ``analyze_git_activity``, and merges activity data into the existing
+    Builds a ``source_dirs`` mapping from nodes that have a ``source`` field and
+    the ``part_of`` containers, so a box's activity rolls up its parts, runs
+    ``analyze_git_activity``, and merges activity data into the existing
     ``extra`` JSON column for each matching node.
 
     ``analyze_git_activity`` is looked up on the package namespace at call time
@@ -145,18 +147,13 @@ def _store_git_activity(
     """
     from beadloom.application import reindex as _pkg
 
-    # Build ref_id -> source_path mapping from nodes with source field.
-    rows = conn.execute("SELECT ref_id, source FROM nodes WHERE source IS NOT NULL").fetchall()
-    source_dirs: dict[str, str] = {}
-    for row in rows:
-        src: str = row["source"]
-        if src.strip():
-            source_dirs[row["ref_id"]] = src
-
+    source_dirs = get_node_sources(conn)
     if not source_dirs:
         return
 
-    activities = _pkg.analyze_git_activity(project_root, source_dirs)
+    activities = _pkg.analyze_git_activity(
+        project_root, source_dirs, get_part_of_containers(conn)
+    )
 
     for ref_id, activity in activities.items():
         # Read existing extra.
@@ -170,6 +167,8 @@ def _store_git_activity(
         # Merge activity data.
         extra["activity"] = {
             "level": activity.activity_level,
+            "lines_30d": activity.lines_30d,
+            "lines_90d": activity.lines_90d,
             "commits_30d": activity.commits_30d,
             "commits_90d": activity.commits_90d,
             "last_commit": activity.last_commit_date,

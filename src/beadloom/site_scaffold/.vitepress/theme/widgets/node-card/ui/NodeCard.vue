@@ -48,6 +48,27 @@ const docLinkOf = computed(() => {
 
 const edgeGroups = computed(() => edgeGroupsOf(props.node.id, props.edges));
 
+// The activity line: changed lines in 30 days and the level, which is relative
+// to the project. A node with no change in
+// its window says so in words, not as a low count. A data file written before
+// lines were counted carries commits only, and is said in commits.
+const NO_CHANGE = new Map([
+  ["quiet", "no change in 30 days"],
+  ["dormant", "no change in 90 days"],
+]);
+const activityLine = computed(() => {
+  const activity = props.node.activity;
+  if (!activity) return NOT_RECORDED;
+  const level = activity.level || "";
+  let said = NO_CHANGE.get(level);
+  if (said === undefined) {
+    said = activity.lines_30d === undefined
+      ? `${activity.commits_30d ?? 0} commits in 30 days`
+      : `${activity.lines_30d} lines changed in 30 days`;
+  }
+  return level ? `${said}, ${level}` : said;
+});
+
 const placements = computed(() =>
   Object.entries(props.node.tests?.placement || {}).sort(([a], [b]) => a.localeCompare(b))
 );
@@ -84,12 +105,7 @@ const placements = computed(() =>
         <code v-else>{{ node.source }}</code>
       </dd>
       <dt>Activity</dt>
-      <dd data-card-field="activity">
-        <template v-if="!node.activity">{{ NOT_RECORDED }}</template>
-        <template v-else>
-          {{ node.activity.commits_30d ?? 0 }} commits in 30 days<template v-if="node.activity.level">, {{ node.activity.level }}</template>
-        </template>
-      </dd>
+      <dd data-card-field="activity">{{ activityLine }}</dd>
       <dt>Debt</dt>
       <dd data-card-field="debt">
         <template v-if="node.debt === undefined">{{ NOT_RECORDED }}</template>

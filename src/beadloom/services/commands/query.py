@@ -16,6 +16,35 @@ if TYPE_CHECKING:
 from beadloom.infrastructure.repository import StaleCount
 from beadloom.services.commands._root import main
 
+#: The mark beside each activity level in ``ctx``'s markdown, busiest first.
+ACTIVITY_MARKS: dict[str, str] = {
+    "hot": "\U0001f525",
+    "warm": "☀️",
+    "cool": "\U0001f324️",
+    "quiet": "\U0001f319",
+    "dormant": "\U0001f9ca",
+}
+
+#: How a level with no change in its window is said: in words, not as a low count.
+_NO_CHANGE = {"quiet": "no change in 30 days", "dormant": "no change in 90 days"}
+
+
+def _describe_activity(activity: dict[str, Any]) -> str:
+    """The recorded activity in the node card's words (BDL-078 F-activity).
+
+    An activity recorded before changed lines were counted has no ``lines_30d``
+    and is said in commits, as it was recorded.
+    """
+    level = str(activity.get("level", "dormant"))
+    mark = ACTIVITY_MARKS.get(level, "")
+    if level in _NO_CHANGE:
+        detail = _NO_CHANGE[level]
+    elif "lines_30d" in activity:
+        detail = f"{activity['lines_30d']} lines changed in 30 days"
+    else:
+        detail = f"{activity.get('commits_30d', 0)} commits in 30 days"
+    return f"{mark} {level} ({detail})" if mark else f"{level} ({detail})"
+
 
 # beadloom:domain=context-oracle
 def _format_markdown(bundle: dict[str, object]) -> str:
@@ -78,19 +107,7 @@ def _format_markdown(bundle: dict[str, object]) -> str:
     # Activity.
     activity_info = cast("dict[str, Any] | None", focus.get("activity"))
     if activity_info is not None:
-        _activity_emojis: dict[str, str] = {
-            "hot": "\U0001f525",
-            "warm": "\u2600\ufe0f",
-            "cold": "\u2744\ufe0f",
-            "dormant": "\U0001f9ca",
-        }
-        level: str = activity_info.get("level", "dormant")
-        emoji = _activity_emojis.get(level, "")
-        commits_30d = activity_info.get("commits_30d", 0)
-        if level == "dormant":
-            lines.append(f"Activity: {emoji} dormant")
-        else:
-            lines.append(f"Activity: {emoji} {level} ({commits_30d} commits/30d)")
+        lines.append(f"Activity: {_describe_activity(activity_info)}")
     lines.append("")
 
     # Graph.

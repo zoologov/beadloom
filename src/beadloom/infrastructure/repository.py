@@ -146,6 +146,18 @@ def get_part_of_children(conn: sqlite3.Connection, ref_id: str) -> list[NodeRow]
     return [_node(r) for r in rows]
 
 
+def get_part_of_containers(conn: sqlite3.Connection) -> dict[str, list[str]]:
+    """Return ``{ref_id: [the nodes it is part_of]}`` for every node with a container."""
+    rows = conn.execute(
+        "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'part_of' "
+        "ORDER BY src_ref_id, dst_ref_id"
+    ).fetchall()
+    containers: dict[str, list[str]] = {}
+    for row in rows:
+        containers.setdefault(str(row["src_ref_id"]), []).append(str(row["dst_ref_id"]))
+    return containers
+
+
 def get_outgoing_edges(conn: sqlite3.Connection, ref_id: str) -> list[EdgeRow]:
     """Return edges leaving *ref_id* ordered by ``(kind, dst_ref_id)``."""
     rows = conn.execute(

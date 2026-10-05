@@ -18,7 +18,12 @@ from beadloom.context_oracle.test_binding import (
     describe_test_file_recognition,
     describe_unplaced,
 )
-from beadloom.infrastructure.repository import count_test_files_by_placement, read_test_layout
+from beadloom.infrastructure.repository import (
+    count_test_files_by_placement,
+    get_node_sources,
+    get_part_of_containers,
+    read_test_layout,
+)
 
 if TYPE_CHECKING:
     import sqlite3
@@ -160,7 +165,11 @@ def _count_dormant(
     conn: sqlite3.Connection,
     project_root: Path,
 ) -> tuple[int, list[str]]:
-    """Count dormant domains (no git activity in 90 days).
+    """Count dormant nodes (no git activity in 90 days).
+
+    A box is read with its ``part_of`` parts, as the node card reads it
+    (BDL-078 F-activity): a box whose parts changed is not dormant because its
+    own files stood still.
 
     Returns (count, list_of_ref_ids).
     """
@@ -169,19 +178,14 @@ def _count_dormant(
     except ImportError:
         return 0, []
 
-    # Build source_dirs from nodes
-    nodes = conn.execute(
-        "SELECT ref_id, source FROM nodes WHERE source IS NOT NULL"
-    ).fetchall()
-    source_dirs: dict[str, str] = {}
-    for node in nodes:
-        source_dirs[str(node[0])] = str(node[1])
-
+    source_dirs = get_node_sources(conn)
     if not source_dirs:
         return 0, []
 
     try:
-        activities = analyze_git_activity(project_root, source_dirs)
+        activities = analyze_git_activity(
+            project_root, source_dirs, get_part_of_containers(conn)
+        )
     except (OSError, ValueError):
         return 0, []
 

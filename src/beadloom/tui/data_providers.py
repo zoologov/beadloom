@@ -309,8 +309,10 @@ class ActivityDataProvider:
             # Through the facade, not `infrastructure.git_activity` directly: the
             # `tui-no-direct-infra` boundary forbids it — and, since BDL-UX #150,
             # actually says so.
+            # With the part_of containers, so a box reads with its parts as the
+            # node card reads it (BDL-078 F-activity).
             self._activities = graph_reads.analyze_git_activity(
-                self.project_root, source_dirs
+                self.project_root, source_dirs, graph_reads.get_part_of_containers(self.conn)
             )
         except (OSError, ValueError) as exc:
             logger.warning("Git activity analysis failed: %s", exc)
