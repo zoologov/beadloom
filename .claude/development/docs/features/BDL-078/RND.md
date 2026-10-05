@@ -35,3 +35,17 @@ Diagnosis confirmed on the first prototype (V0): medoid lanes 0.8 px apart at th
 Adopter-sized (36 boxes, 100 lines): V0 174 head overlaps; V1 38; V2/V5 2 (one line fell back to its medoid), routing 100 ms; V3 109. The router works on a grid of tracks about 8 px apart, boxes and outside titles as obstacles, a straight run into each box, bends, crossings and running beside another line priced; lines into one box may share their last run and one arrowhead. Boxes never move.
 
 Open: with one box open every variant is poor (about 100 lines from small nodes to closed boxes) → owner's ruling 9. The adopter-sized "fit" does not fit (zoom clamps at 0.02; boxes about 35×10 px) → deferred (ruling 11). A top-level leaf node has no readable title at the overview → in scope.
+
+## Probe: an open box stays calm (V6, 2026-10-04)
+
+Rules: an edge is drawn between siblings at the lowest box holding both ends, as itself only when both ends are those children and neither is a box; a pair between top-level ends always keeps the overview plan's route and port, open or closed; a node's outward edges are a "+N" chip at rest and appear on hover or selection (to a closed box: one line; to an open one: the edge on its ELK route), on top with a casing; a walk draws only its own edges as themselves; own lines at a leaf share an arriving and a leaving port (one head).
+
+| State (this repository) | lines in view | head overlaps | min gap, box-level px | crowded px | max heads per side | re-plan / redraw ms |
+|---|---|---|---|---|---|---|
+| one box open, V5 | 114 | 10 | 0.8 | 28,740 | 13 | 5.4 / 8.1 |
+| one box open, V6 | 43 | 0 | 22.8 | 1,222 | 3 | 0.3 / 1.9 |
+| two boxes open, V5 → V6 | 204 → 110 | 28 → 0 | 0.8 → 14.1 | 42,746 → 1,846 | 14 → 3 | — |
+
+Adopter-sized, one box open: head overlaps 29 → 0, crowded 11,416 → 388. A full hover: median 8.6 ms here, 9.8 ms at adopter size. Opening a box moves no box-level line or pill.
+
+Still poor in the probe: inner wiring at the 600 px opening threshold (nodes about 55×12 px) → ruling 12; arrows ending where an outside title plate was → lines must end on the box border, the plate only an obstacle; a hub's own lines get a double head (use the node's bus port); the faded box-level line stays under a hovered node's own lines.

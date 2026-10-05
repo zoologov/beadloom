@@ -44,8 +44,9 @@ or a crash in a path adopters use (a dev server, a node id, a manifest change, f
       box, parallel lines at least 5 px apart, no line under a title or through a box, every box
       and every top-level node titled readably (on this repository's graph: 0 head overlaps,
       today 12; minimum gap 7 px, today 0.8).
-- [ ] With one box open, its outward edges stay aggregated at the box; a node's own outward edges
-      show on hover or selection.
+- [ ] With one box open, its outward edges stay aggregated at the box and no box-level line or
+      pill moves; a node's own outward edges show on hover or selection, and a "+N" mark says how
+      many there are. A box opens only when its nodes are readable (about 24 px tall).
 - [ ] Every arrowhead is whole: a constant size on screen, with a straight run before its box at
       least as long as the head.
 - [ ] A followed line (hover, a selection's walk) is visibly on top of what it crosses; there are
@@ -63,7 +64,7 @@ or a crash in a path adopters use (a dev server, a node id, a manifest change, f
 
 ## Non-goals
 
-- Changing the layout, the map's level rule, or the bundling rules of BDL-077.
+- Changing the layout or the bundling rules of BDL-077. (The map's opening rule and the rule for when an edge is drawn as itself do change: rulings 9 and 12.)
 - Replacing Cytoscape.
 - New viewer features beyond zoom-to-selection.
 
@@ -92,6 +93,13 @@ or a crash in a path adopters use (a dev server, a node id, a manifest change, f
 11. **Deferred:** an overview for projects whose top level does not fit the canvas (boxes of
     about 35×10 px) — a minimum box size or another grouping tier — waits for a real large
     project.
+12. **A box opens when its nodes are readable** — a node at least about 24 px tall on screen —
+    not when the box is 600 px wide. This replaces BDL-077's threshold (probe: at 600 px the
+    nodes are about 55×12 px, unreadable, and their wiring fuses).
+13. **Edges from a node to its own container stay loops, drawn** (BDL-077's ruling stands); the
+    owner will look at them at one thin weight and may remove them afterwards.
+14. **A node inside an open box carries a "+N" mark** for its outward edges that are not drawn at
+    rest.
 
 ## User Stories
 
