@@ -14,7 +14,10 @@
 //
 // A pill keeps one size on screen. It is placed once per step of the map's scale
 // (`model/canvasMap.js`, `scaleAt`) and drawn at that place at any zoom within
-// the step, so it is given the room it takes at the step's largest.
+// the step, so it is given the room it takes at the step's largest. Nodes,
+// titles, arrowheads, pills and lines are filed in a grid of buckets, so a point
+// tried is compared with what lies near it only: with many boxes open thousands
+// of lines are drawn.
 //
 // Every function here is pure: lines, rectangles and a measure in, places out.
 
@@ -34,7 +37,36 @@ const PRICE = Object.freeze({ offMiddle: 12, corner: 14, covers: 9 });
 /** A pill placed at one step of the map's scale is drawn up to this much larger within the step. */
 const STEP_ROOM = Math.sqrt(1.25);
 
+/** The side of the buckets things are filed in, in pixels: a few pills across. */
+const BUCKET_PX = 64;
+
 const overlaps = (a, b, gap = 0) => a.x1 - gap < b.x2 && a.x2 + gap > b.x1 && a.y1 - gap < b.y2 && a.y2 + gap > b.y1;
+
+/** A grid of buckets that things with a rectangle are filed in: `{ add(rect, item), near(rect) }`, `near` giving the items of every bucket the rectangle meets. */
+function bucketsOf() {
+  const buckets = new Map();
+  const each = (r, visit) => {
+    for (let x = Math.floor(r.x1 / BUCKET_PX); x <= Math.floor(r.x2 / BUCKET_PX); x += 1) {
+      for (let y = Math.floor(r.y1 / BUCKET_PX); y <= Math.floor(r.y2 / BUCKET_PX); y += 1) visit(`${x},${y}`);
+    }
+  };
+  return {
+    add(rect, item) {
+      each(rect, (key) => {
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(item);
+      });
+    },
+    near(rect) {
+      const found = [];
+      each(rect, (key) => {
+        const items = buckets.get(key);
+        if (items) for (const item of items) found.push(item);
+      });
+      return found;
+    },
+  };
+}
 
 /** Whether segment `a`-`b` passes through rectangle `r` (Liang-Barsky). */
 function crosses(a, b, r) {
@@ -54,7 +86,7 @@ function crosses(a, b, r) {
 }
 
 /** The best free point for a pill `size` (pixels) along `line`, or null. */
-function bestPointOf(line, size, { placed, blocked, others }) {
+function bestPointOf(line, size, { placed, blocked, segments }) {
   const points = line.points;
   const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));
   const total = lengths.reduce((sum, length) => sum + length, 0);
@@ -69,12 +101,15 @@ function bestPointOf(line, size, { placed, blocked, others }) {
       if (where < room[0] + reach || where > total - room[1] - reach) continue;
       const [x, y] = [a.x + ((b.x - a.x) * s) / lengths[i], a.y + ((b.y - a.y) * s) / lengths[i]];
       const rect = { x1: x - size.width / 2, y1: y - size.height / 2, x2: x + size.width / 2, y2: y + size.height / 2 };
-      if (placed.some((other) => overlaps(rect, other.rect, PILL_MARKS.gap)) || blocked.some((r) => overlaps(rect, r))) continue;
+      const roomy = { x1: rect.x1 - PILL_MARKS.gap, y1: rect.y1 - PILL_MARKS.gap, x2: rect.x2 + PILL_MARKS.gap, y2: rect.y2 + PILL_MARKS.gap };
+      if (placed.near(roomy).some((other) => overlaps(rect, other, PILL_MARKS.gap)) || blocked.near(rect).some((r) => overlaps(rect, r))) continue;
       let price = (Math.abs(where - total / 2) / (total || 1)) * PRICE.offMiddle;
       if (s < reach || lengths[i] - s < reach) price += PRICE.corner;
       if (best && price >= best.price) continue;
       const grown = { x1: rect.x1 - COVER_PX, y1: rect.y1 - COVER_PX, x2: rect.x2 + COVER_PX, y2: rect.y2 + COVER_PX };
-      for (const other of others) if (other.id !== line.id && other.segments.some(([p, q]) => crosses(p, q, grown))) price += PRICE.covers;
+      const covered = new Set();
+      for (const segment of segments.near(grown)) if (segment.id !== line.id && crosses(segment.a, segment.b, grown)) covered.add(segment.id);
+      price += covered.size * PRICE.covers;
       if (!best || price < best.price) best = { price, x, y, rect };
     }
     along += lengths[i];
@@ -97,11 +132,16 @@ function bestPointOf(line, size, { placed, blocked, others }) {
 export function pillPlacesOf({ lines, drawn, blocked, scale, measure }) {
   const inPixels = (p) => ({ x: p.x / scale, y: p.y / scale });
   const rectInPixels = (r) => ({ x1: r.x1 / scale, y1: r.y1 / scale, x2: r.x2 / scale, y2: r.y2 / scale });
-  const others = drawn.map(({ id, points }) => {
+  const context = { placed: bucketsOf(), blocked: bucketsOf(), segments: bucketsOf() };
+  for (const rect of blocked.map(rectInPixels)) context.blocked.add(rect, rect);
+  for (const { id, points } of drawn) {
     const pixels = points.map(inPixels);
-    return { id, segments: pixels.slice(1).map((q, k) => [pixels[k], q]) };
-  });
-  const context = { placed: [], blocked: blocked.map(rectInPixels), others };
+    for (let k = 1; k < pixels.length; k += 1) {
+      const [a, b] = [pixels[k - 1], pixels[k]];
+      context.segments.add({ x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y) }, { id, a, b });
+    }
+  }
+  const pills = [];
   const dropped = [];
   const order = lines
     .filter((line) => line.weight >= PILL_MIN_WEIGHT)
@@ -114,8 +154,8 @@ export function pillPlacesOf({ lines, drawn, blocked, scale, measure }) {
       dropped.push(line.id);
       continue;
     }
-    const pill = { id: line.id, text: line.text, x: best.x * scale, y: best.y * scale, width, height: PILL_MARKS.height };
-    context.placed.push({ rect: best.rect, pill });
+    pills.push({ id: line.id, text: line.text, x: best.x * scale, y: best.y * scale, width, height: PILL_MARKS.height });
+    context.placed.add(best.rect, best.rect);
   }
-  return { placed: context.placed.map((entry) => entry.pill), dropped: dropped.sort() };
+  return { placed: pills, dropped: dropped.sort() };
 }

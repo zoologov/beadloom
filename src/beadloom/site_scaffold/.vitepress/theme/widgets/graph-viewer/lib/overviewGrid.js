@@ -5,9 +5,10 @@
 // whole drawing, at least a pitch apart, one through the middle of every box
 // that has room for it and the rest spread evenly between, so two lines on
 // neighbouring tracks are always at least a pitch apart. The one exception is a
-// track forced through the middle of a box too small for any other, and two
-// tracks nearer than a lane carry one line between them. A line moves from one
-// crossing of two tracks (a cell) to the next.
+// track forced through the middle of a box too small for any other, and tracks
+// nearer each other than a lane carry one line between them, however many such
+// tracks lie together. A line moves from one crossing of two tracks (a cell) to
+// the next.
 //
 // Each box is an obstacle: no line enters it or the half pitch around it. Around
 // it lies its halo, a band on each side, at most `halo` deep and under half the
@@ -34,7 +35,7 @@ const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 export const DX = Object.freeze([0, 1, 0, -1]);
 export const DY = Object.freeze([-1, 0, 1, 0]);
 
-/** A track pair closer than this share of a pitch carries one line between them. */
+/** Tracks closer than this share of a pitch carry one line between them. */
 const TIGHT_SHARE = 0.6;
 /** Two tracks through box middles closer than this share of a pitch are one. */
 const MIDDLE_SHARE = 1;
@@ -120,13 +121,16 @@ function extentOf(obstacles) {
  * `marks` (`{ pitch, halo, run, corner }`); `degree(b)` is how many lines box
  * `b` takes, so the busiest boxes get the first tracks through their middles.
  *
- * `{ xs, ys, nx, ny, interior, covered, band, bandAxis, band2, band2Axis, crowded,
- * tight, ports, stem, cellAt }`: the tracks; per cell, the box whose margin it is
- * in (-1 for none), whether a plate covers it, the one or two boxes whose
+ * `{ xs, ys, nx, ny, interior, inside, covered, band, bandAxis, band2, band2Axis,
+ * crowded, near, ports, lead, stem, cellAt }`: the tracks; per cell, the box whose
+ * margin it is in (-1 for none) and whether it lies in the box itself, whether a
+ * plate covers it, the one or two boxes whose
  * halo it is in and the axis a line of that box crosses it along (2 for none),
- * and whether it is in three halos; per track, whether it is nearer its next than
- * a lane; each box's ports `[{ cell, dir, at, lead, off, side, slot }]`; per
- * cell, the box whose stem it is on; and the cell nearest a point.
+ * and whether it is in three halos; per axis and track, the first and the last
+ * track nearer it than a lane (`[low, high]`); each box's ports `[{ cell, dir,
+ * at, lead, off, side, slot }]`; per cell of a box's margin, the port cell
+ * whose way in it lies on (-1 for none), where an arriving line's arrowhead is;
+ * per cell, the box whose stem it is on; and the cell nearest a point.
  */
 export function gridOf(boxes, plates, marks, degree) {
   const { pitch } = marks;
@@ -140,9 +144,19 @@ export function gridOf(boxes, plates, marks, degree) {
   const ny = ys.length;
   const cells = nx * ny;
   const half = pitch / 2;
-  const tightOf = (tracks) => Uint8Array.from(tracks, (value, i) => (i + 1 < tracks.length && tracks[i + 1] - value < TIGHT_SHARE * pitch ? 1 : 0));
+  const nearOf = (tracks) => {
+    const [low, high] = [new Int32Array(tracks.length), new Int32Array(tracks.length)];
+    for (let i = 0; i < tracks.length; i += 1) {
+      let [a, b] = [i, i];
+      while (a > 0 && tracks[i] - tracks[a - 1] < TIGHT_SHARE * pitch) a -= 1;
+      while (b + 1 < tracks.length && tracks[b + 1] - tracks[i] < TIGHT_SHARE * pitch) b += 1;
+      [low[i], high[i]] = [a, b];
+    }
+    return [low, high];
+  };
 
   const interior = new Int32Array(cells).fill(-1);
+  const inside = new Uint8Array(cells);
   const covered = new Uint8Array(cells);
   const band = new Int32Array(cells).fill(-1);
   const bandAxis = new Uint8Array(cells);
@@ -166,6 +180,7 @@ export function gridOf(boxes, plates, marks, degree) {
         if (inX && inY) {
           if (isPlate) covered[c] = 1;
           else if (interior[c] < 0) interior[c] = b;
+          if (!isPlate && x >= box.x1 && x <= box.x2 && y >= box.y1 && y <= box.y2) inside[c] = 1;
           continue;
         }
         if (isPlate || (!inX && !inY)) continue;
@@ -183,7 +198,8 @@ export function gridOf(boxes, plates, marks, degree) {
     }
   });
 
-  const ports = boxes.map((box, b) => portsOf(box, b, { xs, ys, nx, ny, interior }));
+  const lead = new Int32Array(cells).fill(-1);
+  const ports = boxes.map((box, b) => portsOf(box, b, { xs, ys, nx, ny, interior }, lead));
   const stem = new Int32Array(cells).fill(-1);
   const reachNeeded = marks.run - marks.corner / 2;
   ports.forEach((list, b) => {
@@ -201,11 +217,15 @@ export function gridOf(boxes, plates, marks, degree) {
   });
 
   const cellAt = (x, y) => [clamp(lowerBound(xs, x - half), 0, nx - 1), clamp(lowerBound(ys, y - half), 0, ny - 1)];
-  return { xs, ys, nx, ny, interior, covered, band, bandAxis, band2, band2Axis, crowded, tight: [tightOf(xs), tightOf(ys)], ports, stem, cellAt };
+  return { xs, ys, nx, ny, interior, inside, covered, band, bandAxis, band2, band2Axis, crowded, near: [nearOf(xs), nearOf(ys)], ports, lead, stem, cellAt };
 }
 
-/** The ports of `box`, obstacle `b` of `grid`: on each track through a side, the first cell outside it. */
-function portsOf(box, b, { xs, ys, nx, ny, interior }) {
+/**
+ * The ports of `box`, obstacle `b` of `grid`: on each track through a side, the
+ * first cell outside it. Each margin cell between the side and a port is noted in
+ * `lead` with the port's cell.
+ */
+function portsOf(box, b, { xs, ys, nx, ny, interior }, lead) {
   const ports = [];
   const [portX1, portX2] = sideRange(box, 0);
   const [portY1, portY2] = sideRange(box, 1);
@@ -213,8 +233,13 @@ function portsOf(box, b, { xs, ys, nx, ny, interior }) {
   for (let i = lowerBound(xs, portX1 - EPS); i < nx && xs[i] <= portX2 + EPS; i += 1) {
     for (const dir of [0, 2]) {
       let j = dir === 0 ? lowerBound(ys, box.y1) - 1 : lowerBound(ys, box.y2 + EPS);
-      while (j >= 0 && j < ny && interior[j * nx + i] === b) j += DY[dir];
+      const walked = [];
+      while (j >= 0 && j < ny && interior[j * nx + i] === b) {
+        walked.push(j * nx + i);
+        j += DY[dir];
+      }
       if (j < 0 || j >= ny) continue;
+      for (const cell of walked) lead[cell] = j * nx + i;
       const at = { x: xs[i], y: dir === 0 ? box.y1 : box.y2 };
       ports.push({ cell: j * nx + i, dir, at, lead: Math.abs(ys[j] - at.y), off: Math.abs(xs[i] - centre.x), side: dir + 4 * b, slot: i });
     }
@@ -222,8 +247,13 @@ function portsOf(box, b, { xs, ys, nx, ny, interior }) {
   for (let j = lowerBound(ys, portY1 - EPS); j < ny && ys[j] <= portY2 + EPS; j += 1) {
     for (const dir of [1, 3]) {
       let i = dir === 3 ? lowerBound(xs, box.x1) - 1 : lowerBound(xs, box.x2 + EPS);
-      while (i >= 0 && i < nx && interior[j * nx + i] === b) i += DX[dir];
+      const walked = [];
+      while (i >= 0 && i < nx && interior[j * nx + i] === b) {
+        walked.push(j * nx + i);
+        i += DX[dir];
+      }
       if (i < 0 || i >= nx) continue;
+      for (const cell of walked) lead[cell] = j * nx + i;
       const at = { x: dir === 3 ? box.x1 : box.x2, y: ys[j] };
       ports.push({ cell: j * nx + i, dir, at, lead: Math.abs(xs[i] - at.x), off: Math.abs(ys[j] - centre.y), side: dir + 4 * b, slot: j });
     }

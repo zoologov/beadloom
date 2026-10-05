@@ -155,8 +155,11 @@ export function headsUnderLines(arrivals, segments) {
 /**
  * The smallest distance, in pixels, between two lines that run beside each
  * other, over every sample of `looks`; lines closer than `MERGED_PX` are drawn as
- * one and are a shared run, not a gap. `{ minimum, closest }`, `closest` naming
- * the two lines and where.
+ * one and are a shared run, not a gap. Two runs are beside each other where they
+ * overlap along their length: a sample of one has a sample of the other within
+ * half a sample's spacing along it. Two runs that only meet end to end, as at a
+ * corner where one line turns one way and another the other, are not.
+ * `{ minimum, closest }`, `closest` naming the two lines and where.
  */
 export function narrowestGap(looks, view) {
   const samples = [];
@@ -186,7 +189,7 @@ export function narrowestGap(looks, view) {
         for (const o of grid.get(`${gx},${gy}`) || []) {
           if (o.line === s.line || Math.abs(o.t.x * s.t.x + o.t.y * s.t.y) < PARALLEL) continue;
           const [dx, dy] = [o.x - s.x, o.y - s.y];
-          if (Math.abs(dx * s.t.x + dy * s.t.y) > SAMPLE_PX) continue;
+          if (Math.abs(dx * s.t.x + dy * s.t.y) > SAMPLE_PX / 2) continue;
           const across = Math.abs(-dx * s.t.y + dy * s.t.x);
           if (across < MERGED_PX || across >= minimum) continue;
           minimum = across;

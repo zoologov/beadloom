@@ -154,14 +154,14 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
   /**
    * Give the drawn node `node` the title it is drawn with now: a closed box's, or
    * a top-level node's while it reads larger. A top-level node's title is laid
-   * out at the overview plan's scale whenever the view is zoomed out past it, so
-   * it keeps the room the plan's routes left it and shrinks with its box, rather
-   * than growing onto a plate the routes run under.
+   * out at the scale the overview's plan decided titles at whenever the view is
+   * zoomed out past it, so it keeps the room the plan's routes left it and
+   * shrinks with its box, rather than growing onto a plate the routes run under.
    */
   function dressTitle(node) {
     const id = node.id();
     const mapped = node.hasClass(COLLAPSED) || (planner.isTop(id) && !tree.boxes.has(id));
-    const planned = planner.report().unit;
+    const planned = planner.titleScale();
     const at = planner.isTop(id) && planned ? Math.min(scale, planned) : scale;
     const title = mapped ? titleLookOf(id, at, hiddenAt.get(id) || 0) : null;
     if (title) node.data({ [MAP_TITLE]: { ...title, side: planner.plateSideOf(id), scale: at }, [MAP_SCALE]: scale });

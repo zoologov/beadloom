@@ -1,4 +1,4 @@
-// The viewer stays as fast as it was: a frame at the whole-graph fit and at zoom 1, and the first drawing.
+// The viewer stays as fast as it was: a frame at the whole-graph fit and at zoom 1, the first drawing, and planning the overview.
 //
 // Before the overview drew a map, the whole-graph fit drew every node and every
 // edge. Measured without a GPU on an Apple M1 Max (headless Chromium, the room
@@ -41,6 +41,16 @@ const FRAME_MS = { local: 25, ci: 33.4 };
  * that takes twice as long as the local one, not one 15% slower.
  */
 const FIRST_DRAWING_MS = { local: 7200, ci: 15000 };
+/**
+ * The longest the overview's routes may take to plan, at the first drawing, in
+ * ms, on this portal's graph and on an adopter-sized one (RFC V2: 50 and 250
+ * locally). Measured on an Apple M1 Max, no GPU, the median of three openings:
+ * 16 ms on this repository's graph and 121 ms on its adopter-sized one, and 223
+ * ms on the adopter-sized graph built from the TypeScript fixture's layers, the
+ * slowest of the stacks' (it holds a box no route reaches). A build server is
+ * unmeasured: its bound catches a plan four times slower than the local one.
+ */
+const PLAN_MS = { own: { local: 50, ci: 200 }, adopter: { local: 250, ci: 1000 } };
 
 /** How many pointer moves a pan makes, one per animation frame. */
 const PAN_MOVES = 150;
@@ -59,8 +69,8 @@ const ZOOM_STEPS = 30;
 
 /** The graphs a frame is timed on: this portal's and an adopter-sized one. */
 const GRAPHS = [
-  { name: "this portal's architecture graph", tag: [], data: (served) => served },
-  { name: "an adopter-sized architecture graph", tag: [ADOPTER_SIZED], data: (served) => adopterSizedGraph(served) },
+  { name: "this portal's architecture graph", key: "own", tag: [], data: (served) => served },
+  { name: "an adopter-sized architecture graph", key: "adopter", tag: [ADOPTER_SIZED], data: (served) => adopterSizedGraph(served) },
 ];
 
 const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
@@ -164,6 +174,23 @@ for (const graph of GRAPHS) {
 
     expect(atFit, "a frame at the whole-graph fit, in ms").toBeLessThanOrEqual(bound);
     expect(atOne, "a frame at zoom 1, in ms").toBeLessThanOrEqual(bound);
+  });
+}
+
+for (const graph of GRAPHS) {
+  test(`on ${graph.name} the overview's routes are planned within the bound for this environment`, { tag: graph.tag }, async ({ page, request }) => {
+    const bound = boundHere(PLAN_MS[graph.key]);
+    const data = graph.data(await architectureData(request));
+    // Each opening plans afresh, as a reader's first drawing does; the median is held.
+    const plans = [];
+    for (let opening = 0; opening < OPENINGS; opening += 1) {
+      await openOver(page, data);
+      plans.push((await viewer(page, "overviewPlan")).ms);
+    }
+    const planned = median(plans);
+    report(`planning the overview, the median of ${plans.map((ms) => ms.toFixed(0)).join(", ")}:`, planned, bound);
+
+    expect(planned, "planning the overview, in ms").toBeLessThanOrEqual(bound);
   });
 }
 

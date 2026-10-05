@@ -146,6 +146,8 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
       if (!pair.ends.every((id) => top.has(id))) return null;
       return plan.paths.get(pair.name) || (plan.failed.includes(pair.name) ? null : extraRouteOf(pair));
     },
+    /** The scale the plan decided its titles and plates at, or null before the first plan. */
+    titleScale: () => plan.unit,
     /** What the last plan was: `{ ms, unit, routed, failed }`. */
     report: () => ({ ms: plan.ms, unit: plan.unit, routed: [...plan.paths.keys()].sort(), failed: [...plan.failed] }),
   };
