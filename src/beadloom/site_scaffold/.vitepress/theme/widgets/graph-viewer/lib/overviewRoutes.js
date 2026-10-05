@@ -20,7 +20,9 @@
 // and agree on having an arrowhead there may share their last run and end in one
 // port, so they end in one arrowhead (`heads.js`), and a line with a head never
 // shares its last run with one without. Lines that reach a box separately stay a
-// track apart. No box moves; a line nothing can route keeps no route here, and
+// track apart. A line with no corner at all is accepted only when it is long
+// enough for the arrowheads it carries, so two boxes nearer than that are joined
+// around a corner instead. No box moves; a line nothing can route keeps no route here, and
 // its caller draws its medoid instead.
 //
 // Everything here is pure and deterministic for its input: boxes, plates, pairs
@@ -31,9 +33,10 @@ import { DX, DY, EPS, gridOf } from "./overviewGrid.js";
 /**
  * What the overview's lines measure on screen, in pixels: the pitch of the
  * tracks, the deepest a halo reaches, the straight run before a box (an
- * arrowhead, a rounded corner and a little room), and a corner's radius.
+ * arrowhead, a rounded corner and a little room), a corner's radius, an
+ * arrowhead's length, and the line left between two arrowheads of one straight line.
  */
-export const OVERVIEW_MARKS = Object.freeze({ pitch: 8, halo: 14, run: 15, corner: 6 });
+export const OVERVIEW_MARKS = Object.freeze({ pitch: 8, halo: 14, run: 15, corner: 6, head: 6, between: 2 });
 
 /** What a line costs, in pixels of its length: a bend, a crossing, a run beside another line, a shared run, a port shared or crowded, a port off its side's middle, a cell under a plate. */
 const COST = Object.freeze({ bend: 30, cross: 10, beside: 0.3, share: 2, shareOnce: 60, portBeside: 35, offCentre: 0.12, underPlate: 1000 });
@@ -129,7 +132,7 @@ function spanOf(a, b) {
  * and counts): `{ route, mark }`, with the cells each line occupies kept between
  * calls. `fixed` are the polylines of lines drawn as themselves, in pixels.
  */
-function routerOn(grid, pairs, fixed) {
+function routerOn(grid, pairs, fixed, marks) {
   const { xs, ys, nx, ny, interior, covered, band, bandAxis, band2, band2Axis, crowded, tight, ports, stem } = grid;
   const cells = nx * ny;
   // Per axis: the first line through a cell (1-based; FIXED for a fixed line) and how many; where a line bends.
@@ -150,6 +153,8 @@ function routerOn(grid, pairs, fixed) {
   const done = new Uint32Array(states);
   const goalSeen = new Uint32Array(states);
   const goalCost = new Float64Array(states);
+  // Whether the best way into a state has turned: a straight line must be long enough for its arrowheads.
+  const turned = new Uint8Array(states);
   let stamp = 0;
 
   function route(e) {
@@ -218,6 +223,16 @@ function routerOn(grid, pairs, fixed) {
       const dy = Math.max(target.y1 - y, 0, y - target.y2);
       return dx + dy + bendsLeft(dx, dy, x < target.x1 ? 1 : 3, y < target.y1 ? 2 : 0, dir) * COST.bend;
     };
+    // How long a line with no corner must be: an arrowhead at each end its edges arrive at, and a little line between two.
+    const heads = (headAt(e, a) ? 1 : 0) + (headAt(e, b) ? 1 : 0);
+    const shortest = heads * marks.head + (heads > 1 ? marks.between : 0);
+    /** Whether the straight way into goal state `state` is too short for its arrowheads. */
+    const tooShort = (state) => {
+      let first = state;
+      while (from[first] >= 0) first = from[first];
+      const [start, goal] = [starts.get(first), goals.get(state)];
+      return Math.hypot(goal.at.x - start.at.x, goal.at.y - start.at.y) < shortest;
+    };
     const heap = new Heap();
     const starts = new Map();
     for (const port of ports[a]) {
@@ -230,6 +245,7 @@ function routerOn(grid, pairs, fixed) {
       seen[state] = stamp;
       best[state] = g;
       from[state] = -1;
+      turned[state] = 0;
       starts.set(state, port);
       heap.push(g + heuristic(port.cell, port.dir), state);
     }
@@ -239,6 +255,7 @@ function routerOn(grid, pairs, fixed) {
       if (done[state] === stamp) continue;
       done[state] = stamp;
       if (goalSeen[state] === stamp) {
+        if (!turned[state] && tooShort(state)) continue;
         found = state;
         break;
       }
@@ -277,6 +294,7 @@ function routerOn(grid, pairs, fixed) {
         seen[s2] = stamp;
         best[s2] = g2;
         from[s2] = state;
+        turned[s2] = turned[state] || turn !== 0 ? 1 : 0;
         heap.push(g2 + heuristic(c2, d2), s2);
       }
     }
@@ -384,7 +402,7 @@ export function planOverview(input, marks = OVERVIEW_MARKS) {
   for (const pair of pairs) for (const b of [pair.a, pair.b]) degree.set(b, (degree.get(b) || 0) + 1);
   const grid = { ...gridOf(boxes, plates, marks, (b) => degree.get(b) || 0), boxes };
   const fixed = (input.fixed || []).map((path) => path.map((p) => ({ x: p.x / unit, y: p.y / unit })));
-  const router = routerOn(grid, pairs, fixed);
+  const router = routerOn(grid, pairs, fixed, marks);
   const byName = (p, q) => (pairs[p].name < pairs[q].name ? -1 : pairs[p].name > pairs[q].name ? 1 : 0);
   const order = pairs
     .map((_, e) => e)

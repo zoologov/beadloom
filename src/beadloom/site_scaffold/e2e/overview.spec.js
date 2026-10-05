@@ -45,7 +45,7 @@ import { architectureData, openArchitecture, viewer, withAncestors } from "./sup
 
 /** The share of the lines that carry more than one edge that have a pill: a short or crowded line may have none. */
 const MOST_PILLS = 0.75;
-/** How many lines whose pill found no place a case hovers, to read their counts in the note. */
+/** How many lines a case hovers to read their counts in the note, those whose pill found no place first. */
 const HOVERED_DROPPED = 2;
 /** Lines that run beside each other keep at least this far apart at the fit, in pixels. */
 const GAP_PX = 5;
@@ -88,21 +88,28 @@ const GRAPHS = [
   },
 ];
 
-/** Room around the pointer, in pixels, that no other line, node or title may enter for a line to be hovered there. */
-const HOVER_CLEAR_PX = 6;
+/**
+ * Room around the pointer, in pixels, that no other line, node or title may
+ * enter for a line to be hovered there: Cytoscape takes an edge within 8 px of
+ * the pointer, and half a line more.
+ */
+const HOVER_CLEAR_PX = 12;
+/** How many points of a line a case tries the pointer on before it gives the line up. */
+const HOVER_TRIES = 6;
 
 /**
- * A point of `look`'s route on the canvas, in pixels, inside the canvas `size`
+ * Points of `look`'s route on the canvas, in pixels, inside the canvas `size`
  * and at least `HOVER_CLEAR_PX` from every one of `segments` (other lines') and
- * `rects` (nodes and titles), or null when the line has none.
+ * `rects` (nodes and titles): at most `HOVER_TRIES`, spread along the line.
  */
-function clearPointOn(look, segments, rects, view, size) {
+function clearPointsOn(look, segments, rects, view, size) {
   const points = look.points.map((p) => ({ x: p.x * view.zoom + view.pan.x, y: p.y * view.zoom + view.pan.y }));
   const near = (p, a, b) => {
     const [dx, dy] = [b.x - a.x, b.y - a.y];
     const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
     return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy) < HOVER_CLEAR_PX;
   };
+  const found = [];
   for (let k = 1; k < points.length; k += 1) {
     const [a, b] = [points[k - 1], points[k]];
     const length = Math.hypot(b.x - a.x, b.y - a.y);
@@ -111,10 +118,11 @@ function clearPointOn(look, segments, rects, view, size) {
       if (p.x < HOVER_CLEAR_PX || p.y < HOVER_CLEAR_PX || p.x > size.width - HOVER_CLEAR_PX || p.y > size.height - HOVER_CLEAR_PX) continue;
       if (segments.some((seg) => near(p, seg.a, seg.b))) continue;
       if (rects.some((r) => p.x > r.x1 - HOVER_CLEAR_PX && p.x < r.x2 + HOVER_CLEAR_PX && p.y > r.y1 - HOVER_CLEAR_PX && p.y < r.y2 + HOVER_CLEAR_PX)) continue;
-      return p;
+      found.push(p);
     }
   }
-  return null;
+  const every = Math.max(1, Math.floor(found.length / HOVER_TRIES));
+  return found.filter((_, i) => i % every === 0).slice(0, HOVER_TRIES);
 }
 
 /**
@@ -248,7 +256,8 @@ for (const graph of GRAPHS) {
       // Pills are drawn above every line, the followed ones included.
       expect(await viewer(page, "overlayLayers")).toEqual(["followed", "pills"]);
 
-      // A count with no pill shows while the pointer is on its line, at a point clear of everything else.
+      // A count shows while the pointer is on its line, in the note: a line without a pill is tried
+      // first, then the others, at points clear of everything else; one at least is read.
       await page.getByTestId("graph-canvas").scrollIntoViewIfNeeded();
       await twoFrames(page);
       const canvas = await page.getByTestId("graph-canvas").boundingBox();
@@ -257,19 +266,29 @@ for (const graph of GRAPHS) {
       const everyTitle = await viewer(page, "titles");
       const clearOf = [...rects.map(([, r]) => r), ...everyTitle];
       const hovered = [];
-      for (const id of dropped) {
+      for (const id of [...dropped, ...lines.map((e) => e.id).filter((id) => !dropped.includes(id))]) {
         if (hovered.length >= HOVERED_DROPPED) break;
         const look = allLooks.find((l) => l.id === id);
-        const point = clearPointOn(look, segmentsOf(allLooks.filter((l) => l.id !== id), shown), clearOf, shown, canvas);
-        if (!point) continue;
-        await page.mouse.move(canvas.x + point.x, canvas.y + point.y);
+        // The pointer on the line, at the first point where Cytoscape reports this line and no other.
+        let onIt = false;
+        for (const point of clearPointsOn(look, segmentsOf(allLooks.filter((l) => l.id !== id), shown), clearOf, shown, canvas)) {
+          await page.mouse.move(canvas.x + point.x, canvas.y + point.y);
+          await twoFrames(page);
+          onIt = JSON.stringify(await viewer(page, "hoveredEdges")) === JSON.stringify([id]);
+          if (onIt) break;
+        }
+        if (!onIt) continue;
         for (const count of [byId[id].forwardKeys.length, byId[id].backwardKeys.length].filter(Boolean)) {
           await expect(page.getByTestId("aggregated-edge-note"), id).toContainText(`${count} edge`);
         }
         hovered.push(id);
         await page.mouse.move(canvas.x + 2, canvas.y + 2);
       }
-      test.info().annotations.push({ type: "measured", description: `the count read on hover for ${hovered.length} of ${dropped.length} lines without a pill` });
+      test.info().annotations.push({
+        type: "measured",
+        description: `the count read on hover for ${hovered.length} line(s), ${hovered.filter((id) => dropped.includes(id)).length} of the ${dropped.length} without a pill`,
+      });
+      expect(hovered.length).toBeGreaterThan(0);
     });
 
     test("the overview's routes are planned once: a zoom and a box opening move no line between two closed boxes", async ({ page, request }) => {
@@ -486,6 +505,20 @@ test("a title plate is routed around and no line ends on it: the line ends on it
   const end = path[path.length - 1];
   const b = input.boxes[1];
   expect(end.x >= b.x1 && end.x <= b.x2 && end.y >= b.y1 && end.y <= b.y2).toBe(true);
+});
+
+test("a straight line with an arrowhead at each end is at least two arrowheads long, however near its two boxes stand", async ({ page }) => {
+  await openThemeModules(page);
+  const short = [];
+  for (let gap = 4; gap <= 16; gap += 1) {
+    const input = { unit: 1, boxes: [box("a", 0, 0, 60, 30), box("b", 0, 30 + gap, 60, 60 + gap)], pairs: [{ name: "a\nb", a: "a", b: "b", forward: 2, backward: 1 }] };
+    const { paths, failed } = await plan(page, input);
+    expect(failed, `boxes ${gap} px apart`).toEqual([]);
+    const path = paths["a\nb"];
+    const run = straightRunInto(path, 1);
+    if (!run.cornered && run.run < 2 * HEAD_PX) short.push(`boxes ${gap} px apart: a straight line ${run.run.toFixed(1)} px long`);
+  }
+  expect(short).toEqual([]);
 });
 
 test("lines that reach a crowded box share their last run only with lines that agree on having an arrowhead there", async ({
