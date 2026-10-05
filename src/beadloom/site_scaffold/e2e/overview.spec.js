@@ -338,7 +338,7 @@ for (const graph of GRAPHS) {
   });
 }
 
-test("every closed box and every top-level node at the fit is titled at 14, 12.5, 11 or 10 px inside it, or beside it on a plate with a border that nothing covers and no line runs under", async ({
+test("every closed box and every top-level node at the fit is titled readably: at 14, 12.5, 11 or 10 px inside it, or beside it on a plate with a border that nothing covers and no line runs under", async ({
   page,
   request,
 }) => {
@@ -348,7 +348,13 @@ test("every closed box and every top-level node at the fit is titled at 14, 12.5
   const view = await viewOf(page);
   const top = Object.keys(tree.parents).filter((id) => id !== tree.wrapper && tree.parents[id] === tree.wrapper);
   const titles = await viewer(page, "titles");
-  expect(titles.map((t) => t.id).sort()).toEqual([...top].sort());
+  // Every closed box takes the map's title; a top-level node that is not a box keeps its own label
+  // where that reads larger, and then reads at no less than the smallest size a title is tried at.
+  const closed = (await viewer(page, "level")).collapsed.map((b) => b.id);
+  expect(closed.filter((id) => !titles.some((t) => t.id === id))).toEqual([]);
+  const own = (await viewer(page, "nodeLooks")).filter((look) => top.includes(look.id) && !titles.some((t) => t.id === look.id));
+  expect(own.filter((look) => look.fontSize * view.zoom < Math.min(...TITLE_PX) - 1e-6).map((look) => look.id)).toEqual([]);
+  requireShape(titles.length > 0, "no closed box or top-level node takes the map's title at the fit");
 
   // A title is fitted at the scale the overview was planned at, and keeps that size in the graph's
   // units when the view is further out: where the fit lands one step coarser than the plan's own
