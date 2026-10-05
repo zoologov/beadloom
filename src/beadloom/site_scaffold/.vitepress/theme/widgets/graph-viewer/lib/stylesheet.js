@@ -346,6 +346,8 @@ const PLATE_BORDER_SHARE = 0.3;
 /** A map title's look: its size, its place inside its box or on one side of it, and the plate it stands on outside. */
 function mapTitleRule(tokens) {
   const title = (node) => node.data(MAP_TITLE);
+  // The scale the title was laid out at: the map's, or the overview plan's when the view is zoomed out past it.
+  const at = (node) => title(node).scale || scaleOf(node);
   const outside = (node) => !title(node).inside;
   const placeOf = (node) => (outside(node) ? title(node).side : "inside");
   return {
@@ -354,18 +356,18 @@ function mapTitleRule(tokens) {
       label: titleOf,
       "text-wrap": "wrap",
       "font-weight": 700,
-      "font-size": (node) => title(node).px * scaleOf(node),
+      "font-size": (node) => title(node).px * at(node),
       "text-valign": (node) => PLATE_PLACES[placeOf(node)].valign,
       "text-halign": (node) => PLATE_PLACES[placeOf(node)].halign,
-      "text-margin-x": (node) => PLATE_PLACES[placeOf(node)].x * plateLiftOf(scaleOf(node)),
-      "text-margin-y": (node) => PLATE_PLACES[placeOf(node)].y * plateLiftOf(scaleOf(node)),
+      "text-margin-x": (node) => PLATE_PLACES[placeOf(node)].x * plateLiftOf(at(node)),
+      "text-margin-y": (node) => PLATE_PLACES[placeOf(node)].y * plateLiftOf(at(node)),
       // Wide enough for the widest line, so a title is never wrapped where it was measured whole.
-      "text-max-width": (node) => title(node).width + scaleOf(node),
+      "text-max-width": (node) => title(node).width + at(node),
       "text-background-color": tokens.bg,
       "text-background-opacity": (node) => (outside(node) ? 1 : 0),
       "text-background-shape": "round-rectangle",
-      "text-background-padding": (node) => `${MAP_MARKS.platePadding * scaleOf(node)}px`,
-      "text-border-width": (node) => (outside(node) ? MAP_MARKS.plateBorder * scaleOf(node) : 0),
+      "text-background-padding": (node) => `${MAP_MARKS.platePadding * at(node)}px`,
+      "text-border-width": (node) => (outside(node) ? MAP_MARKS.plateBorder * at(node) : 0),
       "text-border-color": mixRgb(tokens.text1, tokens.bg, PLATE_BORDER_SHARE),
       "text-border-opacity": (node) => (outside(node) ? 1 : 0),
     },

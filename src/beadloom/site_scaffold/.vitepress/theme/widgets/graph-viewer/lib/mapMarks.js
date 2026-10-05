@@ -39,7 +39,7 @@ export const MAP_MARKS = Object.freeze({
   collapsedOpacity: 0.16,
 });
 
-/** The data a node of the map carries for its title: `{ px, inside, width, side }` (`mapTitleOf`). */
+/** The data a node of the map carries for its title: `{ px, inside, width, side, scale }` (`mapTitleOf`), `scale` the one it was laid out at. */
 export const MAP_TITLE = "mapTitle";
 /** The data a closed box carries for what its edges do: `{ incoming, outgoing }`. */
 export const TALLY = "tally";

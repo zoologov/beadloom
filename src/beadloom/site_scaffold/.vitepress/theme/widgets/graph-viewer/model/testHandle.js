@@ -30,7 +30,7 @@ import { idRecord } from "../../../shared/ids/index.js";
 import { isLoop } from "./canvasLayout.js";
 import { BEHIND, DISTANCE_DATA, IN_FRONT } from "./canvasMarks.js";
 import { AGGREGATE, COLLAPSED, HIDDEN_EDGES } from "../lib/levels.js";
-import { MAP_TITLE, scaleOf } from "../lib/mapMarks.js";
+import { MAP_TITLE } from "../lib/mapMarks.js";
 
 const HANDLE = "__beadloomViewer";
 
@@ -153,7 +153,7 @@ function titleLookOf(node, zoom) {
     sizePx: title.px,
     fontSize: parseFloat(node.style("font-size")) * zoom,
     inside: title.inside,
-    plate: { opacity: parseFloat(node.style("text-background-opacity")), borderWidth: parseFloat(node.style("text-border-width")) / scaleOf(node) },
+    plate: { opacity: parseFloat(node.style("text-background-opacity")), borderWidth: parseFloat(node.style("text-border-width")) * zoom },
     x1: drawn.x1,
     y1: drawn.y1,
     x2: drawn.x2,

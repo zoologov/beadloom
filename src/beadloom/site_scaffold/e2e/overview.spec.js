@@ -340,6 +340,22 @@ test("every closed box and every top-level node at the fit is titled at 14, 12.5
   expect(underTitles).toEqual([]);
 });
 
+test("zoomed out from the fit, no title leaves its box for a plate and no line runs under a title: a title keeps the room the routes left it", async ({
+  page,
+}) => {
+  await openArchitecture(page);
+  const insideAtFit = new Set((await viewer(page, "titles")).filter((t) => t.inside).map((t) => t.id));
+  requireShape(insideAtFit.size > 0, "no title fits inside its box at the fit");
+  for (let step = 0; step < ZOOM_OUT_STEPS; step += 1) await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+  await twoFrames(page);
+
+  const titles = await viewer(page, "titles");
+  expect(titles.filter((t) => insideAtFit.has(t.id) && !t.inside).map((t) => t.id)).toEqual([]);
+  const segments = segmentsOf(await viewer(page, "lineLooks"), await viewOf(page));
+  const under = titles.filter((t) => !t.inside).flatMap((t) => segments.filter((s) => segmentInRect(s.a, s.b, t, 1)).map((s) => `${s.id} under ${t.id}`));
+  expect(under).toEqual([]);
+});
+
 test("calm by default: hovering a box draws its lines and pills in front and fades every other line and pill; the pointer gone, all are back at rest", async ({
   page,
 }) => {
@@ -375,6 +391,8 @@ test("calm by default: hovering a box draws its lines and pills in front and fad
 
 /** How many zoom steps a case takes at most before it gives up. */
 const ZOOM_STEPS = 6;
+/** How far out from the fit a case zooms, in steps of the toolbar's zoom (1.25 each): to about two thirds. */
+const ZOOM_OUT_STEPS = 2;
 
 test("a closed box large enough to say it says how many edges come in and how many go out, inside it and clear of its title", async ({
   page,

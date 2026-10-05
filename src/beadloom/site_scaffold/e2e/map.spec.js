@@ -566,13 +566,15 @@ test("the map's marks keep their size on screen as the view zooms", async ({ pag
     await page.getByRole("button", { name: "Zoom out", exact: true }).click();
     await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   }
-  for (const { zoom, edges, pills, titles } of readings) {
+  for (const [step, { zoom, edges, pills, titles }] of readings.entries()) {
     expect(edges.length + titles.length).toBeGreaterThan(0);
     // One weight whatever the count an aggregated edge carries: the count is on its pill.
     expect(edges.filter((e) => !within(e.width * zoom, LINE_PX)).map((e) => `${e.id} at zoom ${zoom}`)).toEqual([]);
     expect(pills.filter((p) => p.fontSize !== COUNT_PILL_PX).map((p) => p.id)).toEqual([]);
-    // A title keeps the size it was fitted at, one of the few it is tried at.
-    expect(titles.filter((t) => !BOX_TITLE_PX.includes(t.sizePx) || !within(t.fontSize, t.sizePx)).map((t) => `${t.id} at zoom ${zoom}`)).toEqual([]);
+    // At the fit a title has the size it was fitted at, one of the few it is tried at; zoomed out
+    // past the fit, a top-level one shrinks with its box rather than outgrow it (`overview.spec.js`).
+    const off = titles.filter((t) => !BOX_TITLE_PX.includes(t.sizePx) || (step === 0 ? !within(t.fontSize, t.sizePx) : t.fontSize > t.sizePx * STEP + 1e-6));
+    expect(off.map((t) => `${t.id} at zoom ${zoom}`)).toEqual([]);
   }
 });
 
