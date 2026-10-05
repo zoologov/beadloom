@@ -10,19 +10,27 @@
 //
 // An aggregated edge is an element of the map's own, made once per pair of drawn
 // ends and kept while the page lives. Its id is chosen against every id of the
-// graph (`freshId`); its route is the medoid of its edges' routes between its two
-// boxes (`lib/aggregateRoutes.js`), drawn by the same segments as any routed
+// graph (`freshId`). Between two top-level nodes its route is the overview's own
+// (`overviewPlan.js`), routed afresh between the boxes and kept at every level;
+// any other runs along the medoid of its edges' routes between its two boxes
+// (`lib/aggregateRoutes.js`). Either is drawn by the same segments as any routed
 // edge; its counts, its arrowheads and its look are in its data, for the
-// stylesheet. An aggregated edge the budget leaves out is taken out of the graph
-// as well, and each end it would join carries the count (`hiddenEdges`); while
-// the pointer is on an end, or the end is selected, all of its edges are drawn.
+// stylesheet and the pills (`pillOverlay.js`). An aggregated edge the budget
+// leaves out is taken out of the graph as well, and each end it would join
+// carries the count (`hiddenEdges`); while the pointer is on an end, or the end
+// is selected, all of its edges are drawn. A closed box carries how many edges
+// come into it and go out of it (`tally`), the ones left out included.
 //
 // What a box or a line says on screen — every line's weight, arrowheads and
-// corners, an aggregated edge's count, a closed box's title — keeps one size on
+// corners, a closed box's title and a top-level node's — keeps one size on
 // screen whatever the zoom: each carries the map's scale in its data, a power of
 // 1.25 near 1 / zoom, and the stylesheet multiplies by it, so a zoom gesture
 // restyles these elements only when the zoom crosses a step. An edge out of the
-// graph is given the scale too, so it comes back at the size of the rest.
+// graph is given the scale too, so it comes back at the size of the rest. A
+// title is tried at a few sizes inside its box and otherwise stands above it on
+// a plate (`lib/mapMarks.js`); which, is in the node's data (`mapTitle`), worked
+// out again at each step of the scale. A top-level node that is not a box takes
+// the map's title only while its own label would read smaller.
 //
 // Which boxes are open follows the view: on every change of the viewport, once
 // per frame at most, the boxes in view are worked out again, and when they differ
@@ -44,7 +52,11 @@ import {
   levelOf,
   openInView,
 } from "../lib/levels.js";
+import { MAP_TITLE, TALLY, mapTitleOf, statusMarkInsetOf, statusMarkOf } from "../lib/mapMarks.js";
+import { routePointsOf } from "../lib/lineMarks.js";
 import { pathOf, segmentsOf } from "../lib/routes.js";
+import { GEOMETRY } from "../lib/stylesheet.js";
+import { overviewPlanner } from "./overviewPlan.js";
 
 /** The zoom step the map's marks are restyled at. */
 export const SCALE_STEP = 1.25;
@@ -56,6 +68,16 @@ const sameSet = (a, b) => a.size === b.size && [...a].every((id) => b.has(id));
 /** The map's scale at `zoom`: the power of `SCALE_STEP` nearest 1 / zoom. */
 export function scaleAt(zoom) {
   return SCALE_STEP ** Math.round(Math.log(1 / zoom) / Math.log(SCALE_STEP));
+}
+
+/** A title's width in pixels at a size, measured in the font `cy`'s nodes are drawn in, bold. */
+function titleMeasurer(cy) {
+  const context = typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d");
+  return (text, px) => {
+    if (!context) return String(text).length * px * 0.62;
+    context.font = `700 ${px}px ${cy.nodes().first().style("font-family")}`;
+    return context.measureText(String(text)).width;
+  };
 }
 
 /** What an aggregated edge's label says: its count each way, the way that has any. */
@@ -102,6 +124,41 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
   let scale = scaleAt(cy.zoom());
   let queued = false;
   let destroyed = false;
+  let version = 0;
+  let hiddenAt = new Map();
+  const measure = titleMeasurer(cy);
+  const planner = overviewPlanner(cy, {
+    tree,
+    geometry,
+    plainEdges,
+    routePointsOf: (id) => (edges.get(id)?.data("route") ? routePointsOf(edges.get(id)) : null),
+    titleOf: (id, at, hidden) => titleLookOf(id, at, hidden),
+    measure,
+    scaleAt,
+    budget: options.budget,
+  });
+
+  /** The title node `id` is drawn with at `at` when `hidden` of its lines are left out, or null for its own label. */
+  function titleLookOf(id, at, hidden) {
+    const node = nodes.get(id);
+    const box = geometry.boxes[id];
+    if (!node || !box) return null;
+    const isBox = tree.boxes.has(id);
+    const size = { width: box.x2 - box.x1, height: box.y2 - box.y1 };
+    const marked = Boolean(node.data("status"));
+    const reserved = !marked ? 0 : isBox ? statusMarkOf(at, size.height) + statusMarkInsetOf(at, size.height) : GEOMETRY.statusMark + GEOMETRY.statusMarkInset;
+    const lines = [String(node.data("label")), ...(hidden ? [`+${hidden}`] : [])];
+    return mapTitleOf(lines, size, at, measure, { reserved, natural: isBox ? null : GEOMETRY.nodeTitle });
+  }
+
+  /** Give the drawn node `node` the title it is drawn with now: a closed box's, or a top-level node's while it reads larger. */
+  function dressTitle(node) {
+    const id = node.id();
+    const mapped = node.hasClass(COLLAPSED) || (planner.isTop(id) && !tree.boxes.has(id));
+    const title = mapped ? titleLookOf(id, scale, hiddenAt.get(id) || 0) : null;
+    if (title) node.data({ [MAP_TITLE]: { ...title, side: planner.plateSideOf(id) }, [MAP_SCALE]: scale });
+    else node.removeData(MAP_TITLE);
+  }
 
   /** Whether `id` is one of `ids` or inside one: a box's edges are those of everything in it. */
   function isWithin(id, ids) {
@@ -156,7 +213,9 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
       styleKey: styleKeyOf(members),
       [MAP_SCALE]: scale,
     };
-    const route = routeOf(pair);
+    const planned = planner.routeOf(pair);
+    const at = (id) => nodes.get(id).position();
+    const route = planned ? segmentsOf(planned, at(pair.ends[0]), at(pair.ends[1])) : routeOf(pair);
     element.data(data);
     if (route) element.data("route", route);
     else element.removeData("route");
@@ -188,8 +247,10 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
       pair.overBudget = leftOut.has(pair.name);
       pair.hidden = pair.overBudget && !pair.ends.some((end) => isWithin(end, free));
     }
-    const hiddenAt = new Map();
+    hiddenAt = new Map();
     for (const pair of weighed.filter((p) => p.hidden)) for (const end of pair.ends) hiddenAt.set(end, (hiddenAt.get(end) || 0) + 1);
+    const tallies = talliesOf(weighed);
+    planner.current(kept);
     const drawnPairs = new Set(weighed.filter((pair) => !pair.hidden).map((pair) => pair.name));
     const originals = new Set(level.originals);
 
@@ -212,10 +273,29 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
         if (hiddenAt.has(id)) node.data({ [HIDDEN_EDGES]: hiddenAt.get(id), [MAP_SCALE]: scale });
         else node.removeData(HIDDEN_EDGES);
         if (node.hasClass(COLLAPSED)) node.data(MAP_SCALE, scale);
+        // A box no line comes into or goes out of has nothing to say.
+        if (node.hasClass(COLLAPSED) && tallies.has(id)) node.data(TALLY, tallies.get(id));
+        else node.removeData(TALLY);
+        dressTitle(node);
       }
     });
     open = nextOpen;
     pairs = weighed;
+    version += 1;
+  }
+
+  /** How many edges come into each drawn end of `weighed` and go out of it, the ones left out included. */
+  function talliesOf(weighed) {
+    const tallies = new Map();
+    const add = (id, incoming, outgoing) => {
+      const now = tallies.get(id) || { incoming: 0, outgoing: 0 };
+      tallies.set(id, { incoming: now.incoming + incoming, outgoing: now.outgoing + outgoing });
+    };
+    for (const pair of weighed) {
+      add(pair.ends[0], pair.backward.length, pair.forward.length);
+      add(pair.ends[1], pair.forward.length, pair.backward.length);
+    }
+    return tallies;
   }
 
   /** Restyle the map's marks when the zoom has crossed a step. */
@@ -226,7 +306,9 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     cy.batch(() => {
       cy.elements(`.${COLLAPSED}, edge[${AGGREGATE}], node[${HIDDEN_EDGES}]`).data(MAP_SCALE, scale);
       for (const edge of edges.values()) edge.data(MAP_SCALE, scale);
+      cy.nodes().forEach(dressTitle);
     });
+    version += 1;
   }
 
   /** Work out the boxes in view again, and have the level drawn again when they differ. */
@@ -297,6 +379,10 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
       return { forward: pair.forward.map(keyOf), backward: pair.backward.map(keyOf) };
     },
     scale: () => scale,
+    /** A number that changes whenever what the map draws or the scale it draws at changes. */
+    version: () => version,
+    /** What the overview's last plan was (`overviewPlan.js`): `{ ms, unit, routed, failed }`. */
+    plan: () => planner.report(),
     fitZoom,
     destroy() {
       destroyed = true;

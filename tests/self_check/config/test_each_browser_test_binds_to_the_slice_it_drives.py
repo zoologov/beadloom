@@ -56,6 +56,8 @@ SPEC_SLICE = {
     "neighbourhood.spec.js": "site-select-neighbourhood",
     "node-page.spec.js": "site-architecture-page",
     "node-status.spec.js": "site-graph-node",
+    # The overview's own routes, pills, titles and calm hover (BDL-078 V2).
+    "overview.spec.js": "site-graph-viewer",
     # Frame time and the first drawing, timed per environment (BDL-077 review M1).
     "performance.spec.js": "site-graph-viewer",
     # ELK's routes and box sizes drawn by the canvas (BDL-077 E2).

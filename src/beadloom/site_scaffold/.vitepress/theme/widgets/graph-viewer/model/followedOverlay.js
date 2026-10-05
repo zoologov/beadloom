@@ -10,8 +10,10 @@
 // a repair; a line drawn whole on top of the others does not.
 //
 // The drawing goes in passes: every casing, then every line, then the
-// arrowheads, then the label of the line under the pointer, the one line that
-// shows its kind. A bundle's lines run together and part, and a line drawn with
+// arrowheads, then the label of the edge under the pointer, the one line that
+// shows its kind. A line of the map's shows no label here: its count is on its
+// pill, drawn above this layer (`pillOverlay.js`), and in the note the viewer
+// shows while the pointer is on it. A bundle's lines run together and part, and a line drawn with
 // its own casing would cut a slit into the one drawn before it where they part;
 // drawn in passes, every casing lies under every line. A followed line is drawn
 // as Cytoscape draws it — the same route, the same corners, the same sizes on
@@ -153,7 +155,7 @@ export function followedOverlay(cy, container, { tokens }) {
     const styleKey = edge.data("styleKey");
     const aggregated = Boolean(edge.data(AGGREGATE));
     const heads = shape.routed ? headEndsOf(edge) : { source: false, target: true };
-    const label = aggregated ? edge.data("countLabel") : edge.hasClass(HOVERED) ? edge.data("label") : "";
+    const label = !aggregated && edge.hasClass(HOVERED) ? edge.data("label") : "";
     return {
       edge,
       id: edge.id(),

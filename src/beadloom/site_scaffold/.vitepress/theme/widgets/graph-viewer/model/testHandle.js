@@ -14,7 +14,9 @@
 // and buses, and the edges along a hovered line — and the followed lines drawn
 // on top, the passes they are drawn in and what each frame cost — and the map:
 // the boxes open and closed, each aggregated edge with what it carries each way
-// and whether the budget draws it, and the counts of hidden edges on the boxes.
+// and whether the budget draws it, and the counts of hidden edges on the boxes —
+// and the overview: its plan, the pills that carry its counts, the titles of its
+// boxes and top-level nodes, and what each closed box says comes in and goes out.
 //
 // It does one thing besides reading: `revealNodes(ids)` draws the nodes in `ids`
 // as themselves with their own edges, opening every box that holds one and each
@@ -26,9 +28,9 @@
 
 import { idRecord } from "../../../shared/ids/index.js";
 import { isLoop } from "./canvasLayout.js";
-import { DISTANCE_DATA } from "./canvasMarks.js";
+import { BEHIND, DISTANCE_DATA, IN_FRONT } from "./canvasMarks.js";
 import { AGGREGATE, COLLAPSED, HIDDEN_EDGES } from "../lib/levels.js";
-import { titleFits } from "../lib/mapMarks.js";
+import { MAP_TITLE, scaleOf } from "../lib/mapMarks.js";
 
 const HANDLE = "__beadloomViewer";
 
@@ -99,11 +101,10 @@ function aggregateOf({ element, pair }, map) {
     weight: pair.weight,
     drawn,
     walk: drawn && element.hasClass("is-walk-edge"),
-    label: drawn ? element.style("label") : null,
+    label: drawn ? element.data("countLabel") : null,
     sourceArrow: drawn ? element.style("source-arrow-shape") : null,
     targetArrow: drawn ? element.style("target-arrow-shape") : null,
     width: drawn ? parseFloat(element.style("width")) : null,
-    fontSize: drawn ? parseFloat(element.style("font-size")) : null,
     routed: drawn && route.routed,
     points: route ? route.points : [],
   };
@@ -131,7 +132,32 @@ function lineLookOf(edge) {
     cornerRadii: edge.data("route") ? numbersOf(edge.style("segment-radii")) : [],
     walk: edge.hasClass("is-walk-edge"),
     dimmed: edge.hasClass("is-dimmed"),
+    front: edge.hasClass(IN_FRONT),
+    behind: edge.hasClass(BEHIND),
+    forward: isAggregate(edge) ? edge.data("forward") : null,
+    backward: isAggregate(edge) ? edge.data("backward") : null,
     points: drawnRouteOf(edge).points,
+  };
+}
+
+/** A node's main label alone, on the canvas. */
+const TITLE_BOUNDS = Object.freeze({ includeNodes: false, includeEdges: false, includeLabels: true, includeMainLabels: true, includeOverlays: false });
+
+/** A map title as the handle reports it (`titles`): where Cytoscape drew it, on the canvas. */
+function titleLookOf(node, zoom) {
+  const title = node.data(MAP_TITLE);
+  const drawn = node.renderedBoundingBox(TITLE_BOUNDS);
+  return {
+    id: node.id(),
+    text: node.style("label"),
+    sizePx: title.px,
+    fontSize: parseFloat(node.style("font-size")) * zoom,
+    inside: title.inside,
+    plate: { opacity: parseFloat(node.style("text-background-opacity")), borderWidth: parseFloat(node.style("text-border-width")) / scaleOf(node) },
+    x1: drawn.x1,
+    y1: drawn.y1,
+    x2: drawn.x2,
+    y2: drawn.y2,
   };
 }
 
@@ -251,7 +277,7 @@ function readers(source) {
         id: node.id(),
         label: node.style("label"),
         fontSize: parseFloat(node.style("font-size")),
-        outside: !titleFits(node),
+        outside: !node.data(MAP_TITLE)?.inside,
       }));
       return {
         fitZoom: map.fitZoom(),
@@ -264,11 +290,12 @@ function readers(source) {
     },
     // Every aggregated edge of the level drawn: `{ id, ends, forwardKeys,
     // backwardKeys, members, weight, drawn, walk, label, sourceArrow, targetArrow,
-    // width, fontSize, routed, points }`. `ends` are its two drawn ends in sorted
+    // width, routed, points }`. `ends` are its two drawn ends in sorted
     // order and the keys are the edges it carries from the first to the second and
     // back; `members` their ids; `drawn` false when the budget leaves it out; `walk`
-    // when a selection's walk takes one of its edges. Its look and its route, in
-    // graph coordinates, only while it is drawn.
+    // when a selection's walk takes one of its edges; `label` the count it says,
+    // on its pill (`pills`). Its look and its route, in graph coordinates, only
+    // while it is drawn.
     aggregatedEdges: () => {
       const map = source.map();
       if (!map) return [];
@@ -277,6 +304,26 @@ function readers(source) {
         .map((entry) => aggregateOf(entry, map))
         .sort((a, b) => a.ends.join("|").localeCompare(b.ends.join("|")));
     },
+    // The overview's last plan: `{ ms, unit, routed, failed }`, how long it took,
+    // the layout units a pixel was at its scale, and the names of the pairs it
+    // routed and of those it found no route for.
+    overviewPlan: () => source.map()?.plan() || null,
+    // The pills drawn last: `{ pills, dropped }`, each pill `{ id, text, x1, y1,
+    // x2, y2, fontSize, faded }` on the canvas in pixels, `id` its line's, and
+    // `dropped` the lines that carry more than one edge and found no place for one.
+    pills: () => source.pills(),
+    // The title of every closed box and every top-level node the map titles:
+    // `[{ id, text, sizePx, fontSize, inside, plate, x1, y1, x2, y2 }]`, `sizePx`
+    // the size it was fitted at and `fontSize` its size on screen now, `plate` its
+    // plate's `{ opacity, borderWidth }` (pixels), and its place on the canvas.
+    titles: () => {
+      const zoom = cy().zoom();
+      return cy().nodes(`[${MAP_TITLE}]`).filter((node) => node.visible()).map((node) => titleLookOf(node, zoom)).sort((a, b) => (a.id < b.id ? -1 : 1));
+    },
+    // What each closed box says comes in and goes out, drawn last: `{ id: {
+    // incoming, outgoing, text, shown, x1, y1, x2, y2 } }`, on the canvas in
+    // pixels while `shown`.
+    boxTallies: () => source.tallies(),
     // Each drawn node whose aggregated edges the budget leaves out: `{ id: { count, label } }`.
     hiddenEdgeCounts: () =>
       idRecord(
@@ -339,9 +386,13 @@ function readers(source) {
     // Every edge drawn now, of the data file or of the map, and its look as
     // Cytoscape resolved it: `{ id, key, aggregated, styleKey, width, lineStyle,
     // dash, lineFill, colour, sourceArrow, targetArrow, arrowScale, arrowColour,
-    // cornerRadii, walk, dimmed, points }`. Sizes are in layout units; `dash` is
-    // the dash pattern a dashed line is drawn with, `cornerRadii` the radius of
-    // each corner of a routed edge, and `points` its route as drawn (`edgeRoutes`).
+    // cornerRadii, walk, dimmed, front, behind, forward, backward, points }`.
+    // Sizes are in layout units; `dash` is the dash pattern a dashed line is drawn
+    // with, `cornerRadii` the radius of each corner of a routed edge; `front` and
+    // `behind` whether it is a line of the node under the pointer or one falling
+    // back behind them; `forward` and `backward` how many edges a line of the
+    // map's carries each way (null for an edge of the file); and `points` its
+    // route as drawn (`edgeRoutes`).
     lineLooks: () => cy().edges().filter((edge) => edge.visible()).map(lineLookOf),
     // Every node drawn now and its look: `{ id, parent, isParent, collapsed,
     // status, borderWidth, borderColour, borderStyle, fill, fillOpacity,
@@ -383,7 +434,8 @@ function readers(source) {
  * `impactSummary()`, `layout()`, the canvas's last layout run, `bundles()`, its
  * routes with the fans bundled, `followed()`, `labelled()` and `frames()`, the
  * lines drawn on top, the ones labelled and what drawing them cost,
- * `droppedHeads()`, the ends that leave their arrowhead to another,
+ * `droppedHeads()`, the ends that leave their arrowhead to another, `pills()` and
+ * `tallies()`, the map's counts drawn last,
  * `hoveredEdges()`, the ids of the edges along the line under the pointer,
  * `map()`, the map drawn now (`canvasMap.js`), and `revealNodes(ids)`, which draws
  * the nodes in `ids` as themselves.

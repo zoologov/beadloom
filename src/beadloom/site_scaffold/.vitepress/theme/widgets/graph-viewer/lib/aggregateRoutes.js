@@ -8,7 +8,10 @@
 // boxes that avoids every other box, as ELK computed it. Of those stretches the
 // one drawn is the medoid: the one lying closest, on average, to all the others,
 // so the line runs where most of its edges run. Nothing is routed again: an
-// edge's own route is not moved, and no box is.
+// edge's own route is not moved, and no box is. A line between two top-level
+// nodes is routed afresh instead, with the overview's others
+// (`overviewRoutes.js`); the medoid draws every other aggregated line, and one
+// the overview's router found no route for.
 //
 // Every function here is pure: polylines and boxes in, a polyline out.
 

@@ -29,7 +29,9 @@
 // the reader zooms in. A selection opens the boxes that hold its node, and those
 // of every node its walk reaches unless the node is a hub selected with nothing
 // more asked; a search opens the boxes that hold what it finds. The pointer on an
-// aggregated edge names how many edges it carries each way.
+// aggregated edge names how many edges it carries each way. At the overview the
+// lines between top-level nodes are routed together, thin and light, with their
+// counts on pills; the pointer on a node draws its lines in front of the rest.
 //
 // The toolbar, the canvas, the panel and the legend are all inside one root
 // element, and that element is what goes full screen, so full screen and the
@@ -367,6 +369,8 @@ onMounted(() => {
     labelled: () => canvas.labelled(),
     frames: () => canvas.frames(),
     droppedHeads: () => canvas.droppedHeads(),
+    pills: () => canvas.pills(),
+    tallies: () => canvas.tallies(),
     hoveredEdges: () => canvas.hoveredEdges.value,
     map: () => canvas.map(),
     revealNodes: (ids) => canvas.revealNow("test", ids),

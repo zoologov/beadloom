@@ -11,7 +11,7 @@
 import { test, expect } from "@playwright/test";
 import { ADOPTER_SIZED, adopterSizedGraph } from "./support/adopterGraph.js";
 import { landscapeData, openLandscape } from "./support/landscape.js";
-import { distanceToPolyline, edgesThroughBoxes, polylineOf } from "./support/routeMetrics.js";
+import { edgesThroughBoxes } from "./support/routeMetrics.js";
 import {
   AGGREGATE_BUDGET,
   budgetLeftOut,
@@ -39,10 +39,12 @@ const TOLERANCE = 0.5;
 const HUB_DEGREE = 20;
 /** The screen size a map mark keeps, in pixels, within one zoom step of the restyle. */
 const STEP = 1.25;
-const COUNT_LABEL_PX = 11;
+/** A count's size on its pill, in pixels: drawn over the canvas, it is that size at every zoom. */
+const COUNT_PILL_PX = 10.5;
 /** The one weight every line is drawn at, in pixels on screen (`look.spec.js`). */
 const LINE_PX = 1.35;
-const BOX_TITLE_PX = 14;
+/** The sizes a closed box's title is tried at, in pixels on screen. */
+const BOX_TITLE_PX = [14, 12.5, 11, 10];
 /** The most zoom steps a case takes before it gives up. */
 const ZOOM_STEPS = 30;
 /** How far inside the canvas's edges a point the pointer aims at lies, in pixels. */
@@ -128,7 +130,7 @@ for (const graph of GRAPHS) {
       expect(drawn.filter((r) => !top.has(r.source) || !top.has(r.target)).map((r) => r.id)).toEqual([]);
     });
 
-    test("an aggregated edge has an arrowhead at each end its edges arrive at, its counts in its label, and a route between its two boxes along one of its edges", async ({
+    test("an aggregated edge has an arrowhead at each end its edges arrive at, its counts in its label, and a square route from the border of one of its boxes to the other's through no other box", async ({
       page,
       request,
     }) => {
@@ -136,17 +138,21 @@ for (const graph of GRAPHS) {
       const tree = treeOf(data);
       const edges = (await viewer(page, "aggregatedEdges")).filter((e) => e.drawn);
       requireShape(edges.length > 0, "no edge between two boxes at the top of the containment tree");
-      const { boxes, routes } = await viewer(page, "elkGeometry");
+      const { boxes } = await viewer(page, "elkGeometry");
 
+      // An end its edges arrive at draws a head, unless it shares its last run with a line that draws it.
+      const dropped = new Set((await viewer(page, "droppedHeads")).map((d) => `${d.id}:${d.end}`));
+      const headAt = (e, end, arrow) => arrow !== "none" || dropped.has(`${e.id}:${end}`);
       const arrows = edges.filter(
-        (e) => (e.targetArrow !== "none") !== e.forwardKeys.length > 0 || (e.sourceArrow !== "none") !== e.backwardKeys.length > 0
+        (e) => headAt(e, "target", e.targetArrow) !== e.forwardKeys.length > 0 || headAt(e, "source", e.sourceArrow) !== e.backwardKeys.length > 0
       );
       expect(arrows.map((e) => e.id)).toEqual([]);
       const counts = (e) => [e.forwardKeys.length, e.backwardKeys.length].filter(Boolean);
       expect(edges.filter((e) => e.label !== counts(e).join(" + ")).map((e) => e.id)).toEqual([]);
 
       // Every aggregated edge between two boxes neither of which holds the other is routed: from the
-      // border of one to the border of the other, at right angles, along one of its edges' routes.
+      // border of one to the border of the other, at right angles. At the overview its route is the
+      // overview's own, routed afresh between the boxes (`overview.spec.js`), not one of its edges'.
       const holds = (outer, inner) => withAncestors([inner], tree.parents).has(outer);
       const between = edges.filter((e) => !holds(e.ends[0], e.ends[1]) && !holds(e.ends[1], e.ends[0]));
       expect(between.length).toBeGreaterThan(0);
@@ -156,9 +162,7 @@ for (const graph of GRAPHS) {
       const off = between.filter((e) => {
         const [first, last] = [e.points[0], e.points[e.points.length - 1]];
         const square = e.points.slice(1).every((p, i) => Math.abs(p.x - e.points[i].x) < TOLERANCE || Math.abs(p.y - e.points[i].y) < TOLERANCE);
-        const members = e.members.map((id) => polylineOf(routes[id].sections));
-        const alongOne = members.some((m) => e.points.every((p) => distanceToPolyline(p, m) <= TOLERANCE));
-        return !square || !alongOne || !onBorder(first, boxes[e.ends[0]]) || !onBorder(last, boxes[e.ends[1]]);
+        return !square || !onBorder(first, boxes[e.ends[0]]) || !onBorder(last, boxes[e.ends[1]]);
       });
       expect(off.map((e) => e.id)).toEqual([]);
       const drawnBoxes = Object.fromEntries((await viewer(page, "visibleIds")).map((id) => [id, boxes[id]]));
@@ -556,17 +560,19 @@ test("the map's marks keep their size on screen as the view zooms", async ({ pag
   for (let step = 0; step < 4; step += 1) {
     const zoom = await viewer(page, "zoom");
     const edges = (await viewer(page, "aggregatedEdges")).filter((e) => e.drawn);
-    const { collapsed } = await viewer(page, "level");
-    readings.push({ zoom, edges, collapsed });
+    const { pills } = await viewer(page, "pills");
+    const titles = await viewer(page, "titles");
+    readings.push({ zoom, edges, pills, titles });
     await page.getByRole("button", { name: "Zoom out", exact: true }).click();
     await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   }
-  for (const { zoom, edges, collapsed } of readings) {
-    expect(edges.length + collapsed.length).toBeGreaterThan(0);
-    // One weight whatever the count an aggregated edge carries: the count is its label.
+  for (const { zoom, edges, pills, titles } of readings) {
+    expect(edges.length + titles.length).toBeGreaterThan(0);
+    // One weight whatever the count an aggregated edge carries: the count is on its pill.
     expect(edges.filter((e) => !within(e.width * zoom, LINE_PX)).map((e) => `${e.id} at zoom ${zoom}`)).toEqual([]);
-    expect(edges.filter((e) => !within(e.fontSize * zoom, COUNT_LABEL_PX)).map((e) => e.id)).toEqual([]);
-    expect(collapsed.filter((b) => !within(b.fontSize * zoom, BOX_TITLE_PX)).map((b) => b.id)).toEqual([]);
+    expect(pills.filter((p) => p.fontSize !== COUNT_PILL_PX).map((p) => p.id)).toEqual([]);
+    // A title keeps the size it was fitted at, one of the few it is tried at.
+    expect(titles.filter((t) => !BOX_TITLE_PX.includes(t.sizePx) || !within(t.fontSize, t.sizePx)).map((t) => `${t.id} at zoom ${zoom}`)).toEqual([]);
   }
 });
 

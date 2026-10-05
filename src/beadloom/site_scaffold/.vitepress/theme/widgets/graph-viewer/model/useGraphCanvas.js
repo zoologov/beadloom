@@ -6,8 +6,10 @@
 // every box at its size, every edge along its route with its node's fans bundled
 // (`canvasLayout.js`) and one arrowhead where lines share their last run
 // (`sharedLines.js`) — draws the followed lines on top of everything they cross,
-// with the label of the one under the pointer (`followedOverlay.js`), reports
-// taps, marks every edge along the hovered line, shows only a set of node ids
+// with the label of the one under the pointer (`followedOverlay.js`), draws the
+// map's counts over everything (`pillOverlay.js`), reports taps, marks every
+// edge along the hovered line, brings the lines of the node under the pointer in
+// front of the rest and fades the rest, shows only a set of node ids
 // (and of contracts), marks a selection — the selected node, the nodes and edges
 // its walk reached, their distance rings and risks, and what lies outside — and
 // swaps the stylesheet when the theme changes. It decides nothing about which
@@ -28,10 +30,11 @@
 import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { loadCytoscape } from "../../../shared/cytoscape/index.js";
 import { elkGraphOf, layOut, warmUpLayout } from "../../../shared/elk/index.js";
-import { ALONG_HOVER, DISTANCE_DATA, HOVERED, SELECTION_CLASSES } from "./canvasMarks.js";
+import { ALONG_HOVER, BEHIND, DISTANCE_DATA, HOVERED, IN_FRONT, SELECTION_CLASSES } from "./canvasMarks.js";
 import { applyGeometry, fitCompounds, layoutInputOf } from "./canvasLayout.js";
 import { canvasMap } from "./canvasMap.js";
 import { followedOverlay } from "./followedOverlay.js";
+import { pillOverlay } from "./pillOverlay.js";
 import { sharedLines } from "./sharedLines.js";
 import { COLLAPSED } from "../lib/levels.js";
 
@@ -40,8 +43,8 @@ const UNPLACED = Object.freeze({ name: "null" });
 
 /**
  * `{ cy, ready, layingOut, layout, bundles, hoveredEdges, layoutError, followed,
- * labelled, frames, droppedHeads, map, mount, setStyle, reveal, showOnly,
- * markSelection, resize }` over the container in `containerRef`.
+ * labelled, frames, droppedHeads, pills, tallies, map, mount, setStyle, reveal,
+ * showOnly, markSelection, resize }` over the container in `containerRef`.
  *
  * `tokens()` gives the resolved theme tokens now, which the followed lines are
  * drawn in.
@@ -59,7 +62,8 @@ const UNPLACED = Object.freeze({ name: "null" });
  * `layoutError` is the error a failed run gave, or null; `followed()` the lines
  * drawn on top, `labelled()` the ones whose label is drawn and `frames()` what
  * drawing them cost (`followedOverlay.js`); `droppedHeads()` the line ends that
- * leave their arrowhead to another on their last run (`sharedLines.js`).
+ * leave their arrowhead to another on their last run (`sharedLines.js`);
+ * `pills()` and `tallies()` the map's counts drawn last (`pillOverlay.js`).
  */
 export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundTap, fitZoom, tokens }) {
   const cy = shallowRef(null);
@@ -71,7 +75,10 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   const layoutError = shallowRef(null);
   let shared = null;
   let followed = null;
+  let pills = null;
   let map = null;
+  // The node under the pointer, whose lines are drawn in front of the rest.
+  let pointed = null;
   let generation = 0;
   // What the filters show and what the selection marks, kept to mark again on
   // whatever a later level draws.
@@ -88,9 +95,26 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     hoverNode(null);
   }
 
-  // A node under the pointer has every edge of its drawn, whatever the budget.
+  // A node under the pointer has every edge of its drawn, whatever the budget,
+  // in front of the rest.
   function hoverNode(id) {
+    pointed = id;
     if (map?.setExempt("pointer", id)) redraw();
+    else if (cy.value) {
+      cy.value.batch(() => markFront(cy.value));
+      followed?.refresh();
+    }
+  }
+
+  /** Bring the drawn lines of the node under the pointer in front of the rest, and fade the rest; none for an open box. */
+  function markFront(instance) {
+    instance.edges(`.${IN_FRONT}, .${BEHIND}`).removeClass(`${IN_FRONT} ${BEHIND}`);
+    const node = pointed ? instance.getElementById(pointed) : null;
+    if (!node || node.empty() || node.isParent()) return;
+    const own = node.connectedEdges().filter((edge) => edge.visible());
+    if (own.empty()) return;
+    own.addClass(IN_FRONT);
+    instance.edges().not(own).addClass(BEHIND);
   }
 
   // Cytoscape reports the one edge under the pointer; on a shared line every
@@ -120,6 +144,9 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     shared = null;
     followed?.destroy();
     followed = null;
+    pills?.destroy();
+    pills = null;
+    pointed = null;
     map?.destroy();
     map = null;
     shown = { ids: null, contracts: null };
@@ -175,6 +202,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
       shared = sharedLines(instance, drawn.paths);
       followed = followedOverlay(instance, containerRef.value, { tokens });
       map = canvasMap(instance, run.geometry, { fitZoom, onLevel: redraw });
+      // Laid over the followed lines, so no line is drawn over a count.
+      pills = pillOverlay(instance, containerRef.value, { tokens, map: () => map });
       layout.value = run;
       bundles.value = drawn;
     } catch (error) {
@@ -226,6 +255,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
       map?.apply();
       markShown(instance);
       markWalk(instance, marked);
+      markFront(instance);
     });
     fitBoxes();
     refreshOverlay();
@@ -339,6 +369,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     labelled: () => followed?.labelled() || [],
     frames: () => followed?.frames() || { frames: [] },
     droppedHeads: () => shared?.droppedHeads() || [],
+    pills: () => pills?.pills() || { pills: [], dropped: [] },
+    tallies: () => pills?.tallies() || {},
     map: () => map,
     mount,
     setStyle,

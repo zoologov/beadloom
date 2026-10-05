@@ -187,12 +187,12 @@ test("every routed line turns its corners at one radius on screen, so a branch l
   expect(radii.filter(({ px }) => !withinAStep(px, CORNER_PX)).map(({ id }) => id)).toEqual([]);
 });
 
-test("no bridge and no junction dot is drawn: the one layer over the canvas draws the followed lines, above Cytoscape's", async ({
+test("no bridge and no junction dot is drawn: the layers over the canvas draw the followed lines and the map's counts, above Cytoscape's", async ({
   page,
 }) => {
   await openArchitecture(page);
   await openEveryBox(page);
-  expect(await viewer(page, "overlayLayers")).toEqual(["followed"]);
+  expect(await viewer(page, "overlayLayers")).toEqual(["followed", "pills"]);
   const handle = await page.evaluate(() => ["bridges", "bridgeFrames", "junctions"].filter((name) => name in window.__beadloomViewer));
   expect(handle).toEqual([]);
   const stacking = await page.evaluate(() => {

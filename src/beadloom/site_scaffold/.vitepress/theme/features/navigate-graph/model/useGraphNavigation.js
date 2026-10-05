@@ -36,13 +36,28 @@ export const FIT_PADDING = 40;
 export const FIT_MAX_ZOOM = 1.5;
 
 /**
- * What a fit measures: the shapes, not their labels. Some labels keep one size
- * on screen whatever the zoom (the viewer's map titles its closed boxes so), and
- * in the graph's units those grow as the view zooms out: a fit measured with them
- * would depend on the zoom it was pressed at. The padding leaves room for a
- * label at the edge.
+ * What a fit measures: the nodes' shapes, not their labels, and each edge's
+ * route, not its stroke. Some labels keep one size on screen whatever the zoom
+ * (the viewer's map titles its closed boxes so), and so does every line's width
+ * and arrowhead; in the graph's units those grow as the view zooms out, and a
+ * fit measured with them would depend on the zoom it was pressed at, which
+ * matters once a line runs outside every node, as the overview's do. The
+ * padding leaves room for a label or an arrowhead at the edge.
  */
 const SHAPES_ONLY = Object.freeze({ includeLabels: false });
+
+/** The box around `elements` a fit measures: every node's shape and every point of every edge's route. */
+function shapesBoxOf(elements) {
+  const box = elements.nodes().boundingBox(SHAPES_ONLY);
+  let [x1, y1, x2, y2] = box.w || box.h ? [box.x1, box.y1, box.x2, box.y2] : [Infinity, Infinity, -Infinity, -Infinity];
+  elements.edges().forEach((edge) => {
+    for (const point of [edge.sourceEndpoint(), edge.targetEndpoint(), ...(edge.segmentPoints() || edge.controlPoints() || [])]) {
+      [x1, y1, x2, y2] = [Math.min(x1, point.x), Math.min(y1, point.y), Math.max(x2, point.x), Math.max(y2, point.y)];
+    }
+  });
+  if (!Number.isFinite(x1)) return box;
+  return { x1, y1, x2, y2, w: x2 - x1, h: y2 - y1 };
+}
 
 /** The canvas's edges nothing lies over. */
 const NO_INSET = Object.freeze({ right: 0 });
@@ -93,7 +108,7 @@ export function useGraphNavigation(getCy, { getInset = () => NO_INSET } = {}) {
 
   function fitTo(cy, target) {
     const inset = getInset();
-    const box = target.boundingBox(SHAPES_ONLY);
+    const box = shapesBoxOf(target);
     const zoom = zoomFitting(cy, box, inset);
     if (zoom === null) {
       cy.fit(target, FIT_PADDING);
@@ -116,7 +131,7 @@ export function useGraphNavigation(getCy, { getInset = () => NO_INSET } = {}) {
   function fitZoom() {
     const cy = getCy();
     if (!cy) return 1;
-    return zoomFitting(cy, everythingVisible(cy).boundingBox(SHAPES_ONLY), getInset()) ?? cy.zoom();
+    return zoomFitting(cy, shapesBoxOf(everythingVisible(cy)), getInset()) ?? cy.zoom();
   }
 
   function centre(id) {

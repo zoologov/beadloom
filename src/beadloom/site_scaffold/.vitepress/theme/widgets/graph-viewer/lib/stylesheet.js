@@ -21,8 +21,9 @@
 // on screen, on a straight run of its own, and one head where lines share their
 // last run (`lib/lineMarks.js`, `lib/heads.js`). A followed line is drawn again
 // on top by the layer over the canvas, with its label when it is under the
-// pointer (`model/followedOverlay.js`); Cytoscape draws no edge label but an
-// aggregated edge's count and a landscape badge.
+// pointer (`model/followedOverlay.js`); Cytoscape draws no edge label but a
+// landscape badge. While the pointer rests on a node, its lines are drawn on
+// top in the same way and every other line falls back to a fainter look.
 //
 // A selection adds three looks. Outside the neighbourhood or the impact set a
 // node or edge is dimmed, or hidden when the reader asks for it. In impact mode
@@ -30,12 +31,14 @@
 // danger outline. A dimmed node is drawn see-through, a dimmed line opaque in
 // its colour faded towards the background (`lib/edgePalette.js`).
 //
-// The map (`lib/levels.js`) adds its own looks. A closed box is drawn tinted, its
-// title in the middle, or above it when the box is too narrow for it; an
-// aggregated edge is a solid line with an arrowhead at each end edges arrive at
-// and the counts as its label. Every size that keeps one size on screen whatever
-// the zoom multiplies by the map's scale, which every mark of the map and every
-// line keeps in its data.
+// The map (`lib/levels.js`) adds its own looks. A closed box is drawn tinted; a
+// closed box's title, and a top-level node's while the map titles it, is drawn
+// at the size its data names, inside its box or above it on a plate with a
+// border (`lib/mapMarks.js`); an aggregated edge is a solid line with an
+// arrowhead at each end edges arrive at, its count on a pill drawn over the
+// canvas (`model/pillOverlay.js`). Every size that keeps one size on screen
+// whatever the zoom multiplies by the map's scale, which every mark of the map
+// and every line keeps in its data.
 
 import { mixRgb } from "../../../shared/theme-tokens/index.js";
 import { EDGE_STYLES, dashOf } from "../../../entities/graph-edge/index.js";
@@ -46,7 +49,7 @@ import { DIMMED_SHARE, edgePaletteOf } from "./edgePalette.js";
 import { NO_SOURCE_HEAD, NO_TARGET_HEAD } from "./heads.js";
 import { AGGREGATE, COLLAPSED, HIDDEN_EDGES } from "./levels.js";
 import { arrowScaleOf, dashOnScreen, edgeCornerRadiiOf, lineWidthOf } from "./lineMarks.js";
-import { MAP_MARKS, boxMarkInsetOf, boxMarkOf, scaleOf, titleFits, titleOf, titleSizeOf } from "./mapMarks.js";
+import { MAP_MARKS, MAP_TITLE, boxMarkInsetOf, boxMarkOf, plateLiftOf, scaleOf, titleOf } from "./mapMarks.js";
 
 /**
  * A node's sizes, in layout units. `outerWidth` and `outerHeight` are a leaf's
@@ -56,6 +59,8 @@ import { MAP_MARKS, boxMarkInsetOf, boxMarkOf, scaleOf, titleFits, titleOf, titl
 export const GEOMETRY = Object.freeze({
   outerWidth: 163,
   outerHeight: 47,
+  /** A node's title size, in layout units. */
+  nodeTitle: 12,
   cardBorder: 1.5,
   boxBorder: 1,
   selectedBorder: 3,
@@ -127,7 +132,7 @@ function nodeRules(tokens) {
         "text-halign": "center",
         color: tokens.text1,
         "font-family": tokens.font,
-        "font-size": "12px",
+        "font-size": `${GEOMETRY.nodeTitle}px`,
         "font-weight": 600,
         width: GEOMETRY.outerWidth - GEOMETRY.cardBorder,
         height: GEOMETRY.outerHeight - GEOMETRY.cardBorder,
@@ -275,6 +280,14 @@ function edgeRules(tokens, palette) {
   ];
 }
 
+/** An edge behind the lines of the node under the pointer (`model/canvasMarks.js`, `BEHIND`): its own look faded towards the background. */
+function behindEdgeRules(palette) {
+  return Object.keys(EDGE_STYLES).map((key) => ({
+    selector: `edge.is-behind[styleKey = "${key}"]`,
+    style: { "line-color": palette[key].behind, "target-arrow-color": palette[key].behind, "source-arrow-color": palette[key].behind },
+  }));
+}
+
 /** An edge outside the selection: its own look faded towards the background, at full opacity. */
 function dimmedEdgeRules(palette) {
   return Object.keys(EDGE_STYLES).map((key) => ({
@@ -313,11 +326,53 @@ function selectionRules(tokens, palette) {
       },
     },
     { selector: "node.is-dimmed", style: { opacity: DIMMED_SHARE } },
+    ...behindEdgeRules(palette),
     ...dimmedEdgeRules(palette),
   ];
 }
 
-/** The map's looks: a closed box and its title, an aggregated edge, a count of hidden edges. */
+/** Where a map title is drawn, inside its box or on a plate on one side of it: its alignment, and which way it is lifted off the box. */
+const PLATE_PLACES = Object.freeze({
+  inside: { valign: "center", halign: "center", x: 0, y: 0 },
+  above: { valign: "top", halign: "center", x: 0, y: -1 },
+  below: { valign: "bottom", halign: "center", x: 0, y: 1 },
+  right: { valign: "center", halign: "right", x: 1, y: 0 },
+  left: { valign: "center", halign: "left", x: -1, y: 0 },
+});
+
+/** How much of the text colour a title plate's border takes over the background. */
+const PLATE_BORDER_SHARE = 0.3;
+
+/** A map title's look: its size, its place inside its box or on one side of it, and the plate it stands on outside. */
+function mapTitleRule(tokens) {
+  const title = (node) => node.data(MAP_TITLE);
+  const outside = (node) => !title(node).inside;
+  const placeOf = (node) => (outside(node) ? title(node).side : "inside");
+  return {
+    selector: `node[${MAP_TITLE}]`,
+    style: {
+      label: titleOf,
+      "text-wrap": "wrap",
+      "font-weight": 700,
+      "font-size": (node) => title(node).px * scaleOf(node),
+      "text-valign": (node) => PLATE_PLACES[placeOf(node)].valign,
+      "text-halign": (node) => PLATE_PLACES[placeOf(node)].halign,
+      "text-margin-x": (node) => PLATE_PLACES[placeOf(node)].x * plateLiftOf(scaleOf(node)),
+      "text-margin-y": (node) => PLATE_PLACES[placeOf(node)].y * plateLiftOf(scaleOf(node)),
+      // Wide enough for the widest line, so a title is never wrapped where it was measured whole.
+      "text-max-width": (node) => title(node).width + scaleOf(node),
+      "text-background-color": tokens.bg,
+      "text-background-opacity": (node) => (outside(node) ? 1 : 0),
+      "text-background-shape": "round-rectangle",
+      "text-background-padding": (node) => `${MAP_MARKS.platePadding * scaleOf(node)}px`,
+      "text-border-width": (node) => (outside(node) ? MAP_MARKS.plateBorder * scaleOf(node) : 0),
+      "text-border-color": mixRgb(tokens.text1, tokens.bg, PLATE_BORDER_SHARE),
+      "text-border-opacity": (node) => (outside(node) ? 1 : 0),
+    },
+  };
+}
+
+/** The map's looks: a closed box and its title, a top-level node's title, an aggregated edge, a count of hidden edges. */
 function mapRules(tokens) {
   const tones = [...LAYER_TONES, UNLAYERED_TONE];
   return [
@@ -325,18 +380,12 @@ function mapRules(tokens) {
     {
       selector: `node.${COLLAPSED}`,
       style: {
-        label: titleOf,
-        "text-wrap": "wrap",
-        "font-weight": 700,
-        "font-size": (node) => MAP_MARKS.boxTitle * scaleOf(node),
-        "text-valign": (node) => (titleFits(node) ? "center" : "top"),
-        "text-margin-y": 0,
-        "text-max-width": (node) => (titleFits(node) ? node.data("box").width : titleSizeOf(node).width + 1),
         "background-opacity": MAP_MARKS.collapsedOpacity,
         // A closed box's border is an open box's, so a box is drawn at ELK's size either way.
         "border-width": GEOMETRY.boxBorder,
       },
     },
+    mapTitleRule(tokens),
     ...tones.map((tone) => ({
       selector: `node.${COLLAPSED}[tone = "${tone}"]`,
       style: { "background-color": tokens[tone] },
@@ -345,11 +394,6 @@ function mapRules(tokens) {
       selector: `edge[${AGGREGATE}]`,
       style: {
         "line-style": "solid",
-        label: "data(countLabel)",
-        "font-size": (edge) => MAP_MARKS.countLabel * scaleOf(edge),
-        "font-weight": 700,
-        "text-rotation": "none",
-        "text-background-padding": (edge) => `${2 * scaleOf(edge)}px`,
         "source-arrow-shape": (edge) => (edge.data("backward") ? "triangle" : "none"),
         "target-arrow-shape": (edge) => (edge.data("forward") ? "triangle" : "none"),
         "z-index": 5,
