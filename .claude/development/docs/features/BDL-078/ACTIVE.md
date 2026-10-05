@@ -28,8 +28,8 @@
 | `beadloom-btkd` | epic | ready | BDL-078 parent |
 | `beadloom-ytcg` | F-ytcg | ✓ done | a node named `__proto__` is drawn |
 | `beadloom-xv87` | V1 | ✓ done | the base look: `584b9677`, `e152a493`, `562551ed` |
-| `beadloom-0gyz` | V2 | in progress | the overview |
-| `beadloom-btkd.2` | dev | blocked | a line enters its arrowhead correctly (owner, after V1) |
+| `beadloom-0gyz` | V2 | ✓ done | the overview: own routes, pills, titles, calm hover: `18e447cf`, `6a9f9620`, `8b87b4f1`, `a710da95`, `86fa44ae`, `82af814a`; head overlaps 12 -> 0, narrowest gap 8.24 px; readings for the owner in the bead |
+| `beadloom-btkd.2` | dev | in progress | a line enters its arrowhead correctly (owner, after V1) |
 | `beadloom-hnff` | V3 | blocked | levels |
 | `beadloom-lw56` | F-activity | ✓ done | activity by changed lines |
 | `beadloom-btkd.1` | dev | ✓ done | activity: boxes among boxes, generated files excluded (owner) |
@@ -43,6 +43,8 @@
 | `beadloom-hpat` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **Wave 5 closed (2026-10-05):** `beadloom-0gyz` (V2) `18e447cf`, `6a9f9620`, `8b87b4f1`, `a710da95`, `86fa44ae`, `82af814a` — the overview's own router (tracks >= 8 px apart, a straight run of >= 12 px into each box), pills over lines, titles inside the box or on a plate beside it, calm hover, "in N · out M". This portal at the fit: overlapping head pairs 12 -> 0, narrowest gap 8.24 px. Gate owner 0gyz on the tree at `82af814a`: 13,369 passed, 0 failed; ruff, mypy, lint, doctor clean; Playwright 225 of 225; adopter portals 86 passed (python and typescript at `a710da95`); planning 16 ms here, 223 ms on the slowest graph (bound 250); `beadloom ci` rc 1 on sync-check alone (235 stale pairs -> W). Nine surfaced decisions in the bead's SURFACED comment (relayed to the owner). Coordinator's look: the selected view at the fit still draws unreadable inner edges with diagonals -> V3 (noted on `beadloom-hnff`). `beadloom-btkd.2` (arrowheads) launched.
 
 - **Wave 4 closed (2026-10-05):** `beadloom-jcng` `61a2e390` — a changed `go.mod`, `go.work` or `Package.swift` alone re-resolves every stored import; single-segment Go module paths no longer dropped (Go standard-library imports are now stored with no node -> T measures). `beadloom-xv87` (V1) `584b9677`, `e152a493`, `562551ed` — one weight, bridges, junction dots and gradient removed, corner status mark, legends; the layout no longer depends on findings (all 130 nodes moved once; RND probe numbers are on the old layout); Cytoscape's edge path cache off. Gate owner xv87 on the tree at `e152a493`: 13,361 passed, 0 failed; ruff, mypy, lint, doctor clean; Playwright 203 of 203; adopter portals 18 of 18; `beadloom ci` rc 1 on sync-check alone (225 stale pairs -> W). Open from V1, handed to V3 in its bead comments: 34 of 139 arrowheads broken at zoom 0.545; a diagonal unrouted line from a node to its own box. V1's readings for the owner: a followed line keeps the one weight; imports = text colour at 40%; dotted kinds in screen pixels. `beadloom-0gyz` (V2) launched.
 
