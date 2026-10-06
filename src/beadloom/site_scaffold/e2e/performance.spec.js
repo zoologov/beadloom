@@ -1,4 +1,4 @@
-// The viewer stays as fast as it was: a frame at the whole-graph fit and at zoom 1, the first drawing, planning the overview and bundling.
+// The viewer stays as fast as it was: a frame at the whole-graph fit and at zoom 1, the first drawing, planning the overview, bundling, a zoom step and a hover.
 //
 // Before the overview drew a map, the whole-graph fit drew every node and every
 // edge. Measured without a GPU on an Apple M1 Max (headless Chromium, the room
@@ -21,7 +21,10 @@
 
 import { test, expect } from "@playwright/test";
 import { ADOPTER_SIZED, adopterSizedGraph } from "./support/adopterGraph.js";
-import { ENVIRONMENT, boundHere } from "./support/environment.js";
+import { ENVIRONMENT, GESTURE_MS, boundHere } from "./support/environment.js";
+import { treeOf } from "./support/map.js";
+import { centreOn } from "./support/levels.js";
+import { requireShape } from "./support/shape.js";
 import { architectureData, openArchitecture, viewer, waitForViewer } from "./support/viewer.js";
 
 /**
@@ -255,3 +258,117 @@ test("the adopter-sized graph is first drawn within the bound for this environme
 
   expect(first, "the first drawing of the adopter-sized graph, in ms").toBeLessThanOrEqual(bound);
 });
+
+/** How many nodes in view a hover is timed on, at most, per opening. */
+const HOVERED_NODES = 6;
+/** How far inside the canvas's edges a node the pointer rests on lies, in pixels. */
+const HOVER_MARGIN_PX = 40;
+
+/**
+ * The top-level box nearest the middle of the canvas at the fit, which a zoom
+ * towards the middle keeps in view until it opens; the case is skipped without one.
+ */
+async function middleTopBox(page, data) {
+  const { topBoxes } = treeOf(data);
+  requireShape(topBoxes.length > 0, "no box at the top of the containment tree");
+  const canvas = await page.getByTestId("graph-canvas").boundingBox();
+  const rects = await viewer(page, "boxes");
+  const [cx, cy] = [canvas.x + canvas.width / 2, canvas.y + canvas.height / 2];
+  const distance = (id) => Math.hypot((rects[id].x1 + rects[id].x2) / 2 - cx, (rects[id].y1 + rects[id].y2) / 2 - cy);
+  return [...topBoxes].filter((id) => rects[id]).sort((a, b) => distance(a) - distance(b) || (a < b ? -1 : 1))[0];
+}
+
+/**
+ * Press "Zoom in" from the page itself, and return how long passed until the
+ * viewer held still again and two more frames were drawn, in ms, with whether
+ * the box `box` is open then.
+ */
+function zoomStep(page, box) {
+  return page.evaluate(async (id) => {
+    const handle = window.__beadloomViewer;
+    const frame = () => new Promise((done) => requestAnimationFrame(done));
+    const start = performance.now();
+    document.querySelector("button[aria-label='Zoom in']").click();
+    await frame();
+    while (!handle.ready()) await frame();
+    await frame();
+    await frame();
+    return { ms: performance.now() - start, open: handle.openBoxes().includes(id) };
+  }, box);
+}
+
+/** Rest the pointer on the middle of `rect` from the page itself, and return how long passed until two frames were drawn, in ms. */
+function hoverAt(page, rect) {
+  return page.evaluate(async ([x, y]) => {
+    const target = document.elementFromPoint(x, y);
+    const start = performance.now();
+    target.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }));
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+    return performance.now() - start;
+  }, [(rect.x1 + rect.x2) / 2, (rect.y1 + rect.y2) / 2]);
+}
+
+/**
+ * Open `data` and press "Zoom in" towards the top-level box nearest the middle
+ * until it opens: `{ box, steps }`, how long each step took, in ms.
+ */
+async function zoomIntoBoxTimed(page, data) {
+  await openOver(page, data);
+  await page.getByTestId("graph-canvas").scrollIntoViewIfNeeded();
+  const box = await middleTopBox(page, data);
+  await centreOn(page, box);
+  const steps = [];
+  for (let step = 0; step < ZOOM_STEPS; step += 1) {
+    const { ms, open } = await zoomStep(page, box);
+    steps.push(ms);
+    if (open) return { box, steps };
+  }
+  throw new Error(`${box} did not open in ${ZOOM_STEPS} zoom steps`);
+}
+
+for (const graph of GRAPHS) {
+  test(`on ${graph.name} a zoom step towards a box is drawn within the bound for this environment`, { tag: graph.tag }, async ({ page, request }) => {
+    test.setTimeout(OPENINGS * 60_000);
+    const bound = boundHere(GESTURE_MS.zoomStep[graph.key]);
+    const data = graph.data(await architectureData(request));
+    const steps = [];
+    let box = null;
+    for (let opening = 0; opening < OPENINGS; opening += 1) {
+      const run = await zoomIntoBoxTimed(page, data);
+      box = run.box;
+      steps.push(...run.steps);
+    }
+    const step = median(steps);
+    report(`a zoom step until ${box} opens, the median of ${steps.length} (the longest ${Math.max(...steps).toFixed(0)}):`, step, bound);
+
+    expect(step, "a zoom step, in ms").toBeLessThanOrEqual(bound);
+  });
+
+  test(`on ${graph.name} the pointer resting on a node inside an open box is drawn within the bound for this environment`, { tag: graph.tag }, async ({ page, request }) => {
+    test.setTimeout(OPENINGS * 60_000);
+    const bound = boundHere(GESTURE_MS.hover[graph.key]);
+    const data = graph.data(await architectureData(request));
+    const hovers = [];
+    for (let opening = 0; opening < OPENINGS; opening += 1) {
+      await zoomIntoBoxTimed(page, data);
+      // The nodes in view with edges out of the box, which a hover draws.
+      const marks = await viewer(page, "outwardMarks");
+      const rects = await viewer(page, "boxes");
+      const canvas = await page.getByTestId("graph-canvas").boundingBox();
+      const inView = (r) =>
+        (r.x1 + r.x2) / 2 > canvas.x + HOVER_MARGIN_PX && (r.x1 + r.x2) / 2 < canvas.x + canvas.width - HOVER_MARGIN_PX &&
+        (r.y1 + r.y2) / 2 > canvas.y + HOVER_MARGIN_PX && (r.y1 + r.y2) / 2 < canvas.y + canvas.height - HOVER_MARGIN_PX;
+      const nodes = Object.keys(marks).filter((id) => rects[id] && inView(rects[id])).sort().slice(0, HOVERED_NODES);
+      requireShape(nodes.length > 0, "no node in view inside the top-level box zoomed into has an edge out of it");
+      for (const id of nodes) {
+        await page.mouse.move(2, 2);
+        await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+        hovers.push(await hoverAt(page, rects[id]));
+      }
+    }
+    const hover = median(hovers);
+    report(`the pointer resting on a node with edges out of its box, the median of ${hovers.length} (the longest ${Math.max(...hovers).toFixed(0)}):`, hover, bound);
+
+    expect(hover, "a hover, in ms").toBeLessThanOrEqual(bound);
+  });
+}

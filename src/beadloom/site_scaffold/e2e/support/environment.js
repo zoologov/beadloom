@@ -35,3 +35,30 @@ export function boundHere(bounds) {
   }
   return bounds[ENVIRONMENT];
 }
+
+/**
+ * The bounds of the cases that time what a reader's own gesture costs
+ * (`performance.spec.js`), in ms, per graph and per environment, beside the
+ * bounds each case states for a frame, a first drawing, a plan and a bundling.
+ *
+ * - `zoomStep`: one press of "Zoom in" from the fit towards a box, from the
+ *   press until the viewer holds still again and two frames are drawn, the
+ *   median of every step until the box opens.
+ * - `hover`: the pointer coming to rest on a node inside an open box, from the
+ *   move until two frames are drawn, the median over the nodes in view.
+ *
+ * Locally (an Apple M-series machine, headless Chromium, no GPU, one browser
+ * at work) the viewer took, as medians of three openings on the portal these
+ * cases were written on: a zoom step 48 ms on its graph and 149 ms on the
+ * adopter-sized one, a hover 53 ms and 236 ms. The viewer before an open box
+ * kept its outward edges at the box, measured the same way on the same
+ * machine, took 35 and 39 ms for a zoom step and 28 ms for a hover on both
+ * graphs. The local bounds hold the cost as it is now with half again as much
+ * room, so they catch a change that makes it slower still; whether the cost as
+ * it is now is acceptable is not theirs to say. A build server is unmeasured:
+ * its bounds take the bundling's measured factor of 4.7, and twice that again.
+ */
+export const GESTURE_MS = Object.freeze({
+  zoomStep: { own: { local: 75, ci: 450 }, adopter: { local: 225, ci: 1400 } },
+  hover: { own: { local: 80, ci: 500 }, adopter: { local: 350, ci: 2200 } },
+});

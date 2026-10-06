@@ -18,6 +18,7 @@ nodes:
       - src/beadloom/site_scaffold/e2e/levels.spec.js
       - src/beadloom/site_scaffold/e2e/look.spec.js
       - src/beadloom/site_scaffold/e2e/map.spec.js
+      - src/beadloom/site_scaffold/e2e/metrics.spec.js
       - src/beadloom/site_scaffold/e2e/overview.spec.js
       - src/beadloom/site_scaffold/e2e/performance.spec.js
       - src/beadloom/site_scaffold/e2e/routes.spec.js

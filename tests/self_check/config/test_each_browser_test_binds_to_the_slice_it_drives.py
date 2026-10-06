@@ -56,6 +56,8 @@ SPEC_SLICE = {
     "layout.spec.js": "site-shared",
     # The map-like overview: levels, aggregated edges, the budget (BDL-077 E4).
     "map.spec.js": "site-graph-viewer",
+    # The design's readings measured a second time, by geometry of their own (BDL-078 T).
+    "metrics.spec.js": "site-graph-viewer",
     "navigation.spec.js": "site-navigate-graph",
     "neighbourhood.spec.js": "site-select-neighbourhood",
     "node-page.spec.js": "site-architecture-page",
