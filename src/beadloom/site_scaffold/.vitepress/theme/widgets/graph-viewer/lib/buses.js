@@ -9,6 +9,9 @@
 // bus where its own lane begins. The gap ends at the nearest box over any place
 // the channel runs to, a lane's as well as a port's: a channel past the border of
 // a box the bus reaches would take an edge to that box past it and back into it.
+// A box near the ports ends it too, within `gapReach` of them; one off to the side
+// of a lane far out does not, or a box hundreds of units away would hold the
+// channel a few units under the node, across the head of a line arriving there.
 // When two nodes face one gap, an edge between them keeps the channel the busier
 // node's bus gave it, and the other node's bus takes it along its own channel
 // first.
@@ -217,7 +220,10 @@ function busOf(drawing, node, { side, sign }, direction, options) {
   // drops further first, or whose channel another bus claimed, leaves the bus at
   // its own port's place and keeps its drop to that channel.
   const turnsIn = (gap) => fan.filter((item) => !item.claimed && sign * (item.route[1].y - border) < gap);
-  const gap = gapOver(ports, (span) => firstGap(drawing, node, border, sign, span, depth, options.gapReach), turnsIn);
+  // The reach is kept around the ports; over a lane, only a box right under the channel's run ends the gap.
+  const nearPorts = firstGap(drawing, node, border, sign, [Math.min(...ports), Math.max(...ports)], depth, options.gapReach);
+  const gapOf = (span) => Math.min(nearPorts, firstGap(drawing, node, border, sign, span, depth, 0));
+  const gap = gapOver(ports, gapOf, turnsIn);
   const inGap = new Set(turnsIn(gap));
   for (const item of fan) {
     item.inGap = inGap.has(item);
