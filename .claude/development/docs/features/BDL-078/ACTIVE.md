@@ -42,6 +42,8 @@
 | `beadloom-stcx` | F-stcx | ✓ done | `vitepress dev` loads |
 | `beadloom-btkd.6` | dev | ✓ done | no open box's title under a node (owner's no-artefact requirement): `f2eb84f0`, `23d04791`, `cd910b06`; every box keeps 36 units above its children (all 118 leaves here move down, up to 192 units; boxes +24 per level of boxes held); titles under a node, every box open: this portal 5 of 12 -> 0, six fixtures 10 of 10 -> 0; a hovered line through a title runs under it; the project box's title (0.55 px at this portal's fit) on a 12.5 px plate above it; the padding exposed two bundling misses on the adopter-sized graph (a lane bound masked at HEAD; a bus channel 3.3 units deep across a head, python fixture) -> joins and bus gap fixed; readings for the owner in the bead |
 | `beadloom-q63p` | T | in progress | PRD criteria measured |
+| `beadloom-btkd.7` | dev | blocked | one count per node and per line (owner, after the look) |
+| `beadloom-btkd.8` | fix | blocked | tui's colour; the project box visible (owner, after the look) |
 | `beadloom-ak1i` | R | blocked | review |
 | `beadloom-1hle` | W | blocked | docs |
 | `beadloom-hpat` | P | blocked | owner's look, PR |
