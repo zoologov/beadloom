@@ -51,7 +51,11 @@ jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
+      # The full history: the Gate's reindex measures git activity over 90 days
+      # and names a shallow history as WARN (BDL-078, `beadloom-btkd.9`).
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Beadloom gate
         uses: ./.github/actions/beadloom-gate
@@ -364,7 +368,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # The full history, for the same reason as the gate job: the portal this
+      # job builds carries activity levels (BDL-078, `beadloom-btkd.9`).
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
