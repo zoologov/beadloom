@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import sqlite3
 
+    from beadloom.infrastructure.git_activity import GitHistory
+
 # Meta key recording that the index's derived ``depends_on`` edges carry their
 # provenance marker, so an incremental run can refresh them without deleting a
 # graph-declared edge. An index written before this marker existed reports a
@@ -101,6 +103,9 @@ class ReindexResult:
     nothing_changed: bool = False
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    #: The history a full reindex measured activity on (BDL-078 ``beadloom-btkd.9``):
+    #: ``None`` when no activity was read, as on an incremental run or outside git.
+    activity_history: GitHistory | None = None
 
 
 @dataclass

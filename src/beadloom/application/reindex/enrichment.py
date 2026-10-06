@@ -20,12 +20,15 @@ from typing import TYPE_CHECKING, Any
 
 from beadloom.application.activity_settings import activity_exclusions
 from beadloom.application.reindex.models import _EXT_TO_LANG
+from beadloom.infrastructure.git_activity import read_git_history
 from beadloom.infrastructure.node_source import NodeSource
 from beadloom.infrastructure.repository import get_node_sources, get_part_of_containers
 
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
+
+    from beadloom.infrastructure.git_activity import GitHistory
 
 
 def _update_node_extra(
@@ -133,7 +136,7 @@ def _scan_routes(project_root: Path) -> list[dict[str, object]]:
 def _store_git_activity(
     conn: sqlite3.Connection,
     project_root: Path,
-) -> None:
+) -> GitHistory | None:
     """Analyze git activity and store results in ``nodes.extra["activity"]``.
 
     Builds a ``source_dirs`` mapping from nodes that have a ``source`` field and
@@ -145,13 +148,18 @@ def _store_git_activity(
     ``analyze_git_activity`` is looked up on the package namespace at call time
     (``beadloom.application.reindex.analyze_git_activity``) so tests can patch
     it there.  Gracefully does nothing when git is unavailable
-    (``analyze_git_activity`` returns an empty dict in that case).
+    (``analyze_git_activity`` returns an empty dict in that case), and nothing
+    on a shallow clone that does not reach back over the history window.
+
+    Returns the history the activity was measured on, so the reindex can say
+    so when it is shallow (BDL-078 ``beadloom-btkd.9``); ``None`` when no node
+    has a source or git cannot say.
     """
     from beadloom.application import reindex as _pkg
 
     source_dirs = get_node_sources(conn)
     if not source_dirs:
-        return
+        return None
 
     activities = _pkg.analyze_git_activity(
         project_root,
@@ -186,3 +194,4 @@ def _store_git_activity(
         )
 
     conn.commit()
+    return read_git_history(project_root)

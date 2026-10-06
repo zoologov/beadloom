@@ -46,7 +46,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # The full history: the activity on every node's card is measured on the
+      # history this job checks out, and checkout's default of one commit shows
+      # every file as added (BDL-078 beadloom-btkd.9).
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6

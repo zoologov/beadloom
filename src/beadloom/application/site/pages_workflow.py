@@ -7,7 +7,9 @@ BDL-076 B2 (``beadloom-qki6``). ``beadloom docs site --pages-workflow`` writes
 CI what ``docs site`` did on the adopter's machine: it installs the beadloom that
 wrote it, reindexes, regenerates the portal into the same directory, builds it
 with the Node major the scaffold's ``package.json`` declares under
-``engines.node``, and deploys it to Pages.
+``engines.node``, and deploys it to Pages. It checks out the whole history,
+because the reindex measures each node's activity on the history it is given
+(BDL-078 ``beadloom-btkd.9``).
 
 Three facts are the project's, and each comes from where the project declares it:
 
@@ -100,7 +102,11 @@ jobs:
     env:
       PORTAL_BASE: @BASE@
     steps:
+      # The whole history: each node's activity is measured on the history checked
+      # out here, and one commit, checkout's default, shows every file as added.
       - uses: actions/checkout@@CHECKOUT@
+        with:
+          fetch-depth: 0
 
       - name: Configure Pages
         id: pages

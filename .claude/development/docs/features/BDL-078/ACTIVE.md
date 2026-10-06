@@ -44,7 +44,7 @@
 | `beadloom-q63p` | T | ✓ done | every PRD criterion measured a second time: `e2e/metrics.spec.js` (26 cases, own geometry; red on the viewer before the router: head overlaps 9 / 137, gaps 0.96 / 0.80 px), two gesture timings in `performance.spec.js` (bounds `GESTURE_MS` in `support/environment.js`), a pytest case on six fixtures (incremental == fresh; red on 80095d60^ and 61a2e390^); `beadloom-95jv` and `beadloom-xzvp` measured fixed; failing: the owner's five (btkd.7, btkd.8), activity on a shallow clone (3 levels on the published portal), zoom step / hover 4x / 8x slower than BDL-077 on an adopter-sized graph; criteria table in the bead |
 | `beadloom-btkd.7` | dev | in progress | one count per node and per line (owner, after the look) |
 | `beadloom-btkd.8` | fix | blocked | tui's colour; the project box visible (owner, after the look) |
-| `beadloom-btkd.9` | fix | in progress | the published portal's activity on a full history; shallow clone named (T F1) |
+| `beadloom-btkd.9` | fix | ✓ done | the published portal's activity on a full history; shallow clone named (T F1): `deploy-site.yml` and the workflow `docs site --pages-workflow` writes check out `fetch-depth: 0`; a shallow clone that does not reach back 90 days records no activity and `reindex` / `beadloom ci` (reindex step WARN) say `not measured on history: shallow (N commits)`; depth-1 clone of this repository: hot 14 / warm 39 / cool 77 (3 levels, sizes of files) -> 0 of 130 nodes recorded, card 'not recorded'; full history unchanged 11 / 28 / 56 / 21 / 14 |
 | `beadloom-btkd.10` | dev | blocked | zoom step and hover cost (T F2) |
 | `beadloom-ak1i` | R | blocked | review |
 | `beadloom-1hle` | W | blocked | docs |

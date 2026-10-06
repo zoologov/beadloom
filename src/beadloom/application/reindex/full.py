@@ -187,7 +187,7 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
         _load_rules_into_db(rules_path, conn, result)
 
     # 3e. Analyze git activity and store in nodes.extra.
-    _store_git_activity(conn, project_root)
+    result.activity_history = _store_git_activity(conn, project_root)
 
     # 3f. Extract API routes and store in nodes.extra.
     _extract_and_store_routes(project_root, conn)

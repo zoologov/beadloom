@@ -58,6 +58,7 @@ from beadloom.doc_sync.engine import (
     content_remedy,
 )
 from beadloom.doc_sync.surface_ledger import SurfaceVerdict, compare_surface, read_ledger
+from beadloom.infrastructure.git_activity import activity_history_note
 from beadloom.infrastructure.repository import StaleCount
 from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH
 
@@ -262,7 +263,15 @@ def _step_reindex(project_root: Path, *, no_reindex: bool) -> GateStep:
             summary=f"{len(result.errors)} reindex error(s)",
         )
     summary = "up to date" if result.nothing_changed else "reindexed"
-    return GateStep("reindex", summary=summary)
+    # A shallow clone is named on the step (BDL-078 ``beadloom-btkd.9``); one that
+    # does not reach back over the activity window recorded no activity, and a
+    # step that could not measure part of what it reports on says WARN.
+    history = result.activity_history
+    note = activity_history_note(history)
+    if note:
+        summary = f"{summary}; activity {note}"
+    unmeasured = history is not None and not history.measurable
+    return GateStep("reindex", summary=summary, not_verified=unmeasured)
 
 
 def lint_step(project_root: Path) -> GateStep:

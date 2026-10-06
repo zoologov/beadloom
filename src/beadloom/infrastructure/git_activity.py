@@ -50,6 +50,15 @@ BDL-078 ``beadloom-btkd.1`` (the owner, after F-activity) refined two things:
   from the project root, ``*`` crossing directories. A binary file that no
   attribute marks is still a change of zero lines, as above: git detected it,
   nobody declared it generated.
+
+BDL-078 ``beadloom-btkd.9`` (T's finding F1): **activity is measured on the
+history the clone holds.** Git shows the first commit of a shallow clone as
+adding every file, so on a clone one commit deep every node read "1 commit" and
+its changed lines were the size of its files. A shallow clone whose first
+commits landed inside the 90-day window cannot say what changed in it, so no
+activity is recorded, as without git, and :func:`activity_history_note` says
+why; a shallow clone that reaches back past the window holds every change the
+window needs, and is measured. :func:`read_git_history` tells the two apart.
 """
 
 # beadloom:domain=infrastructure
@@ -142,6 +151,49 @@ class GitActivity:
     activity_level: str  # one of ACTIVITY_LEVELS
     lines_30d: int = 0  # changed lines (added + deleted) in 30 days
     lines_90d: int = 0  # changed lines (added + deleted) in 90 days
+
+
+@dataclass(frozen=True)
+class GitHistory:
+    """How much of the project's history the clone holds.
+
+    ``shallow`` is git's own answer. A shallow clone also records how many
+    commits it holds and whether the commits it was cut at landed before the
+    history window opened (``reaches_window``): only then does it hold every
+    change the window needs. A full history reaches every window.
+    """
+
+    shallow: bool
+    commits: int = 0
+    reaches_window: bool = True
+
+    @property
+    def measurable(self) -> bool:
+        """Whether activity can be measured on this history."""
+        return not self.shallow or self.reaches_window
+
+    def describe(self) -> str:
+        """``history: full``, or ``history: shallow (N commits)``."""
+        if not self.shallow:
+            return "history: full"
+        noun = "commit" if self.commits == 1 else "commits"
+        return f"history: shallow ({self.commits} {noun})"
+
+
+def activity_history_note(history: GitHistory | None) -> str:
+    """What activity was measured on, for a shallow history; ``""`` for any other.
+
+    The one wording the reindex and the Gate both print, so the two cannot
+    describe one clone differently.
+    """
+    if history is None or not history.shallow:
+        return ""
+    if history.reaches_window:
+        return f"measured on {history.describe()}, which reaches back {HISTORY_DAYS} days"
+    return (
+        f"not measured on {history.describe()}, which does not reach back {HISTORY_DAYS} "
+        "days; check out the full history (actions/checkout fetch-depth: 0)"
+    )
 
 
 def rank_activity_levels(
@@ -309,15 +361,16 @@ def _parse_git_log(output: str) -> list[_CommitInfo]:
 _GIT_LOG_FORMAT = f"--format={_RECORD}%H{_FIELD}%cI{_FIELD}%aN"
 
 
-def _read_history(project_root: Path, since: datetime) -> list[_CommitInfo] | None:
-    """The commits that landed after *since*, or ``None`` when git cannot say."""
+def _git_output(project_root: Path, *args: str, stdin: str | None = None) -> str | None:
+    """What ``git <args>`` prints in *project_root*, or ``None`` when git cannot say."""
     # The codec is stated, not inherited: this output is author NAMES and file
     # paths, and ``text=True`` would decode them with
     # ``locale.getpreferredencoding(False)``. MEASURED on a repo authored by
     # "Иван Петров": an ambient latin-1 yields "Ð\x98Ð²Ð°Ð½ ..." -- a contributor
     # who does not exist, shown in the dashboard as a real person -- and an
     # ambient ascii raises ``UnicodeDecodeError``, which is a ``ValueError`` and
-    # so escaped the handler below.
+    # so escaped the handler below. A path written to git's input is encoded
+    # with the same codec.
     #
     # ``errors="replace"`` rather than ``surrogateescape``, and the reason is the
     # direction of failure rather than fidelity: a name reaches sqlite through
@@ -328,21 +381,11 @@ def _read_history(project_root: Path, since: datetime) -> list[_CommitInfo] | No
     # is not injective, so two authors differing only in a byte that is not UTF-8
     # render as one. That loss touches names which are already not UTF-8, only
     # their display, and never a gate, a verdict or an exit code.
-    #
-    # ``-M`` states rename detection rather than inheriting ``diff.renames``;
-    # ``-z`` leaves paths unquoted, whatever ``core.quotePath`` says.
     try:
         result = subprocess.run(  # noqa: S603
-            [  # noqa: S607
-                "git",
-                "log",
-                _GIT_LOG_FORMAT,
-                "--numstat",
-                "-z",
-                "-M",
-                f"--since={since.isoformat()}",
-            ],
+            ["git", *args],  # noqa: S607
             cwd=str(project_root),
+            input=stdin,
             capture_output=True,
             encoding="utf-8",
             errors="replace",
@@ -357,9 +400,67 @@ def _read_history(project_root: Path, since: datetime) -> list[_CommitInfo] | No
         # being unavailable for any of these reasons degrades gracefully to
         # "no activity".
         return None
-    if result.returncode != 0:
+    return result.stdout if result.returncode == 0 else None
+
+
+def _read_history(project_root: Path, since: datetime) -> list[_CommitInfo] | None:
+    """The commits that landed after *since*, or ``None`` when git cannot say.
+
+    ``-M`` states rename detection rather than inheriting ``diff.renames``;
+    ``-z`` leaves paths unquoted, whatever ``core.quotePath`` says.
+    """
+    output = _git_output(
+        project_root,
+        "log",
+        _GIT_LOG_FORMAT,
+        "--numstat",
+        "-z",
+        "-M",
+        f"--since={since.isoformat()}",
+    )
+    return None if output is None else _parse_git_log(output)
+
+
+def _boundary_dates(project_root: Path) -> list[datetime]:
+    """When each commit a shallow clone was cut at landed; none when git cannot say.
+
+    Git lists those commits, whose parents the clone lacks, in its ``shallow``
+    file (``git rev-parse --git-path shallow`` names where it is).
+    """
+    where = _git_output(project_root, "rev-parse", "--git-path", "shallow")
+    if where is None:
+        return []
+    try:
+        hashes = (project_root / where.strip()).read_text(encoding="ascii").split()
+    except (OSError, ValueError):
+        return []
+    if not hashes:
+        return []
+    dates = _git_output(project_root, "log", "--no-walk", "--format=%cI", *hashes)
+    if dates is None:
+        return []
+    return [landed for line in dates.splitlines() if (landed := _parse_date(line.strip()))]
+
+
+def read_git_history(project_root: Path, *, now: datetime | None = None) -> GitHistory | None:
+    """How much history the clone at *project_root* holds; ``None`` when git cannot say.
+
+    A shallow clone reaches the window ending at *now* (the current time when
+    omitted) when every commit it was cut at landed before the window opened.
+    """
+    answer = _git_output(project_root, "rev-parse", "--is-shallow-repository")
+    if answer is None:
         return None
-    return _parse_git_log(result.stdout)
+    if answer.strip() != "true":
+        return GitHistory(shallow=False)
+    counted = (_git_output(project_root, "rev-list", "--count", "HEAD") or "").strip()
+    history_since = (now or datetime.now(tz=timezone.utc)) - timedelta(days=HISTORY_DAYS)
+    starts = _boundary_dates(project_root)
+    return GitHistory(
+        shallow=True,
+        commits=int(counted) if counted.isdigit() else 0,
+        reaches_window=bool(starts) and all(start < history_since for start in starts),
+    )
 
 
 def _matches_declared(path: str, patterns: Collection[str]) -> bool:
@@ -375,29 +476,25 @@ def _marked_by_attributes(project_root: Path, paths: Collection[str]) -> set[str
     file is judged by what the project declares now, not when it was committed.
 
     The codec is stated both ways, UTF-8 with ``replace``, for the reason
-    ``_read_history`` gives: the paths are the ones that call decoded, and no
-    ambient codec has a say.
+    ``_git_output`` gives: the paths are the ones ``_read_history`` decoded, and
+    no ambient codec has a say.
     """
     if not paths:
         return set()
-    try:
-        result = subprocess.run(  # noqa: S603
-            ["git", "check-attr", "-z", "--stdin", *_GENERATED_ATTRIBUTES],  # noqa: S607
-            cwd=str(project_root),
-            input="".join(f"{path}\0" for path in paths),
-            capture_output=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=30,
-        )
-    except (OSError, subprocess.SubprocessError):
+    output = _git_output(
+        project_root,
+        "check-attr",
+        "-z",
+        "--stdin",
+        *_GENERATED_ATTRIBUTES,
+        stdin="".join(f"{path}\0" for path in paths),
+    )
+    if output is None:
         # The same degradation as ``_read_history``: without git's answer no
         # file is taken for generated, and every change counts.
         return set()
-    if result.returncode != 0:
-        return set()
     # ``-z`` output is ``path NUL attribute NUL value NUL`` per attribute asked.
-    fields = result.stdout.split("\0")
+    fields = output.split("\0")
     marked: set[str] = set()
     for index in range(0, len(fields) - 2, 3):
         path, attribute, value = fields[index : index + 3]
@@ -550,7 +647,9 @@ def analyze_git_activity(
     -------
     dict[str, GitActivity]
         Mapping of ``ref_id -> GitActivity`` for each node in *source_dirs*.
-        Returns empty dict if not a git repo or git is unavailable.
+        Returns empty dict if not a git repo, git is unavailable, or the clone
+        is shallow and does not reach back over the history window
+        (:func:`read_git_history`).
     """
     if not source_dirs:
         return {}
@@ -559,6 +658,9 @@ def analyze_git_activity(
     recent_since = now - timedelta(days=RECENT_DAYS)
     history_since = now - timedelta(days=HISTORY_DAYS)
 
+    clone = read_git_history(project_root, now=now)
+    if clone is not None and not clone.measurable:
+        return {}
     history = _read_history(project_root, history_since)
     if history is None:
         return {}
