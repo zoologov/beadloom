@@ -40,12 +40,15 @@
 | `beadloom-jcng` | F-jcng | ✓ done | manifests as inputs: a go.mod, go.work or Package.swift edit re-resolves the imports it governs; a Go module path with no `/` is imported |
 | `beadloom-76mk` | F-76mk | ✓ done | flat Python tests bind |
 | `beadloom-stcx` | F-stcx | ✓ done | `vitepress dev` loads |
-| `beadloom-q63p` | T | ready | PRD criteria measured |
+| `beadloom-btkd.6` | dev | in progress | a nested open box's title is not covered (artefact left by V3) |
+| `beadloom-q63p` | T | blocked | PRD criteria measured |
 | `beadloom-ak1i` | R | blocked | review |
 | `beadloom-1hle` | W | blocked | docs |
 | `beadloom-hpat` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **Wave 8 closed (2026-10-06):** `beadloom-hnff` (V3) `da76249c`, `69ea0551`, `67b6d70a`, `d951994b`, `bf10030d`, `826a89c7` — a box opens when its nodes are readable (24 px; closes below 0.9 of it), a selection frames its neighbourhood at 0.51 (0 nodes under 21.6 px; before: 34+ nodes at 2-6 px), an open box keeps outward edges on its line, "+N" on nodes, own edges on hover/selection, loops drawn square along ELK's route to an invisible end on the box border. Leftovers to 0: heads with no room 41/7 -> 0 (the case now fails on them), loop heads 17 -> 0, loop diagonals 20 -> 0, the tui size jump gone. Gate owner on the tree at `bf10030d`: 13,378 passed, 0 failed; ruff, mypy, lint, doctor clean; Playwright 237 of 237 + performance 6 of 6 (planning 37.8 / 143.6 ms, bundling 39.4 ms, first drawing 6.3 s of 7.2); adopters 18 of 18; `beadloom ci` rc 1 on sync-check alone (246 pairs -> W). Departures surfaced: close threshold 0.9 not 0.8; smallest head 3 px not 4. Not fixed: a nested open box's title under its first row (ELK top padding 12) -> `beadloom-btkd.6`, launched; loops cross open boxes as long lines (ruling 13, the owner judges).
 
 - **Wave 7 closed (2026-10-06):** `beadloom-btkd.3` `6d716d1e` — at the overview a small top-level node is drawn as a box that holds its title: this portal 6 of 11 titles inside -> 11 of 11, plates 5 -> 0 (ai_agents, context-oracle, mcp-server, tui, vitepress-site drawn larger); the six fixtures unchanged, 0 plates. Planning 16 -> 38.4 ms here (bound 50), adopter-sized 142.9 of 250. One visible jump left for V3: tui returns to its laid-out size when a data-file edge is drawn into it (~3.2x the fit). `beadloom-btkd.5` `a56a64c3` — the issue-log self-checks derive their expectation from the log's own headings. Gate owner btkd.3 on the tree at `6d716d1e`: 13,374 passed, 0 failed; ruff, mypy, lint, doctor clean; Playwright 229 of 229 + performance 5 of 5; adopters 86; `beadloom ci` rc 1 on sync-check alone (241 pairs -> W). `beadloom-hnff` (V3) launched, the last viewer bead.
 
