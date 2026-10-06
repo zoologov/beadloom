@@ -12,6 +12,12 @@
 // both, and each case records what it measured on the run's report
 // (`measured` annotations), the reading a reviewer compares with the goal.
 //
+// The cases whose reading the layout decides — the titles at the fit, a box
+// opened at the fit — run on this portal's graph and again on the same graph
+// with two edges more (`support/perturbedGraph.js`), laid out another way. There
+// a title's size is held as the map draws every mark, within a step of its scale:
+// on this portal the fit lands where the floor holds at the size itself.
+//
 // What the cases cannot see. They read the state the viewer drew through its test
 // handle and compare no pixels. Arrowheads are the triangles Cytoscape's source
 // says it draws. On the adopter-sized graph the whole-graph fit is held at the
@@ -37,6 +43,7 @@ import {
   spread,
   triangleOverlap,
 } from "./support/metrics.js";
+import { withTwoMoreEdges } from "./support/perturbedGraph.js";
 import { requireShape } from "./support/shape.js";
 import { architectureData, openArchitecture, openEveryBox, viewer, withAncestors } from "./support/viewer.js";
 
@@ -115,6 +122,43 @@ async function plannedLines(page) {
 /** Each drawn node's box on screen, by id. */
 async function screenBoxes(page, view) {
   return Object.fromEntries(Object.entries(await viewer(page, "nodeBoxes")).map(([id, box]) => [id, rectToScreen(box, view)]));
+}
+
+/**
+ * The layouts a rule the layout decides is read on: the served file's, and the
+ * one ELK makes of it with two edges more (`support/perturbedGraph.js`), served
+ * in its place. A rule read on one layout holds by that layout's luck.
+ */
+const LAYOUTS = [
+  { name: "", served: true, data: (request) => architectureData(request) },
+  {
+    name: ", with two edges more",
+    served: false,
+    data: async (request) => {
+      const more = withTwoMoreEdges(await architectureData(request));
+      requireShape(Boolean(more), "no two leaves in two other top-level boxes than a third leaf's");
+      return more.data;
+    },
+  },
+];
+
+/**
+ * The least size on screen a title of the smallest size may be drawn at at the
+ * fit, as the map draws its marks: one size on screen within half of the step
+ * its scale is restyled at, a power of 1.25 near 1 / zoom, and laid out at the
+ * scale of the overview's plan, so one step smaller where the fit, which
+ * measures the routes as well, lands a step coarser. On the served layout the
+ * design's goal holds the floor at the size itself.
+ */
+async function smallestTitleOnScreen(page) {
+  const shrink = Math.min(1, (await viewer(page, "overviewPlan")).unit / (await viewer(page, "level")).scale);
+  return (SMALLEST_TITLE_PX * shrink) / half;
+}
+
+/** Open the architecture page over `layout`'s `data`: the served file as it is, or `data` served in its place. */
+async function openLayout(page, layout, data) {
+  if (!layout.served) await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  await openArchitecture(page);
 }
 
 /** The top-level box holding the most nodes; the case is skipped without one. */
@@ -282,66 +326,70 @@ test.describe("on this portal's architecture graph", () => {
     expect({ covers: real, single }).toEqual({ covers: [], single: [] });
   });
 
-  test("at the whole-graph fit every closed box and top-level node is titled at 10 px or more, inside its box", async ({ page, request }) => {
-    const tree = treeOf(await architectureData(request));
-    await openArchitecture(page);
-    const view = await viewOf(page);
-    const boxes = await screenBoxes(page, view);
-    const titles = await viewer(page, "titles");
-    const zoom = await viewer(page, "zoom");
-    const nodeLooks = new Map((await viewer(page, "nodeLooks")).map((look) => [look.id, look]));
-    const top = Object.keys(tree.parents).filter((id) => id !== tree.wrapper && (tree.parents[id] === tree.wrapper || (!tree.wrapper && !tree.parents[id])));
-    const byId = new Map(titles.map((title) => [title.id, title]));
-    const wrong = [];
-    for (const id of top) {
-      const title = byId.get(id);
-      // A top-level leaf whose own label reads larger than a title would keeps its label, centred in it.
-      const label = nodeLooks.get(id);
-      if (!title && !(label && !label.isParent && label.labelValign === "center" && label.fontSize * zoom >= SMALLEST_TITLE_PX - 0.01)) wrong.push(`${id}: no title`);
-      else if (!title) continue;
-      else if (title.fontSize < SMALLEST_TITLE_PX - 0.01) wrong.push(`${id}: ${title.fontSize.toFixed(2)} px`);
-      else if (!title.inside || !(title.x1 >= boxes[id].x1 - 0.5 && title.x2 <= boxes[id].x2 + 0.5 && title.y1 >= boxes[id].y1 - 0.5 && title.y2 <= boxes[id].y2 + 0.5))
-        wrong.push(`${id}: outside its box${title.inside ? "" : " on a plate"}`);
-    }
-    const project = (await viewer(page, "boxTitles")).find((title) => title.id === tree.wrapper);
-    measured(`${top.length} top-level node(s); titles ${spread(top.filter((id) => byId.has(id)).map((id) => byId.get(id).fontSize))} px; ${wrong.length} wrong; the project box's title ${project ? `${project.fontSize.toFixed(2)} px${project.plate ? " on a plate" : ""}` : "not drawn"}`);
+  for (const layout of LAYOUTS) {
+    test(`at the whole-graph fit every closed box and top-level node is titled at 10 px ${layout.served ? "or more" : "within a step of the map's scale"}, inside its box${layout.name}`, async ({ page, request }) => {
+      const data = await layout.data(request);
+      const tree = treeOf(data);
+      await openLayout(page, layout, data);
+      const view = await viewOf(page);
+      const floor = layout.served ? SMALLEST_TITLE_PX : await smallestTitleOnScreen(page);
+      const boxes = await screenBoxes(page, view);
+      const titles = await viewer(page, "titles");
+      const zoom = await viewer(page, "zoom");
+      const nodeLooks = new Map((await viewer(page, "nodeLooks")).map((look) => [look.id, look]));
+      const top = Object.keys(tree.parents).filter((id) => id !== tree.wrapper && (tree.parents[id] === tree.wrapper || (!tree.wrapper && !tree.parents[id])));
+      const byId = new Map(titles.map((title) => [title.id, title]));
+      const wrong = [];
+      for (const id of top) {
+        const title = byId.get(id);
+        // A top-level leaf whose own label reads larger than a title would keeps its label, centred in it.
+        const label = nodeLooks.get(id);
+        if (!title && !(label && !label.isParent && label.labelValign === "center" && label.fontSize * zoom >= floor - 0.01)) wrong.push(`${id}: no title`);
+        else if (!title) continue;
+        else if (title.fontSize < floor - 0.01) wrong.push(`${id}: ${title.fontSize.toFixed(2)} px`);
+        else if (!title.inside || !(title.x1 >= boxes[id].x1 - 0.5 && title.x2 <= boxes[id].x2 + 0.5 && title.y1 >= boxes[id].y1 - 0.5 && title.y2 <= boxes[id].y2 + 0.5))
+          wrong.push(`${id}: outside its box${title.inside ? "" : " on a plate"}`);
+      }
+      const project = (await viewer(page, "boxTitles")).find((title) => title.id === tree.wrapper);
+      measured(`${top.length} top-level node(s); titles ${spread(top.filter((id) => byId.has(id)).map((id) => byId.get(id).fontSize))} px; ${wrong.length} wrong; the project box's title ${project ? `${project.fontSize.toFixed(2)} px${project.plate ? " on a plate" : ""}` : "not drawn"}`);
 
-    expect(wrong).toEqual([]);
-  });
+      expect(wrong).toEqual([]);
+    });
 
-  test("opening a box at the whole-graph fit moves no line between top-level ends and no pill, and draws no line of the file out of the box", async ({ page, request }) => {
-    const data = await architectureData(request);
-    const tree = treeOf(data);
-    const box = largestTopBox(data, tree);
-    await openArchitecture(page);
-    const top = new Set(tree.topBoxes.concat(Object.keys(tree.parents).filter((id) => tree.parents[id] === tree.wrapper)));
-    const lines = async () =>
-      Object.fromEntries(
-        (await viewer(page, "aggregatedEdges")).filter((e) => e.drawn && e.ends.every((end) => top.has(end))).map((e) => [e.ends.join("|"), JSON.stringify([e.points, e.label])])
+    test(`opening a box at the whole-graph fit moves no line between top-level ends and no pill, and draws no line of the file out of the box${layout.name}`, async ({ page, request }) => {
+      const data = await layout.data(request);
+      const tree = treeOf(data);
+      const box = largestTopBox(data, tree);
+      await openLayout(page, layout, data);
+      const top = new Set(tree.topBoxes.concat(Object.keys(tree.parents).filter((id) => tree.parents[id] === tree.wrapper)));
+      const lines = async () =>
+        Object.fromEntries(
+          (await viewer(page, "aggregatedEdges")).filter((e) => e.drawn && e.ends.every((end) => top.has(end))).map((e) => [e.ends.join("|"), JSON.stringify([e.points, e.label])])
+        );
+      const pills = async () => Object.fromEntries((await viewer(page, "pills")).pills.map((p) => [`${p.id}`, JSON.stringify([p.text, p.x1.toFixed(2), p.y1.toFixed(2)])]));
+      const [linesBefore, pillsBefore, idsBefore] = [await lines(), await pills(), await viewer(page, "aggregatedEdges")];
+      const pairIds = Object.fromEntries(idsBefore.filter((e) => e.drawn).map((e) => [e.id, e.ends.join("|")]));
+
+      await page.evaluate((id) => window.__beadloomViewer.revealNodes([id], { edges: false }), box);
+      await expect.poll(() => viewer(page, "openBoxes")).toContain(box);
+      await twoFrames(page);
+      const [linesAfter, pillsAfterRaw] = [await lines(), await pills()];
+      const moved = Object.keys(linesBefore).filter((pair) => linesAfter[pair] !== linesBefore[pair]);
+      // A pill is named by its line's id; a line keeps its pair, so a pill is compared by its pair.
+      const byPair = (raw, ids) => Object.fromEntries(Object.entries(raw).map(([id, v]) => [ids[id] ?? id, v]));
+      const pairIdsAfter = Object.fromEntries((await viewer(page, "aggregatedEdges")).filter((e) => e.drawn).map((e) => [e.id, e.ends.join("|")]));
+      const [pillsA, pillsB] = [byPair(pillsBefore, pairIds), byPair(pillsAfterRaw, pairIdsAfter)];
+      const pillsMoved = Object.keys(pillsA).filter((pair) => pair in linesBefore && pillsB[pair] !== pillsA[pair]);
+      const inBox = (id) => withAncestors([id], tree.parents).has(box);
+      const ancestor = (a, b) => withAncestors([b], tree.parents).has(a);
+      const outward = (await viewer(page, "edgeRoutes")).filter(
+        (route) => !route.aggregated && inBox(route.source) !== inBox(route.target) && !ancestor(route.source, route.target) && !ancestor(route.target, route.source)
       );
-    const pills = async () => Object.fromEntries((await viewer(page, "pills")).pills.map((p) => [`${p.id}`, JSON.stringify([p.text, p.x1.toFixed(2), p.y1.toFixed(2)])]));
-    const [linesBefore, pillsBefore, idsBefore] = [await lines(), await pills(), await viewer(page, "aggregatedEdges")];
-    const pairIds = Object.fromEntries(idsBefore.filter((e) => e.drawn).map((e) => [e.id, e.ends.join("|")]));
+      measured(`opened ${box}: ${Object.keys(linesBefore).length} top-level line(s), ${moved.length} moved; ${Object.keys(pillsA).length} pill(s), ${pillsMoved.length} moved; ${outward.length} line(s) of the file out of the box at rest`);
 
-    await page.evaluate((id) => window.__beadloomViewer.revealNodes([id], { edges: false }), box);
-    await expect.poll(() => viewer(page, "openBoxes")).toContain(box);
-    await twoFrames(page);
-    const [linesAfter, pillsAfterRaw] = [await lines(), await pills()];
-    const moved = Object.keys(linesBefore).filter((pair) => linesAfter[pair] !== linesBefore[pair]);
-    // A pill is named by its line's id; a line keeps its pair, so a pill is compared by its pair.
-    const byPair = (raw, ids) => Object.fromEntries(Object.entries(raw).map(([id, v]) => [ids[id] ?? id, v]));
-    const pairIdsAfter = Object.fromEntries((await viewer(page, "aggregatedEdges")).filter((e) => e.drawn).map((e) => [e.id, e.ends.join("|")]));
-    const [pillsA, pillsB] = [byPair(pillsBefore, pairIds), byPair(pillsAfterRaw, pairIdsAfter)];
-    const pillsMoved = Object.keys(pillsA).filter((pair) => pair in linesBefore && pillsB[pair] !== pillsA[pair]);
-    const inBox = (id) => withAncestors([id], tree.parents).has(box);
-    const ancestor = (a, b) => withAncestors([b], tree.parents).has(a);
-    const outward = (await viewer(page, "edgeRoutes")).filter(
-      (route) => !route.aggregated && inBox(route.source) !== inBox(route.target) && !ancestor(route.source, route.target) && !ancestor(route.target, route.source)
-    );
-    measured(`opened ${box}: ${Object.keys(linesBefore).length} top-level line(s), ${moved.length} moved; ${Object.keys(pillsA).length} pill(s), ${pillsMoved.length} moved; ${outward.length} line(s) of the file out of the box at rest`);
-
-    expect({ moved, pillsMoved, outward: outward.map((route) => route.key) }).toEqual({ moved: [], pillsMoved: [], outward: [] });
-  });
+      expect({ moved, pillsMoved, outward: outward.map((route) => route.key) }).toEqual({ moved: [], pillsMoved: [], outward: [] });
+    });
+  }
 
   test('a node in a box opened by zooming carries "+N" for exactly its edges out of the box, and hovering it draws exactly those', async ({ page, request }) => {
     const data = await architectureData(request);

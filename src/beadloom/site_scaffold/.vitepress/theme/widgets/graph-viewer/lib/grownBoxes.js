@@ -35,6 +35,9 @@ export function grownAround(box, size) {
 /** Whether rectangles `a` and `b` come closer than `gap`. */
 const nearer = (a, b, gap) => a.x1 - gap < b.x2 && a.x2 + gap > b.x1 && a.y1 - gap < b.y2 && a.y2 + gap > b.y1;
 
+/** Whether rectangles `a` and `b` are one, within a hair of rounding. */
+const same = (a, b) => Math.abs(a.x1 - b.x1) < EPS && Math.abs(a.y1 - b.y1) < EPS && Math.abs(a.x2 - b.x2) < EPS && Math.abs(a.y2 - b.y2) < EPS;
+
 /** Whether rectangle `inner` lies within `outer`; any rectangle lies within none. */
 const inside = (inner, outer) => !outer || (inner.x1 >= outer.x1 && inner.y1 >= outer.y1 && inner.x2 <= outer.x2 && inner.y2 <= outer.y2);
 
@@ -82,7 +85,9 @@ export function crossesAny(box, paths) {
  * keeps that room from every other box, those already drawn larger included,
  * covers no line and stays within `within`; failing that, the first gap and the
  * smallest size at which it does all but the last; a node that takes none is
- * not in the map.
+ * not in the map. A box no larger than the laid-out one keeps its layout, which
+ * needs no room it does not have: `leastBoxOf` may hold a title another way,
+ * broken onto two lines, that fits the node as laid out.
  */
 export function grownBoxesOf(candidates, boxes, { leastBoxOf, sizes, gaps, lines = [], within = null }) {
   const drawn = new Map(Object.entries(boxes));
@@ -98,7 +103,7 @@ export function grownBoxesOf(candidates, boxes, { leastBoxOf, sizes, gaps, lines
     let found = null;
     for (const { gap, px, held } of tries) {
       const box = grownAround(laid, leastBoxOf(id, px));
-      if (clear(box, gap) && (!held || inside(box, within))) {
+      if (same(box, laid) || (clear(box, gap) && (!held || inside(box, within)))) {
         found = { px, box };
         break;
       }

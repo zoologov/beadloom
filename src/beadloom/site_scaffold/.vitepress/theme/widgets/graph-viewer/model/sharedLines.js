@@ -15,7 +15,7 @@
 //   A line that leaves its node beside where another's head arrives, close
 //   enough to run along the head's side, starts at that head's base too; and of
 //   two heads side by side on one border, too near for both at the scale drawn
-//   now, one gives way, its line ending at the other's base.
+//   now, one gives way, its line ending beside the other's head, behind its base.
 //   A line whose end lies on another line's way, which runs on through it — a
 //   node's own line into an open box, on the border its lines into the box's
 //   nodes cross — has no head there either: the head would sit across the line
@@ -161,7 +161,8 @@ export function sharedLines(cy, paths, { scale = () => 1 } = {}) {
     }
     // Heads side by side on one border, too near for two at the scale drawn now: one gives way.
     const s = scale();
-    for (const key of crowdedHeadsOf(ends, dropped, LINE_MARKS.smallestHead * s, LINE_MARKS.headClearance * s)) dropped.add(key);
+    const crowded = crowdedHeadsOf(ends, dropped, LINE_MARKS.smallestHead * s, LINE_MARKS.headClearance * s);
+    for (const key of crowded.keys()) dropped.add(key);
     // A head on another line's way, where that line runs on through the tip, would sit across it: the line ends there without one.
     for (const end of ends) {
       if (end.headless || dropped.has(`${end.id}\n${end.end}`)) continue;
@@ -170,7 +171,8 @@ export function sharedLines(cy, paths, { scale = () => 1 } = {}) {
     // A headless end has a room only where a head is drawn at its tip.
     const rooms = headRoomsOf(ends.filter((end) => !end.headless || dropped.has(`${end.id}\n${end.end}`)));
     // It starts behind that head's base: it takes the head's room, which sizes the head, and keeps clear of it.
-    for (const [key, head] of aside) if (rooms.has(head)) rooms.set(key, { ...rooms.get(head), aside: true });
+    // So does a line whose head gave way to one beside it: it ends beside that head, behind its base.
+    for (const [key, head] of [...aside, ...crowded]) if (rooms.has(head)) rooms.set(key, { ...rooms.get(head), aside: true });
     cy.batch(() => {
       cy.edges().forEach((edge) => {
         const id = edge.id();

@@ -28,6 +28,11 @@
 // a box stays open at, and a selection, its node's own edges on top. A followed
 // line is drawn over every line that is not, and meets their heads by design.
 //
+// The cases run on this portal's graph, on the same graph with two edges more
+// (`support/perturbedGraph.js`), which ELK lays out another way, and on an
+// adopter-sized one: a rule that held on one layout of a graph once failed on
+// the next when two edges were added, so each is read on two.
+//
 // What the cases cannot see. They read the drawn lines through the test handle
 // and measure them with their own restatement of how Cytoscape draws a line and
 // its head (`support/heads.js`); they compare no pixels. The definition was
@@ -40,6 +45,7 @@ import { test, expect } from "@playwright/test";
 import { ADOPTER_SIZED, adopterSizedGraph } from "./support/adopterGraph.js";
 import { headsOf, loopHeads, roomlessHeads, wrongHeads } from "./support/heads.js";
 import { CLOSE_SHARE, READABLE_PX } from "./support/levels.js";
+import { withTwoMoreEdges } from "./support/perturbedGraph.js";
 import { requireShape } from "./support/shape.js";
 import { architectureData, openArchitecture, openEveryBox, viewer } from "./support/viewer.js";
 
@@ -108,10 +114,25 @@ function busiestSource(data) {
   return busiest;
 }
 
+/** The served file with two edges more, laid out another way (`support/perturbedGraph.js`); the case is skipped without one. */
+function perturbed(data) {
+  const more = withTwoMoreEdges(data);
+  requireShape(Boolean(more), "no two leaves in two other top-level boxes than a third leaf's");
+  return more.data;
+}
+
+/** The graphs the heads are read on: the served one, as the browser gets it, and two made from it, served in its place. */
 const GRAPHS = [
-  { name: "this portal's architecture graph", tag: [], data: async (request) => architectureData(request) },
+  { name: "this portal's architecture graph", served: true, tag: [], data: async (request) => architectureData(request) },
+  {
+    name: "this portal's architecture graph with two edges more",
+    served: false,
+    tag: [],
+    data: async (request) => perturbed(await architectureData(request)),
+  },
   {
     name: "an adopter-sized architecture graph",
+    served: false,
     tag: [ADOPTER_SIZED],
     data: async (request) => adopterSizedGraph(await architectureData(request)),
   },
@@ -124,7 +145,7 @@ for (const graph of GRAPHS) {
       request,
     }) => {
       const data = await graph.data(request);
-      if (graph.tag.length) await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+      if (!graph.served) await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
       await openArchitecture(page);
       await openEveryBox(page, { edges: false });
       const closing = closingZoomOf((await viewer(page, "elkGeometry")).boxes, data);
@@ -139,7 +160,7 @@ for (const graph of GRAPHS) {
 
     test("as the overview is zoomed into, every drawn arrowhead is entered straight, whole and clear", async ({ page, request }) => {
       const data = await graph.data(request);
-      if (graph.tag.length) await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+      if (!graph.served) await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
       await openArchitecture(page);
       const found = [];
       const fit = await viewer(page, "zoom");
@@ -160,7 +181,7 @@ for (const graph of GRAPHS) {
       request,
     }) => {
       const data = await graph.data(request);
-      if (graph.tag.length) await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+      if (!graph.served) await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
       await openArchitecture(page, `?focus=${encodeURIComponent(busiestSource(data))}&depth=1`);
       await expect.poll(async () => (await viewer(page, "lineLooks")).some((look) => look.walk)).toBe(true);
       // An overview for a project whose top level does not fit the canvas is deferred (ruling 11):

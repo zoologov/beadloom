@@ -47,30 +47,47 @@ const BUCKET_PX = 64;
 
 const overlaps = (a, b, gap = 0) => a.x1 - gap < b.x2 && a.x2 + gap > b.x1 && a.y1 - gap < b.y2 && a.y2 + gap > b.y1;
 
-/** A grid of buckets that things with a rectangle are filed in: `{ add(rect, item), near(rect) }`, `near` giving the items of every bucket the rectangle meets. */
+/** The keys of the buckets rectangle `r` meets. */
+function bucketKeysOf(r) {
+  const keys = [];
+  for (let x = Math.floor(r.x1 / BUCKET_PX); x <= Math.floor(r.x2 / BUCKET_PX); x += 1) {
+    for (let y = Math.floor(r.y1 / BUCKET_PX); y <= Math.floor(r.y2 / BUCKET_PX); y += 1) keys.push(`${x},${y}`);
+  }
+  return keys;
+}
+
+/** A grid of buckets that things with a rectangle are filed in: a map from a bucket's key to the items filed in it. */
 function bucketsOf() {
-  const buckets = new Map();
-  const each = (r, visit) => {
-    for (let x = Math.floor(r.x1 / BUCKET_PX); x <= Math.floor(r.x2 / BUCKET_PX); x += 1) {
-      for (let y = Math.floor(r.y1 / BUCKET_PX); y <= Math.floor(r.y2 / BUCKET_PX); y += 1) visit(`${x},${y}`);
+  return new Map();
+}
+
+/** File `item` in `buckets` under every bucket `rect` meets. */
+function fileIn(buckets, rect, item) {
+  for (const key of bucketKeysOf(rect)) {
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(item);
+  }
+}
+
+/** Whether `test` holds for an item of `parts`, grids of buckets read as one, in a bucket `rect` meets. */
+function someNear(parts, rect, test) {
+  for (const key of bucketKeysOf(rect)) {
+    for (const buckets of parts) {
+      const items = buckets.get(key);
+      if (items && items.some(test)) return true;
     }
-  };
-  return {
-    add(rect, item) {
-      each(rect, (key) => {
-        if (!buckets.has(key)) buckets.set(key, []);
-        buckets.get(key).push(item);
-      });
-    },
-    near(rect) {
-      const found = [];
-      each(rect, (key) => {
-        const items = buckets.get(key);
-        if (items) for (const item of items) found.push(item);
-      });
-      return found;
-    },
-  };
+  }
+  return false;
+}
+
+/** `see` each item of `parts`, grids of buckets read as one, in every bucket `rect` meets: an item in several, once per bucket. */
+function visitNear(parts, rect, see) {
+  for (const key of bucketKeysOf(rect)) {
+    for (const buckets of parts) {
+      const items = buckets.get(key);
+      if (items) for (const item of items) see(item);
+    }
+  }
 }
 
 /** Whether segment `a`-`b` passes through rectangle `r` (Liang-Barsky). */
@@ -129,12 +146,14 @@ function bestPointOf(line, size, { placed, blocked, segments }) {
     const [x, y] = [a.x + ((b.x - a.x) * s) / length, a.y + ((b.y - a.y) * s) / length];
     const rect = { x1: x - size.width / 2, y1: y - size.height / 2, x2: x + size.width / 2, y2: y + size.height / 2 };
     const roomy = { x1: rect.x1 - PILL_MARKS.gap, y1: rect.y1 - PILL_MARKS.gap, x2: rect.x2 + PILL_MARKS.gap, y2: rect.y2 + PILL_MARKS.gap };
-    if (placed.near(roomy).some((other) => overlaps(rect, other, PILL_MARKS.gap)) || blocked.near(rect).some((r) => overlaps(rect, r))) continue;
+    if (someNear(placed, roomy, (other) => overlaps(rect, other, PILL_MARKS.gap)) || someNear(blocked, rect, (r) => overlaps(rect, r))) continue;
     if (s < reach || length - s < reach) price += PRICE.corner;
     if (best && price >= best.price) continue;
     const grown = { x1: rect.x1 - COVER_PX, y1: rect.y1 - COVER_PX, x2: rect.x2 + COVER_PX, y2: rect.y2 + COVER_PX };
     const covered = new Set();
-    for (const segment of segments.near(grown)) if (segment.id !== line.id && crosses(segment.a, segment.b, grown)) covered.add(segment.id);
+    visitNear(segments, grown, (segment) => {
+      if (segment.id !== line.id && crosses(segment.a, segment.b, grown)) covered.add(segment.id);
+    });
     price += covered.size * PRICE.covers;
     if (!best || price < best.price) best = { price, x, y, rect };
   }
@@ -172,37 +191,65 @@ function middleOf(points, size) {
  * `dropped` names the lines that were to say their count and have no pill.
  */
 export function pillPlacesOf({ lines, drawn, blocked, scale, measure }) {
+  return pillStagesOf({ stages: [{ lines, drawn: [drawn], blocked: [blocked] }], scale, measure });
+}
+
+/**
+ * The pills of the lines of `stages`, placed stage after stage at `scale`, as
+ * `pillPlacesOf` places them: `{ placed, dropped }`. Each stage is `{ lines,
+ * drawn, blocked }`, its lines placed among its own routes and rectangles and
+ * clear of every pill an earlier stage placed, so what a stage reads decides
+ * where its pills stand and nothing a later stage reads does. A stage's `drawn`
+ * and `blocked` are each a list of parts, and a part two stages share is filed once.
+ */
+export function pillStagesOf({ stages, scale, measure }) {
   const inPixels = (p) => ({ x: p.x / scale, y: p.y / scale });
   const rectInPixels = (r) => ({ x1: r.x1 / scale, y1: r.y1 / scale, x2: r.x2 / scale, y2: r.y2 / scale });
-  const context = { placed: bucketsOf(), blocked: bucketsOf(), segments: bucketsOf() };
-  for (const rect of blocked.map(rectInPixels)) context.blocked.add(rect, rect);
-  for (const { id, points } of drawn) {
+  const filed = new Map();
+  /** `items` filed in buckets once, by `add(buckets, item)`. */
+  const fileOnce = (items, add) => {
+    if (!filed.has(items)) {
+      const buckets = bucketsOf();
+      for (const item of items) add(buckets, item);
+      filed.set(items, buckets);
+    }
+    return filed.get(items);
+  };
+  const addRect = (buckets, r) => {
+    const rect = rectInPixels(r);
+    fileIn(buckets, rect, rect);
+  };
+  const addRoute = (buckets, { id, points }) => {
     const pixels = points.map(inPixels);
     for (let k = 1; k < pixels.length; k += 1) {
       const [a, b] = [pixels[k - 1], pixels[k]];
-      context.segments.add({ x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y) }, { id, a, b });
+      fileIn(buckets, { x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y) }, { id, a, b });
     }
-  }
+  };
+  const placed = [bucketsOf()];
   const pills = [];
   const dropped = [];
   // What a line asked to say its count may cover when nothing is free: everything but another pill.
-  const nothing = bucketsOf();
-  const order = lines
-    .filter((line) => line.weight >= PILL_MIN_WEIGHT || line.always)
-    .sort((a, b) => Number(Boolean(b.always)) - Number(Boolean(a.always)) || b.weight - a.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  for (const line of order) {
-    const width = Math.max(PILL_MARKS.height, measure(line.text) + 2 * PILL_MARKS.paddingX);
-    const room = { width: width * STEP_ROOM, height: PILL_MARKS.height * STEP_ROOM };
-    const inScreen = { ...line, points: line.points.map(inPixels) };
-    let best = bestPointOf(inScreen, room, context);
-    const crowded = !best && Boolean(line.always);
-    if (crowded) best = bestPointOf(inScreen, room, { ...context, blocked: nothing }) || middleOf(inScreen.points, room);
-    if (!best) {
-      dropped.push(line.id);
-      continue;
+  const nothing = [bucketsOf()];
+  for (const stage of stages) {
+    const context = { placed, blocked: stage.blocked.map((part) => fileOnce(part, addRect)), segments: stage.drawn.map((part) => fileOnce(part, addRoute)) };
+    const order = stage.lines
+      .filter((line) => line.weight >= PILL_MIN_WEIGHT || line.always)
+      .sort((a, b) => Number(Boolean(b.always)) - Number(Boolean(a.always)) || b.weight - a.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    for (const line of order) {
+      const width = Math.max(PILL_MARKS.height, measure(line.text) + 2 * PILL_MARKS.paddingX);
+      const room = { width: width * STEP_ROOM, height: PILL_MARKS.height * STEP_ROOM };
+      const inScreen = { ...line, points: line.points.map(inPixels) };
+      let best = bestPointOf(inScreen, room, context);
+      const crowded = !best && Boolean(line.always);
+      if (crowded) best = bestPointOf(inScreen, room, { ...context, blocked: nothing }) || middleOf(inScreen.points, room);
+      if (!best) {
+        dropped.push(line.id);
+        continue;
+      }
+      pills.push({ id: line.id, text: line.text, x: best.x * scale, y: best.y * scale, width, height: PILL_MARKS.height, crowded });
+      fileIn(placed[0], best.rect, best.rect);
     }
-    pills.push({ id: line.id, text: line.text, x: best.x * scale, y: best.y * scale, width, height: PILL_MARKS.height, crowded });
-    context.placed.add(best.rect, best.rect);
   }
   return { placed: pills, dropped: dropped.sort() };
 }

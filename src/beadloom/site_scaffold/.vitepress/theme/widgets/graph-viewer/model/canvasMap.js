@@ -95,7 +95,7 @@ import {
 } from "../lib/levels.js";
 import { pathOutside } from "../lib/grownBoxes.js";
 import { STUB_AT } from "../lib/heads.js";
-import { MAP_BOX, MAP_MARKS, MAP_TITLE, OUTWARD, TALLY, mapTitleOf, statusMarkInsetOf, statusMarkOf, titleBoxOf } from "../lib/mapMarks.js";
+import { MAP_BOX, MAP_MARKS, MAP_TITLE, OUTWARD, TALLY, brokenLabelOf, mapTitleOf, statusMarkInsetOf, statusMarkOf, titleBoxOf } from "../lib/mapMarks.js";
 import { routePointsOf } from "../lib/lineMarks.js";
 import { pathOf, segmentsOf } from "../lib/routes.js";
 import { GEOMETRY } from "../lib/stylesheet.js";
@@ -173,6 +173,8 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   const drawingOf = (id) => (loops.has(id) ? [loops.get(id).end, loops.get(id).line] : [edges.get(id)]);
   /** The line that draws the edge `id` of the file. */
   const lineOf = (id) => loops.get(id)?.line ?? edges.get(id);
+  // The edge of the file each loop's end stands for, by the end's id.
+  const loopEdgeOfEnd = new Map([...loops].map(([id, { end }]) => [end.id(), id]));
   const smallest = smallestChildOf(tree, geometry.boxes);
   const aggregates = new Map();
   // The pair each aggregated edge draws, by the edge's id: Cytoscape hands out a new wrapper per lookup.
@@ -218,18 +220,30 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     geometry,
     plainEdges,
     routePointsOf: drawnRouteOf,
-    titleOf: (id, at, hidden) => titleLookOf(id, at, hidden),
+    // The plan asks whether a title fits its box on one line: whether to break it is the plan's to decide.
+    titleOf: (id, at, hidden) => titleLookOf(id, at, hidden, null, false),
     projectTitleOf: (at) => projectTitleAt(at),
     // A box is drawn at least as tall as it was laid out, and its status mark takes room by the height it is drawn at.
-    leastBoxOf: (id, px, at, hidden) =>
-      titleBoxOf(linesOf(id, hidden), px, at, measure, (height) => reservedOf(id, at, Math.max(height, geometry.boxes[id].y2 - geometry.boxes[id].y1))),
+    leastBoxOf: (id, px, at, hidden, broken = false) =>
+      titleBoxOf(linesOf(id, hidden, broken), px, at, measure, (height) => reservedOf(id, at, Math.max(height, geometry.boxes[id].y2 - geometry.boxes[id].y1))),
+    breakable: (id) => Boolean(brokenLabelFor(id)),
     measure,
     scaleAt,
     budget: options.budget,
   });
 
-  /** A node's title as lines: its label, and the count of its lines left out when there are any. */
-  const linesOf = (id, hidden) => [String(nodes.get(id).data("label")), ...(hidden ? [`+${hidden}`] : [])];
+  // Each node's label broken onto two lines, worked out once: null where it has no place to break.
+  const brokenLabels = new Map();
+  function brokenLabelFor(id) {
+    if (!brokenLabels.has(id)) brokenLabels.set(id, brokenLabelOf(nodes.get(id).data("label"), measure));
+    return brokenLabels.get(id);
+  }
+
+  /** A node's title as lines: its label, `broken` onto two where it breaks, and the count of its lines left out when there are any. */
+  function linesOf(id, hidden, broken = false) {
+    const label = (broken && brokenLabelFor(id)) || [String(nodes.get(id).data("label"))];
+    return [...label, ...(hidden ? [`+${hidden}`] : [])];
+  }
 
   /** The room node `id`'s status mark takes at each end of its title at `at` in a box `height` tall, in layout units. */
   function reservedOf(id, at, height) {
@@ -239,16 +253,19 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
 
   /**
    * The title node `id` is drawn with at `at` when `hidden` of its lines are left
-   * out, in `drawn`, the box it is drawn as, or its laid-out box; null for its own label.
+   * out, in `drawn`, the box it is drawn as, or its laid-out box; null for its
+   * own label. Where the overview's plan breaks its title, and the title fits on
+   * one line at no size, it is drawn broken; `broken: false` asks for one line.
    */
-  function titleLookOf(id, at, hidden, drawn = null) {
+  function titleLookOf(id, at, hidden, drawn = null, broken = planner.isBroken(id)) {
     const node = nodes.get(id);
     const box = drawn || geometry.boxes[id];
     if (!node || !box) return null;
     const isBox = tree.boxes.has(id);
     const size = { width: box.x2 - box.x1, height: box.y2 - box.y1 };
     const reserved = reservedOf(id, at, size.height);
-    return mapTitleOf(linesOf(id, hidden), size, at, measure, { reserved, natural: isBox ? null : GEOMETRY.nodeTitle });
+    const lines = broken ? linesOf(id, hidden, true) : null;
+    return mapTitleOf(linesOf(id, hidden), size, at, measure, { reserved, natural: isBox ? null : GEOMETRY.nodeTitle, broken: lines });
   }
 
   /**
@@ -346,19 +363,30 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     return next;
   }
 
-  /** The path of the pair `pair` between its two drawn ends' laid-out boxes, or null; cached by its members. */
-  function routeOf(pair) {
-    const signature = `${pair.name}\n${pair.forward.join(",")}\n${pair.backward.join(",")}`;
-    if (!routes.has(signature)) routes.set(signature, computeRoute(pair));
+  /**
+   * The path of the pair `pair` between its two drawn ends' laid-out boxes, or
+   * null, with the boxes `openNow` open; cached by its members and by which of
+   * its ends are closed boxes.
+   */
+  function routeOf(pair, openNow) {
+    const closed = { from: isClosed(pair.ends[0], openNow), to: isClosed(pair.ends[1], openNow) };
+    const signature = `${pair.name}\n${pair.forward.join(",")}\n${pair.backward.join(",")}\n${closed.from}\n${closed.to}`;
+    if (!routes.has(signature)) routes.set(signature, computeRoute(pair, closed));
     return routes.get(signature);
   }
+
+  /** Whether `id` is a box drawn closed when the boxes `openNow` are open. */
+  const isClosed = (id, openNow) => tree.boxes.has(id) && !openNow.has(id);
 
   /**
    * The medoid of the routes of a pair's edges between its two ends' boxes: the
    * routes ELK gave them for a pair of a level, and the bundled ones they are
-   * drawn along for a node's own line, which leaves the node by its bus port.
+   * drawn along for a node's own line, which leaves the node by its bus port. An
+   * end at a box drawn `closed` (`{ from, to }`) is entered straight where its
+   * edges' routes step across just before its border to a node not drawn
+   * (`lib/aggregateRoutes.js`, `straightenedInto`).
    */
-  function computeRoute({ name, ends: [a, b], forward, backward }) {
+  function computeRoute({ name, ends: [a, b], forward, backward }, closed) {
     const [from, to] = [geometry.boxes[a], geometry.boxes[b]];
     if (!from || !to) return null;
     const holds = (outer, inner) => boxesHolding(tree, [inner]).has(outer);
@@ -366,7 +394,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     const own = name.startsWith("own\n");
     const pathFor = (id) => (own ? drawnRouteOf(id) : null) || (geometry.routes[id] ? pathOf(geometry.routes[id]) : null);
     const member = (id, reversed) => ({ path: pathFor(id), reversed });
-    return aggregateRouteOf([...forward.map((id) => member(id, false)), ...backward.map((id) => member(id, true))], from, to);
+    return aggregateRouteOf([...forward.map((id) => member(id, false)), ...backward.map((id) => member(id, true))], from, to, closed);
   }
 
   /** The element that draws `pair`, made the first time the pair is drawn. */
@@ -383,7 +411,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     return entry.element;
   }
 
-  function dress(element, pair) {
+  function dress(element, pair, openNow) {
     const members = [...pair.forward, ...pair.backward].map((id) => edges.get(id));
     const said = pair.said || { forward: pair.forward.length, backward: pair.backward.length };
     const data = {
@@ -396,7 +424,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
       styleKey: styleKeyOf(members),
       [MAP_SCALE]: scale,
     };
-    const path = planner.routeOf(pair) || routeOf(pair);
+    const path = planner.routeOf(pair) || routeOf(pair, openNow);
     const [a, b] = pair.ends;
     // Drawn up to where it enters an end drawn larger than its layout: on its last run, for a planned line.
     const shown = path && (pathOutside(path, grownNow.get(a) || null, grownNow.get(b) || null) || path);
@@ -571,7 +599,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
       putBack([...originals].flatMap(drawingOf));
       const drawn = [...weighed.filter((pair) => !pair.hidden && !pair.twice), ...extras.own].map((pair) => {
         const element = elementOf(pair);
-        dress(element, pair);
+        dress(element, pair, nextOpen);
         return element;
       });
       putBack(drawn);
@@ -615,6 +643,19 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
       add(pair.ends[1], pair.forward.length, pair.backward.length);
     }
     return tallies;
+  }
+
+  // Whether each element asked about is of the top level, by its id: an element's ends never change.
+  const topLevel = new Map();
+  /** Whether `id` is at the top: the box that holds everything, or a node right under it. */
+  const atTop = (id) => id === tree.wrapper || tree.parent.get(id) === tree.wrapper;
+
+  /** Whether `element`, whose id is `id`, is of the top level (`ofTopLevel`). */
+  function isOfTopLevel(element, id) {
+    const fileEdge = edgeById.get(element.isEdge() ? id : loopEdgeOfEnd.get(id));
+    if (fileEdge) return atTop(fileEdge.source) && atTop(fileEdge.target);
+    if (element.isEdge()) return Boolean(aggregates.get(pairOfElement.get(id))?.pair.ends.every(atTop));
+    return nodes.has(id) && atTop(id);
   }
 
   /** Whether two maps of drawn boxes (`grownBoxesNow`) draw the same boxes. */
@@ -741,6 +782,16 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     collapsedBoxes: () => cy.nodes(`.${COLLAPSED}`),
     allNodes: () => [...nodes.values()],
     isAggregate: (edge) => Boolean(edge.data(AGGREGATE)),
+    /**
+     * Whether `element` is of the top level, drawn alike at every level: a node
+     * at the top or the box that holds everything, a line whose ends both are —
+     * the overview's own lines among them — and a loop of such a line, its end too.
+     */
+    ofTopLevel(element) {
+      const id = element.id();
+      if (!topLevel.has(id)) topLevel.set(id, isOfTopLevel(element, id));
+      return topLevel.get(id);
+    },
     /** The keys of the edges an aggregated edge carries and no other line draws now. */
     keysOf(element) {
       const entry = aggregates.get(pairOfElement.get(element.id()));

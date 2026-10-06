@@ -15,7 +15,11 @@
 // lines a reader is shown for a node add up to the node's count; such a pill is
 // drawn even where its line has no free place for it (`lib/pillPlaces.js`,
 // `crowded`). What a line says is its data's `countLabel` (`canvasMap.js`):
-// during a selection, how many of the walk's edges it carries.
+// during a selection, how many of the walk's edges it carries. The pills of the
+// lines between two top-level nodes are placed among what the top level draws
+// alone, so opening a box, whose nodes and their lines are drawn then, moves
+// none of them. Every other pill is placed around them, except those of a
+// node's own lines under the pointer or selected, which are placed first.
 //
 // A closed box large enough on screen says how many edges come into it and go
 // out of it — the ones the budget leaves out included — in a line of small text
@@ -37,7 +41,7 @@ import { AGGREGATE, COLLAPSED } from "../lib/levels.js";
 import { headLengthOf, routePointsOf } from "../lib/lineMarks.js";
 import { MAP_MARKS, MAP_TITLE, OUTWARD, TALLY } from "../lib/mapMarks.js";
 import { GEOMETRY } from "../lib/stylesheet.js";
-import { PILL_MARKS, pillPlacesOf } from "../lib/pillPlaces.js";
+import { PILL_MARKS, pillStagesOf } from "../lib/pillPlaces.js";
 import { BEHIND, IN_FRONT } from "./canvasMarks.js";
 import { OWN_LINE } from "./canvasMap.js";
 import { overlayCanvas } from "./overlayCanvas.js";
@@ -88,9 +92,28 @@ export function pillOverlay(cy, container, { tokens, map }) {
   /** Whether a line says its count even when it is one: a line of the node under the pointer, a node's own line, a line of a walk. */
   const saysOne = (edge) => edge.hasClass(IN_FRONT) || edge.hasClass("is-walk-edge") || Boolean(edge.data(OWN_LINE));
 
+  /** The rectangles of the arrowheads of `edge`, drawn along `points`, in the graph's coordinates. */
+  function headBoxesOf(edge, points) {
+    const boxes = [];
+    const heads = headEndsOf(edge);
+    const n = points.length;
+    if (heads.target) boxes.push(headBoxOf(points[n - 1], points[n - 2], headLengthOf(edge)));
+    if (heads.source) boxes.push(headBoxOf(points[0], points[1], headLengthOf(edge)));
+    return boxes;
+  }
+
   /**
    * Where each drawn line's pill stands, worked out again when the drawing, the
    * scale's step or the lines that say a count of one change.
+   *
+   * The lines asked to say their count that are not at the top — a node's own
+   * lines, under the pointer or selected — are placed first, among everything
+   * drawn. Then the lines at the top, between two top-level nodes as the overview
+   * draws them at every level, among what is at the top alone: its nodes, an open
+   * one as the box it is when closed, its titles, its lines and their arrowheads.
+   * Nothing a box opened draws inside it or out of it, such as its nodes' lines
+   * to the box that holds everything, moves them. Every other line's pill is
+   * placed last, around them all.
    */
   function placesNow(look) {
     const drawn = cy.edges().filter((edge) => edge.visible() && edge.data("route"));
@@ -99,26 +122,48 @@ export function pillOverlay(cy, container, { tokens, map }) {
     const key = `${map()?.version()}|${lines.map((edge) => edge.id()).join(",")}|${ones.join(",")}|${look.font}`;
     if (places.key === key) return places;
     const scale = map()?.scale() || 1;
-    const routes = drawn.map((edge) => ({ id: edge.id(), points: routePointsOf(edge) }));
-    const blocked = cy.nodes().filter((node) => node.visible() && !node.isParent()).map((node) => node.boundingBox(SHAPE));
-    cy.nodes(`[${MAP_TITLE}]`).filter((node) => node.visible()).forEach((node) => blocked.push(node.boundingBox(TITLE)));
-    for (const edge of drawn) {
+    const atTop = (element) => map()?.ofTopLevel(element) ?? true;
+    const wrapper = map()?.tree.wrapper ?? null;
+    // What the top level draws (routes and what no pill covers), an open box at the top as the room it takes
+    // closed, and what is drawn below the top; the box that holds everything takes no room.
+    const [topRoutes, belowRoutes, topRooms, openTops, belowRooms] = [[], [], [], [], []];
+    const pointsOf = new Map();
+    drawn.forEach((edge) => {
       const points = routePointsOf(edge);
-      const heads = headEndsOf(edge);
-      const n = points.length;
-      if (heads.target) blocked.push(headBoxOf(points[n - 1], points[n - 2], headLengthOf(edge)));
-      if (heads.source) blocked.push(headBoxOf(points[0], points[1], headLengthOf(edge)));
-    }
-    measurer.font = pillFont(look);
+      pointsOf.set(edge.id(), points);
+      const ofTop = atTop(edge);
+      (ofTop ? topRoutes : belowRoutes).push({ id: edge.id(), points });
+      (ofTop ? topRooms : belowRooms).push(...headBoxesOf(edge, points));
+    });
+    cy.nodes().forEach((node) => {
+      if (!node.visible() || node.id() === wrapper) return;
+      const ofTop = atTop(node);
+      if (node.isParent()) {
+        if (ofTop) openTops.push(node.boundingBox(SHAPE));
+        return;
+      }
+      (ofTop ? topRooms : belowRooms).push(node.boundingBox(SHAPE));
+    });
+    cy.nodes(`[${MAP_TITLE}]`).forEach((node) => {
+      if (node.visible()) (atTop(node) ? topRooms : belowRooms).push(node.boundingBox(TITLE));
+    });
+    const top = { drawn: [topRoutes], blocked: [topRooms, openTops] };
+    const everything = { drawn: [topRoutes, belowRoutes], blocked: [topRooms, belowRooms] };
     const always = new Set(ones);
-    const { placed, dropped } = pillPlacesOf({
-      lines: lines.map((edge) => {
+    const asked = (edges) =>
+      edges.map((edge) => {
         const heads = headEndsOf(edge);
         const weight = edge.data("saidWeight") ?? edge.data("weight") ?? 1;
-        return { id: edge.id(), text: String(edge.data("countLabel")), weight, always: always.has(edge.id()), points: routePointsOf(edge), heads: [heads.source, heads.target] };
-      }),
-      drawn: routes,
-      blocked,
+        return { id: edge.id(), text: String(edge.data("countLabel")), weight, always: always.has(edge.id()), points: pointsOf.get(edge.id()), heads: [heads.source, heads.target] };
+      });
+    const below = lines.filter((edge) => !atTop(edge));
+    measurer.font = pillFont(look);
+    const { placed, dropped } = pillStagesOf({
+      stages: [
+        { lines: asked(below.filter((edge) => always.has(edge.id()))), ...everything },
+        { lines: asked(lines.filter(atTop)), ...top },
+        { lines: asked(below.filter((edge) => !always.has(edge.id()))), ...everything },
+      ],
       scale,
       measure: (text) => measurer.measureText(text).width,
     });

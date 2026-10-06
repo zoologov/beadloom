@@ -14,8 +14,10 @@
 // routes keep clear of every plate (`overviewRoutes.js`), and the plate is where
 // `plateOf` says: a title's width is measured with the font it is drawn in. At
 // the overview a top-level node too small for its title is drawn at the least
-// box that holds it (`titleBoxOf`, `grownBoxes.js`), and a plate is left only
-// where no such box fits.
+// box that holds it (`titleBoxOf`, `grownBoxes.js`). Where no such box fits
+// its title on one line, its name is broken onto two at a hyphen, an
+// underscore, a slash, a dot, a colon or a space (`brokenLabelOf`), in its box
+// or in the least box that holds it so; a plate is left only where neither fits.
 //
 // Every function here is pure: sizes and a text in, a size or a place out.
 
@@ -54,10 +56,33 @@ export const OUTWARD = "outward";
 /** The factor a mark's sizes are multiplied by: the map's scale, 1 before the map has set it. */
 export const scaleOf = (element) => element.data(MAP_SCALE) || 1;
 
-/** A node's title, with the count of its edges the budget leaves out on a line below. */
+/** A node's title, with the count of its edges the budget leaves out on a line below; as its map title breaks it, when it does. */
 export function titleOf(node) {
+  const broken = node.data(MAP_TITLE)?.lines;
+  if (broken) return broken.join("\n");
   const hidden = node.data(HIDDEN_EDGES);
   return hidden ? `${node.data("label")}\n+${hidden}` : node.data("label");
+}
+
+/** The characters a title may be broken after, each kept at the end of the first line. */
+const BREAK_AFTER = new Set(["-", "_", "/", ".", ":"]);
+
+/**
+ * `label` broken onto two lines where its wider line is narrowest by
+ * `measure(line, px)`: after a hyphen, an underscore, a slash, a dot or a colon,
+ * which stays on the first line, or at a space, which is dropped; null when it
+ * has no such place, or only at an end.
+ */
+export function brokenLabelOf(label, measure, px = MAP_MARKS.titleSizes[0]) {
+  const text = String(label);
+  let best = null;
+  for (let i = 1; i < text.length - 1; i += 1) {
+    const at = text[i] === " " ? [text.slice(0, i), text.slice(i + 1)] : BREAK_AFTER.has(text[i]) ? [text.slice(0, i + 1), text.slice(i + 1)] : null;
+    if (!at || !at[0].trim() || !at[1].trim()) continue;
+    const widest = widthOf(at, px, measure);
+    if (!best || widest < best.widest) best = { lines: at, widest };
+  }
+  return best ? best.lines : null;
 }
 
 /** How wide the widest of `lines` is at `px`, in pixels, by `measure(line, px)`. */
@@ -66,28 +91,33 @@ const widthOf = (lines, px, measure) => Math.max(...lines.map((line) => measure(
 /**
  * Where a title of `lines` goes in `box` (`{ width, height }`, layout units) at
  * `scale`: `{ px, inside }`, the size on screen it is drawn at and whether it is
- * inside. `reserved` is the room a status mark takes at each end, in layout
- * units; `measure(line, px)` gives a line's width in pixels.
+ * inside, and `lines` when it is drawn as `broken` rather than as `lines`.
+ * `reserved` is the room a status mark takes at each end, in layout units;
+ * `measure(line, px)` gives a line's width in pixels. `broken`, the same title
+ * on more lines, is tried at every size only once `lines` fits at none.
  */
-export function titleLayoutOf(lines, box, scale, measure, reserved = 0) {
+export function titleLayoutOf(lines, box, scale, measure, reserved = 0, broken = null) {
   const inset = MAP_MARKS.titleInset * scale;
   const room = { width: box.width - 2 * Math.max(inset, reserved), height: box.height - inset };
-  const fits = (px) =>
-    widthOf(lines, px, measure) * scale <= room.width && lines.length * MAP_MARKS.lineHeight * px * scale <= room.height;
-  const px = MAP_MARKS.titleSizes.find(fits);
-  return px === undefined ? { px: MAP_MARKS.plateTitle, inside: false } : { px, inside: true };
+  const fits = (form) => (px) =>
+    widthOf(form, px, measure) * scale <= room.width && form.length * MAP_MARKS.lineHeight * px * scale <= room.height;
+  const px = MAP_MARKS.titleSizes.find(fits(lines));
+  if (px !== undefined) return { px, inside: true };
+  const brokenPx = broken ? MAP_MARKS.titleSizes.find(fits(broken)) : undefined;
+  return brokenPx === undefined ? { px: MAP_MARKS.plateTitle, inside: false } : { px: brokenPx, inside: true, lines: broken };
 }
 
 /**
  * The title a node of the map is drawn with at `scale`, or null when its own
  * label reads larger: `{ px, inside, width }`, `width` its widest line in layout
- * units. A box always takes the map's title; a node that is not a box takes it
- * only while its own label, `natural` layout units, would be smaller on screen.
+ * units, and `lines` when it is drawn `broken` (`titleLayoutOf`). A box always
+ * takes the map's title; a node that is not a box takes it only while its own
+ * label, `natural` layout units, would be smaller on screen.
  */
-export function mapTitleOf(lines, box, scale, measure, { reserved = 0, natural = null } = {}) {
-  const layout = titleLayoutOf(lines, box, scale, measure, reserved);
+export function mapTitleOf(lines, box, scale, measure, { reserved = 0, natural = null, broken = null } = {}) {
+  const layout = titleLayoutOf(lines, box, scale, measure, reserved, broken);
   if (natural !== null && natural / scale >= layout.px) return null;
-  return { ...layout, width: widthOf(lines, layout.px, measure) * scale };
+  return { ...layout, width: widthOf(layout.lines || lines, layout.px, measure) * scale };
 }
 
 /** How much larger than exact the least box for a title is made, as a share: so a title measured to fit it does, whatever the rounding. */

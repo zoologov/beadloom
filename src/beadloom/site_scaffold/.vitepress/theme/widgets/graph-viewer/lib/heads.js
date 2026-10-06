@@ -180,8 +180,9 @@ export function departuresBeside(ends, dropped) {
  * between them: of two such heads the one drawn first keeps its own
  * (`drawsBefore`). Lines that reach a side separately stay separate, and where
  * the zoom leaves no room for two heads side by side, the one that gives way ends
- * at the other's base. `dropped` is the ends already dropped; the answer is a set
- * of `${id}\n${end}`.
+ * behind the other's base, beside it as a line leaving beside a head does
+ * (`departuresBeside`). `dropped` is the ends already dropped; the answer maps
+ * each end that gives way, `${id}\n${end}`, to the head it gives way to.
  */
 export function crowdedHeadsOf(ends, dropped, least, gap) {
   const heads = ends.filter((end) => !end.headless && !dropped.has(`${end.id}\n${end.end}`));
@@ -192,17 +193,18 @@ export function crowdedHeadsOf(ends, dropped, least, gap) {
     if (!borders.has(key)) borders.set(key, []);
     borders.get(key).push({ end, way, across: end.tip.x * way.y - end.tip.y * way.x });
   }
-  const out = new Set();
+  const out = new Map();
+  const keyOf = (end) => `${end.id}\n${end.end}`;
   for (const row of borders.values()) {
     row.sort((a, b) => a.across - b.across);
     for (let i = 1; i < row.length; i += 1) {
       const [a, b] = [row[i - 1], row[i]];
       const apart = b.across - a.across;
       // Ends a unit apart or nearer share a tip, and one head already (`droppedHeadsOf`).
-      if (apart <= SAME_END || apart > least + gap || out.has(`${a.end.id}\n${a.end.end}`)) continue;
+      if (apart <= SAME_END || apart > least + gap || out.has(keyOf(a.end))) continue;
       const loud = (end) => ({ ...end, loud: LOUD_LOOKS.has(end.styleKey) });
-      const gives = drawsBefore(loud(a.end), loud(b.end)) ? b : a;
-      out.add(`${gives.end.id}\n${gives.end.end}`);
+      const [gives, keeps] = drawsBefore(loud(a.end), loud(b.end)) ? [b, a] : [a, b];
+      out.set(keyOf(gives.end), keyOf(keeps.end));
     }
   }
   return out;

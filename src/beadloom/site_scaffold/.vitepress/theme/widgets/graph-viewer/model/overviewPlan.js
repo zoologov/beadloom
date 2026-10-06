@@ -8,9 +8,12 @@
 // node whose title fits its laid-out box at no size is drawn at the least box
 // that holds the title, where that box keeps clear of every other
 // (`lib/grownBoxes.js`); the lines are routed around the drawn box and on into
-// the laid-out one. Only a title no such box fits around stands on a plate,
-// and only where the fit is not held at the smallest zoom: an overview whose
-// top level does not fit the canvas is left as it was (the owner's deferral).
+// the laid-out one. Where no such box fits the title on one line, the title is
+// broken onto two (`lib/mapMarks.js`, `brokenLabelOf`), in the laid-out box or
+// in the least box that holds it so. Only a title neither fits stands on a
+// plate, and only where the fit is not held at the smallest zoom: an overview
+// whose top level does not fit the canvas is left as it was (the owner's
+// deferral).
 // A plate stands above its box unless there it would come within a lane of another
 // top-level box, where it would close that box's ways in, or cover a plate
 // placed before it; then below; and when neither side is clear, on the side
@@ -57,6 +60,9 @@ export const PROJECT_PLATE_SIDE = "above";
 /** The least rectangle that holds rectangles `a` and `b`. */
 const unionOf = (a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) });
 
+/** Whether rectangles `a` and `b` are one, within a hair of rounding. */
+const sameBox = (a, b) => ["x1", "y1", "x2", "y2"].every((side) => Math.abs(a[side] - b[side]) < 1e-9);
+
 /** `box` drawn as a compound around `reach`, larger on both sides of an axis by as much as `reach` passes it there. */
 function heldBoxOf(box, reach) {
   const { width, height } = compoundSizeOf(box, null, 0, reach);
@@ -82,11 +88,23 @@ const inputPairOf = (pair) => ({ name: pair.name, a: pair.ends[0], b: pair.ends[
  * (`titleBoxOf`); `measure(text, px)` a title's width in pixels; `scaleAt(zoom)`
  * the map's scale at a zoom; `budget` how many lines a level draws.
  */
-export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf, titleOf, projectTitleOf, leastBoxOf, measure, scaleAt, budget }) {
+export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf, titleOf, projectTitleOf, leastBoxOf, breakable, measure, scaleAt, budget }) {
   const top = new Set([...tree.parent.keys()].filter((id) => id !== tree.wrapper && tree.parent.get(id) === tree.wrapper && geometry.boxes[id]));
   const overview = levelOf(tree, new Set(tree.wrapper ? [tree.wrapper] : []), plainEdges);
   const edgeById = new Map(plainEdges.map((edge) => [edge.id, edge]));
-  let plan = { signature: null, paths: new Map(), failed: [], ms: 0, unit: null, input: null, sides: new Map(), grown: new Map(), plated: [], project: null };
+  let plan = {
+    signature: null,
+    paths: new Map(),
+    failed: [],
+    ms: 0,
+    unit: null,
+    input: null,
+    sides: new Map(),
+    grown: new Map(),
+    broken: new Set(),
+    plated: [],
+    project: null,
+  };
   const extras = new Map();
 
   /**
@@ -106,21 +124,22 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
   }
 
   /**
-   * The top-level nodes drawn larger than their layout at `unit`, chosen among
-   * `unfit`, whose titles fit their laid-out box at no size: none at a fit held
-   * at the smallest zoom, and none that an edge drawn as itself ends at, whose
-   * end its drawn box would cover (`lib/grownBoxes.js`).
+   * The top-level nodes drawn in a box of their own at `unit`, chosen among
+   * `ids`, whose titles fit their laid-out box at no size: each in the least box
+   * that holds its title on one line, or, `broken`, broken onto two lines
+   * (`lib/grownBoxes.js`). None at a fit held at the smallest zoom, and none that
+   * an edge drawn as itself ends at, whose end its drawn box would cover.
    */
-  function grownAt(unit, unfit, hiddenAt, clamped) {
+  function grownAt(unit, ids, hiddenAt, clamped, broken = false) {
     if (clamped) return new Map();
     const lines = overview.originals.map(routePointsOf).filter(Boolean);
     const ownEnds = new Set(overview.originals.flatMap((id) => [edgeById.get(id).source, edgeById.get(id).target]));
     const boxes = Object.fromEntries([...top].map((id) => [id, geometry.boxes[id]]));
     return grownBoxesOf(
-      unfit.filter((id) => !ownEnds.has(id)),
+      ids.filter((id) => !ownEnds.has(id)),
       boxes,
       {
-        leastBoxOf: (id, px) => leastBoxOf(id, px, unit, hiddenAt.get(id) || 0),
+        leastBoxOf: (id, px) => leastBoxOf(id, px, unit, hiddenAt.get(id) || 0, broken),
         sizes: MAP_MARKS.titleSizes,
         gaps: GROWN_GAPS.map((gap) => gap * unit),
         lines,
@@ -191,13 +210,31 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
     const signature = `${unit}\n${signatureOf(drawn)}`;
     if (plan.signature === signature) return plan;
     const started = performance.now();
+    const made = layOut(unit, drawn, hiddenAt, clamped);
+    plan = { signature, ...made, ms: performance.now() - started, unit };
+    extras.clear();
+    return plan;
+  }
+
+  /**
+   * The plan's boxes, plates and routes at `unit` for the lines `drawn`. A
+   * top-level node whose title fits its laid-out box at no size is drawn larger
+   * to hold it on one line; where no such box fits, its title is broken onto two
+   * lines, in its box or a larger one that holds it so; where neither fits, it
+   * stands on a plate.
+   */
+  function layOut(unit, drawn, hiddenAt, clamped) {
     const unfit = [...top].sort().filter((id) => {
       const title = titleOf(id, unit, hiddenAt.get(id) || 0);
       return title && !title.inside;
     });
-    const grown = grownAt(unit, unfit, hiddenAt, clamped);
+    const whole = grownAt(unit, unfit, hiddenAt, clamped);
+    const brokenAt = clamped ? new Map() : grownAt(unit, unfit.filter((id) => !whole.has(id) && breakable(id)), hiddenAt, clamped, true);
+    const grows = ([id, entry]) => !sameBox(entry.box, geometry.boxes[id]);
+    const grown = new Map([...whole, ...[...brokenAt].filter(grows)]);
+    const broken = new Set(brokenAt.keys());
     const boxOf = (id) => grown.get(id)?.box || geometry.boxes[id];
-    const plated = unfit.filter((id) => !grown.has(id));
+    const plated = unfit.filter((id) => !whole.has(id) && !broken.has(id));
     const { plates, sides } = platesAt(unit, hiddenAt, plated, boxOf);
     const project = projectPlateAt(unit, grown);
     const input = {
@@ -208,9 +245,7 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
       fixed: overview.originals.map(routePointsOf).filter(Boolean),
     };
     const { paths, failed } = planOverview(input);
-    plan = { signature, paths, failed, ms: performance.now() - started, unit, input, sides, grown, plated, project };
-    extras.clear();
-    return plan;
+    return { paths, failed, input, sides, grown, broken, plated, project };
   }
 
   /** The route of a pair between two top-level nodes the plan left out, around the plan's lines. */
@@ -240,6 +275,8 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
     titleScale: () => plan.unit,
     /** Whether the plan draws node `id` larger than its layout. */
     isGrown: (id) => plan.grown.has(id),
+    /** Whether the plan breaks node `id`'s title onto two lines (`lib/mapMarks.js`, `brokenLabelOf`). */
+    isBroken: (id) => plan.broken.has(id),
     /** The box the plan draws node `id` as at most, in layout units, the box its lines were routed around; null for a node drawn as laid out. */
     plannedBoxOf: (id) => plan.grown.get(id)?.box ?? null,
     /**
@@ -252,13 +289,14 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
     drawnBoxAt(id, at, hidden) {
       const entry = plan.grown.get(id);
       if (!entry) return null;
-      const least = leastBoxOf(id, entry.px, Math.min(at, plan.unit), hidden);
+      const least = leastBoxOf(id, entry.px, Math.min(at, plan.unit), hidden, plan.broken.has(id));
       return drawnBoxOf(geometry.boxes[id], entry.box, least);
     },
     /**
-     * What the last plan was: `{ ms, unit, routed, failed, grown, plates,
-     * projectPlate }`, `grown` the top-level nodes it draws larger than their
-     * layout, `plates` those whose title it stands on a plate, every list sorted,
+     * What the last plan was: `{ ms, unit, routed, failed, grown, broken,
+     * plates, projectPlate }`, `grown` the top-level nodes it draws
+     * larger than their layout, `broken` those whose title it breaks onto two
+     * lines, `plates` those whose title it stands on a plate, every list sorted,
      * and `projectPlate` the room it keeps for the title of the box that holds
      * everything, `{ x1, y1, x2, y2 }` in layout units, or null.
      */
@@ -268,6 +306,7 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
       routed: [...plan.paths.keys()].sort(),
       failed: [...plan.failed],
       grown: [...plan.grown.keys()].sort(),
+      broken: [...plan.broken].sort(),
       plates: [...plan.plated],
       projectPlate: plan.project ? { ...plan.project } : null,
     }),
