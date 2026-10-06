@@ -77,8 +77,9 @@ const NO_INSET = Object.freeze({ right: 0 });
  * selector names, or everything visible; `centre(id)` centres on a node, or on
  * what is visible when no node is named; `frame(target, { animate })` frames a
  * selection. `getInset()` says how many pixels at the canvas's right edge are
- * covered, and all three leave them out. `fitZoom()` is the zoom `fit()` would
- * take now, without moving the view.
+ * covered, and all three leave them out. `fitZoom({ drawing })` is the zoom
+ * `fit()` would take now, without moving the view, measured once per `drawing`
+ * when one is named.
  */
 export function useGraphNavigation(getCy, { getInset = () => NO_INSET } = {}) {
   // The centre of the uncovered part of the canvas, in rendered pixels.
@@ -136,10 +137,25 @@ export function useGraphNavigation(getCy, { getInset = () => NO_INSET } = {}) {
     fitTo(cy, chosen.nonempty() ? chosen : everythingVisible(cy));
   }
 
-  function fitZoom() {
+  // The last fit zoom measured for a named drawing, and what it was measured over.
+  let measured = { key: null, zoom: null };
+
+  /**
+   * The zoom a fit of everything visible would take now. A caller that names the
+   * drawing it asks about, `drawing`, a token that changes whenever what is drawn
+   * does, has it measured once per drawing, canvas size and inset: measuring
+   * reads every visible node's shape and every visible edge's route, which a
+   * zoom or a pan of one drawing does not move.
+   */
+  function fitZoom({ drawing = null } = {}) {
     const cy = getCy();
     if (!cy) return 1;
-    return zoomFitting(cy, shapesBoxOf(everythingVisible(cy)), getInset()) ?? cy.zoom();
+    const inset = getInset();
+    const key = drawing === null ? null : `${drawing}\n${cy.width()}x${cy.height()}\n${inset.right}`;
+    if (key !== null && measured.key === key) return measured.zoom;
+    const zoom = zoomFitting(cy, shapesBoxOf(everythingVisible(cy)), inset) ?? cy.zoom();
+    measured = { key, zoom };
+    return zoom;
   }
 
   /**

@@ -32,7 +32,7 @@
 import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { loadCytoscape } from "../../../shared/cytoscape/index.js";
 import { elkGraphOf, layOut, warmUpLayout } from "../../../shared/elk/index.js";
-import { ALONG_HOVER, BEHIND, DISTANCE_DATA, HOVERED, IN_FRONT, SELECTION_CLASSES } from "./canvasMarks.js";
+import { ALONG_HOVER, BEHIND, DISTANCE_DATA, HOVERED, IN_FRONT, SELECTION_CLASSES, setClass } from "./canvasMarks.js";
 import { applyGeometry, fitCompounds, layoutInputOf } from "./canvasLayout.js";
 import { canvasMap } from "./canvasMap.js";
 import { followedOverlay } from "./followedOverlay.js";
@@ -40,6 +40,9 @@ import { pillOverlay } from "./pillOverlay.js";
 import { sharedLines } from "./sharedLines.js";
 import { COLLAPSED, LOOP_BOX, LOOP_END, endsOfLine } from "../lib/levels.js";
 import { GEOMETRY } from "../lib/stylesheet.js";
+
+/** The marks of an element a selection leaves as it is. */
+const NO_MARKS = Object.freeze({ classes: Object.freeze([]) });
 
 /** Cytoscape's layout that places nothing, run when the graph is created. */
 const UNPLACED = Object.freeze({ name: "null" });
@@ -51,8 +54,9 @@ const UNPLACED = Object.freeze({ name: "null" });
  *
  * `tokens()` gives the resolved theme tokens now, which the followed lines are
  * drawn in.
- * `fitZoom()` gives the zoom of the whole-graph fit now, which the map's levels
- * are measured from. `reveal(source, ids)` draws the nodes in `ids` as themselves
+ * `fitZoom({ drawing })` gives the zoom of the whole-graph fit now, which the
+ * map's levels are measured from, measured once per `drawing` the map names.
+ * `reveal(source, ids)` draws the nodes in `ids` as themselves
  * with their own edges for `source` ("search", or a test), opening every box that
  * holds one and each one that is a box, from the next drawing on; `revealNow`
  * draws it at once; the selection reveals what it needs itself (`markSelection`).
@@ -82,6 +86,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   let map = null;
   // The node under the pointer, whose lines are drawn in front of the rest.
   let pointed = null;
+  // Whether drawing what the pointer rests on is waiting (`hoverNode`).
+  let pointerQueued = false;
   let generation = 0;
   // What the filters show and what the selection marks, kept to mark again on
   // whatever a later level draws.
@@ -99,12 +105,22 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   }
 
   // A node under the pointer has every edge of its drawn, whatever the budget,
-  // and its outward edges, in front of the rest.
+  // and its outward edges, in front of the rest. A pointer that leaves one node
+  // for another reports both in one event, the node it leaves and the one it
+  // comes to: what it rests on is drawn once, when the event is over, and the
+  // node it left is never drawn in between.
   function hoverNode(id) {
     pointed = id;
-    const lifted = map?.setExempt("pointer", id);
-    const exposed = map?.expose("pointer", id ? [id] : []);
-    // The pointer adds or takes lines, never a node: every box keeps its size.
+    if (pointerQueued) return;
+    pointerQueued = true;
+    queueMicrotask(drawPointer);
+  }
+
+  function drawPointer() {
+    pointerQueued = false;
+    const lifted = map?.setExempt("pointer", pointed);
+    const exposed = map?.expose("pointer", pointed ? [pointed] : []);
+    // The pointer adds or takes lines, never a node: every box keeps its size, and no box opens or closes.
     if (lifted || exposed) redraw({ boxes: false });
     else if (cy.value) {
       cy.value.batch(() => markFront(cy.value));
@@ -112,15 +128,21 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     }
   }
 
-  /** Bring the drawn lines of the node under the pointer in front of the rest, and fade the rest; none for an open box. */
+  /**
+   * Bring the drawn lines of the node under the pointer in front of the rest,
+   * and fade the rest; none for an open box. Only a line whose mark changes is
+   * marked again: Cytoscape restyles every line it is told of, and a pointer that
+   * leaves one node for another leaves the rest faded as they were.
+   */
   function markFront(instance) {
-    instance.edges(`.${IN_FRONT}, .${BEHIND}`).removeClass(`${IN_FRONT} ${BEHIND}`);
     const node = pointed ? instance.getElementById(pointed) : null;
-    if (!node || node.empty() || node.isParent()) return;
-    const own = node.connectedEdges().filter((edge) => edge.visible());
-    if (own.empty()) return;
-    own.addClass(IN_FRONT);
-    instance.edges().not(own).addClass(BEHIND);
+    const own = node && node.nonempty() && !node.isParent() ? node.connectedEdges().filter((edge) => edge.visible()) : instance.collection();
+    const front = new Set(own.map((edge) => edge.id()));
+    instance.edges().forEach((edge) => {
+      const inFront = front.has(edge.id());
+      setClass(edge, IN_FRONT, inFront);
+      setClass(edge, BEHIND, front.size > 0 && !inFront);
+    });
   }
 
   // Cytoscape reports the one edge under the pointer; on a shared line every
@@ -140,6 +162,19 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     followed?.refresh();
   }
 
+  /**
+   * The zoom crossed a step of the map's scale and drew no other level: every
+   * mark of the map is restyled at the new scale. Cytoscape restyles an element
+   * when its style is next read, which would be in the next frame's drawing,
+   * where the counts are placed at the new scale too: more than a frame's work.
+   * Reading every element's style now restyles them in the frame that found the
+   * step, and leaves the next frame the drawing alone.
+   */
+  function rescaled() {
+    refreshOverlay();
+    cy.value?.elements().forEach((element) => element.pstyle("display"));
+  }
+
   function destroy() {
     ready.value = false;
     layingOut.value = false;
@@ -148,6 +183,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     hoveredEdges.value = [];
     containerRef.value?.removeEventListener("mouseleave", clearHover);
     shared = null;
+    pointerQueued = false;
     followed?.destroy();
     followed = null;
     pills?.destroy();
@@ -208,7 +244,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
       if (mine !== generation) return false;
       shared = sharedLines(instance, drawn.paths, { scale: () => map?.scale() ?? 1 });
       followed = followedOverlay(instance, containerRef.value, { tokens });
-      map = canvasMap(instance, run.geometry, { fitZoom, onLevel: redraw, onRescale: refreshOverlay });
+      map = canvasMap(instance, run.geometry, { fitZoom, onLevel: redraw, onRescale: rescaled });
       // Laid over the followed lines, so no line is drawn over a count.
       pills = pillOverlay(instance, containerRef.value, { tokens, map: () => map });
       layout.value = run;
@@ -247,23 +283,23 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   function markShown(instance) {
     const { ids, contracts } = shown;
     if (!ids) return;
-    instance.nodes().forEach((node) => node.toggleClass("is-hidden", !ids.has(node.data(LOOP_BOX) ?? node.id())));
+    instance.nodes().forEach((node) => setClass(node, "is-hidden", !ids.has(node.data(LOOP_BOX) ?? node.id())));
     instance.edges().forEach((edge) => {
       const contract = edge.data("contract");
-      edge.toggleClass("is-hidden", Boolean(contracts && contract && !contracts.has(contract)));
+      setClass(edge, "is-hidden", Boolean(contracts && contract && !contracts.has(contract)));
     });
   }
 
   /**
    * Draw the level wanted now, and mark the filters and the selection on it;
    * every box sized to ELK's again unless `boxes` is false, as for a change that
-   * draws no node and hides none.
+   * draws no node and hides none, which keeps the boxes open now open.
    */
   function redraw({ boxes = true } = {}) {
     const instance = cy.value;
     if (!instance) return;
     instance.batch(() => {
-      map?.apply();
+      map?.apply({ sameLevel: !boxes });
       markShown(instance);
       markWalk(instance, marked);
       markFront(instance);
@@ -296,23 +332,20 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     redraw();
   }
 
-  function markNode(node, selection, outside) {
+  /** The marks `selection` gives `node`: `{ classes, distance }`, the classes among `SELECTION_CLASSES` and a ring's, and its distance in impact mode. */
+  function marksOfNode(node, selection, outside) {
     const id = node.id();
     const distance = selection.distances.get(id);
     if (distance === undefined) {
       // What a selected box holds is what was selected: drawn as it is, nothing dimmed.
-      if (selection.inside?.has(id)) return;
-      if (!selection.keep.has(id)) node.addClass(outside);
+      if (selection.inside?.has(id)) return NO_MARKS;
+      if (!selection.keep.has(id)) return { classes: [outside] };
       // A closed box that holds a node of the walk is part of what the selection frames.
-      else if (node.hasClass(COLLAPSED)) node.addClass("holds-walk");
-      return;
+      return node.hasClass(COLLAPSED) ? { classes: ["holds-walk"] } : NO_MARKS;
     }
-    node.addClass("in-walk");
     const ring = selection.rings?.get(id);
-    if (ring === undefined) return;
-    node.addClass(`ring-${ring}`);
-    node.data(DISTANCE_DATA, distance);
-    if (selection.risks?.has(id)) node.addClass("is-risk");
+    if (ring === undefined) return { classes: ["in-walk"] };
+    return { classes: ["in-walk", `ring-${ring}`, ...(selection.risks?.has(id) ? ["is-risk"] : [])], distance };
   }
 
   /** Whether `edge` is one the walk took: an aggregated edge is when it carries one. */
@@ -321,16 +354,12 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     return map.keysOf(edge).some((key) => selection.edges.has(key));
   }
 
-  /** Mark `selection` on what is drawn now, or clear its marks when it is null. */
-  function markWalk(instance, selection) {
-    instance.elements().removeClass(SELECTION_CLASSES.join(" "));
-    instance.nodes().forEach((node) => {
-      node.removeClass(node.classes().filter((name) => name.startsWith("ring-")));
-      node.removeData(DISTANCE_DATA);
-    });
-    if (!selection) return;
+  /** The marks `selection` gives what is drawn now: element id to `{ classes, distance }`; none for a null selection. */
+  function marksOf(instance, selection) {
+    const marks = new Map();
+    if (!selection) return marks;
     const outside = selection.hide ? "is-outside" : "is-dimmed";
-    instance.nodes().not(`.${LOOP_END}`).forEach((node) => markNode(node, selection, outside));
+    instance.nodes().not(`.${LOOP_END}`).forEach((node) => marks.set(node.id(), marksOfNode(node, selection, outside)));
     // A line between two parts of a selected box, or from one onto a box that holds it, is drawn as it is,
     // as the box's contents are.
     const inside = (edge) => {
@@ -340,13 +369,35 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
       return kept(source) && kept(target) && (selection.inside.has(source) || selection.inside.has(target));
     };
     instance.edges().forEach((edge) => {
-      if (!inside(edge)) edge.addClass(walked(edge, selection) ? "is-walk-edge" : outside);
+      if (!inside(edge)) marks.set(edge.id(), { classes: [walked(edge, selection) ? "is-walk-edge" : outside] });
     });
     const focus = instance.getElementById(selection.focus);
     if (focus.nonempty()) {
-      focus.addClass("is-selected");
-      focus.connectedEdges(".is-walk-edge").addClass("is-selected-edge");
+      const own = marks.get(focus.id()) || NO_MARKS;
+      marks.set(focus.id(), { ...own, classes: [...own.classes, "is-selected"] });
+      focus.connectedEdges().forEach((edge) => {
+        const line = marks.get(edge.id());
+        if (line?.classes.includes("is-walk-edge")) marks.set(edge.id(), { classes: [...line.classes, "is-selected-edge"] });
+      });
     }
+    return marks;
+  }
+
+  /**
+   * Mark `selection` on what is drawn now, or clear its marks when it is null,
+   * changing only the marks that differ from what each element carries.
+   */
+  function markWalk(instance, selection) {
+    const marks = marksOf(instance, selection);
+    instance.elements().forEach((element) => {
+      const { classes, distance } = marks.get(element.id()) || NO_MARKS;
+      for (const name of SELECTION_CLASSES) setClass(element, name, classes.includes(name));
+      if (!element.isNode()) return;
+      for (const name of element.classes()) if (name.startsWith("ring-") && !classes.includes(name)) setClass(element, name, false);
+      for (const name of classes) if (name.startsWith("ring-")) setClass(element, name, true);
+      if (distance !== undefined && element.data(DISTANCE_DATA) !== distance) element.data(DISTANCE_DATA, distance);
+      else if (distance === undefined && element.data(DISTANCE_DATA) !== undefined) element.removeData(DISTANCE_DATA);
+    });
   }
 
   /**

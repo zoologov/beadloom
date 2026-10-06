@@ -49,7 +49,9 @@
 // screen whatever the zoom: each carries the map's scale in its data, a power of
 // 1.25 near 1 / zoom, and the stylesheet multiplies by it, so a zoom gesture
 // restyles these elements only when the zoom crosses a step. An edge out of the
-// graph is given the scale too, so it comes back at the size of the rest. A
+// graph is given the scale when it is put back, so it comes back at the size of
+// the rest: Cytoscape restyles an element out of the graph as it does one in it,
+// and giving every edge of the file the scale at each step restyled them all. A
 // title is tried at a few sizes inside its box and otherwise stands above it on
 // a plate (`lib/mapMarks.js`); which, is in the node's data (`mapTitle`), worked
 // out again at each step of the scale. A top-level node that is not a box takes
@@ -101,6 +103,7 @@ import { routePointsOf } from "../lib/lineMarks.js";
 import { pathOf, segmentsOf } from "../lib/routes.js";
 import { GEOMETRY } from "../lib/stylesheet.js";
 import { isLoop } from "./canvasLayout.js";
+import { setClass } from "./canvasMarks.js";
 import { loopLines } from "./loopLines.js";
 import { PROJECT_PLATE_SIDE, overviewPlanner } from "./overviewPlan.js";
 
@@ -133,6 +136,34 @@ function titleMeasurer(cy) {
   };
 }
 
+/** Whether two values of an element's data are the same: one value, or plain data equal field by field. */
+function sameData(a, b) {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Give `element` the data in `values`, a key whose value is undefined taken
+ * away, and have it restyled only when one of them differs from what it holds:
+ * Cytoscape restyles an element for every value it is given, the same or not,
+ * and a box with everything it holds, so giving the box that holds everything
+ * its unchanged scale on every drawing restyled every node of the map.
+ */
+function giveData(element, values) {
+  const changed = {};
+  const gone = [];
+  for (const [key, value] of Object.entries(values)) {
+    const now = element.data(key);
+    if (value === undefined) {
+      if (now !== undefined) gone.push(key);
+    } else if (!sameData(now, value)) changed[key] = value;
+  }
+  if (gone.length) element.removeData(gone.join(" "));
+  if (Object.keys(changed).length) element.data(changed);
+  else if (gone.length) element.updateStyle();
+}
+
 /** What an aggregated edge's label says: its count each way, the way that has any. */
 function countLabelOf(forward, backward) {
   return [forward, backward].filter(Boolean).join(" + ");
@@ -155,7 +186,9 @@ function styleKeyOf(edges) {
  * openBoxes, collapsedBoxes, allNodes, isAggregate, keysOf, scale, fitZoom,
  * zoomDrawing, pending, destroy }`.
  *
- * `fitZoom()` gives the zoom of the whole-graph fit now; `onLevel()` is called
+ * `fitZoom({ drawing })` gives the zoom of the whole-graph fit now, which may be
+ * measured once per `drawing`, a token the map changes whenever it draws a level
+ * or the filters change, and never for a zoom or a pan alone; `onLevel()` is called
  * when the view opens or closes a box, and is expected to call `apply`;
  * `onRescale()` when the scale stepped and nothing else changed. Nothing is
  * drawn differently until the first `apply`.
@@ -209,6 +242,8 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   // Whether the view has been placed since the canvas was made: its first change is the first fit.
   let placed = false;
   let version = 0;
+  // A token of what is drawn, which the fit is measured once per: it changes with every drawing of a level.
+  let drawing = 0;
   let hiddenAt = new Map();
   // The nodes an edge of the file is drawn as itself into at rest, and the box each node drawn larger than its layout is drawn as now.
   let ownEnds = new Set();
@@ -318,8 +353,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     if (id === tree.wrapper) return dressProjectTitle(node, at);
     const mapped = node.hasClass(COLLAPSED) || (planner.isTop(id) && !tree.boxes.has(id));
     const title = mapped ? titleLookOf(id, at, hiddenAt.get(id) || 0, grownNow.get(id)) : null;
-    if (title) node.data({ [MAP_TITLE]: { ...title, side: planner.plateSideOf(id), scale: at }, [MAP_SCALE]: scale });
-    else node.removeData(MAP_TITLE);
+    giveData(node, title ? { [MAP_TITLE]: { ...title, side: planner.plateSideOf(id), scale: at }, [MAP_SCALE]: scale } : { [MAP_TITLE]: undefined });
   }
 
   /**
@@ -329,15 +363,13 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
    */
   function dressProjectTitle(node, at) {
     const title = planner.hasProjectPlate() && projectTitleAt(scale) ? projectTitleAt(at) : null;
-    if (title) node.data({ [MAP_TITLE]: { ...title, side: PROJECT_PLATE_SIDE, scale: at }, [MAP_SCALE]: scale });
-    else node.removeData(MAP_TITLE);
+    giveData(node, title ? { [MAP_TITLE]: { ...title, side: PROJECT_PLATE_SIDE, scale: at }, [MAP_SCALE]: scale } : { [MAP_TITLE]: undefined });
   }
 
   /** Give the drawn node `node` the box it is drawn as now when the plan draws it larger than its layout. */
   function dressBox(node) {
     const box = grownNow.get(node.id());
-    if (box) node.data(MAP_BOX, { width: box.x2 - box.x1, height: box.y2 - box.y1 });
-    else node.removeData(MAP_BOX);
+    giveData(node, { [MAP_BOX]: box ? { width: box.x2 - box.x1, height: box.y2 - box.y1 } : undefined });
   }
 
   /** Whether `id` is one of `ids` or inside one: a box's edges are those of everything in it. */
@@ -345,8 +377,8 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     return ids.has(id) || holdersOf(tree, id).some((box) => ids.has(box));
   }
 
-  /** The view now, as the levels read it. */
-  const viewNow = () => ({ zoom: cy.zoom(), fitZoom: fitZoom(), extent: cy.extent() });
+  /** The view now, as the levels read it: the fit measured once per drawing (`drawing`). */
+  const viewNow = () => ({ zoom: cy.zoom(), fitZoom: fitZoom({ drawing }), extent: cy.extent() });
 
   /**
    * The boxes to draw open now: the readable ones in view and those a reveal
@@ -430,13 +462,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     // Drawn up to where it enters an end drawn larger than its layout: on its last run, for a planned line.
     const shown = path && (pathOutside(path, grownNow.get(a) || null, grownNow.get(b) || null) || path);
     const route = shown ? segmentsOf(shown, nodes.get(a).position(), nodes.get(b).position()) : null;
-    element.data(data);
-    if (pair.said) element.data(SAID, pair.said);
-    else element.removeData(SAID);
-    if (route) element.data("route", route);
-    else element.removeData("route");
-    if (stubs.has(pair.name)) element.data(STUB_AT, stubs.get(pair.name));
-    else element.removeData(STUB_AT);
+    giveData(element, { ...data, [SAID]: pair.said || undefined, route: route || undefined, [STUB_AT]: stubs.get(pair.name) });
   }
 
   /** Take `elements` out of the graph, those still in it. */
@@ -559,9 +585,12 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     return said.forward + said.backward ? said : null;
   }
 
-  /** Draw the level wanted now: the boxes open by the view and by every reveal. */
-  function apply() {
-    const nextOpen = wanted();
+  /**
+   * Draw the level wanted now: the boxes open by the view and by every reveal;
+   * with `sameLevel`, the boxes open now, as for the pointer, which opens none.
+   */
+  function apply({ sameLevel = false } = {}) {
+    const nextOpen = sameLevel ? open : wanted();
     // An edge the filters hide is drawn as itself and marked hidden, as ever; an
     // aggregated edge carries only the edges they show.
     const kept = (id) => shown(edges.get(id));
@@ -604,7 +633,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
         return element;
       });
       putBack(drawn);
-      for (const id of edges.keys()) {
+      for (const id of originals) {
         const line = lineOf(id);
         if (line.data(MAP_SCALE) !== scale) line.data(MAP_SCALE, scale);
         if (stubs.has(id)) line.data(STUB_AT, stubs.get(id));
@@ -612,18 +641,18 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
       }
       for (const id of level.nodes) {
         const node = nodes.get(id);
-        node.toggleClass(COLLAPSED, tree.boxes.has(id) && !nextOpen.has(id));
+        setClass(node, COLLAPSED, tree.boxes.has(id) && !nextOpen.has(id));
+        const collapsed = node.hasClass(COLLAPSED);
         // The project's frame keeps its width on screen, as a mark of the map does.
-        if (id === tree.wrapper) node.addClass(PROJECT_BOX).data(MAP_SCALE, scale);
-        if (hiddenAt.has(id)) node.data({ [HIDDEN_EDGES]: hiddenAt.get(id), [MAP_SCALE]: scale });
-        else node.removeData(HIDDEN_EDGES);
-        if (node.hasClass(COLLAPSED)) node.data(MAP_SCALE, scale);
-        // A box no line comes into or goes out of has nothing to say.
-        if (node.hasClass(COLLAPSED) && tallies.has(id)) node.data(TALLY, tallies.get(id));
-        else node.removeData(TALLY);
-        // A node inside an open box counts its outward edges; the root's children have none.
-        if (outward.has(id) && tree.parent.get(id) && tree.parent.get(id) !== tree.wrapper) node.data(OUTWARD, outward.get(id).length);
-        else node.removeData(OUTWARD);
+        if (id === tree.wrapper) setClass(node, PROJECT_BOX, true);
+        giveData(node, {
+          ...(id === tree.wrapper || hiddenAt.has(id) || collapsed ? { [MAP_SCALE]: scale } : {}),
+          [HIDDEN_EDGES]: hiddenAt.get(id),
+          // A box no line comes into or goes out of has nothing to say.
+          [TALLY]: collapsed ? tallies.get(id) : undefined,
+          // A node inside an open box counts its outward edges; the root's children have none.
+          [OUTWARD]: outward.has(id) && tree.parent.get(id) && tree.parent.get(id) !== tree.wrapper ? outward.get(id).length : undefined,
+        });
         dressBox(node);
         dressTitle(node);
       }
@@ -632,6 +661,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     pairs = weighed;
     ownPairs = extras.own;
     version += 1;
+    drawing += 1;
   }
 
   /** How many edges come into each drawn end of `weighed` and go out of it, the ones left out included. */
@@ -675,7 +705,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     scale = next;
     cy.batch(() => {
       cy.elements(`.${COLLAPSED}, .${PROJECT_BOX}, edge[${AGGREGATE}], node[${HIDDEN_EDGES}]`).data(MAP_SCALE, scale);
-      for (const id of edges.keys()) lineOf(id).data(MAP_SCALE, scale);
+      for (const id of edges.keys()) if (lineOf(id).inside()) lineOf(id).data(MAP_SCALE, scale);
       for (const node of nodes.values()) if (node.inside()) dressTitle(node);
     });
     version += 1;
@@ -761,6 +791,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     setShown(predicate) {
       shown = predicate;
       shownVersion += 1;
+      drawing += 1;
     },
     /**
      * Draw every edge of the node `id`, and of everything inside it, for `source`

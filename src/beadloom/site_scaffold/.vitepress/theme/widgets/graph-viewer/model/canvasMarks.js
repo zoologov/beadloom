@@ -1,5 +1,5 @@
 // beadloom:component=site-graph-viewer
-// The names a selection and a hover mark the canvas with: the classes and the data, named once.
+// The names a selection and a hover mark the canvas with: the classes and the data, named once, and how a class is set.
 //
 // The canvas sets them (`useGraphCanvas.js`), the layers over the canvas read
 // which edges they mark as followed (`followedOverlay.js`) and which fall back
@@ -36,3 +36,13 @@ export const HIGHLIGHTED_EDGES = `.is-walk-edge, .${ALONG_HOVER}, .${HOVERED}, .
 
 /** The node data the impact mode sets: the node's distance from the selection. */
 export const DISTANCE_DATA = "impactDistance";
+
+/**
+ * Give `element` the class `name` when `on`, and take it away otherwise, only
+ * where that changes it: Cytoscape restyles every element it adds a class to or
+ * takes one from, whether it had the class or not, and a box with everything it
+ * holds, so marking every element of the map on each drawing restyled them all.
+ */
+export function setClass(element, name, on) {
+  if (element.hasClass(name) !== on) element.toggleClass(name, on);
+}

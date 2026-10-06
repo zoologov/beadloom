@@ -46,6 +46,8 @@ import {
 import { AGGREGATE } from "../lib/levels.js";
 import { LINE_MARKS, routePointsOf } from "../lib/lineMarks.js";
 import { routeIndexOf, routesAlong } from "../lib/routeIndex.js";
+import { segmentRect } from "../lib/spatialIndex.js";
+import { setClass } from "./canvasMarks.js";
 
 /**
  * Where a line beside a head's run is looked for, in layout units: up to
@@ -60,6 +62,14 @@ const BESIDE_REACH = 40;
 
 /** Two directions closer than this cross product apart are one: a point between them is no corner. */
 const STRAIGHT_ON = 1e-6;
+/**
+ * How far around an end's last run its search for room reads, in layout units:
+ * the reach beside it, the run past its tip, and the half unit a point on a
+ * route may lie off it (`lib/routeIndex.js`), with a unit to spare.
+ */
+const SEARCH_REACH = Math.max(BESIDE_REACH, PAST_TIP) + 1;
+
+const samePoint = (p, q) => p.x === q.x && p.y === q.y;
 
 /** The point `length` from `from` towards `to`. */
 function towards(from, to, length) {
@@ -123,29 +133,58 @@ export function sharedLines(cy, paths, { scale = () => 1 } = {}) {
   let index = routeIndexOf([]);
   let lines = routeIndexOf([]);
   let dropped = new Set();
+  // The routed lines drawn, by what names each (`keyOf`), and each end's search among them (`searchOf`).
+  let routesNow = new Map();
+  let searches = new Map();
+
+  /** What names a drawn line's route: its id, and for a line of the map, which can be routed again, the route. */
+  const keyOf = (edge) => (edge.data(AGGREGATE) ? `${edge.id()} ${JSON.stringify(edge.data("route"))}` : edge.id());
+
+  /**
+   * Keep the searches of the ends no line that came or went since can change:
+   * an end's search reads only what lies within its run and a reach around it.
+   */
+  function keepSearches(before, after) {
+    const changed = [...before].filter(([key]) => !after.has(key)).concat([...after].filter(([key]) => !before.has(key)));
+    const segments = changed.flatMap(([, points]) => points.slice(1).map((b, i) => segmentRect(points[i], b)));
+    const untouched = (region) => !segments.some((r) => r.x1 <= region.x2 && region.x1 <= r.x2 && r.y1 <= region.y2 && region.y1 <= r.y2);
+    searches = new Map([...searches].filter(([, search]) => untouched(search.region)));
+  }
+
+  /**
+   * How much room `end` has and what lies beside its head, among the lines drawn
+   * now: `{ corner, beside, arrival, besideId }`, searched again only when its
+   * last run, or a line within its reach, changed since it was last searched.
+   */
+  function searchOf(end) {
+    const key = `${end.id}\n${end.end}`;
+    const from = towards(end.tip, end.before, end.corner);
+    const kept = searches.get(key);
+    if (kept && samePoint(kept.tip, end.tip) && samePoint(kept.from, from)) return kept.found;
+    const corner = Math.min(end.corner, lines.nearestCrossing(end.tip, from, SAME_END));
+    const zone = towards(end.tip, end.before, Math.min(corner, HEAD_ZONE));
+    const found = { corner, ...lines.nearestBeside(end.tip, zone, BESIDE_REACH, SAME_END, PAST_TIP, end.id) };
+    searches.set(key, { tip: end.tip, from, found, region: segmentRect(end.tip, from, SEARCH_REACH) });
+    return found;
+  }
 
   function refresh() {
     const drawn = cy.edges().filter((edge) => edge.visible());
     const routed = drawn.filter((edge) => paths[edge.id()]);
     // The map's own lines can be routed again, or drawn to another end, with the same ids drawn.
-    const ids = drawn
-      .filter((edge) => edge.data("route"))
-      .map((edge) => (edge.data(AGGREGATE) ? `${edge.id()} ${JSON.stringify(edge.data("route"))}` : edge.id()))
-      .join("\n");
+    const withRoutes = drawn.filter((edge) => edge.data("route"));
+    const keys = withRoutes.map(keyOf);
+    const ids = keys.join("\n");
     if (ids !== drawnIds) {
       drawnIds = ids;
       index = routeIndexOf(routed.map((edge) => ({ id: edge.id(), points: paths[edge.id()] })));
       // Every routed line drawn, the map's own among them, for the room around a head.
-      lines = routeIndexOf(drawn.filter((edge) => edge.data("route")).map((edge) => ({ id: edge.id(), points: routePointsOf(edge) })));
+      const now = new Map(withRoutes.map((edge, i) => [keys[i], routePointsOf(edge)]));
+      lines = routeIndexOf(withRoutes.map((edge, i) => ({ id: edge.id(), points: now.get(keys[i]) })));
+      keepSearches(routesNow, now);
+      routesNow = now;
     }
-    const ends = drawn
-      .filter((edge) => edge.data("route"))
-      .flatMap(endsOf)
-      .map((end) => {
-        const corner = Math.min(end.corner, lines.nearestCrossing(end.tip, towards(end.tip, end.before, end.corner), SAME_END));
-        const zone = towards(end.tip, end.before, Math.min(corner, HEAD_ZONE));
-        return { ...end, corner, ...lines.nearestBeside(end.tip, zone, BESIDE_REACH, SAME_END, PAST_TIP, end.id) };
-      });
+    const ends = withRoutes.flatMap(endsOf).map((end) => ({ ...end, ...searchOf(end) }));
     dropped = droppedHeadsOf(ends);
     // A line that leaves its node beside where a head arrives starts at that head's base, clear of its side.
     const aside = departuresBeside(ends, dropped);
@@ -178,8 +217,8 @@ export function sharedLines(cy, paths, { scale = () => 1 } = {}) {
         const id = edge.id();
         const room = { source: rooms.get(`${id}\nsource`) ?? null, target: rooms.get(`${id}\ntarget`) ?? null };
         if (!sameRoom(edge.data(HEAD_ROOM), room)) edge.data(HEAD_ROOM, room);
-        edge.toggleClass(NO_TARGET_HEAD, dropped.has(`${id}\ntarget`));
-        edge.toggleClass(NO_SOURCE_HEAD, dropped.has(`${id}\nsource`));
+        setClass(edge, NO_TARGET_HEAD, dropped.has(`${id}\ntarget`));
+        setClass(edge, NO_SOURCE_HEAD, dropped.has(`${id}\nsource`));
       });
     });
   }

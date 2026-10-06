@@ -16,6 +16,11 @@
 //   they cost more than the index saves (measured in Node 18 on an adopter-sized
 //   graph: 85 ms for the bundling against 17), while a band holds each once.
 //
+//   A line whose clearance spans more bands than hold anything, as the search
+//   for the room around an arrowhead along a run thousands of units long does,
+//   visits the bands that hold something, in the same order, rather than every
+//   band along the run.
+//
 // A query visits each item once. An item cannot be removed: a caller that
 // replaces one files the new one and skips the old one when it visits it.
 
@@ -94,11 +99,36 @@ export function orientationOf(a, b) {
  * `insert` files `item`, the segment from `a` to `b`, and ignores a segment that
  * is neither horizontal nor vertical. `along` calls `visit(item, a, b)` once for
  * every segment of `orientation` ("horizontal" or "vertical") whose fixed
- * coordinate lies within `clearance` of `at` and whose span meets `[lo, hi]`.
+ * coordinate lies within `clearance` of `at` and whose span meets `[lo, hi]`,
+ * until `visit` returns true; it returns whether one did.
  */
 export function lineIndex(band) {
   const lines = { horizontal: new Map(), vertical: new Map() };
+  // Each orientation's bands that hold a segment, in order, made again only when a band was added since.
+  const filled = { horizontal: { keys: [], stale: false }, vertical: { keys: [], stale: false } };
   const bandOf = (value) => Math.floor(value / band);
+
+  /** The bands of `orientation` that hold a segment, in order, made again when a band was added since. */
+  function filledBands(orientation) {
+    const known = filled[orientation];
+    if (known.stale) {
+      known.keys = [...lines[orientation].keys()].sort((x, y) => x - y);
+      known.stale = false;
+    }
+    return known.keys;
+  }
+
+  /** The first place in the ordered `keys` that holds `first` or a later key. */
+  function firstFrom(keys, first) {
+    let [lo, hi] = [0, keys.length];
+    while (lo < hi) {
+      const middle = (lo + hi) >> 1;
+      if (keys[middle] < first) lo = middle + 1;
+      else hi = middle;
+    }
+    return lo;
+  }
+
   return {
     insert(item, a, b) {
       const orientation = orientationOf(a, b);
@@ -111,16 +141,31 @@ export function lineIndex(band) {
       const key = bandOf(fixed);
       const entries = lines[orientation];
       if (entries.has(key)) entries.get(key).push(entry);
-      else entries.set(key, [entry]);
+      else {
+        entries.set(key, [entry]);
+        filled[orientation].stale = true;
+      }
     },
     along(orientation, at, clearance, lo, hi, visit) {
       const entries = lines[orientation];
-      for (let key = bandOf(at - clearance); key <= bandOf(at + clearance); key += 1) {
+      const [first, last] = [bandOf(at - clearance), bandOf(at + clearance)];
+      // Whether `visit` said to stop, by returning true.
+      const visitBand = (key) => {
         for (const entry of entries.get(key) || []) {
           if (Math.abs(entry.fixed - at) > clearance || entry.hi < lo || entry.lo > hi) continue;
-          visit(entry.item, entry.a, entry.b);
+          if (visit(entry.item, entry.a, entry.b) === true) return true;
         }
+        return false;
+      };
+      // A clearance wider than the bands that hold anything, as along a long run, visits those bands
+      // alone, in the same order: band after empty band would cost the run's length.
+      if (last - first + 1 <= 2 * entries.size) {
+        for (let key = first; key <= last; key += 1) if (visitBand(key)) return true;
+        return false;
       }
+      const keys = filledBands(orientation);
+      for (let i = firstFrom(keys, first); i < keys.length && keys[i] <= last; i += 1) if (visitBand(keys[i])) return true;
+      return false;
     },
   };
 }

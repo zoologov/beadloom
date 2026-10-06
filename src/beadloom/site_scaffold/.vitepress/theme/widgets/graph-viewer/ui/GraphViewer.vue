@@ -253,7 +253,7 @@ function toggleImpact() {
 
 const canvas = useGraphCanvas(container, {
   options: NAVIGATION_OPTIONS,
-  fitZoom: () => navigation.fitZoom(),
+  fitZoom: (options) => navigation.fitZoom(options),
   tokens: () => tokens.value,
   onNodeTap: (id) => {
     select(id);
