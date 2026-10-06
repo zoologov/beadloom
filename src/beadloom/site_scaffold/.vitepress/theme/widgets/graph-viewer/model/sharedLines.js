@@ -137,9 +137,15 @@ export function sharedLines(cy, paths) {
     // A line that leaves its node beside where a head arrives starts at that head's base, clear of its side.
     const aside = departuresBeside(ends, dropped);
     for (const key of aside.keys()) dropped.add(key);
-    // Such a line, started behind the head's base, is no longer beside the head: the head has the room across it.
+    // Such a line, started behind the head's base, is no longer beside the head: the head has the room across
+    // it, and as much of its own run as that line's first run is straight, so it can start behind it.
     const leftAside = new Set([...aside.keys()].map((key) => key.slice(0, key.lastIndexOf("\n"))));
+    const byKey = new Map(ends.map((end) => [`${end.id}\n${end.end}`, end]));
     for (const end of ends) if (end.besideId && leftAside.has(end.besideId)) Object.assign(end, { beside: Infinity, arrival: false });
+    for (const [key, head] of aside) {
+      const [departure, arrival] = [byKey.get(key), byKey.get(head)];
+      if (departure && arrival) arrival.corner = Math.min(arrival.corner, departure.corner);
+    }
     // A head on another line's way, where that line runs on through the tip, would sit across it: the line ends there without one.
     for (const end of ends) {
       if (end.headless || dropped.has(`${end.id}\n${end.end}`)) continue;

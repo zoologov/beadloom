@@ -22,6 +22,7 @@ import { test, expect } from "@playwright/test";
 import { drawnEdgesOf, levelOf, outwardOf, smallestChildOf, treeOf } from "./support/map.js";
 import {
   CLOSE_SHARE,
+  FIT_FLOOR,
   READABLE_PX,
   againstReadability,
   centreOn,
@@ -58,7 +59,7 @@ const shownEdges = (data) => drawnEdgesOf(data);
 const onBorder = (point, box) =>
   Math.min(Math.abs(point.x - box.x1), Math.abs(point.x - box.x2), Math.abs(point.y - box.y1), Math.abs(point.y - box.y2)) <= ON_BORDER;
 
-test("a box opens when its nodes are readable, about 24 px tall, and closes below 0.8 of that, as the view zooms in and out", async ({ page, request }) => {
+test("a box opens when its nodes are readable, about 24 px tall, and closes below 0.9 of that, as the view zooms in and out", async ({ page, request }) => {
   const data = await architectureData(request);
   const tree = treeOf(data);
   requireShape(tree.topBoxes.length > 0, "no box at the top of the containment tree");
@@ -88,7 +89,9 @@ test("a box opens when its nodes are readable, about 24 px tall, and closes belo
   await twoFrames(page);
   await check("one step out");
   const out = smallest.get(target) * (await viewer(page, "zoom"));
-  if (out >= READABLE_PX * CLOSE_SHARE) expect(await viewer(page, "openBoxes")).toContain(target);
+  // Still readable at the share it closes below, and past the floor over the fit: still open.
+  const { fitZoom } = await viewer(page, "level");
+  if (out >= READABLE_PX * CLOSE_SHARE && (await viewer(page, "zoom")) >= FIT_FLOOR * fitZoom) expect(await viewer(page, "openBoxes")).toContain(target);
   test.info().annotations.push({ type: "measured", description: `${target} opened with its smallest node ${opening.toFixed(1)} px tall; one step out ${out.toFixed(1)} px` });
   expect(broken).toEqual([]);
 });

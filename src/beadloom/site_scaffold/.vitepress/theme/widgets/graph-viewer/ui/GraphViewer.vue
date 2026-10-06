@@ -34,11 +34,11 @@
 // itself and readable, in an animated move unless the reader asks for reduced
 // motion. A selection opens the boxes that hold its node, and those of every
 // node its walk reaches unless the node is a hub selected with nothing more
-// asked; a search frames what it finds and opens the boxes that hold it. The
-// pointer on an aggregated edge names how many edges it carries each way. At the
-// overview the lines between top-level nodes are routed together, thin and
-// light, with their counts on pills; the pointer on a node draws its lines in
-// front of the rest.
+// asked; a search frames what it finds, readably, and opens the boxes that hold
+// it. The pointer on an aggregated edge names how many edges it carries each
+// way. At the overview the lines between top-level nodes are routed together,
+// thin and light, with their counts on pills; the pointer on a node draws its
+// lines in front of the rest.
 //
 // The toolbar, the canvas, the panel and the legend are all inside one root
 // element, and that element is what goes full screen, so full screen and the
@@ -322,12 +322,22 @@ function frameSelection({ animate }) {
   });
 }
 
-/** Frame what the search box finds, when it finds anything and nothing is selected; else fit everything visible. */
+/**
+ * Frame what the search box finds, when it finds anything and nothing is
+ * selected, at no less than the zoom at which what it finds is drawn readably,
+ * centred on the first where it does not fit; else fit everything visible.
+ */
 function frameSearch() {
   nextTick(() => {
-    const box = selection.value ? null : laidOutBoxOf(searched.value);
-    if (box) navigation.frame({ box });
-    else navigation.fit();
+    const found = selection.value ? [] : searched.value;
+    const box = laidOutBoxOf(found);
+    const map = canvas.map();
+    if (!box || !map) {
+      navigation.fit();
+      return;
+    }
+    const leastZoom = Math.max(...found.map((id) => map.zoomDrawing(id)));
+    navigation.frame({ box, focus: laidOutBoxOf(found.slice(0, 1)), leastZoom });
   });
 }
 

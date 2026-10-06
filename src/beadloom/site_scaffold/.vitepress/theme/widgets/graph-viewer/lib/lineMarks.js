@@ -115,9 +115,11 @@ const DROPPED = Object.freeze({ source: NO_SOURCE_HEAD, target: NO_TARGET_HEAD }
 export function endHeadLength(edge, end) {
   if (headEndsOf(edge)[end] && !edge.hasClass(DROPPED[end])) return headLengthOf(edge);
   const room = (edge.data(HEAD_ROOM) || {})[end] ?? null;
-  // A line that leaves beside the head rather than behind it keeps a line's width and a clearance past its base.
-  const past = room?.aside ? (LINE_MARKS.width + LINE_MARKS.headClearance) * scaleOf(edge) : 0;
-  return headLengthAt(scaleOf(edge), room) + past;
+  const head = headLengthAt(scaleOf(edge), room);
+  if (!room?.aside) return head;
+  // A line that leaves beside the head rather than behind it keeps a line's width and a clearance past its base,
+  // within its own first run, which the head's room is no longer than.
+  return Math.min(head + (LINE_MARKS.width + LINE_MARKS.headClearance) * scaleOf(edge), Math.max(head, room.run ?? Infinity));
 }
 
 /** The `arrow-scale` that draws `edge`'s arrowheads `headLengthOf` long. */
