@@ -103,7 +103,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     pointed = id;
     const lifted = map?.setExempt("pointer", id);
     const exposed = map?.expose("pointer", id ? [id] : []);
-    if (lifted || exposed) redraw();
+    // The pointer adds or takes lines, never a node: every box keeps its size.
+    if (lifted || exposed) redraw({ boxes: false });
     else if (cy.value) {
       cy.value.batch(() => markFront(cy.value));
       followed?.refresh();
@@ -251,8 +252,12 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     });
   }
 
-  /** Draw the level wanted now, and mark the filters and the selection on it. */
-  function redraw() {
+  /**
+   * Draw the level wanted now, and mark the filters and the selection on it;
+   * every box sized to ELK's again unless `boxes` is false, as for a change that
+   * draws no node and hides none.
+   */
+  function redraw({ boxes = true } = {}) {
     const instance = cy.value;
     if (!instance) return;
     instance.batch(() => {
@@ -261,7 +266,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
       markWalk(instance, marked);
       markFront(instance);
     });
-    fitBoxes();
+    if (boxes) fitBoxes();
     refreshOverlay();
   }
 

@@ -166,6 +166,9 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   const exposures = new Map();
   let walkKeys = null;
   let shown = () => true;
+  // How many times the filters have changed, and the level last worked out (`levelNow`).
+  let shownVersion = 0;
+  let levelCache = { key: null };
   let open = new Set();
   let pairs = [];
   let ownPairs = [];
@@ -438,13 +441,28 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     return [...new Set([...full, ...walk].map((edge) => edge.id))];
   }
 
+  /**
+   * The level drawn with the boxes `openNow` open and its outward edges, those
+   * the filters keep (`kept`): worked out again only when the boxes or the
+   * filters change, not when the pointer or the selection exposes another node.
+   */
+  function levelNow(openNow, kept) {
+    const key = `${shownVersion}\n${[...openNow].sort().join("\n")}`;
+    if (levelCache.key !== key) {
+      const level = levelOf(tree, openNow, plainEdges);
+      const outward = outwardOf(tree, openNow, plainEdges.filter((edge) => kept(edge.id)), level);
+      levelCache = { key, level, outward };
+    }
+    return levelCache;
+  }
+
   /** Draw the level wanted now: the boxes open by the view and by every reveal. */
   function apply() {
     const nextOpen = wanted();
-    const level = levelOf(tree, nextOpen, plainEdges);
     // An edge the filters hide is drawn as itself and marked hidden, as ever; an
     // aggregated edge carries only the edges they show.
     const kept = (id) => shown(edges.get(id));
+    const { level, outward } = levelNow(nextOpen, kept);
     const weighed = [...level.pairs.values()].map((pair) => weigh(pair, kept)).filter((pair) => pair.weight > 0);
     const leftOut = budgetOf(weighed, options.budget);
     const free = new Set([...exempt.values()].filter(Boolean));
@@ -461,7 +479,6 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     const full = fullDetailOf(level, nextOpen);
     ownEnds = new Set([...level.originals, ...full].flatMap((id) => [edgeById.get(id).source, edgeById.get(id).target]));
     grownNow = grownBoxesNow(level.nodes, nextOpen);
-    const outward = outwardOf(tree, nextOpen, plainEdges.filter((edge) => kept(edge.id)), level);
     const extras = extrasOf(level, nextOpen, outward, kept);
     for (const id of full) extras.originals.add(id);
     stubs = extras.stubs;
@@ -613,6 +630,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     /** Have an aggregated edge carry only the edges `predicate` keeps: the ones the filters show. */
     setShown(predicate) {
       shown = predicate;
+      shownVersion += 1;
     },
     /**
      * Draw every edge of the node `id`, and of everything inside it, for `source`
