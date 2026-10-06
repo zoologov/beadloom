@@ -52,7 +52,7 @@ import { pathOfSegments } from "./routes.js";
 export const LINE_MARKS = Object.freeze({
   width: 1.35,
   head: 6,
-  smallestHead: 4,
+  smallestHead: 3,
   stem: 0.5,
   corner: 6,
   casing: 2,
@@ -109,11 +109,15 @@ const DROPPED = Object.freeze({ source: NO_SOURCE_HEAD, target: NO_TARGET_HEAD }
 /**
  * How long the head at `edge`'s `end` is, in layout units: its own where it draws
  * one, and where it leaves the head to another line, that head, sized by the room
- * they share; the line ends at its base there (`stylesheet.js`).
+ * they share; the line ends at its base there (`stylesheet.js`), and a line's
+ * width and a clearance further back where it leaves beside the head (`aside`).
  */
 export function endHeadLength(edge, end) {
   if (headEndsOf(edge)[end] && !edge.hasClass(DROPPED[end])) return headLengthOf(edge);
-  return headLengthAt(scaleOf(edge), (edge.data(HEAD_ROOM) || {})[end] ?? null);
+  const room = (edge.data(HEAD_ROOM) || {})[end] ?? null;
+  // A line that leaves beside the head rather than behind it keeps a line's width and a clearance past its base.
+  const past = room?.aside ? (LINE_MARKS.width + LINE_MARKS.headClearance) * scaleOf(edge) : 0;
+  return headLengthAt(scaleOf(edge), room) + past;
 }
 
 /** The `arrow-scale` that draws `edge`'s arrowheads `headLengthOf` long. */
@@ -139,13 +143,15 @@ function targetPullback(edge, shape) {
 
 /**
  * The length of a route of `points` drawn with corners of `radii`, its end
- * pulled back by `pullback`: a right-angled corner takes its rounding off both
- * runs and adds its arc; a point on a straight run is no corner.
+ * pulled back by `pullback` and its start by `lead`: a right-angled corner takes
+ * its rounding off both runs, as drawn, and adds its arc; a point on a straight
+ * run is no corner.
  */
-function strokeLength(points, radii, pullback) {
+function strokeLength(points, radii, pullback, lead = 0) {
   const n = points.length;
   const runs = points.slice(1).map((point, i) => distance(points[i], point));
   runs[n - 2] = Math.max(0, runs[n - 2] - pullback);
+  runs[0] = Math.max(0, runs[0] - lead);
   let length = runs.reduce((sum, run) => sum + run, 0);
   for (let i = 1; i < n - 1; i += 1) {
     const [a, b, c] = [points[i - 1], points[i], points[i + 1]];
@@ -170,7 +176,9 @@ export function dashOffsetOf(edge, pattern, shape, ownHead = null) {
   const pullback = ownHead ? ownHead.pullback : targetPullback(edge, shape);
   const dropped = !ownHead && edge.hasClass(NO_TARGET_HEAD);
   const inside = dropped ? pullback : (DASH_INSIDE[shape] ?? DASH_INSIDE.triangle) * headLengthOf(edge);
-  const anchor = strokeLength(points, edgeCornerRadiiOf(edge), pullback) - Math.max(0, inside - pullback);
+  // The pattern starts where the line is drawn from: past the base of a head it leaves its source to.
+  const lead = edge.hasClass(NO_SOURCE_HEAD) ? endHeadLength(edge, "source") : 0;
+  const anchor = strokeLength(points, edgeCornerRadiiOf(edge), pullback, lead) - Math.max(0, inside - pullback);
   const period = pattern.reduce((sum, length) => sum + length, 0);
   return (((pattern[0] - anchor) % period) + period) % period;
 }

@@ -48,6 +48,8 @@ export const MAP_TITLE = "mapTitle";
 export const MAP_BOX = "mapBox";
 /** The data a closed box carries for what its edges do: `{ incoming, outgoing }`. */
 export const TALLY = "tally";
+/** The data a drawn node inside an open box carries: how many of its outward edges are not drawn at rest, its "+N" (`levels.js`, `outwardOf`). */
+export const OUTWARD = "outward";
 
 /** The factor a mark's sizes are multiplied by: the map's scale, 1 before the map has set it. */
 export const scaleOf = (element) => element.data(MAP_SCALE) || 1;

@@ -21,6 +21,19 @@
 // is selected, all of its edges are drawn. A closed box carries how many edges
 // come into it and go out of it (`tally`), the ones left out included.
 //
+// A node inside an open box carries the count of its outward edges, the ones a
+// box that holds it carries at rest (`lib/levels.js`, `OUTWARD`), drawn as "+N"
+// over the canvas (`pillOverlay.js`). While it is under the pointer or selected,
+// they are drawn: each as itself, on its route, where both its ends are drawn at
+// their laid-out size, an open box among them; otherwise one **own line** from
+// the node to each node the other ends are drawn as, along the medoid of their
+// drawn routes, an element of the map's own as an aggregated edge is. A line of
+// a box whose every edge is then drawn by such lines is not drawn twice, and a
+// line into an open box that the node's other lines run on into is their stub,
+// with no head of its own (`STUB_AT`). A selection's walk draws its edges as
+// themselves wherever both their ends can take one. An edge from a node to a box
+// that holds it is drawn by a line of its own along its route (`loopLines.js`).
+//
 // What a box or a line says on screen — every line's weight, arrowheads and
 // corners, a closed box's title and a top-level node's — keeps one size on
 // screen whatever the zoom: each carries the map's scale in its data, a power of
@@ -42,8 +55,10 @@
 // box.
 //
 // Which boxes are open follows the view: on every change of the viewport, once
-// per frame at most, the boxes in view are worked out again, and when they differ
-// the canvas is told to draw the level again (`onLevel`).
+// per frame at most and not while the view is animated, the readable boxes in
+// view and those a selection or a search needs are worked out again, and when
+// they differ the canvas is told to draw the level again (`onLevel`). A box the
+// test handle reveals is open at any zoom: the one way to force it.
 
 import { freshId } from "../../../shared/ids/index.js";
 import { aggregateRouteOf } from "../lib/aggregateRoutes.js";
@@ -60,13 +75,23 @@ import {
   holdersOf,
   levelOf,
   openInView,
+  outwardOf,
+  ownLinesOf,
+  smallestChildOf,
+  zoomDrawingOf,
 } from "../lib/levels.js";
 import { pathOutside } from "../lib/grownBoxes.js";
-import { MAP_BOX, MAP_TITLE, TALLY, mapTitleOf, statusMarkInsetOf, statusMarkOf, titleBoxOf } from "../lib/mapMarks.js";
+import { STUB_AT } from "../lib/heads.js";
+import { MAP_BOX, MAP_TITLE, OUTWARD, TALLY, mapTitleOf, statusMarkInsetOf, statusMarkOf, titleBoxOf } from "../lib/mapMarks.js";
 import { routePointsOf } from "../lib/lineMarks.js";
 import { pathOf, segmentsOf } from "../lib/routes.js";
 import { GEOMETRY } from "../lib/stylesheet.js";
+import { isLoop } from "./canvasLayout.js";
+import { loopLines } from "./loopLines.js";
 import { overviewPlanner } from "./overviewPlan.js";
+
+/** The source of a reveal that opens its boxes at any zoom: the test handle's. */
+export const FORCED = "test";
 
 /** The zoom step the map's marks are restyled at. */
 export const SCALE_STEP = 1.25;
@@ -108,8 +133,9 @@ function styleKeyOf(edges) {
 
 /**
  * The map over `cy`, drawn as `geometry` lays it out: `{ apply, evaluate,
- * reveal, setShown, setExempt, aggregates, openBoxes, collapsedBoxes, allNodes,
- * isAggregate, keysOf, scale, fitZoom, destroy }`.
+ * reveal, expose, setWalk, setShown, setExempt, aggregates, ownLines,
+ * openBoxes, collapsedBoxes, allNodes, isAggregate, keysOf, scale, fitZoom,
+ * zoomDrawing, pending, destroy }`.
  *
  * `fitZoom()` gives the zoom of the whole-graph fit now; `onLevel()` is called
  * when the view opens or closes a box, and is expected to call `apply`. Nothing
@@ -121,31 +147,52 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
   const edges = new Map(cy.edges().map((edge) => [edge.id(), edge]));
   const taken = new Set([...nodes.keys(), ...edges.keys()]);
   const plainEdges = [...edges.values()].map((edge) => ({ id: edge.id(), source: edge.data("source"), target: edge.data("target") }));
+  const edgeById = new Map(plainEdges.map((edge) => [edge.id, edge]));
+  const byKey = new Map([...edges.values()].map((edge) => [edge.data("key"), edge.id()]));
+  // An edge from a node to a box that holds it is drawn by a line of its own, to an end on the box's border.
+  const loops = loopLines(cy, geometry, { isLoop, taken });
+  /** The elements that draw the edge `id` of the file: its loop's end and line, or the edge. */
+  const drawingOf = (id) => (loops.has(id) ? [loops.get(id).end, loops.get(id).line] : [edges.get(id)]);
+  /** The line that draws the edge `id` of the file. */
+  const lineOf = (id) => loops.get(id)?.line ?? edges.get(id);
+  const smallest = smallestChildOf(tree, geometry.boxes);
   const aggregates = new Map();
   // The pair each aggregated edge draws, by the edge's id: Cytoscape hands out a new wrapper per lookup.
   const pairOfElement = new Map();
   const routes = new Map();
   const reveals = new Map();
   const exempt = new Map();
+  const exposures = new Map();
+  let walkKeys = null;
   let shown = () => true;
-  let inView = new Set();
   let open = new Set();
   let pairs = [];
-  // The scale of the whole-graph fit until the view is fitted, so the first fit measures the map as the overview draws it.
+  let ownPairs = [];
+  // The edges of the file a line other than their box's draws now: as themselves, or on a node's own line.
+  let drawnElsewhere = new Set();
+  // The lines that end as a stub at an open box, and the box (`stubsOf`).
+  let stubs = new Map();
+  // The scale of the whole-graph fit until the view is fitted, so the first fit measures the map as the
+  // overview draws it: the overview plan's, read from ELK's boxes, once there is one (`apply`).
   let scale = scaleAt(fitZoom());
+  let planned = false;
   let queued = false;
   let destroyed = false;
+  // Whether the view has been placed since the canvas was made: its first change is the first fit.
+  let placed = false;
   let version = 0;
   let hiddenAt = new Map();
-  // The nodes an edge of the file is drawn as itself into, and the box each node drawn larger than its layout is drawn as now.
+  // The nodes an edge of the file is drawn as itself into at rest, and the box each node drawn larger than its layout is drawn as now.
   let ownEnds = new Set();
   let grownNow = new Map();
   const measure = titleMeasurer(cy);
+  /** The route an edge of the file is drawn along, bundled, or null. */
+  const drawnRouteOf = (id) => (edges.get(id)?.data("route") ? routePointsOf(edges.get(id)) : null);
   const planner = overviewPlanner(cy, {
     tree,
     geometry,
     plainEdges,
-    routePointsOf: (id) => (edges.get(id)?.data("route") ? routePointsOf(edges.get(id)) : null),
+    routePointsOf: drawnRouteOf,
     titleOf: (id, at, hidden) => titleLookOf(id, at, hidden),
     // A box is drawn at least as tall as it was laid out, and its status mark takes room by the height it is drawn at.
     leastBoxOf: (id, px, at, hidden) =>
@@ -187,7 +234,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
   /**
    * The box each node the plan draws larger than its layout is drawn as now,
    * among the nodes `drawn` with the boxes `openNow` open: while it is closed or
-   * a leaf with its map title, and no edge of the file is drawn into it.
+   * a leaf with its map title, and no edge of the file is drawn into it at rest.
    */
   function grownBoxesNow(drawn, openNow) {
     const now = new Map();
@@ -229,9 +276,20 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     return ids.has(id) || holdersOf(tree, id).some((box) => ids.has(box));
   }
 
+  /** The view now, as the levels read it. */
+  const viewNow = () => ({ zoom: cy.zoom(), fitZoom: fitZoom(), extent: cy.extent() });
+
+  /**
+   * The boxes to draw open now: the readable ones in view and those a reveal
+   * needs, once the view has been placed — before, the canvas stands at a zoom
+   * nobody chose, and the first drawing is the overview — every one the test
+   * handle forces, and the root.
+   */
   function wanted() {
-    const next = new Set(inView);
-    for (const boxes of reveals.values()) for (const box of boxes) next.add(box);
+    const needed = new Set();
+    for (const [source, boxes] of reveals) if (source !== FORCED) for (const box of boxes) needed.add(box);
+    const next = placed ? openInView(tree, geometry.boxes, smallest, open, viewNow(), needed, options) : new Set();
+    for (const box of reveals.get(FORCED) || []) next.add(box);
     if (tree.wrapper) next.add(tree.wrapper);
     return next;
   }
@@ -243,12 +301,19 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     return routes.get(signature);
   }
 
-  function computeRoute({ ends: [a, b], forward, backward }) {
+  /**
+   * The medoid of the routes of a pair's edges between its two ends' boxes: the
+   * routes ELK gave them for a pair of a level, and the bundled ones they are
+   * drawn along for a node's own line, which leaves the node by its bus port.
+   */
+  function computeRoute({ name, ends: [a, b], forward, backward }) {
     const [from, to] = [geometry.boxes[a], geometry.boxes[b]];
     if (!from || !to) return null;
     const holds = (outer, inner) => boxesHolding(tree, [inner]).has(outer);
     if (holds(a, b) || holds(b, a)) return null;
-    const member = (id, reversed) => ({ path: geometry.routes[id] ? pathOf(geometry.routes[id]) : null, reversed });
+    const own = name.startsWith("own\n");
+    const pathFor = (id) => (own ? drawnRouteOf(id) : null) || (geometry.routes[id] ? pathOf(geometry.routes[id]) : null);
+    const member = (id, reversed) => ({ path: pathFor(id), reversed });
     return aggregateRouteOf([...forward.map((id) => member(id, false)), ...backward.map((id) => member(id, true))], from, to);
   }
 
@@ -284,6 +349,8 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     element.data(data);
     if (route) element.data("route", route);
     else element.removeData("route");
+    if (stubs.has(pair.name)) element.data(STUB_AT, stubs.get(pair.name));
+    else element.removeData(STUB_AT);
   }
 
   /** Take `elements` out of the graph, those still in it. */
@@ -295,6 +362,81 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     if (out.length) cy.collection(out).restore();
   }
 
+  /** `pair` with only the edges `kept` shows, and its weight. */
+  const weigh = (pair, kept) => {
+    const forward = pair.forward.filter(kept);
+    const backward = pair.backward.filter(kept);
+    return { ...pair, forward, backward, weight: forward.length + backward.length };
+  };
+
+  /**
+   * What the exposed nodes and the walk draw besides the level at rest, with
+   * the boxes `openNow` open: `{ originals, own, stubs }`, the edges drawn as
+   * themselves, the own lines, each weighed by the edges `kept` shows, and the
+   * end each line that is a stub draws no head at (`STUB_AT`), by its id or its
+   * pair's name.
+   */
+  function extrasOf(level, openNow, outward, kept) {
+    const exposed = new Set();
+    for (const ids of exposures.values()) {
+      for (const id of ids) {
+        if (level.nodes.has(id) && id !== tree.wrapper && !(tree.boxes.has(id) && openNow.has(id))) exposed.add(id);
+      }
+    }
+    // An end takes an edge drawn as itself when it is drawn at its laid-out size: a leaf, or an open box, on its route.
+    const asItself = (id) => level.nodes.has(id) && !(tree.boxes.has(id) && !openNow.has(id)) && !grownNow.has(id);
+    const lines = ownLinesOf(tree, openNow, edgeById, outward, exposed, asItself);
+    const originals = new Set(lines.originals);
+    for (const id of level.originals) originals.delete(id);
+    const own = [...lines.pairs.values()].map((pair) => weigh(pair, kept)).filter((pair) => pair.weight > 0);
+    return { originals, own, stubs: stubsOf(originals, own, openNow) };
+  }
+
+  /**
+   * The lines among `originals` and `own` that end at an open box whose nodes
+   * their node's other lines run on into: each a stub of those lines, under the
+   * bus that spreads them in the box, its head theirs. `Map(id or pair name =>
+   * the box)`.
+   */
+  function stubsOf(originals, own, openNow) {
+    const reached = new Map();
+    const note = (node, end) => reached.set(node, [...(reached.get(node) || []), end]);
+    const endsOf = [...[...originals].map((id) => [id, [edgeById.get(id).source, edgeById.get(id).target]]), ...own.map((pair) => [pair.name, pair.ends])];
+    for (const [, [a, b]] of endsOf) {
+      note(a, b);
+      note(b, a);
+    }
+    const stubs = new Map();
+    for (const [key, ends] of endsOf) {
+      const box = ends.find((end) => tree.boxes.has(end) && openNow.has(end));
+      const node = ends.find((end) => end !== box);
+      if (box && (reached.get(node) || []).some((end) => end !== box && holdersOf(tree, end).includes(box))) stubs.set(key, box);
+    }
+    return stubs;
+  }
+
+  /**
+   * The edges drawn as themselves besides the level at rest by the test handle
+   * and by a selection's walk: every edge with an end at a node the handle
+   * reveals with its edges, both of whose ends are drawn and neither of them a
+   * closed box — the whole graph at full detail, every edge on its route, when
+   * it reveals every node — and every edge of the walk whose ends are so drawn.
+   * An edge the filters hide is drawn and marked hidden, as at rest.
+   */
+  function fullDetailOf(level, openNow) {
+    const forced = new Set(exposures.get(FORCED) || []);
+    const takes = (id) => level.nodes.has(id) && !(tree.boxes.has(id) && !openNow.has(id));
+    const rest = new Set(level.originals);
+    const full = forced.size
+      ? plainEdges.filter((edge) => !rest.has(edge.id) && (forced.has(edge.source) || forced.has(edge.target)) && takes(edge.source) && takes(edge.target))
+      : [];
+    // A selection's walk draws its edges as themselves wherever both their ends are drawn, a box open: a
+    // node drawn larger than its layout is then drawn at its laid-out size, as the selection frames it.
+    const walked = walkKeys ? [...walkKeys].map((key) => edgeById.get(byKey.get(key))).filter(Boolean) : [];
+    const walk = walked.filter((edge) => !rest.has(edge.id) && takes(edge.source) && takes(edge.target));
+    return [...new Set([...full, ...walk].map((edge) => edge.id))];
+  }
+
   /** Draw the level wanted now: the boxes open by the view and by every reveal. */
   function apply() {
     const nextOpen = wanted();
@@ -302,10 +444,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     // An edge the filters hide is drawn as itself and marked hidden, as ever; an
     // aggregated edge carries only the edges they show.
     const kept = (id) => shown(edges.get(id));
-    const weighed = [...level.pairs.values()]
-      .map((pair) => ({ ...pair, forward: pair.forward.filter(kept), backward: pair.backward.filter(kept) }))
-      .map((pair) => ({ ...pair, weight: pair.forward.length + pair.backward.length }))
-      .filter((pair) => pair.weight > 0);
+    const weighed = [...level.pairs.values()].map((pair) => weigh(pair, kept)).filter((pair) => pair.weight > 0);
     const leftOut = budgetOf(weighed, options.budget);
     const free = new Set([...exempt.values()].filter(Boolean));
     for (const pair of weighed) {
@@ -316,24 +455,39 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     for (const pair of weighed.filter((p) => p.hidden)) for (const end of pair.ends) hiddenAt.set(end, (hiddenAt.get(end) || 0) + 1);
     const tallies = talliesOf(weighed);
     planner.current(kept);
-    const drawnPairs = new Set(weighed.filter((pair) => !pair.hidden).map((pair) => pair.name));
-    const originals = new Set(level.originals);
-    ownEnds = new Set(level.originals.flatMap((id) => [edges.get(id).data("source"), edges.get(id).data("target")]));
+    // The first drawing is at the fit's scale as the plan measured it, not at the scale of the graph before any level.
+    if (!planned && planner.titleScale()) [scale, planned] = [planner.titleScale(), true];
+    const full = fullDetailOf(level, nextOpen);
+    ownEnds = new Set([...level.originals, ...full].flatMap((id) => [edgeById.get(id).source, edgeById.get(id).target]));
     grownNow = grownBoxesNow(level.nodes, nextOpen);
+    const outward = outwardOf(tree, nextOpen, plainEdges.filter((edge) => kept(edge.id)), level);
+    const extras = extrasOf(level, nextOpen, outward, kept);
+    for (const id of full) extras.originals.add(id);
+    stubs = extras.stubs;
+    drawnElsewhere = new Set([...extras.originals, ...extras.own.flatMap((pair) => [...pair.forward, ...pair.backward])]);
+    // A line of a box whose every edge shown is drawn by another line now is not drawn twice.
+    for (const pair of weighed) pair.twice = [...pair.forward, ...pair.backward].every((id) => drawnElsewhere.has(id));
+    const drawnPairs = new Set([...weighed.filter((pair) => !pair.hidden && !pair.twice), ...extras.own].map((pair) => pair.name));
+    const originals = new Set([...level.originals, ...extras.originals]);
 
     cy.batch(() => {
       takeOut([...aggregates.values()].filter(({ pair }) => !drawnPairs.has(pair.name)).map(({ element }) => element));
-      takeOut([...edges.values()].filter((edge) => !originals.has(edge.id())));
+      takeOut([...edges.keys()].filter((id) => !originals.has(id)).flatMap(drawingOf));
       takeOut([...nodes.values()].filter((node) => !level.nodes.has(node.id())));
       putBack([...level.nodes].map((id) => nodes.get(id)));
-      putBack([...originals].map((id) => edges.get(id)));
-      const drawn = weighed.filter((pair) => !pair.hidden).map((pair) => {
+      putBack([...originals].flatMap(drawingOf));
+      const drawn = [...weighed.filter((pair) => !pair.hidden && !pair.twice), ...extras.own].map((pair) => {
         const element = elementOf(pair);
         dress(element, pair);
         return element;
       });
       putBack(drawn);
-      for (const edge of edges.values()) if (edge.data(MAP_SCALE) !== scale) edge.data(MAP_SCALE, scale);
+      for (const id of edges.keys()) {
+        const line = lineOf(id);
+        if (line.data(MAP_SCALE) !== scale) line.data(MAP_SCALE, scale);
+        if (stubs.has(id)) line.data(STUB_AT, stubs.get(id));
+        else if (line.data(STUB_AT) !== undefined) line.removeData(STUB_AT);
+      }
       for (const id of level.nodes) {
         const node = nodes.get(id);
         node.toggleClass(COLLAPSED, tree.boxes.has(id) && !nextOpen.has(id));
@@ -343,12 +497,16 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
         // A box no line comes into or goes out of has nothing to say.
         if (node.hasClass(COLLAPSED) && tallies.has(id)) node.data(TALLY, tallies.get(id));
         else node.removeData(TALLY);
+        // A node inside an open box counts its outward edges; the root's children have none.
+        if (outward.has(id) && tree.parent.get(id) && tree.parent.get(id) !== tree.wrapper) node.data(OUTWARD, outward.get(id).length);
+        else node.removeData(OUTWARD);
         dressBox(node);
         dressTitle(node);
       }
     });
     open = nextOpen;
     pairs = weighed;
+    ownPairs = extras.own;
     version += 1;
   }
 
@@ -380,33 +538,41 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     scale = next;
     cy.batch(() => {
       cy.elements(`.${COLLAPSED}, edge[${AGGREGATE}], node[${HIDDEN_EDGES}]`).data(MAP_SCALE, scale);
-      for (const edge of edges.values()) edge.data(MAP_SCALE, scale);
-      cy.nodes().forEach(dressTitle);
+      for (const id of edges.keys()) lineOf(id).data(MAP_SCALE, scale);
+      for (const node of nodes.values()) if (node.inside()) dressTitle(node);
     });
     version += 1;
-    return !sameBoxes(grownNow, grownBoxesNow(cy.nodes().map((node) => node.id()), open));
+    return !sameBoxes(grownNow, grownBoxesNow([...nodes.values()].filter((node) => node.inside()).map((node) => node.id()), open));
   }
 
-  /** Work out the boxes in view again, and have the level drawn again when they differ or a drawn box changed size. */
+  /** Work out the boxes wanted again, and have the level drawn again when they differ or a drawn box changed size. */
   function evaluate() {
     if (destroyed) return;
+    placed = true;
     const resized = rescale();
-    const view = { zoom: cy.zoom(), fitZoom: fitZoom(), extent: cy.extent() };
-    const next = openInView(tree, geometry.boxes, open, view, options);
-    if (sameSet(next, inView) && !resized) return;
-    inView = next;
+    if (sameSet(wanted(), open) && !resized) return;
     onLevel();
   }
 
+  // Once per frame at most, and only once the view holds still: a frame of an animated move is not a level.
   function onViewport() {
     if (queued) return;
     queued = true;
-    requestAnimationFrame(() => {
-      queued = false;
-      evaluate();
-    });
+    const next = () =>
+      requestAnimationFrame(() => {
+        if (cy.animated()) return next();
+        queued = false;
+        evaluate();
+      });
+    next();
   }
   cy.on("viewport", onViewport);
+
+  /** Whether the drawing changes when `before` and `after`, two lists of node ids, swap as exposed. */
+  const exposesOther = (before, after) => {
+    const outward = (ids) => ids.some((id) => cy.getElementById(id).data(OUTWARD) > 0);
+    return JSON.stringify(before) !== JSON.stringify(after) && (outward(before) || outward(after));
+  };
 
   return {
     tree,
@@ -414,10 +580,26 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     evaluate: onViewport,
     /**
      * Draw each node of `ids` as itself with its own edges, for `source`: every
-     * box that holds one open, and each one that is a box; an empty list lets them close.
+     * box that holds one open, and each one that is a box, once its nodes are
+     * readable — at any zoom for the test handle (`FORCED`); an empty list lets them close.
      */
     reveal(source, ids) {
       reveals.set(source, boxesRevealing(tree, ids || []));
+    },
+    /**
+     * Draw the outward edges of each node of `ids` for `source` (the pointer,
+     * the selection, the test handle); an empty list takes them back. True when
+     * the drawing changes.
+     */
+    expose(source, ids) {
+      const before = exposures.get(source) || [];
+      const after = [...new Set(ids || [])];
+      exposures.set(source, after);
+      return exposesOther(before, after);
+    },
+    /** Draw the edges whose keys are in `keys`, a selection's walk, as themselves where both their ends can take one; null for none. */
+    setWalk(keys) {
+      walkKeys = keys ? new Set(keys) : null;
     },
     /** Have an aggregated edge carry only the edges `predicate` keeps: the ones the filters show. */
     setShown(predicate) {
@@ -438,17 +620,19 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
       const weakAt = (id) => id !== null && pairs.some((pair) => pair.overBudget && pair.ends.some((end) => isWithin(end, new Set([id]))));
       return weakAt(before) || weakAt(after);
     },
-    /** Every pair of the level drawn now: `[{ element, pair }]`, `pair.hidden` when the budget leaves it out. */
+    /** Every pair of the level drawn now: `[{ element, pair }]`, `pair.hidden` when the budget leaves it out, `pair.twice` when other lines draw all it carries. */
     aggregates: () => pairs.map((pair) => ({ element: aggregates.get(pair.name)?.element, pair })),
+    /** The own lines drawn now: `[{ element, pair }]`. */
+    ownLines: () => ownPairs.map((pair) => ({ element: aggregates.get(pair.name)?.element, pair })),
     openBoxes: () => [...open].filter((id) => tree.boxes.has(id) && nodes.get(id).inside()).sort(),
     collapsedBoxes: () => cy.nodes(`.${COLLAPSED}`),
     allNodes: () => [...nodes.values()],
     isAggregate: (edge) => Boolean(edge.data(AGGREGATE)),
-    /** The keys of the edges an aggregated edge carries. */
+    /** The keys of the edges an aggregated edge carries and no other line draws now. */
     keysOf(element) {
       const entry = aggregates.get(pairOfElement.get(element.id()));
       if (!entry) return [];
-      return [...entry.pair.forward, ...entry.pair.backward].map((id) => edges.get(id).data("key"));
+      return [...entry.pair.forward, ...entry.pair.backward].filter((id) => !drawnElsewhere.has(id) || entry.pair.name.startsWith("own\n")).map((id) => edges.get(id).data("key"));
     },
     keysEachWay(pair) {
       const keyOf = (id) => edges.get(id).data("key");
@@ -471,6 +655,10 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
       return boxes.reduce((a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) }));
     },
     fitZoom,
+    /** The least zoom at which node `id` is drawn as itself and readable (`lib/levels.js`, `zoomDrawingOf`). */
+    zoomDrawing: (id) => zoomDrawingOf(tree, id, smallest, fitZoom(), options),
+    /** Whether a change of the view is still to be read: the boxes open may be about to change. */
+    pending: () => queued,
     destroy() {
       destroyed = true;
       cy.removeListener("viewport", onViewport);

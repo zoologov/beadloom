@@ -13,7 +13,8 @@
 //
 // A route that crosses the last run of another near its end, or turns off it
 // there, would run under that end's arrowhead or bend into it; the nearest such
-// place is part of the room the head has (`nearestCrossing`).
+// place is part of the room the head has (`nearestCrossing`). A route that runs
+// on through another's end would run through its arrowhead (`runningOn`).
 //
 // Every function here is pure: routes in, ids out.
 
@@ -81,6 +82,15 @@ export function routeIndexOf(routes) {
       return found;
     },
     /**
+     * The ids of the routes that run on through `tip` past the end of a run
+     * arriving there from `from`: a line that ends on another's way, as a line
+     * into a box ends on the border a trunk into the box's nodes crosses.
+     */
+    runningOn(tip, from) {
+      const onward = directionTowards(from, tip);
+      return onward ? this.throughPoint(tip).filter((entry) => (entry.directions & onward) !== 0).map((entry) => entry.id) : [];
+    },
+    /**
      * How far from `tip` the nearest route crosses the axis-aligned run from
      * `tip` to `from`, or meets it from the side, as a line that runs along the
      * run and turns off it does: anything nearer the tip than `beyond` is the
@@ -104,12 +114,14 @@ export function routeIndexOf(routes) {
     /**
      * The nearest route beside the axis-aligned run from `tip` to `from`, within
      * `reach` of it, running alongside it there or up to `beyond` past the tip:
-     * `{ beside, arrival }`, how far it lies and whether it ends within `beyond`
-     * of the tip's level, arriving about where the run does, its head beside
-     * this one; `{ beside: Infinity }` when none does. A route on the run itself,
-     * or closer to it than `shared`, shares it and is not beside it.
+     * `{ beside, arrival, besideId }`, how far it lies, whether it ends within
+     * `beyond` of the tip's level, arriving about where the run does, its head
+     * beside this one, and which route it is; `{ beside: Infinity }` when none
+     * does. A route on the run itself, or closer to it than `shared`, shares it
+     * and is not beside it, and the route `own`, whose run it is, is never
+     * beside itself: a jog of its own further back is no line beside its head.
      */
-    nearestBeside(tip, from, reach, shared = ON_ROUTE, beyond = 0) {
+    nearestBeside(tip, from, reach, shared = ON_ROUTE, beyond = 0, own = null) {
       const vertical = Math.abs(tip.x - from.x) < ON_ROUTE;
       if (!vertical && Math.abs(tip.y - from.y) >= ON_ROUTE) return { beside: Infinity, arrival: false };
       const [fixed, moving] = vertical ? ["x", "y"] : ["y", "x"];
@@ -117,12 +129,12 @@ export function routeIndexOf(routes) {
       const past = tip[moving] - back * beyond;
       const lo = Math.min(past, from[moving]);
       const hi = Math.max(past, from[moving]);
-      let found = { beside: Infinity, arrival: false };
+      let found = { beside: Infinity, arrival: false, besideId: null };
       index.along(vertical ? "vertical" : "horizontal", tip[fixed], reach, lo, hi, (route, a, b) => {
         const beside = Math.abs(a[fixed] - tip[fixed]);
-        if (beside < shared || beside >= found.beside) return;
+        if (route.id === own || beside < shared || beside >= found.beside) return;
         const arrival = [a, b].some((end) => Math.abs(end[moving] - tip[moving]) <= beyond + ON_ROUTE);
-        found = { beside, arrival };
+        found = { beside, arrival, besideId: route.id };
       });
       return found;
     },

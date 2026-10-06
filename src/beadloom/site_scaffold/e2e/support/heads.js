@@ -24,10 +24,11 @@
 // the tip; none is drawn into the head nearer its tip than its own width, and
 // the head's own line, its dash pattern read, reaches into the head; the
 // head is between the smallest size the viewer draws one at and its full size;
-// no other head overlaps it, and no other line touches it. The diagnosis that
-// fixed this definition confirmed it against rendered pixels (each head drawn
-// alone, its ink read back): a head the geometry passes shows no ink off its
-// triangle and the straight line behind it.
+// no other head overlaps it, and no other line touches it — but a followed line,
+// drawn on top of every line that is not, meets heads below it by design. The
+// diagnosis that fixed this definition confirmed it against rendered pixels
+// (each head drawn alone, its ink read back): a head the geometry passes shows
+// no ink off its triangle and the straight line behind it.
 
 import { headLength } from "./look.js";
 
@@ -431,11 +432,21 @@ export function headsOf(looks, view, { head, smallest, step }) {
     return { found, straight };
   }
 
-  // A loop is drawn by Cytoscape, from a node across its box to the box's border:
-  // a finding on a loop's head, or one a loop's line causes, is the loop's.
+  // A loop is a line Cytoscape draws as a curve, from a node across its box to
+  // the box's border: a finding on a loop's head, or one a loop's line causes, is
+  // the loop's. The viewer draws every line along a route, a loop too, so a case
+  // fails on any.
   const isLoop = (line) => Boolean(line) && !line.look.aggregated && !line.look.cornerRadii.length;
+  // A followed line — on a selection's walk, or of the node under the pointer — is
+  // drawn over every line that is not, on a casing (ruling 1): where one of two
+  // lines is followed and the other is not, one is drawn on top of the other, and
+  // their meeting is no fault of either head.
+  const followed = (line) => Boolean(line) && (line.look.walk || line.look.front);
+  const layered = (h, finding) => Boolean(finding.by) && followed(h.line) !== followed(finding.by);
   return heads.map((h) => {
-    const { found, straight } = findings(h, "drawnAs");
+    const drawn = findings(h, "drawnAs");
+    const straight = drawn.straight;
+    const found = drawn.found.filter((finding) => !layered(h, finding));
     if (h.length > head * half + SLACK_PX || h.length < smallest / half - SLACK_PX) {
       found.push({ text: `a head ${h.length.toFixed(2)} px long`, room: false, by: null });
     }
@@ -445,7 +456,7 @@ export function headsOf(looks, view, { head, smallest, step }) {
     // Room decides a bend, an overlap and a line too near; nothing excuses a line drawn on into a
     // head, one that stops short of it, a head drawn on another, or a head out of its sizes.
     const roomless = rest.some((finding) => finding.room)
-      ? findings(h, "smallest").found.filter((finding) => finding.room && !ofLoop(finding)).map((finding) => finding.text)
+      ? findings(h, "smallest").found.filter((finding) => finding.room && !ofLoop(finding) && !layered(h, finding)).map((finding) => finding.text)
       : [];
     const wrong = rest.filter((finding) => !finding.room || !roomless.length).map((finding) => finding.text);
     return { id: h.line.look.id, end: h.end, length: h.length, straight, wrong, roomless, loops };

@@ -1,4 +1,4 @@
-// The viewer stays as fast as it was: a frame at the whole-graph fit and at zoom 1, the first drawing, and planning the overview.
+// The viewer stays as fast as it was: a frame at the whole-graph fit and at zoom 1, the first drawing, planning the overview and bundling.
 //
 // Before the overview drew a map, the whole-graph fit drew every node and every
 // edge. Measured without a GPU on an Apple M1 Max (headless Chromium, the room
@@ -51,6 +51,21 @@ const FIRST_DRAWING_MS = { local: 7200, ci: 15000 };
  * bound catches a plan four times slower than the local one.
  */
 const PLAN_MS = { own: { local: 50, ci: 200 }, adopter: { local: 250, ci: 1000 } };
+
+/**
+ * How long rewriting the routes may take on an adopter-sized graph, in ms, per
+ * environment (`support/environment.js`). Locally (Apple M1 Max, headless
+ * Chromium, no GPU) it took 36 to 39 ms; the bound is 50. On a GitHub-hosted
+ * Ubuntu runner (two Playwright workers, no GPU) it took 186.8 ms, and the same
+ * code took 157 to 161 ms here with the page's processor slowed four times and
+ * 196 to 205 ms slowed five times, so the runner runs it about 4.7 times slower;
+ * its bound is 400, about twice what it measured there. Either bound still
+ * catches the bundling without its indexes, which took 100 to 230 ms locally
+ * (`lib/spatialIndex.js`). The case ran beside the other browser cases until
+ * BDL-078 and took 43 ms there, once 50.3 with six other browsers at work: it is
+ * timed here, alone, the median of `OPENINGS` openings.
+ */
+const BUNDLING_MS = { local: 50, ci: 400 };
 
 /** How many pointer moves a pan makes, one per animation frame. */
 const PAN_MOVES = 150;
@@ -193,6 +208,21 @@ for (const graph of GRAPHS) {
     expect(planned, "planning the overview, in ms").toBeLessThanOrEqual(bound);
   });
 }
+
+test("the bundling of an adopter-sized graph takes no longer than the bound for this environment", { tag: ADOPTER_SIZED }, async ({ page, request }) => {
+  const bound = boundHere(BUNDLING_MS);
+  const data = adopterSizedGraph(await architectureData(request));
+  // Each opening lays the graph out and bundles it afresh; the median is held.
+  const runs = [];
+  for (let opening = 0; opening < OPENINGS; opening += 1) {
+    await openOver(page, data);
+    runs.push((await viewer(page, "bundles")).ms);
+  }
+  const bundled = median(runs);
+  report(`bundling, the median of ${runs.map((ms) => ms.toFixed(1)).join(", ")}:`, bundled, bound);
+
+  expect(bundled, "bundling the adopter-sized graph, in ms").toBeLessThanOrEqual(bound);
+});
 
 test("the adopter-sized graph is first drawn within the bound for this environment", { tag: ADOPTER_SIZED }, async ({ browser, request }, testInfo) => {
   test.setTimeout(OPENINGS * 60_000);

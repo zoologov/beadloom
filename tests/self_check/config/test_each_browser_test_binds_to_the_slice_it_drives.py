@@ -48,6 +48,8 @@ SPEC_SLICE = {
     "landscape-impact.spec.js": "site-impact-view",
     "landscape.spec.js": "site-landscape-page",
     "layers.spec.js": "site-layer",
+    # When a box opens, what an open box draws, "+N", a selection framed readably (BDL-078 V3).
+    "levels.spec.js": "site-graph-viewer",
     # The base look: one line weight, whole arrowheads, followed lines on top (BDL-078 V1).
     "look.spec.js": "site-graph-viewer",
     # ELK in a worker, its geometry and its cache are `shared/elk` (BDL-077 E1).

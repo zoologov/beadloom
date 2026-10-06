@@ -35,7 +35,6 @@ import {
 import { architectureData, openArchitecture, openEveryBox, parentMap, viewer } from "./support/viewer.js";
 import { requireShape } from "./support/shape.js";
 import { openThemeModules } from "./support/themeModules.js";
-import { ENVIRONMENT, boundHere } from "./support/environment.js";
 
 /** A node with this many drawn edges is busy enough for trunks; the viewer's own threshold. */
 const TRUNK_DEGREE = 20;
@@ -45,18 +44,6 @@ const LANE_DISTANCE = 150;
 const STEPS_KEPT = 0.2;
 /** ELK's excess steps below which a drawing has no staircase worth measuring. */
 const STAIRCASE = 20;
-/**
- * How long rewriting the routes may take on an adopter-sized graph, in ms, per
- * environment (`support/environment.js`). Locally (Apple M1 Max, headless
- * Chromium, no GPU) it took 36 to 39 ms; the bound is 50. On a GitHub-hosted
- * Ubuntu runner (two Playwright workers, no GPU) it took 186.8 ms, and the same
- * code took 157 to 161 ms here with the page's processor slowed four times and
- * 196 to 205 ms slowed five times, so the runner runs it about 4.7 times slower;
- * its bound is 400, about twice what it measured there. Either bound still
- * catches the bundling without its indexes, which took 100 to 230 ms locally
- * (`lib/spatialIndex.js`).
- */
-const BUNDLING_BUDGET_MS = { local: 50, ci: 400 };
 /** How far two points, or a point and a line, may lie apart and count as one, in layout units. */
 const TOLERANCE = 0.5;
 /** How far, in pixels on screen, a hovered point lies from any other edge and any node. */
@@ -142,8 +129,10 @@ function boxHubGraph(served) {
 
 /** Every edge drawn now along a route, with its ends: `[{ id, source, target, points }]`. */
 async function drawnRoutes(page) {
+  // The edges of the file the bundling routes: a line of the map's carries edges between boxes, routed by
+  // the map, and a loop, from a node to a box that holds it, keeps ELK's route; neither is bundled.
   return (await viewer(page, "edgeRoutes"))
-    .filter((r) => r.routed)
+    .filter((r) => r.routed && !r.aggregated && !r.loop)
     .map(({ id, source, target, points }) => ({ id, source, target, points }));
 }
 
@@ -351,17 +340,6 @@ for (const layerRanks of RANK_COUNTS) {
     expect(collinearPairs(drawn)).toEqual([]);
   });
 }
-
-test("the bundling of an adopter-sized graph takes no longer than the bound for this environment", { tag: ADOPTER_SIZED }, async ({
-  page,
-  request,
-}) => {
-  const bound = boundHere(BUNDLING_BUDGET_MS);
-  await GRAPHS[1].open(page, request);
-  const { ms } = await viewer(page, "bundles");
-  test.info().annotations.push({ type: "measured", description: `${ENVIRONMENT}: bundling ${ms.toFixed(1)} ms (bound ${bound} ms)` });
-  expect(ms).toBeLessThanOrEqual(bound);
-});
 
 test("the busiest node leaves each side in one channel per direction, in no more lanes than the boxes it leads to", async ({
   page,

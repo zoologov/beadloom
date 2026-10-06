@@ -49,8 +49,8 @@ import { NODE_STATUSES } from "../../../entities/graph-node/index.js";
 import { LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layer/index.js";
 import { RING_TONES } from "../../../features/impact-view/index.js";
 import { DIMMED_SHARE, edgePaletteOf } from "./edgePalette.js";
-import { NO_SOURCE_HEAD, NO_TARGET_HEAD } from "./heads.js";
-import { AGGREGATE, COLLAPSED, HIDDEN_EDGES } from "./levels.js";
+import { NO_SOURCE_HEAD, NO_TARGET_HEAD, STUB_AT, headEndsOf } from "./heads.js";
+import { AGGREGATE, COLLAPSED, HIDDEN_EDGES, LOOP_END } from "./levels.js";
 import { arrowScaleOf, dashOffsetOf, dashOnScreen, edgeCornerRadiiOf, endHeadLength, lineWidthOf } from "./lineMarks.js";
 import { MAP_BOX, MAP_MARKS, MAP_TITLE, boxMarkInsetOf, boxMarkOf, plateLiftOf, scaleOf, titleOf } from "./mapMarks.js";
 
@@ -81,11 +81,14 @@ const RING_FILL_SHARE = 0.55;
 const OPEN_BOX_TINT = 0.07;
 
 /**
- * The curve style of an edge the layout did not route: Cytoscape draws an edge
- * into the node's own box as a loop, whatever its style, and `bezier` is that
- * loop's style.
+ * The curve style of an edge the layout did not route. Every line drawn has a
+ * route — an edge into the node's own box too, by a line of its own to an end
+ * on the box's border (`model/loopLines.js`) — so this is a fallback only.
  */
 export const CURVE_STYLE = "bezier";
+
+/** A loop's end's side, in layout units: a point, drawn as nothing. */
+const LOOP_END_SIDE = 0.01;
 
 /** How many decimals a route's numbers keep: far below a pixel, and never in exponent form. */
 const ROUTE_DECIMALS = 6;
@@ -417,8 +420,8 @@ function mapRules(tokens) {
       selector: `edge[${AGGREGATE}]`,
       style: {
         "line-style": "solid",
-        "source-arrow-shape": (edge) => (edge.data("backward") ? "triangle" : "none"),
-        "target-arrow-shape": (edge) => (edge.data("forward") ? "triangle" : "none"),
+        "source-arrow-shape": (edge) => (headEndsOf(edge).source ? "triangle" : "none"),
+        "target-arrow-shape": (edge) => (headEndsOf(edge).target ? "triangle" : "none"),
         "z-index": 5,
       },
     },
@@ -432,6 +435,8 @@ function mapRules(tokens) {
  * its sides near the tip and in its own colour across it.
  */
 const SHARED_HEAD_RULES = [
+  // An edge drawn as itself into an open box its node's other lines run on into ends there as their stub, with no head.
+  { selector: `edge[${STUB_AT}][!${AGGREGATE}]`, style: { "target-arrow-shape": (edge) => (headEndsOf(edge).target ? EDGE_STYLES[edge.data("styleKey")]?.arrow || "triangle" : "none") } },
   { selector: `edge.${NO_TARGET_HEAD}`, style: { "target-arrow-shape": "none", "target-distance-from-node": (edge) => endHeadLength(edge, "target") } },
   { selector: `edge.${NO_SOURCE_HEAD}`, style: { "source-arrow-shape": "none", "source-distance-from-node": (edge) => endHeadLength(edge, "source") } },
 ];
@@ -446,6 +451,11 @@ export function buildStylesheet(tokens) {
     ...selectionRules(tokens, palette),
     ...mapRules(tokens),
     ...SHARED_HEAD_RULES,
+    {
+      // Where a loop meets its box's border: a point with no look, no title and no events.
+      selector: `node.${LOOP_END}`,
+      style: { width: LOOP_END_SIDE, height: LOOP_END_SIDE, "background-opacity": 0, "border-width": 0, label: "", events: "no", "overlay-opacity": 0, "background-image": "none" },
+    },
     { selector: ".is-hidden, .is-outside", style: { display: "none" } },
   ];
 }

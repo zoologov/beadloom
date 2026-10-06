@@ -26,12 +26,19 @@
 //
 // The graph is drawn like a map (`lib/levels.js`): at the whole-graph fit the
 // boxes at the top and one aggregated edge per pair of them, more detail where
-// the reader zooms in. A selection opens the boxes that hold its node, and those
-// of every node its walk reaches unless the node is a hub selected with nothing
-// more asked; a search opens the boxes that hold what it finds. The pointer on an
-// aggregated edge names how many edges it carries each way. At the overview the
-// lines between top-level nodes are routed together, thin and light, with their
-// counts on pills; the pointer on a node draws its lines in front of the rest.
+// the reader zooms in: a box opens once its nodes are readable. An open box keeps
+// its edges to the outside on its own lines; a node in it says how many of its
+// edges those carry ("+N"), and the pointer on it, or a selection of it, draws
+// them. Selecting a node — by a tap, the URL, the card or the impact list —
+// frames its neighbourhood, never below the zoom at which the node is drawn as
+// itself and readable, in an animated move unless the reader asks for reduced
+// motion. A selection opens the boxes that hold its node, and those of every
+// node its walk reaches unless the node is a hub selected with nothing more
+// asked; a search frames what it finds and opens the boxes that hold it. The
+// pointer on an aggregated edge names how many edges it carries each way. At the
+// overview the lines between top-level nodes are routed together, thin and
+// light, with their counts on pills; the pointer on a node draws its lines in
+// front of the rest.
 //
 // The toolbar, the canvas, the panel and the legend are all inside one root
 // element, and that element is what goes full screen, so full screen and the
@@ -80,7 +87,7 @@ import { useThemeTokens } from "../../../shared/theme-tokens/index.js";
 import { buildElements } from "../lib/elements.js";
 import { buildStylesheet } from "../lib/stylesheet.js";
 import { edgePaletteOf } from "../lib/edgePalette.js";
-import { AGGREGATE, selectionReveals } from "../lib/levels.js";
+import { AGGREGATE, endsOfLine, selectionReveals } from "../lib/levels.js";
 import { useGraphCanvas } from "../model/useGraphCanvas.js";
 import { keyHandler } from "../model/viewerKeys.js";
 import { exposeTestHandle } from "../model/testHandle.js";
@@ -209,14 +216,11 @@ const legendColours = computed(() =>
     : {}
 );
 
-// A selection made anywhere but on the canvas — the URL, the card, the impact
-// list, the toolbar — is framed, so what the reader asked for is in view. A tap
-// on the canvas is not: the reader is already looking at the node.
-let frameNextSelection = true;
-
-function select(id, { frame = true } = {}) {
+// A selection made anywhere — a tap on the canvas, the URL, the card, the impact
+// list — is framed, so the neighbourhood the reader asked for is in view and
+// readable (the owner's ruling 7).
+function select(id) {
   if (!nodeById.value.has(id) || state.focus === id) return;
-  frameNextSelection = frame;
   state.focus = id;
 }
 function clearSelection() {
@@ -235,7 +239,7 @@ const canvas = useGraphCanvas(container, {
   fitZoom: () => navigation.fitZoom(),
   tokens: () => tokens.value,
   onNodeTap: (id) => {
-    select(id, { frame: false });
+    select(id);
     focusCanvas();
   },
   onBackgroundTap: () => {
@@ -254,8 +258,8 @@ const bundleNote = computed(() => {
   if (ids.length < 2 || !instance) return "";
   const labelOf = (id) => nodeById.value.get(id)?.label || id;
   const named = ids.slice(0, NAMED_EDGES).map((id) => {
-    const edge = instance.getElementById(id);
-    return `${labelOf(edge.data("source"))} → ${labelOf(edge.data("target"))}`;
+    const ends = endsOfLine(instance.getElementById(id));
+    return `${labelOf(ends.source)} → ${labelOf(ends.target)}`;
   });
   const rest = ids.length - named.length;
   return `${ids.length} edges along this line: ${named.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}`;
@@ -289,15 +293,50 @@ const navigation = useGraphNavigation(() => canvas.cy.value, {
   getInset: () => ({ right: coveredRight() }),
 });
 
-/** Fit the selection's walk, with the closed boxes that hold part of it, when there is one; else everything visible. */
-function frameSelection() {
-  nextTick(() => navigation.fit(selection.value ? ".in-walk, .holds-walk" : undefined));
+/** The laid-out box around the nodes `ids` the filters show, or null. */
+function laidOutBoxOf(ids) {
+  const boxes = canvas.layout.value?.geometry.boxes;
+  const shown = visible.value.nodes;
+  const held = boxes ? ids.filter((id) => boxes[id] && (!shown || shown.has(id))).map((id) => boxes[id]) : [];
+  if (!held.length) return null;
+  return held.reduce((a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) }));
 }
 
+/**
+ * Frame the selection's neighbourhood, at no less than the zoom at which its
+ * node, and every node the selection draws as itself, is drawn readably, centred
+ * on the node where the walk does not fit at that zoom; with nothing selected,
+ * fit everything visible.
+ */
+function frameSelection({ animate }) {
+  nextTick(() => {
+    const focus = selection.value?.focus;
+    const map = canvas.map();
+    const box = focus ? laidOutBoxOf([...selection.value.distances.keys()]) : null;
+    if (!box || !map) {
+      navigation.fit();
+      return;
+    }
+    const leastZoom = Math.max(...[focus, ...selection.value.reveal].map((id) => map.zoomDrawing(id)));
+    navigation.frame({ box, focus: laidOutBoxOf([focus]), leastZoom }, { animate });
+  });
+}
+
+/** Frame what the search box finds, when it finds anything and nothing is selected; else fit everything visible. */
+function frameSearch() {
+  nextTick(() => {
+    const box = selection.value ? null : laidOutBoxOf(searched.value);
+    if (box) navigation.frame({ box });
+    else navigation.fit();
+  });
+}
+
+/** Fit the canvas to its new size: the selection framed again, or everything visible. */
 function refit() {
   nextTick(() => {
     canvas.resize();
-    navigation.fit();
+    if (selection.value) frameSelection({ animate: false });
+    else navigation.fit();
   });
 }
 const fullscreen = useFullscreen(root, { onChange: refit });
@@ -325,7 +364,8 @@ async function render() {
   canvas.reveal("search", searched.value);
   canvas.showOnly(visible.value.nodes, visible.value.contracts);
   canvas.markSelection(selection.value);
-  frameSelection();
+  if (selection.value) frameSelection({ animate: false });
+  else frameSearch();
 }
 
 watch(data, render);
@@ -338,13 +378,12 @@ watch(visible, (shown) => {
   if (!canvas.ready.value) return;
   canvas.reveal("search", searched.value);
   canvas.showOnly(shown.nodes, shown.contracts);
-  navigation.fit();
+  frameSearch();
 });
 watch(selection, (current) => {
   if (!canvas.ready.value) return;
   canvas.markSelection(current);
-  if (current && frameNextSelection) frameSelection();
-  frameNextSelection = true;
+  if (current) frameSelection({ animate: true });
 });
 watch(
   () => state.focus,
@@ -371,9 +410,10 @@ onMounted(() => {
     droppedHeads: () => canvas.droppedHeads(),
     pills: () => canvas.pills(),
     tallies: () => canvas.tallies(),
+    outward: () => canvas.outward(),
     hoveredEdges: () => canvas.hoveredEdges.value,
     map: () => canvas.map(),
-    revealNodes: (ids) => canvas.revealNow("test", ids),
+    revealNodes: (ids, options) => canvas.revealNow("test", ids, options),
   });
 });
 onBeforeUnmount(() => disposeHandle());

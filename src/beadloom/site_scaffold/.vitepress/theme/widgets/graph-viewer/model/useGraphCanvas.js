@@ -22,10 +22,12 @@
 //
 // What is drawn of that layout is a level of the map (`canvasMap.js`): the boxes
 // open where the reader zooms in and where a selection or a search needs them,
-// closed elsewhere, with aggregated edges between what is drawn. Whenever the
-// level changes, what the filters show and what the selection marks are marked
-// again on what is drawn now, so a box opened later shows its children marked as
-// everything else is.
+// closed elsewhere, with aggregated edges between what is drawn. The node under
+// the pointer and the selected node have their outward edges drawn on top of the
+// rest. Whenever the level changes, what the filters show and what the selection
+// marks are marked again on what is drawn now, so a box opened later shows its
+// children marked as everything else is. A loop's end (`loopLines.js`) is no
+// node of the file: it is shown with its box and marked with nothing.
 
 import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { loadCytoscape } from "../../../shared/cytoscape/index.js";
@@ -36,14 +38,14 @@ import { canvasMap } from "./canvasMap.js";
 import { followedOverlay } from "./followedOverlay.js";
 import { pillOverlay } from "./pillOverlay.js";
 import { sharedLines } from "./sharedLines.js";
-import { COLLAPSED } from "../lib/levels.js";
+import { COLLAPSED, LOOP_BOX, LOOP_END } from "../lib/levels.js";
 
 /** Cytoscape's layout that places nothing, run when the graph is created. */
 const UNPLACED = Object.freeze({ name: "null" });
 
 /**
  * `{ cy, ready, layingOut, layout, bundles, hoveredEdges, layoutError, followed,
- * labelled, frames, droppedHeads, pills, tallies, map, mount, setStyle, reveal,
+ * labelled, frames, droppedHeads, pills, tallies, outward, map, mount, setStyle, reveal,
  * showOnly, markSelection, resize }` over the container in `containerRef`.
  *
  * `tokens()` gives the resolved theme tokens now, which the followed lines are
@@ -63,7 +65,7 @@ const UNPLACED = Object.freeze({ name: "null" });
  * drawn on top, `labelled()` the ones whose label is drawn and `frames()` what
  * drawing them cost (`followedOverlay.js`); `droppedHeads()` the line ends that
  * leave their arrowhead to another on their last run (`sharedLines.js`);
- * `pills()` and `tallies()` the map's counts drawn last (`pillOverlay.js`).
+ * `pills()`, `tallies()` and `outward()` the map's counts drawn last (`pillOverlay.js`).
  */
 export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundTap, fitZoom, tokens }) {
   const cy = shallowRef(null);
@@ -96,10 +98,12 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   }
 
   // A node under the pointer has every edge of its drawn, whatever the budget,
-  // in front of the rest.
+  // and its outward edges, in front of the rest.
   function hoverNode(id) {
     pointed = id;
-    if (map?.setExempt("pointer", id)) redraw();
+    const lifted = map?.setExempt("pointer", id);
+    const exposed = map?.expose("pointer", id ? [id] : []);
+    if (lifted || exposed) redraw();
     else if (cy.value) {
       cy.value.batch(() => markFront(cy.value));
       followed?.refresh();
@@ -236,11 +240,11 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     return ids.has(edge.data("source")) && ids.has(edge.data("target"));
   }
 
-  /** Mark what the filters hide, on what is drawn now. */
+  /** Mark what the filters hide, on what is drawn now: a loop's end with its box. */
   function markShown(instance) {
     const { ids, contracts } = shown;
     if (!ids) return;
-    instance.nodes().forEach((node) => node.toggleClass("is-hidden", !ids.has(node.id())));
+    instance.nodes().forEach((node) => node.toggleClass("is-hidden", !ids.has(node.data(LOOP_BOX) ?? node.id())));
     instance.edges().forEach((edge) => {
       const contract = edge.data("contract");
       edge.toggleClass("is-hidden", Boolean(contracts && contract && !contracts.has(contract)));
@@ -266,9 +270,10 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     map?.reveal(source, ids);
   }
 
-  /** Draw the nodes in `ids` as themselves for `source`, now. */
-  function revealNow(source, ids) {
+  /** Draw the nodes in `ids` as themselves for `source`, now, and their outward edges unless `edges` is false. */
+  function revealNow(source, ids, { edges = true } = {}) {
     reveal(source, ids);
+    map?.expose(source, edges ? ids : []);
     redraw();
   }
 
@@ -316,7 +321,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     });
     if (!selection) return;
     const outside = selection.hide ? "is-outside" : "is-dimmed";
-    instance.nodes().forEach((node) => markNode(node, selection, outside));
+    instance.nodes().not(`.${LOOP_END}`).forEach((node) => markNode(node, selection, outside));
     instance.edges().forEach((edge) => edge.addClass(walked(edge, selection) ? "is-walk-edge" : outside));
     const focus = instance.getElementById(selection.focus);
     if (focus.nonempty()) {
@@ -341,6 +346,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     marked = selection;
     map?.reveal("selection", selection?.reveal || []);
     map?.setExempt("selection", selection?.focus || null);
+    map?.expose("selection", selection?.focus ? [selection.focus] : []);
+    map?.setWalk(selection ? [...selection.edges] : null);
     redraw();
   }
 
@@ -371,6 +378,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     droppedHeads: () => shared?.droppedHeads() || [],
     pills: () => pills?.pills() || { pills: [], dropped: [] },
     tallies: () => pills?.tallies() || {},
+    outward: () => pills?.outward() || {},
     map: () => map,
     mount,
     setStyle,

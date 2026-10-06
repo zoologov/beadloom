@@ -40,7 +40,7 @@ const LINE_PX = 1.35;
 /** The one length every arrowhead is drawn at, in pixels on screen, where its run has room for it. */
 const HEAD_PX = 6;
 /** The smallest length an arrowhead is drawn at, in pixels on screen, where its run has no room for more (`heads.spec.js`). */
-const SMALLEST_HEAD_PX = 4;
+const SMALLEST_HEAD_PX = 3;
 /** The radius every rounded corner is drawn at, in pixels on screen, where its runs leave room for it. */
 const CORNER_PX = 6;
 /**
@@ -168,12 +168,22 @@ test("lines that share their last run into a node end in one arrowhead, and a li
   page,
 }) => {
   await openArchitecture(page);
-  await openEveryBox(page);
-  const routed = (await viewer(page, "lineLooks")).filter((look) => look.cornerRadii.length && !look.aggregated);
-  const groups = finalRunGroups(routed);
+  // Every box open as a reader's zoom opens it: the lines of the map's at the boxes, the edges inside them.
+  await openEveryBox(page, { edges: false });
+  // Each end edges arrive at, as a line ending there: an edge's target, and each end of a line of the map's
+  // that its count says edges arrive at.
+  const arrivals = (await viewer(page, "lineLooks"))
+    .filter((look) => look.cornerRadii.length)
+    .flatMap((look) => {
+      const ends = [];
+      if (!look.aggregated || look.forward > 0) ends.push({ ...look, head: look.targetArrow });
+      if (look.aggregated && look.backward > 0) ends.push({ ...look, points: [...look.points].reverse(), head: look.sourceArrow });
+      return ends;
+    });
+  const groups = finalRunGroups(arrivals);
   requireShape(groups.some((group) => group.length > 1), "no two drawn lines share their last run");
 
-  const heads = (group) => group.filter(hasTargetHead).length;
+  const heads = (group) => group.filter((end) => end.head !== "none").length;
   expect(groups.filter((group) => heads(group) !== 1).map((group) => group.map((look) => look.id).join(" + "))).toEqual([]);
 });
 

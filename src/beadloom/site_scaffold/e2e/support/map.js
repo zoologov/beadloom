@@ -50,17 +50,42 @@ export function drawnEdgesOf(data) {
     .map((e) => ({ src: e.src, dst: e.dst, key: edgeKey(e) }));
 }
 
+/** The boxes that hold `id`, outermost first, and `id` itself last. */
+function chainOf(id, tree) {
+  const chain = [id];
+  for (let cursor = tree.parents[id]; cursor; cursor = tree.parents[cursor]) chain.unshift(cursor);
+  return chain;
+}
+
+/**
+ * The two nodes an edge from `src` to `dst` is drawn between, by the sibling
+ * rule: the children of the lowest box holding both ends that hold one end each
+ * (an end itself when it is such a child). Null for a loop, an edge between a
+ * node and a box that holds it.
+ */
+export function siblingsOf(src, dst, tree) {
+  const [a, b] = [chainOf(src, tree), chainOf(dst, tree)];
+  let k = 0;
+  while (k < a.length && k < b.length && a[k] === b[k]) k += 1;
+  if (k === a.length || k === b.length) return null;
+  return [a[k], b[k]];
+}
+
 /**
  * What a level draws: `{ nodes, originals, pairs }`.
  *
  * `open` is the set of open boxes; `edges` the drawn edges to read (`drawnEdgesOf`,
- * or a filtered subset). `nodes` are the ids drawn as themselves; `originals` the
- * keys of the edges drawn as themselves, both of whose ends are, neither of them
- * a closed box; `pairs` maps
- * "a|b", the two drawn ends in sorted order, to `{ ends, forward, backward }`,
- * the keys of the edges drawn from `a` to `b` and from `b` to `a`. An edge inside
- * one closed box is not drawn, and neither is one onto the wrapper from inside a
- * closed box.
+ * or a filtered subset). `nodes` are the ids drawn as themselves. An edge is
+ * drawn at the lowest box that holds both its ends, between the two children of
+ * that box that hold them: as itself only when those children are its own ends
+ * and neither is a box, and otherwise carried by one aggregated edge per
+ * unordered pair of them, so an open box keeps its outward edges at the box. An
+ * edge between a node and a box that holds it is drawn as itself when both its
+ * ends are drawn and neither is a closed box. An edge inside a closed box is not
+ * drawn, and neither is one onto the wrapper from inside a closed box.
+ * `originals` are the keys of the edges drawn as themselves; `pairs` maps
+ * "a|b", the two ends in sorted order, to `{ ends, forward, backward }`, the
+ * keys of the edges drawn from `a` to `b` and from `b` to `a`.
  */
 export function levelOf(tree, open, edges) {
   const nodes = new Set(Object.keys(tree.parents).filter((id) => drawnAs(id, open, tree) === id));
@@ -68,13 +93,17 @@ export function levelOf(tree, open, edges) {
   const originals = [];
   const pairs = new Map();
   for (const edge of edges) {
-    const source = drawnAs(edge.src, open, tree);
-    const target = drawnAs(edge.dst, open, tree);
-    if (source === edge.src && target === edge.dst && !closed(source) && !closed(target)) {
+    const siblings = siblingsOf(edge.src, edge.dst, tree);
+    if (!siblings) {
+      if (nodes.has(edge.src) && nodes.has(edge.dst) && !closed(edge.src) && !closed(edge.dst)) originals.push(edge.key);
+      continue;
+    }
+    const [source, target] = siblings;
+    if (!nodes.has(source) || !nodes.has(target)) continue;
+    if (source === edge.src && target === edge.dst && !tree.boxes.has(source) && !tree.boxes.has(target)) {
       originals.push(edge.key);
       continue;
     }
-    if (source === target || source === tree.wrapper || target === tree.wrapper) continue;
     const ends = [source, target].sort();
     const name = ends.join("|");
     if (!pairs.has(name)) pairs.set(name, { ends, forward: [], backward: [] });
@@ -85,6 +114,44 @@ export function levelOf(tree, open, edges) {
     pair.backward.sort();
   }
   return { nodes, originals: originals.sort(), pairs };
+}
+
+/**
+ * The outward edges of each drawn node that a level does not draw at rest
+ * (owner's ruling 14, the "+N" mark): `Map(id => [keys])`. An edge is the
+ * outward edge of the drawn node one of its ends is drawn as when its other
+ * end is outside that node and it is neither drawn as itself nor carried by an
+ * aggregated edge with that node as an end. `level` is `levelOf`'s answer for
+ * the same `open` and `edges`.
+ */
+export function outwardOf(tree, open, edges, level) {
+  const drawnEnd = new Map();
+  for (const pair of level.pairs.values()) for (const key of [...pair.forward, ...pair.backward]) drawnEnd.set(key, pair.ends);
+  const originals = new Set(level.originals);
+  const out = new Map();
+  for (const edge of edges) {
+    if (originals.has(edge.key) || !siblingsOf(edge.src, edge.dst, tree)) continue;
+    for (const [end, other] of [[edge.src, edge.dst], [edge.dst, edge.src]]) {
+      const node = drawnAs(end, open, tree);
+      if (node === tree.wrapper || chainOf(other, tree).includes(node)) continue;
+      if ((drawnEnd.get(edge.key) || []).includes(node)) continue;
+      if (!out.has(node)) out.set(node, []);
+      out.get(node).push(edge.key);
+    }
+  }
+  for (const keys of out.values()) keys.sort();
+  return out;
+}
+
+/** The height of the smallest node each box holds directly, in layout units, from ELK's boxes: what decides when a box opens. */
+export function smallestChildOf(tree, boxes) {
+  const smallest = new Map();
+  for (const [id, parent] of Object.entries(tree.parents)) {
+    if (!parent || !boxes[id]) continue;
+    const height = boxes[id].y2 - boxes[id].y1;
+    smallest.set(parent, Math.min(smallest.get(parent) ?? Infinity, height));
+  }
+  return smallest;
 }
 
 /** Code-unit order of two strings, which no locale changes. */

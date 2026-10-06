@@ -12,6 +12,12 @@
 //   would each draw a head there, on top of each other. Every line but one drops
 //   its head, by a class the stylesheet reads (`lib/heads.js`), and ends at the
 //   base of the head that stays; a line that reaches the end on its own keeps its own.
+//   A line that leaves its node beside where another's head arrives, close
+//   enough to run along the head's side, starts at that head's base too.
+//   A line whose end lies on another line's way, which runs on through it — a
+//   node's own line into an open box, on the border its lines into the box's
+//   nodes cross — has no head there either: the head would sit across the line
+//   running on, and the lines that run on carry the direction.
 // - **The room a head has**: the straight run behind its tip that every line
 //   ending there has before its last corner, or before another line crosses it
 //   (`headRoomsOf`, `routeIndex.js`), which the head is sized to
@@ -24,7 +30,7 @@
 // control points, so their heads are drawn on one another and read as one,
 // while a loop ended short of its tip would bend away from the head it left.
 
-import { HEAD_ROOM, NO_SOURCE_HEAD, NO_TARGET_HEAD, SAME_END, droppedHeadsOf, headEndsOf, headRoomsOf } from "../lib/heads.js";
+import { HEAD_ROOM, NO_SOURCE_HEAD, NO_TARGET_HEAD, SAME_END, departuresBeside, droppedHeadsOf, headEndsOf, headRoomsOf } from "../lib/heads.js";
 import { AGGREGATE } from "../lib/levels.js";
 import { routePointsOf } from "../lib/lineMarks.js";
 import { routeIndexOf, routesAlong } from "../lib/routeIndex.js";
@@ -79,9 +85,10 @@ function endsOf(edge) {
   const n = points.length;
   const heads = headEndsOf(edge);
   const styleKey = edge.data("styleKey");
+  const mapLine = Boolean(edge.data(AGGREGATE));
   return [
-    { id: edge.id(), end: "target", tip: points[n - 1], before: points[n - 2], corner: firstCornerAlong([...points].reverse()), styleKey, headless: !heads.target },
-    { id: edge.id(), end: "source", tip: points[0], before: points[1], corner: firstCornerAlong(points), styleKey, headless: !heads.source },
+    { id: edge.id(), end: "target", tip: points[n - 1], before: points[n - 2], corner: firstCornerAlong([...points].reverse()), styleKey, mapLine, headless: !heads.target },
+    { id: edge.id(), end: "source", tip: points[0], before: points[1], corner: firstCornerAlong(points), styleKey, mapLine, headless: !heads.source },
   ];
 }
 
@@ -124,11 +131,24 @@ export function sharedLines(cy, paths) {
       .map((end) => {
         const corner = Math.min(end.corner, lines.nearestCrossing(end.tip, towards(end.tip, end.before, end.corner), SAME_END));
         const zone = towards(end.tip, end.before, Math.min(corner, HEAD_ZONE));
-        return { ...end, corner, ...lines.nearestBeside(end.tip, zone, BESIDE_REACH, SAME_END, PAST_TIP) };
+        return { ...end, corner, ...lines.nearestBeside(end.tip, zone, BESIDE_REACH, SAME_END, PAST_TIP, end.id) };
       });
     dropped = droppedHeadsOf(ends);
+    // A line that leaves its node beside where a head arrives starts at that head's base, clear of its side.
+    const aside = departuresBeside(ends, dropped);
+    for (const key of aside.keys()) dropped.add(key);
+    // Such a line, started behind the head's base, is no longer beside the head: the head has the room across it.
+    const leftAside = new Set([...aside.keys()].map((key) => key.slice(0, key.lastIndexOf("\n"))));
+    for (const end of ends) if (end.besideId && leftAside.has(end.besideId)) Object.assign(end, { beside: Infinity, arrival: false });
+    // A head on another line's way, where that line runs on through the tip, would sit across it: the line ends there without one.
+    for (const end of ends) {
+      if (end.headless || dropped.has(`${end.id}\n${end.end}`)) continue;
+      if (lines.runningOn(end.tip, end.before).some((id) => id !== end.id)) dropped.add(`${end.id}\n${end.end}`);
+    }
     // A headless end has a room only where a head is drawn at its tip.
     const rooms = headRoomsOf(ends.filter((end) => !end.headless || dropped.has(`${end.id}\n${end.end}`)));
+    // It starts behind that head's base: it takes the head's room, which sizes the head, and keeps clear of it.
+    for (const [key, head] of aside) if (rooms.has(head)) rooms.set(key, { ...rooms.get(head), aside: true });
     cy.batch(() => {
       cy.edges().forEach((edge) => {
         const id = edge.id();

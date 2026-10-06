@@ -4,20 +4,32 @@
 // The whole-graph view of a large graph is a cloud: every node and every edge at
 // a scale where none can be told apart. So the overview draws it like a map. A
 // box is open or closed; a closed box is drawn at its full size with nothing
-// inside it, and every node inside it is drawn as it. An edge both of whose ends
-// are drawn as themselves, neither of them a closed box, is drawn as itself;
-// every other edge between two drawn ends is carried by one **aggregated edge**
-// per unordered pair of those ends, with how many edges go each way, so two
+// inside it, and every node inside it is drawn as it. An edge is drawn at the
+// lowest box that holds both its ends, between the two children of that box that
+// hold them (`siblingsOf`): as itself only when those children are its own ends
+// and neither is a box; otherwise it is carried by one **aggregated edge** per
+// unordered pair of those children, with how many edges go each way. So two
 // closed boxes are joined by one line whatever runs between them and their
-// contents; an edge inside one closed box is not drawn.
+// contents, and an open box keeps its outward edges aggregated at the box: it
+// shows its nodes and the edges among them, and opening it moves no line between
+// it and its siblings. An edge inside one closed box is not drawn. An edge
+// between a node and a box that holds it (a loop) is drawn as itself once both
+// its ends are drawn and neither is a closed box.
+//
+// A node's edges to the outside that a level does not draw at rest — carried by
+// a line between boxes that hold it — are its **outward** edges (`outwardOf`):
+// a node inside an open box carries their count, and the map draws them while
+// the node is under the pointer or selected (`ownLinesOf`).
 //
 // A level is a set of open boxes and nothing more: nothing is laid out again, so
 // no box moves between levels. Which boxes are open is decided here as well:
 //
-// - **What is in view**: a box opens when the box holding it is open, it overlaps
-//   the viewport, the view is zoomed in past a floor over the whole-graph fit, and
-//   its larger side is at least a size on screen; it closes again below a share of
-//   that size, so it does not flicker at the edge (`openInView`).
+// - **What is readable**: a box opens when the box holding it is open, the view
+//   is zoomed in past a floor over the whole-graph fit, and its nodes are
+//   readable — its smallest child at least a height on screen; it closes again
+//   below a share of that height, so it does not flicker at the edge. The view
+//   opens the readable boxes it overlaps (`openInView`); a selection or a search
+//   opens the readable boxes its nodes need wherever they are.
 // - **What a selection needs**: a node the reader asked for is drawn as itself
 //   with its own edges (`boxesRevealing`): every box that holds it is open, and
 //   so is the node when it is a box, since an edge of a closed box is carried by
@@ -43,13 +55,37 @@ export const AGGREGATE = "aggregate";
 export const HIDDEN_EDGES = "hiddenEdges";
 /** The data every mark of the map carries: the factor that keeps its size on screen. */
 export const MAP_SCALE = "mapScale";
+/** The class of a loop's end: where the line of an edge into its node's own box meets the border (`model/loopLines.js`). */
+export const LOOP_END = "loop-end";
+/** The data a loop's line carries: the id of the box it ends at, which holds its other end. */
+export const LOOP_OF = "loopOf";
+/** The data a loop's end carries: the id of the box it stands on the border of. */
+export const LOOP_BOX = "loopBox";
+
+/**
+ * The data a node's own line, or its edge drawn as itself, carries for the end
+ * it draws no head at: the id of an open box its node's lines into the box's
+ * nodes run on into, which carry the direction there (`model/canvasMap.js`).
+ */
+export const STUB_AT = "stubAt";
+
+/** The ends of the edge drawn by `line`, by id, `{ source, target }`: a loop's box rather than its end. */
+export function endsOfLine(line) {
+  const box = (node) => node.data(LOOP_BOX) ?? node.id();
+  return { source: box(line.source()), target: box(line.target()) };
+}
 
 /** What the levels are tuned by. */
 export const LEVEL_OPTIONS = Object.freeze({
-  /** A box opens when its larger side is at least this many pixels on screen. */
-  openSide: 600,
-  /** An open box closes when its larger side falls below this share of `openSide`. */
-  closeShare: 0.8,
+  /** A box opens when its smallest child is at least this many pixels tall on screen: a node a reader can read. */
+  readable: 24,
+  /**
+   * An open box closes when its smallest child falls below this share of
+   * `readable`, so a box at the edge does not flicker. Lower, the lines between
+   * its nodes would be drawn where ELK's shortest last runs, ten layout units
+   * after a bend, hold no whole arrowhead.
+   */
+  closeShare: 0.9,
   /** A box opens only once the view is zoomed in past this many times the whole-graph fit. */
   fitFloor: 1.3,
   /** The most aggregated edges a level draws; the weakest beyond it are counted on their ends. */
@@ -127,14 +163,28 @@ function pairOf(a, b) {
 }
 
 /**
+ * The two nodes an edge from `source` to `target` is drawn between: the
+ * children of the lowest box holding both ends that hold one end each, an end
+ * itself when it is such a child; null for a loop, an edge between a node and
+ * a box that holds it.
+ */
+export function siblingsOf(tree, source, target) {
+  const a = [...holdersOf(tree, source), source];
+  const b = [...holdersOf(tree, target), target];
+  let k = 0;
+  while (k < a.length && k < b.length && a[k] === b[k]) k += 1;
+  return k === a.length || k === b.length ? null : [a[k], b[k]];
+}
+
+/**
  * What a level draws, with the boxes in `open` open: `{ nodes, originals, pairs }`.
  *
  * `edges` are the drawn edges it reads, `{ id, source, target }`. `nodes` are the
- * ids drawn as themselves; `originals` the ids of the edges drawn as themselves,
- * both of whose ends are, neither of them a closed box;
- * `pairs` maps a pair's name to `{ name, ends, forward, backward }`: its two
- * drawn ends, and the ids of the edges it carries from the first to the second
- * and back.
+ * ids drawn as themselves; `originals` the ids of the edges drawn as themselves:
+ * an edge between two siblings neither of which is a box, and a loop both of
+ * whose ends are drawn, neither of them a closed box; `pairs` maps a pair's
+ * name to `{ name, ends, forward, backward }`: its two siblings, and the ids of
+ * the edges it carries from the first to the second and back.
  */
 export function levelOf(tree, open, edges) {
   const drawnAs = drawnAsOf(tree, open);
@@ -143,18 +193,86 @@ export function levelOf(tree, open, edges) {
   const originals = [];
   const pairs = new Map();
   for (const edge of edges) {
-    const source = drawnAs(edge.source);
-    const target = drawnAs(edge.target);
-    if (source === edge.source && target === edge.target && !closed(source) && !closed(target)) {
+    const siblings = siblingsOf(tree, edge.source, edge.target);
+    if (!siblings) {
+      if (nodes.has(edge.source) && nodes.has(edge.target) && !closed(edge.source) && !closed(edge.target)) originals.push(edge.id);
+      continue;
+    }
+    const [source, target] = siblings;
+    if (!nodes.has(source) || !nodes.has(target)) continue;
+    if (source === edge.source && target === edge.target && !tree.boxes.has(source) && !tree.boxes.has(target)) {
       originals.push(edge.id);
       continue;
     }
-    if (source === target || source === tree.wrapper || target === tree.wrapper) continue;
     const { name, ends } = pairOf(source, target);
     if (!pairs.has(name)) pairs.set(name, { name, ends, forward: [], backward: [] });
     pairs.get(name)[source === ends[0] ? "forward" : "backward"].push(edge.id);
   }
   return { nodes, originals, pairs };
+}
+
+/** Whether `id` is `node` or inside it. */
+const isWithin = (tree, id, node) => id === node || holdersOf(tree, id).includes(node);
+
+/**
+ * The outward edges of the drawn nodes of `level` (`levelOf`, for `open` and
+ * `edges`): `Map(node => [edge ids])`. An edge is an outward edge of the node one
+ * of its ends is drawn as when its other end lies outside that node and it is
+ * neither drawn as itself nor carried by a pair with that node as an end: the
+ * line that carries it at rest is a box's that holds the node. The box that
+ * holds everything has none.
+ */
+export function outwardOf(tree, open, edges, level) {
+  const drawnAs = drawnAsOf(tree, open);
+  const carriedBy = new Map();
+  for (const pair of level.pairs.values()) for (const id of [...pair.forward, ...pair.backward]) carriedBy.set(id, pair.ends);
+  const originals = new Set(level.originals);
+  const out = new Map();
+  for (const edge of edges) {
+    if (originals.has(edge.id) || !siblingsOf(tree, edge.source, edge.target)) continue;
+    for (const [end, other] of [[edge.source, edge.target], [edge.target, edge.source]]) {
+      const node = drawnAs(end);
+      if (node === tree.wrapper || isWithin(tree, other, node) || (carriedBy.get(edge.id) || []).includes(node)) continue;
+      if (!out.has(node)) out.set(node, []);
+      out.get(node).push(edge.id);
+    }
+  }
+  return out;
+}
+
+/**
+ * The lines that draw the outward edges of the nodes in `exposed`: `{ originals,
+ * pairs }`. `edges` maps an edge id to `{ id, source, target }`; `outward` is
+ * `outwardOf`'s answer; `asItself(id)` says whether a drawn node can take an edge
+ * of the file drawn as itself — a leaf the map draws at its laid-out size. An
+ * outward edge between such a leaf and a node drawn as itself that takes one too
+ * is drawn as itself; every other is carried by one line per pair of the exposed
+ * node and the node the other end is drawn as, `{ name, ends, forward,
+ * backward }` as a level's pairs are.
+ */
+export function ownLinesOf(tree, open, edges, outward, exposed, asItself) {
+  const drawnAs = drawnAsOf(tree, open);
+  const originals = new Set();
+  const pairs = new Map();
+  for (const node of exposed) {
+    for (const id of outward.get(node) || []) {
+      const edge = edges.get(id);
+      const inside = isWithin(tree, edge.source, node);
+      const other = drawnAs(inside ? edge.target : edge.source);
+      if (other === tree.wrapper || holdersOf(tree, node).includes(other)) continue;
+      const [source, target] = inside ? [node, other] : [other, node];
+      if (source === edge.source && target === edge.target && asItself(source) && asItself(target)) {
+        originals.add(id);
+        continue;
+      }
+      const { name, ends } = pairOf(source, target);
+      const key = `own\n${name}`;
+      if (!pairs.has(key)) pairs.set(key, { name: key, ends, forward: [], backward: [] });
+      const pair = pairs.get(key);
+      if (![...pair.forward, ...pair.backward].includes(id)) pair[source === ends[0] ? "forward" : "backward"].push(id);
+    }
+  }
+  return { originals, pairs };
 }
 
 /** Code-unit order of two strings, which no locale changes. */
@@ -179,27 +297,58 @@ const overlaps = (box, extent) =>
   box.x2 > extent.x1 && box.x1 < extent.x2 && box.y2 > extent.y1 && box.y1 < extent.y2;
 
 /**
- * The boxes open by what is in view: `view` is `{ zoom, fitZoom, extent }`, the
- * zoom, the whole-graph fit's zoom and the graph's area on screen; `boxes` maps a
- * box to its `{ x1, y1, x2, y2 }`; `open` the boxes open now, which close only
- * below the smaller size.
+ * The height of the smallest node each box holds directly, `Map(box =>
+ * height)`, from `boxes`, each node's laid-out `{ x1, y1, x2, y2 }`: a box's
+ * nodes are readable once that height is on screen.
  */
-export function openInView(tree, boxes, open, view, options = LEVEL_OPTIONS) {
+export function smallestChildOf(tree, boxes) {
+  const smallest = new Map();
+  for (const [id, holder] of tree.parent) {
+    if (!holder || !boxes[id]) continue;
+    smallest.set(holder, Math.min(smallest.get(holder) ?? Infinity, boxes[id].y2 - boxes[id].y1));
+  }
+  return smallest;
+}
+
+/** The zoom at which box `id`'s nodes are readable, for `smallest` (`smallestChildOf`); Infinity for a box with none. */
+export function readableZoomOf(id, smallest, options = LEVEL_OPTIONS) {
+  return smallest.has(id) ? options.readable / smallest.get(id) : Infinity;
+}
+
+/**
+ * The boxes open at the view `view`: `{ zoom, fitZoom, extent }`, the zoom, the
+ * whole-graph fit's zoom and the graph's area on screen. `boxes` maps a node to
+ * its laid-out `{ x1, y1, x2, y2 }` and `smallest` a box to its smallest child's
+ * height (`smallestChildOf`); `open` the boxes open now, which close only below
+ * the smaller height; `wanted` the boxes a selection or a search needs, open
+ * wherever they are once their nodes are readable, as the view opens the
+ * readable boxes it overlaps.
+ */
+export function openInView(tree, boxes, smallest, open, view, wanted = new Set(), options = LEVEL_OPTIONS) {
   const next = new Set();
   if (view.zoom < view.fitZoom * options.fitFloor) return next;
   const visit = (ids) => {
     for (const id of ids) {
       const box = boxes[id];
-      if (!box || !overlaps(box, view.extent)) continue;
-      const side = Math.max(box.x2 - box.x1, box.y2 - box.y1) * view.zoom;
-      const needed = open.has(id) ? options.openSide * options.closeShare : options.openSide;
-      if (side < needed) continue;
+      if (!box || !(wanted.has(id) || overlaps(box, view.extent))) continue;
+      const needed = readableZoomOf(id, smallest, options) * (open.has(id) ? options.closeShare : 1);
+      if (view.zoom < needed) continue;
       next.add(id);
       visit(tree.childBoxes.get(id) || []);
     }
   };
   visit(tree.topBoxes);
   return next;
+}
+
+/**
+ * The least zoom at which node `id` is drawn as itself and readable: every box
+ * that holds it open, past the floor over the fit `fitZoom`.
+ */
+export function zoomDrawingOf(tree, id, smallest, fitZoom, options = LEVEL_OPTIONS) {
+  let zoom = fitZoom * options.fitFloor;
+  for (const box of holdersOf(tree, id)) if (box !== tree.wrapper) zoom = Math.max(zoom, readableZoomOf(box, smallest, options));
+  return zoom;
 }
 
 /**

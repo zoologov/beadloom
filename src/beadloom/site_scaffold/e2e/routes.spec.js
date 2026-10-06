@@ -23,6 +23,7 @@ import {
   deviation,
   distanceToPolyline,
   edgesThroughBoxes,
+  polylineOf,
   sharing,
 } from "./support/routeMetrics.js";
 import {
@@ -54,7 +55,7 @@ function holds(id, other, parents) {
   return false;
 }
 
-/** The drawn edges Cytoscape must draw as a loop: a node to itself or to a box that holds it. */
+/** The drawn edges that are loops: from a node to itself or to a box that holds it. */
 const loopsOf = (routes, parents) =>
   routes
     .filter((r) => holds(r.source, r.target, parents) || holds(r.target, r.source, parents))
@@ -110,21 +111,25 @@ for (const drawing of DRAWINGS) {
   test.describe(`on ${drawing.name}`, { tag: drawing.tag }, () => {
     // The route is ELK's with a node's fans bundled (`bundles.spec.js` checks
     // the bundling against ELK's routes); this case checks it is drawn as computed.
-    test("every edge is drawn along its route with its label on it, and only an edge into its own box is a loop", async ({
+    // A loop, from a node into a box that holds it, is drawn along ELK's route too: Cytoscape once drew it
+    // as a curve straight across the box (`levels.spec.js`), and it keeps ELK's route, unbundled.
+    test("every edge is drawn along its route with its label on it, an edge into its own box along ELK's", async ({
       page,
       request,
     }) => {
       const parents = await drawing.open(page, request);
       const { routes: computed } = await viewer(page, "bundles");
-      const drawn = await viewer(page, "edgeRoutes");
+      const { routes: elk } = (await viewer(page, "elkGeometry")) || { routes: {} };
+      // The edges of the file: a line of the map's is routed by the map (`map.spec.js`, `overview.spec.js`).
+      const drawn = (await viewer(page, "edgeRoutes")).filter((r) => !r.aggregated);
       requireShape(drawn.some((r) => !r.loop), BETWEEN_TWO_BOXES);
 
       const loops = loopsOf(drawn, parents);
       expect(drawn.filter((r) => r.loop).map((r) => r.id).sort()).toEqual(loops);
-      expect(drawn.filter((r) => !r.routed).map((r) => r.id).sort()).toEqual(loops);
+      expect(drawn.filter((r) => !r.routed).map((r) => r.id).sort()).toEqual([]);
       const routed = drawn.filter((r) => r.routed);
       const offRoute = routed
-        .map((r) => ({ id: r.id, by: deviation(r.points, computed[r.id]) }))
+        .map((r) => ({ id: r.id, by: deviation(r.points, r.loop ? polylineOf(elk[r.id].sections) : computed[r.id]) }))
         .filter((r) => r.by > ROUTE_TOLERANCE);
       expect(offRoute).toEqual([]);
       const labelsOff = routed.filter((r) => distanceToPolyline(r.label, r.points) > ROUTE_TOLERANCE);

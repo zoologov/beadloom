@@ -33,7 +33,7 @@
 | `beadloom-btkd.4` | chore | ✓ done | the roadmap and the issue log hold open work only (owner) |
 | `beadloom-btkd.5` | fix | done | the issue-log self-check after the trim: derived from the log's own dated headings, no size literal |
 | `beadloom-btkd.3` | dev | ✓ done | small top-level nodes are proper boxes with the title inside (owner, after V2): `6d716d1e`; this portal at the fit 6 -> 11 of 11 titles inside, plates 5 -> 0; six fixtures unchanged (all inside, 0 plates); readings for the owner in the bead |
-| `beadloom-hnff` | V3 | in progress | levels |
+| `beadloom-hnff` | V3 | in progress | levels (rulings 7, 9, 12, 13, 14): a box opens when its nodes are 24 px tall (closes below 0.9 of it), an open box keeps its outward edges at the box, "+N" and a node's own edges on hover or selection, every selection framed readably, loops routed; heads with no room and loop heads now fail the case (0 at every zoom a box is open at, both graphs); readings for the owner in the bead |
 | `beadloom-lw56` | F-activity | ✓ done | activity by changed lines |
 | `beadloom-btkd.1` | dev | ✓ done | activity: boxes among boxes, generated files excluded (owner) |
 | `beadloom-nh7h` | F-nh7h | ✓ done | incremental vs fresh import resolution |

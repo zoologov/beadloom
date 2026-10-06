@@ -20,16 +20,19 @@
 //
 // It does one thing besides reading: `revealNodes(ids)` draws the nodes in `ids`
 // as themselves with their own edges, opening every box that holds one and each
-// one that is a box, as a selection does for its own node. A reader opens boxes by zooming in, one region at a time; a case
-// that reads the whole graph at full detail, or one level after another, opens
-// them all at once with it. The handle exists only when `navigator.webdriver` is
+// one that is a box, at any zoom, and drawing each one's outward edges as a
+// hover does. A reader opens boxes by zooming in, one region at a time, until
+// their nodes are readable, and sees a node's edges to the outside by pointing
+// at it; a case that reads the whole graph at full detail, every edge drawn,
+// or one level after another, opens them all at once with it; with `{ edges:
+// false }` it opens the boxes alone, as the reader's zoom does. The handle exists only when `navigator.webdriver` is
 // true, which a real reader's browser never reports, so the tested bundle and
 // the deployed one are the same bundle.
 
 import { idRecord } from "../../../shared/ids/index.js";
 import { isLoop } from "./canvasLayout.js";
 import { BEHIND, DISTANCE_DATA, IN_FRONT } from "./canvasMarks.js";
-import { AGGREGATE, COLLAPSED, HIDDEN_EDGES } from "../lib/levels.js";
+import { AGGREGATE, COLLAPSED, HIDDEN_EDGES, LOOP_END, LOOP_OF, STUB_AT, endsOfLine } from "../lib/levels.js";
 import { MAP_TITLE } from "../lib/mapMarks.js";
 import { pathOfSegments } from "../lib/routes.js";
 
@@ -99,14 +102,15 @@ function drawnPointsOf(edge) {
 
 function drawnRouteOf(edge) {
   const corners = edge.segmentPoints();
+  const ends = endsOfLine(edge);
   return {
     id: edge.id(),
     key: edge.data("key") ?? null,
-    source: edge.source().id(),
-    target: edge.target().id(),
+    source: ends.source,
+    target: ends.target,
     aggregated: isAggregate(edge),
     routed: Boolean(corners),
-    loop: isLoop(edge),
+    loop: isLoop(edge) || Boolean(edge.data(LOOP_OF)),
     points: drawnPointsOf(edge),
     label: pointOf(edge.midpoint()),
   };
@@ -164,6 +168,7 @@ function lineLookOf(edge) {
     behind: edge.hasClass(BEHIND),
     forward: isAggregate(edge) ? edge.data("forward") : null,
     backward: isAggregate(edge) ? edge.data("backward") : null,
+    stub: edge.data(STUB_AT) ?? null,
     points: drawnRouteOf(edge).points,
   };
 }
@@ -214,9 +219,12 @@ function readers(source) {
   const cy = () => source.cy();
   const rect = () => source.container().getBoundingClientRect();
   const originals = () => cy().edges().filter((edge) => !isAggregate(edge));
+  // The nodes of the file: a loop's end is a point the viewer draws a line to, not a node.
+  const fileNodes = () => cy().nodes().not(`.${LOOP_END}`);
   return {
-    ready: () => Boolean(cy()) && source.ready(),
-    visibleIds: () => cy().nodes().filter((node) => node.visible()).map((node) => node.id()).sort(),
+    // Laid out, and holding still: no animated move under way and no change of the view left to read.
+    ready: () => Boolean(cy()) && source.ready() && !cy().animated() && !source.map()?.pending(),
+    visibleIds: () => fileNodes().filter((node) => node.visible()).map((node) => node.id()).sort(),
     selection: () => source.selection() || null,
     state: () => ({ ...source.state() }),
     // Every node's position, whether it is drawn or inside a closed box, which
@@ -228,7 +236,7 @@ function readers(source) {
     boxes: () => {
       const r = rect();
       return idRecord(
-        cy().nodes().map((node) => [
+        fileNodes().map((node) => [
           node.id(),
           { ...pageBox(node, r), isParent: node.isParent(), parent: node.parent().nonempty() ? node.parent().id() : null },
         ])
@@ -236,7 +244,7 @@ function readers(source) {
     },
     // Each node's box as drawn, in the graph's coordinates: its shape and its
     // border, without its label or Cytoscape's margin for antialiasing.
-    nodeBoxes: () => idRecord(cy().nodes().map((node) => [node.id(), drawnBoxOf(node)])),
+    nodeBoxes: () => idRecord(fileNodes().map((node) => [node.id(), drawnBoxOf(node)])),
     colours: () => colourEntries(cy()),
     neighbourhood: () => ({
       ids: idsOf(cy().nodes(".in-walk")),
@@ -332,6 +340,23 @@ function readers(source) {
         .map((entry) => aggregateOf(entry, map))
         .sort((a, b) => a.ends.join("|").localeCompare(b.ends.join("|")));
     },
+    // The own lines drawn now, of the node under the pointer or selected (`canvasMap.js`):
+    // `[{ id, ends, forwardKeys, backwardKeys, members, weight, drawn, walk, label,
+    // sourceArrow, targetArrow, width, routed, points }]`, as `aggregatedEdges`
+    // reports a line of a level, `ends` the node and the node the other ends are
+    // drawn as.
+    ownLines: () => {
+      const map = source.map();
+      if (!map) return [];
+      return map
+        .ownLines()
+        .map((entry) => aggregateOf(entry, map))
+        .sort((a, b) => a.ends.join("|").localeCompare(b.ends.join("|")));
+    },
+    // Each drawn node's "+N", how many of its outward edges are not drawn at rest:
+    // `{ id: { count, text, shown, x1, y1, x2, y2 } }`, on the canvas in pixels
+    // while `shown`, which a node too small to read is not.
+    outwardMarks: () => source.outward(),
     // The overview's last plan: `{ ms, unit, routed, failed, grown, plates }`, how
     // long it took, the layout units a pixel was at its scale, the names of the
     // pairs it routed and of those it found no route for, the top-level nodes it
@@ -363,9 +388,10 @@ function readers(source) {
           .map((node) => [node.id(), { count: node.data(HIDDEN_EDGES), label: node.style("label") }])
       ),
     // The handle's one action: draw the nodes in `ids` as themselves, opening every
-    // box that holds one and each one that is a box, until it is called again;
-    // `[]` lets them close.
-    revealNodes: (ids) => source.revealNodes(ids),
+    // box that holds one and each one that is a box at any zoom, with their
+    // outward edges drawn unless `{ edges: false }` is given, until it is called
+    // again; `[]` lets them close.
+    revealNodes: (ids, options) => source.revealNodes(ids, options),
     // The routes with each node's fans bundled: `{ ms, routes, trunks, buses,
     // headRuns }`. `routes` maps each routed edge's id to its polyline, graph
     // coordinates; a trunk is `{ node, box, direction, side, members }`, a bus
@@ -419,7 +445,9 @@ function readers(source) {
     // Cytoscape resolved it: `{ id, key, aggregated, styleKey, width, lineStyle,
     // dash, dashOffset, lineFill, colour, sourceArrow, targetArrow, arrowScale,
     // sourceDistance, targetDistance, arrowColour, cornerRadii, walk, dimmed,
-    // front, behind, forward, backward, points }`. Sizes are in layout units;
+    // front, behind, forward, backward, stub, points }`. Sizes are in layout units;
+    // `stub` is the open box a line ends at, with no head, as the stub of its
+    // node's lines that run on into the box, or null;
     // `sourceDistance` and `targetDistance` how far short of its route's end the
     // line is drawn at each end, besides its head's own gap; `dash` is the dash
     // pattern a dashed line is drawn with and `dashOffset` how far into the
@@ -433,7 +461,7 @@ function readers(source) {
     // status, borderWidth, borderColour, borderStyle, fill, fillOpacity,
     // labelColour, labelValign, labelMarginY, fontSize, mark }`, `mark` the
     // corner image a status is drawn with, or "none".
-    nodeLooks: () => cy().nodes().filter((node) => node.visible()).map(nodeLookOf),
+    nodeLooks: () => fileNodes().filter((node) => node.visible()).map(nodeLookOf),
     // The canvases the viewer draws over Cytoscape's, by name, in the order they lie on the page.
     overlayLayers: () => [...source.container().querySelectorAll("canvas[data-layer]")].map((canvas) => canvas.dataset.layer),
     // The edges whose label is drawn: a count or a badge Cytoscape draws, and the
@@ -442,7 +470,7 @@ function readers(source) {
       [...new Set([...cy().edges().filter((edge) => Boolean(edge.style("label"))).map((edge) => edge.id()), ...source.labelled()])].sort(),
     edgeMidpoint: () => {
       const r = rect();
-      const leaves = cy().nodes().filter((node) => !node.isParent() && node.visible()).map((node) => pageBox(node, r));
+      const leaves = fileNodes().filter((node) => !node.isParent() && node.visible()).map((node) => pageBox(node, r));
       const clear = ({ x, y }) =>
         x > r.left + 10 && x < r.right - 10 && y > r.top + 10 && y < r.bottom - 10 &&
         !leaves.some((b) => x >= b.x1 - 12 && x <= b.x2 + 12 && y >= b.y1 - 12 && y <= b.y2 + 12);
@@ -472,8 +500,8 @@ function readers(source) {
  * `droppedHeads()`, the ends that leave their arrowhead to another, `pills()` and
  * `tallies()`, the map's counts drawn last,
  * `hoveredEdges()`, the ids of the edges along the line under the pointer,
- * `map()`, the map drawn now (`canvasMap.js`), and `revealNodes(ids)`, which draws
- * the nodes in `ids` as themselves.
+ * `map()`, the map drawn now (`canvasMap.js`), `outward()`, each node's "+N",
+ * and `revealNodes(ids, options)`, which draws the nodes in `ids` as themselves.
  * The handle is the last viewer's to install it, and the disposer removes it only
  * while it is still this one's, so a viewer that leaves the page does not take a
  * live neighbour's handle along.

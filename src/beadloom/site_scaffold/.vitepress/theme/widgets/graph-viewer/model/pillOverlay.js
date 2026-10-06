@@ -1,5 +1,5 @@
 // beadloom:component=site-graph-viewer
-// The map's counts drawn over the canvas: each line's count on a pill, and how many edges come into a closed box and go out of it.
+// The map's counts drawn over the canvas: each line's count on a pill, how many edges come into a closed box and go out of it, and a node's "+N".
 //
 // Cytoscape draws an edge's label with its edge, so the next edge drawn paints
 // over it. A line's count is drawn instead on a canvas of its own laid over every
@@ -16,14 +16,21 @@
 // in its lower right corner, where it covers neither its title nor its status
 // mark; a box too small for it says nothing, and its lines' pills still do.
 //
+// A node inside an open box whose outward edges are not drawn at rest says how
+// many there are, "+N", on a small badge across the middle of its right side,
+// where no line of a layout drawn downwards arrives, and below its status mark
+// when it has one; the pointer on the node, or a selection of it, draws those
+// edges (`canvasMap.js`). A node drawn too small to read has no badge.
+//
 // What the last drawing showed is kept for the test handle: each pill's place on
-// the canvas and whether it was faded, the lines whose pill found no place, and
-// each closed box's tally and where it was drawn.
+// the canvas and whether it was faded, the lines whose pill found no place, each
+// closed box's tally and each node's "+N", and where they were drawn.
 
 import { headEndsOf } from "../lib/heads.js";
 import { AGGREGATE, COLLAPSED } from "../lib/levels.js";
 import { headLengthOf, routePointsOf } from "../lib/lineMarks.js";
-import { MAP_MARKS, MAP_TITLE, TALLY } from "../lib/mapMarks.js";
+import { MAP_MARKS, MAP_TITLE, OUTWARD, TALLY } from "../lib/mapMarks.js";
+import { GEOMETRY } from "../lib/stylesheet.js";
 import { PILL_MARKS, pillPlacesOf } from "../lib/pillPlaces.js";
 import { BEHIND } from "./canvasMarks.js";
 import { overlayCanvas } from "./overlayCanvas.js";
@@ -32,6 +39,8 @@ import { overlayCanvas } from "./overlayCanvas.js";
 const FADED_ALPHA = 0.35;
 /** A tally's text size, its weight, the room it keeps from its box's edges and the height of its line, in pixels on screen. */
 const TALLY_MARKS = Object.freeze({ size: 10, weight: 500, inset: 6, lineHeight: 1.25 });
+/** A "+N" badge's text size and weight, its padding each side, its height, and the least height on screen a node carries one at, in pixels. */
+const OUTWARD_MARKS = Object.freeze({ size: 10, weight: 600, padding: 4, height: 14, leastNode: 12 });
 /** The text between a tally's two counts. */
 const TALLY_JOIN = " · ";
 /** A node's shape alone, for what no pill may cover. */
@@ -64,7 +73,7 @@ export function pillOverlay(cy, container, { tokens, map }) {
   const layer = overlayCanvas(container, "pills");
   const measurer = document.createElement("canvas").getContext("2d");
   let places = { key: null, placed: [], dropped: [] };
-  let shown = { pills: [], dropped: [], tallies: {} };
+  let shown = { pills: [], dropped: [], tallies: {}, outward: {} };
 
   const pillFont = (look) => `600 ${PILL_MARKS.font}px ${look.font}`;
   const tallyFont = (look) => `${TALLY_MARKS.weight} ${TALLY_MARKS.size}px ${look.font}`;
@@ -166,19 +175,54 @@ export function pillOverlay(cy, container, { tokens, map }) {
     return out;
   }
 
+  /** Draw each "+N" badge of a drawn node, across the middle of its right side; one on a node too small to read is not drawn. */
+  function drawOutward(context, look) {
+    const out = {};
+    context.font = `${OUTWARD_MARKS.weight} ${OUTWARD_MARKS.size}px ${look.font}`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    cy.nodes(`[${OUTWARD}]`).forEach((node) => {
+      if (!node.visible()) return;
+      const count = node.data(OUTWARD);
+      const text = `+${count}`;
+      const box = node.renderedBoundingBox(SHAPE);
+      const width = context.measureText(text).width + 2 * OUTWARD_MARKS.padding;
+      // Below the status mark in the corner above it, when the node has one.
+      const markEnd = node.data("status") ? box.y1 + (GEOMETRY.statusMarkInset + GEOMETRY.statusMark) * cy.zoom() + 1 : -Infinity;
+      const y = Math.max((box.y1 + box.y2) / 2, markEnd + OUTWARD_MARKS.height / 2);
+      const rect = { x1: box.x2 - width / 2, y1: y - OUTWARD_MARKS.height / 2, x2: box.x2 + width / 2, y2: y + OUTWARD_MARKS.height / 2 };
+      const readable = box.y2 - box.y1 >= OUTWARD_MARKS.leastNode;
+      out[node.id()] = { count, text, shown: readable, ...rect };
+      if (!readable) return;
+      context.globalAlpha = node.hasClass("is-dimmed") ? FADED_ALPHA : 1;
+      context.beginPath();
+      context.roundRect(rect.x1, rect.y1, width, OUTWARD_MARKS.height, OUTWARD_MARKS.height / 2);
+      context.fillStyle = look.bg;
+      context.fill();
+      context.lineWidth = 1;
+      context.strokeStyle = look.text2;
+      context.stroke();
+      context.fillStyle = look.text1;
+      context.fillText(text, (rect.x1 + rect.x2) / 2, y + 0.5);
+    });
+    context.globalAlpha = 1;
+    return out;
+  }
+
   function draw() {
     const context = layer.begin();
     const look = tokens();
     if (!look || !map()) {
-      shown = { pills: [], dropped: [], tallies: {} };
+      shown = { pills: [], dropped: [], tallies: {}, outward: {} };
       return;
     }
     const ratio = window.devicePixelRatio || 1;
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     const pills = drawPills(context, look);
     const tallies = drawTallies(context, look);
-    shown = { pills, dropped: [...places.dropped], tallies };
-    if (pills.length || Object.values(tallies).some((tally) => tally.shown)) layer.drew();
+    const outward = drawOutward(context, look);
+    shown = { pills, dropped: [...places.dropped], tallies, outward };
+    if (pills.length || [...Object.values(tallies), ...Object.values(outward)].some((mark) => mark.shown)) layer.drew();
   }
 
   cy.on("render", draw);
@@ -187,6 +231,8 @@ export function pillOverlay(cy, container, { tokens, map }) {
     pills: () => ({ pills: shown.pills.map((pill) => ({ ...pill })), dropped: [...shown.dropped] }),
     /** Each closed box's tally, `{ id: { incoming, outgoing, text, shown, x1, y1, x2, y2 } }`, on the canvas in pixels. */
     tallies: () => JSON.parse(JSON.stringify(shown.tallies)),
+    /** Each drawn node's "+N", `{ id: { count, text, shown, x1, y1, x2, y2 } }`, on the canvas in pixels. */
+    outward: () => JSON.parse(JSON.stringify(shown.outward)),
     destroy() {
       cy.removeListener("render", draw);
       layer.remove();

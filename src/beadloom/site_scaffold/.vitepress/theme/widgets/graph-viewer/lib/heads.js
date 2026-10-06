@@ -2,15 +2,19 @@
 // Where a drawn line carries an arrowhead: the ends its edges arrive at, one head where lines share their last run, and the room it stands in.
 //
 // An edge of the data file arrives at its target; an aggregated edge of the map
-// at each end the edges it carries arrive at (`headEndsOf`). An arrowhead carries
-// the direction, since a line is one colour from end to end.
+// at each end the edges it carries arrive at (`headEndsOf`), but where a node's
+// own line ends at an open box whose nodes its other lines run on into: there the
+// line is a stub of theirs, under the bus that spreads them, and their heads
+// carry the direction. An arrowhead carries the direction, since a line is one
+// colour from end to end.
 //
 // Lines that reach one end along one final run are drawn as one line there, and
 // end in one arrowhead rather than one per line drawn on top of each other,
 // whose colours would fight. Lines that reach the end separately keep their own.
 // Of the ends that coincide, the loudest look draws the head — a violation is
-// never hidden under an import's head — and among equals the first by id; every
-// other drops its own (`droppedHeadsOf`).
+// never hidden under an import's head — then an edge of the file before a line
+// of the map's, and among equals the first by id; every other drops its own
+// (`droppedHeadsOf`).
 //
 // A head needs a straight run behind its tip, and so do the lines that leave
 // their head to it: one of them bending into the shared run right behind the
@@ -21,7 +25,9 @@
 // Every function here is pure: data and routes in, ends out.
 
 import { VIOLATION_KEY, contractStyleKey } from "../../../entities/graph-edge/index.js";
-import { AGGREGATE } from "./levels.js";
+import { AGGREGATE, STUB_AT } from "./levels.js";
+
+export { STUB_AT };
 
 /** The class of a line whose target drops its arrowhead for another on its last run; the stylesheet draws none there. */
 export const NO_TARGET_HEAD = "no-target-head";
@@ -33,13 +39,18 @@ const LOUD_LOOKS = new Set([VIOLATION_KEY, contractStyleKey("broken"), contractS
 /** Two ends closer than this, in layout units, are one: a bus's lines can end a fraction of a unit apart. */
 export const SAME_END = 1;
 
-/** The data a drawn line carries for the room its ends have: `{ source, target }`, each `{ run, beside, arrival }` (`headRoomsOf`) or null where not known. */
+/** The data a drawn line carries for the room its ends have: `{ source, target }`, each `{ run, beside, arrival }` (`headRoomsOf`), `aside` when the end leaves beside another line's head (`departuresBeside`), or null where not known. */
 export const HEAD_ROOM = "headRoom";
+
 
 /** The ends of `edge` that carry an arrowhead: `{ source, target }`. */
 export function headEndsOf(edge) {
-  if (!edge.data(AGGREGATE)) return { source: false, target: true };
-  return { source: edge.data("backward") > 0, target: edge.data("forward") > 0 };
+  const stub = edge.data(STUB_AT);
+  if (!edge.data(AGGREGATE)) return { source: false, target: stub === undefined || stub !== edge.data("target") };
+  return {
+    source: edge.data("backward") > 0 && stub !== edge.data("source"),
+    target: edge.data("forward") > 0 && stub !== edge.data("target"),
+  };
 }
 
 /** Two last runs whose directions' cosine is at least this arrive the same way: a few degrees apart at most. */
@@ -86,9 +97,11 @@ function sharedEndKeys(ends) {
   return keys;
 }
 
-/** Whether end `a` draws the head before end `b`: the louder look first, then the first by id. */
+/** Whether end `a` draws the head before end `b`: the louder look first, then an edge of the file, then the first by id. */
 function drawsBefore(a, b) {
   if (a.loud !== b.loud) return a.loud;
+  // An edge of the file draws the head before a line of the map's that ends with it there.
+  if (Boolean(a.mapLine) !== Boolean(b.mapLine)) return !a.mapLine;
   return a.id < b.id;
 }
 
@@ -121,6 +134,43 @@ export function droppedHeadsOf(ends) {
   // A line that starts where another arrives, along its last run, starts at that head's base.
   for (const end of ends.filter((e) => e.headless)) if (drawing.has(keys.get(end))) dropped.add(`${end.id}\n${end.end}`);
   return dropped;
+}
+
+/**
+ * How far beside a head's tip, along the border it ends on, a line that leaves
+ * that border would touch the head, in layout units: half the widest head drawn
+ * where nodes are smallest on screen, with a line's half width and a clearance
+ * (about 7 units where a node is 19 px tall).
+ */
+export const BESIDE_HEAD = 8;
+
+/**
+ * The ends among `ends` (as `droppedHeadsOf` reads them) that leave a node
+ * beside where another line's head arrives: a headless end whose tip lies on the
+ * same border as a drawn head's, within `BESIDE_HEAD` of it, its line leaving
+ * the way that head's line arrives. Such a line would run along the head's side;
+ * it starts at that head's base instead, as a line does that leaves where the
+ * head arrives. `dropped` is `droppedHeadsOf`'s answer; the answer maps each
+ * such end, `${id}\n${end}`, to the head's, the nearest.
+ */
+export function departuresBeside(ends, dropped) {
+  const heads = ends.filter((end) => !end.headless && !dropped.has(`${end.id}\n${end.end}`));
+  const out = new Map();
+  for (const end of ends.filter((e) => e.headless && !dropped.has(`${e.id}\n${e.end}`))) {
+    const way = wayOf(end);
+    let nearest = null;
+    for (const head of heads) {
+      if (head.id === end.id) continue;
+      const other = wayOf(head);
+      if (other.x * way.x + other.y * way.y < SAME_WAY) continue;
+      // Along the way, the two tips are on one border; across it, within reach of each other.
+      const along = (head.tip.x - end.tip.x) * way.x + (head.tip.y - end.tip.y) * way.y;
+      const across = Math.abs((head.tip.x - end.tip.x) * way.y - (head.tip.y - end.tip.y) * way.x);
+      if (Math.abs(along) <= SAME_END && across <= BESIDE_HEAD && (!nearest || across < nearest.across)) nearest = { head, across };
+    }
+    if (nearest) out.set(`${end.id}\n${end.end}`, `${nearest.head.id}\n${nearest.head.end}`);
+  }
+  return out;
 }
 
 /**

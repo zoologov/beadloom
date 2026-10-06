@@ -45,20 +45,23 @@ export async function viewerAfter(page, navigate) {
 }
 
 /**
- * Draw the whole graph at full detail: every box open at once, as a reader sees
- * each box after zooming into it.
+ * Draw the whole graph at full detail: every box open at once, and every edge
+ * drawn as itself, as a reader sees each one by pointing at its node after
+ * zooming into its box; with `{ edges: false }`, every box open and the edges
+ * drawn as the map draws them at rest, as a reader sees the boxes zoomed into.
  *
  * At the whole-graph fit the viewer draws a map: the boxes at the top, closed,
- * with aggregated edges between them (`map.spec.js`). A case about every node or
- * every edge of the graph opens every box first, with the handle's one action,
- * which draws each node it names as itself; `positions` names every node, drawn
- * or not.
+ * with aggregated edges between them (`map.spec.js`), and an open box keeps its
+ * edges to the outside on its box's lines (`levels.spec.js`). A case about every
+ * node or every edge of the graph opens every box first, with the handle's one
+ * action, which draws each node it names as itself, with its outward edges
+ * unless told otherwise; `positions` names every node, drawn or not.
  */
-export async function openEveryBox(page) {
-  await page.evaluate(() => {
+export async function openEveryBox(page, { edges = true } = {}) {
+  await page.evaluate((own) => {
     const handle = window.__beadloomViewer;
-    handle.revealNodes(Object.keys(handle.positions()));
-  });
+    handle.revealNodes(Object.keys(handle.positions()), { edges: own });
+  }, edges);
 }
 
 /** Call a read-only method of the test handle and return its answer. */
