@@ -18,8 +18,13 @@
 // is busy too. The level is the nearest one that fits past the lane's first
 // corner, so that the bus drawn afterwards (`buses.js`) keeps the two together;
 // failing that, the farthest one before that corner, where the bus keeps them
-// together when the corner lies past its gap. An edge no level fits keeps its
-// lane, and an edge into the node's own top-level box keeps its own by design.
+// together when the corner lies past its gap. Where an edge cannot join that
+// lane — it runs beside an edge of another node's that has no end in common with
+// the edge — the other lanes are tried in turn, and the one most edges join is
+// taken; where every lane runs beside such an edge, the edges ride a lane of
+// their own, a column straight out of the node's side, past the distance and
+// back to their own routes. An edge no level fits keeps its lane, and an edge
+// into the node's own top-level box keeps its own by design.
 
 import {
   NEAR,
@@ -69,22 +74,29 @@ function turnHugsABox(drawing, a, b, allowed, clearance) {
 }
 
 /**
- * Join `item` (`{ edge, route }`, its route read from `node`) to the route of
- * `carrier` past the level `reach`, `sign` pointing away from the node; true
- * when it joined. `busy` holds the busy nodes, whose lanes the join keeps.
+ * The levels an edge may turn off the lane `carrier` takes at, past `reach`:
+ * past the lane's first corner as well, nearest first, then along the lane's
+ * first run, farthest first.
  */
-function joinTo(drawing, node, item, carrier, { reach, sign, busy }, options) {
+function levelsOf(carrier, { reach, sign }, options) {
+  const corner = carrier.route[1].y;
+  const levels = [];
+  const from = sign * (corner - reach) > 0 ? corner : reach;
+  for (let step = 1; step <= options.joinTries; step += 1) levels.push(from + sign * step * options.joinStep);
+  for (let y = corner - sign * options.joinStep; sign * (y - reach) > 0; y -= sign * options.joinStep) levels.push(y);
+  return levels;
+}
+
+/**
+ * The route that joins `item` (`{ edge, route }`, its route read from `node`) to
+ * the route of `carrier`, turning off it at one of `levels`, or null when none
+ * fits. `busy` holds the busy nodes, whose lanes the join keeps.
+ */
+function joinOf(drawing, node, item, carrier, levels, busy, options) {
   const ends = [drawing.withHolders(item.edge.source), drawing.withHolders(item.edge.target)];
   const allowed = (id) => ends.some((holders) => holders.has(id));
   const related = (other) => sharesAnEnd(other, item.edge);
   const far = otherEnd(item.edge, node);
-  const corner = carrier.route[1].y;
-  const levels = [];
-  // Past the lane's first corner as well as past the reach, nearest first.
-  const from = sign * (corner - reach) > 0 ? corner : reach;
-  for (let step = 1; step <= options.joinTries; step += 1) levels.push(from + sign * step * options.joinStep);
-  // Then along the lane's first run, farthest first.
-  for (let y = corner - sign * options.joinStep; sign * (y - reach) > 0; y -= sign * options.joinStep) levels.push(y);
   for (const y of levels) {
     const along = crossingAt(carrier.route, y);
     const own = crossingAt(item.route, y);
@@ -99,10 +111,62 @@ function joinTo(drawing, node, item, carrier, { reach, sign, busy }, options) {
     if (!fits || turnHugsABox(drawing, { x: along.x, y }, { x: own.x, y }, allowed, options.alongClearance)) continue;
     const points = fromNode(item.edge, node, simplify([...head, ...item.route.slice(own.i)]));
     if (busy.has(far) && !keepsLane(drawing, item.edge, far, points, options.laneReach)) continue;
-    drawing.setRoute(item.edge, points);
-    return true;
+    return points;
   }
-  return false;
+  return null;
+}
+
+/**
+ * The joins of `items` to the lane `main`: `[{ item, points }]`, those that fit.
+ * The items of one group share the node, so no join stands in another's way.
+ */
+function joinsTo(drawing, node, items, main, context, options) {
+  const levels = levelsOf(main, context, options);
+  return items.map((item) => ({ item, points: joinOf(drawing, node, item, main, levels, context.busy, options) })).filter(({ points }) => points);
+}
+
+/**
+ * A lane of the group's own, for edges each of whose lanes runs beside an edge
+ * that has no end in common with the others: a column straight out of the node's
+ * side, tried from the side's middle outwards, that every edge of `items` rides
+ * past the reach and leaves at a level where it turns back to its own route.
+ * `[{ item, points }]` for every item, or null when no column takes them all.
+ */
+function freshLaneOf(drawing, node, items, { reach, sign, busy }, options) {
+  const box = drawing.boxes[node];
+  const border = sign > 0 ? box.y2 : box.y1;
+  const middle = (box.x1 + box.x2) / 2;
+  const far = reach + sign * (options.joinTries * options.joinStep + options.joinStep);
+  const levels = Array.from({ length: options.joinTries }, (_, step) => reach + sign * (step + 1) * options.joinStep);
+  for (let k = 0; middle + k * options.joinStep < box.x2 - options.joinStep; k += 1) {
+    for (const x of k ? [middle - k * options.joinStep, middle + k * options.joinStep] : [middle]) {
+      const column = { route: [{ x, y: border }, { x, y: far }] };
+      const joined = items.map((item) => ({ item, points: joinOf(drawing, node, item, column, levels, busy, options) }));
+      if (joined.every(({ points }) => points)) return joined;
+    }
+  }
+  return null;
+}
+
+/**
+ * The joins of `lanes`, a group's lanes of one top-level box: `{ lane, joined }`,
+ * the lane the others join and each join `{ item, points }`, its new route. The
+ * lane most of the edges leave in is tried first; where an edge cannot join it,
+ * the others are tried in turn, the larger first, and the one most edges join is
+ * taken; where even that leaves an edge out, every edge rides a lane of the
+ * group's own (`freshLaneOf`), when one is free.
+ */
+function joinsOf(drawing, node, lanes, context, options) {
+  const ranked = [...lanes].sort((a, b) => b.length - a.length);
+  let best = null;
+  for (const lane of ranked) {
+    const others = lanes.filter((other) => other !== lane).flat();
+    const joined = joinsTo(drawing, node, others, lane[0], context, options);
+    if (!best || joined.length > best.joined.length) best = { lane, joined };
+    if (joined.length === others.length) return best;
+  }
+  const fresh = freshLaneOf(drawing, node, lanes.flat(), context, options);
+  return fresh ? { lane: [], joined: fresh } : best;
 }
 
 /** `items` grouped by the lane they cross the level in, lanes a unit apart or closer as one: `[[item, …], …]`. */
@@ -160,13 +224,10 @@ export function joinsAt(drawing, node, busy, options) {
     for (const [target, items] of edgesByBox(drawing, node, border, reach)) {
       const lanes = lanesOf(items);
       if (lanes.length < 2) continue;
-      const main = lanes.reduce((best, lane) => (lane.length > best.length ? lane : best));
-      const joined = lanes
-        .filter((lane) => lane !== main)
-        .flat()
-        .filter((item) => joinTo(drawing, node, item, main[0], { reach, sign, busy }, options));
+      const { lane, joined } = joinsOf(drawing, node, lanes, { reach, sign, busy }, options);
       if (!joined.length) continue;
-      const edges = [...main, ...joined].map(({ edge }) => edge);
+      for (const { item, points } of joined) drawing.setRoute(item.edge, points);
+      const edges = [...lane, ...joined.map(({ item }) => item)].map(({ edge }) => edge);
       const members = edges.map((edge) => edge.id);
       joins.push({ node, box: target, direction: directionOf(edges, node), side, members });
     }
