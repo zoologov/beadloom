@@ -78,6 +78,7 @@ history, and five open defects fixed.
 | 2026-10-05 | Flat Python tests bind through `tests: {flat_tests: true}`, written by `init`; not a default | `beadloom-76mk`; binding by name stays opt-in (2026-09-28 ruling); surfaced to the owner, not objected |
 | 2026-10-05 | A line enters its arrowhead correctly at every zoom at which the edge is drawn; 'correct' is defined by geometry AND confirmed on rendered pixels (`beadloom-btkd.2`, between V2 and V3) | Owner, after looking at V1: «все равно стрелки сломаны, линия должна заходить в наконечник стрелки правильно»; V1's measure (0 of 139 broken at zoom 1) passed what the owner sees as broken |
 | 2026-10-05 | At the overview every top-level node is a well-formed box with its title inside; a small node is drawn at a minimum size that holds its title, and the plate beside the box is the exception, counted (`beadloom-btkd.3`, after the arrowheads, before V3) | Owner, after looking at V2: «у tui, mcp_server, ai_agents - кривые блоки нод, а надписи вне блока ноды… Это надо поправить»; the overview itself he accepted: «Стало значительно лучше» |
+| 2026-10-06 | P: the PR opens when T, R, W are done and the Gate is green; merge on green CI without a further browser look; a release work item follows (the BDL-075 scheme) | Owner: «все проверь, делай pr и после ci - сливай… готовь новый релиз с обновленным вьювером и выпускай по отработанной схеме» |
 
 ## Related Files
 
