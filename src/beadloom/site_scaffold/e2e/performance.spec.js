@@ -61,9 +61,9 @@ const PLAN_MS = { own: { local: 50, ci: 200 }, adopter: { local: 250, ci: 1000 }
  * 196 to 205 ms slowed five times, so the runner runs it about 4.7 times slower;
  * its bound is 400, about twice what it measured there. Either bound still
  * catches the bundling without its indexes, which took 100 to 230 ms locally
- * (`lib/spatialIndex.js`). The case ran beside the other browser cases until
- * BDL-078 and took 43 ms there, once 50.3 with six other browsers at work: it is
- * timed here, alone, the median of `OPENINGS` openings.
+ * (`lib/spatialIndex.js`). The case once ran beside the other browser cases and
+ * took 43 ms there, once 50.3 with six other browsers at work: it is timed here,
+ * alone, the median of `OPENINGS` openings.
  */
 const BUNDLING_MS = { local: 50, ci: 400 };
 

@@ -15,11 +15,11 @@
 // beside it or across its run; a line that leaves its head to another ends at
 // that head's base, and a dashed line ends a dash inside its head.
 //
-// Every head drawn wrong fails the case, whatever is in its way. Until BDL-078 V3
-// a head the drawing left no room for — a line that bends, crosses or runs
-// beside it nearer than even the smallest head needs — was only noted on the
-// case, as was what a loop did wrong: Cytoscape drew a line from a node to a box
-// that holds it as a curve across the box. The levels now draw a line between
+// Every head drawn wrong fails the case, whatever is in its way. An earlier case
+// only noted a head the drawing left no room for — a line that bends, crosses or
+// runs beside it nearer than even the smallest head needs — and what a loop did
+// wrong: Cytoscape drew a line from a node to a box that holds it as a curve
+// across the box. The levels now draw a line between
 // nodes only where they are readable, keep an open box's outward edges at the
 // box, and route a loop like any other line; a line that leaves a node beside
 // where a head arrives starts behind its base. The cases read the states the
