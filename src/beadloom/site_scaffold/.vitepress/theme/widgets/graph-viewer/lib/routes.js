@@ -85,7 +85,7 @@ export function pathOfSegments(segments, sourceCentre, targetCentre) {
  * height, biasLeft, biasRight, biasTop, biasBottom }`.
  *
  * `inset` is how far inside its drawn edge a compound's children area begins:
- * its padding and half its border, which Cytoscape adds around the size. Width
+ * its padding and the part of its border Cytoscape adds around the size. Width
  * and height are the box less that inset on each side, both a minimum size and
  * the size of a compound with no child drawn; each bias is the room left on
  * that side of the children, which is how Cytoscape spreads a minimum size

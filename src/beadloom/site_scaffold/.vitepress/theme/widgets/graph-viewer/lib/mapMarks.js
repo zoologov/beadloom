@@ -27,9 +27,9 @@ import { HIDDEN_EDGES, MAP_SCALE } from "./levels.js";
  * What the map's marks measure on screen, in pixels, at any zoom: the sizes a
  * title is tried at inside its box, largest first, the size it stands on a plate
  * at, the room it keeps from its box's edges, the height of a line of it as a
- * share of its size; a plate's padding, border and gap above its box; a status
- * mark on a closed box and how far in from its corner it sits; and how much of a
- * closed box's tint shows.
+ * share of its size; a plate's padding, border and gap above its box; and a
+ * status mark on a closed box and how far in from its corner it sits. A closed
+ * box's tint is its layer's, as any node's (`entities/layer`, `LAYER_FILL_SHARE`).
  */
 export const MAP_MARKS = Object.freeze({
   titleSizes: Object.freeze([14, 12.5, 11, 10]),
@@ -41,7 +41,6 @@ export const MAP_MARKS = Object.freeze({
   plateGap: 3,
   statusMark: 7,
   statusMarkInset: 4,
-  collapsedOpacity: 0.16,
 });
 
 /** The data a node of the map carries for its title: `{ px, inside, width, side, scale }` (`mapTitleOf`), `scale` the one it was laid out at. */

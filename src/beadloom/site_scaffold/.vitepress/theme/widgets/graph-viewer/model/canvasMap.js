@@ -80,6 +80,7 @@ import {
   HIDDEN_EDGES,
   LEVEL_OPTIONS,
   MAP_SCALE,
+  PROJECT_BOX,
   boxTreeOf,
   boxesHolding,
   boxesRevealing,
@@ -612,6 +613,8 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
       for (const id of level.nodes) {
         const node = nodes.get(id);
         node.toggleClass(COLLAPSED, tree.boxes.has(id) && !nextOpen.has(id));
+        // The project's frame keeps its width on screen, as a mark of the map does.
+        if (id === tree.wrapper) node.addClass(PROJECT_BOX).data(MAP_SCALE, scale);
         if (hiddenAt.has(id)) node.data({ [HIDDEN_EDGES]: hiddenAt.get(id), [MAP_SCALE]: scale });
         else node.removeData(HIDDEN_EDGES);
         if (node.hasClass(COLLAPSED)) node.data(MAP_SCALE, scale);
@@ -671,7 +674,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     if (next === scale) return false;
     scale = next;
     cy.batch(() => {
-      cy.elements(`.${COLLAPSED}, edge[${AGGREGATE}], node[${HIDDEN_EDGES}]`).data(MAP_SCALE, scale);
+      cy.elements(`.${COLLAPSED}, .${PROJECT_BOX}, edge[${AGGREGATE}], node[${HIDDEN_EDGES}]`).data(MAP_SCALE, scale);
       for (const id of edges.keys()) lineOf(id).data(MAP_SCALE, scale);
       for (const node of nodes.values()) if (node.inside()) dressTitle(node);
     });

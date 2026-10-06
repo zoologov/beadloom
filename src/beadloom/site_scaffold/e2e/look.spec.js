@@ -23,8 +23,10 @@
 import { test, expect } from "@playwright/test";
 import {
   AA_TEXT,
+  NON_TEXT,
   canvasBackground,
   contrastRatio,
+  drawnColours,
   finalRunGroups,
   hasTargetHead,
   headLength,
@@ -34,6 +36,7 @@ import {
 } from "./support/look.js";
 import { architectureData, openArchitecture, openEveryBox, serveEveryEdgeKind, viewer } from "./support/viewer.js";
 import { requireShape } from "./support/shape.js";
+import { treeOf } from "./support/map.js";
 
 /** The one weight every line is drawn at, in pixels on screen. */
 const LINE_PX = 1.35;
@@ -41,6 +44,15 @@ const LINE_PX = 1.35;
 const HEAD_PX = 6;
 /** The smallest length an arrowhead is drawn at, in pixels on screen, where its run has no room for more (`heads.spec.js`). */
 const SMALLEST_HEAD_PX = 3;
+/** The width the border of the box that holds everything is drawn at, in pixels on screen, at every zoom. */
+const PROJECT_BORDER_PX = 1;
+/**
+ * How far the tint of the box that holds everything stands from the canvas, at
+ * least, as a contrast ratio. It read as the canvas at 1.02 (light) and 1.05
+ * (dark); a node's tint stands at about 1.24 to 1.4, and the frame is to stay
+ * fainter than any node it holds.
+ */
+const PROJECT_TINT_CONTRAST = 1.08;
 /** The radius every rounded corner is drawn at, in pixels on screen, where its runs leave room for it. */
 const CORNER_PX = 6;
 /**
@@ -320,10 +332,13 @@ test("an open box is drawn with a thin solid border, a light tint and its title 
   const plated = new Set((await viewer(page, "boxTitles")).filter((title) => title.plate).map((title) => title.id));
   expect([...plated].filter((id) => boxes.find((box) => box.id === id)?.parent)).toEqual([]);
 
+  // The box that holds everything is the project's frame, a pixel wide on screen at every zoom (the
+  // frame's own case below); every other box's border is one layout unit.
+  const { wrapper } = treeOf(data);
   const wrong = boxes.filter(
     (box) =>
       box.borderStyle !== "solid" ||
-      box.borderWidth > 1 ||
+      (box.id !== wrapper && box.borderWidth > 1) ||
       box.fillOpacity > 0.1 ||
       (!plated.has(box.id) && (box.labelValign !== "top" || !(box.labelMarginY > 0)))
   );
@@ -358,6 +373,66 @@ for (const colorScheme of ["light", "dark"]) {
       expect(await lowContrast()).toEqual([]);
       await openEveryBox(page);
       expect(await lowContrast()).toEqual([]);
+    });
+
+    // Before, the box that holds everything was drawn in the grey of a node in no
+    // layer: a border at 1.35:1 (light) and 2.52:1 (dark) against the canvas, a
+    // layout unit wide (a fifth of a pixel at the whole-graph fit), over a tint
+    // at 1.02:1 and 1.05:1 — the project read as the viewer's background (owner,
+    // 2026-10-06). A node in no layer had the same grey border: 1.33:1 and 2.38:1.
+    test("every node's border keeps 3:1 against what it is drawn on, the box that holds everything included, at the overview and at full detail", async ({
+      page,
+    }) => {
+      await openArchitecture(page);
+      const background = await canvasBackground(page);
+      const faint = async (state) => {
+        const looks = await viewer(page, "nodeLooks");
+        const drawn = drawnColours(looks, background);
+        return looks
+          .map((look) => ({ id: look.id, ratio: contrastRatio(look.borderColour, drawn(look.parent)) }))
+          .filter(({ ratio }) => ratio < NON_TEXT)
+          .map(({ id, ratio }) => `${state} ${id}: ${ratio.toFixed(2)}`);
+      };
+      const overview = await faint("overview");
+      await openEveryBox(page, { edges: false });
+      expect([...overview, ...(await faint("every box open"))]).toEqual([]);
+    });
+
+    test("the box that holds everything is a frame of its own: a border a pixel wide on screen at every zoom, a tint apart from the canvas and fainter than any node's", async ({
+      page,
+      request,
+    }) => {
+      const { wrapper } = treeOf(await architectureData(request));
+      requireShape(Boolean(wrapper), "no single node holds every other node, so no box holds the project");
+      await openArchitecture(page);
+      const background = await canvasBackground(page);
+      const readings = [];
+      const read = async (state) => {
+        const looks = await viewer(page, "nodeLooks");
+        const drawn = drawnColours(looks, background);
+        const frame = looks.find((look) => look.id === wrapper);
+        const tint = contrastRatio(drawn(wrapper), background);
+        const zoom = await viewer(page, "zoom");
+        readings.push({
+          state,
+          borderPx: withinAStep(frame.borderWidth * zoom, PROJECT_BORDER_PX) ? PROJECT_BORDER_PX : +(frame.borderWidth * zoom).toFixed(2),
+          tintApart: tint >= PROJECT_TINT_CONTRAST || +tint.toFixed(3),
+          // A node it holds, closed or with nothing inside, stands further from it than it stands from
+          // the canvas (an open box is drawn fainter on purpose), and no node is drawn as it is.
+          louder: looks
+            .filter((look) => look.parent === wrapper && !(look.isParent && !look.collapsed))
+            .filter((look) => contrastRatio(drawn(look.id), drawn(wrapper)) <= tint)
+            .map((look) => look.id),
+          sameBorder: looks.filter((look) => look.id !== wrapper && look.borderColour === frame.borderColour).map((look) => look.id),
+        });
+      };
+      await read("overview");
+      await zoomIn(page, 3);
+      await read("three steps in");
+      await zoomToOne(page);
+      await read("zoom 1");
+      const held = { borderPx: PROJECT_BORDER_PX, tintApart: true, louder: [], sameBorder: [] };
+      expect(readings).toEqual(["overview", "three steps in", "zoom 1"].map((state) => ({ state, ...held })));
     });
   });
 }

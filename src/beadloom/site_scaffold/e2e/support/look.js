@@ -124,3 +124,48 @@ export function canvasBackground(page) {
     () => getComputedStyle(document.querySelector("[data-testid='graph-canvas']")).backgroundColor
   );
 }
+
+/**
+ * The colour each node of `looks` (`nodeLooks`) is drawn in, by its id: its fill
+ * over what holds it, the canvas `background` at the top. A node not drawn is
+ * drawn on nothing of its own, so asking for it answers the canvas.
+ */
+export function drawnColours(looks, background) {
+  const byId = new Map(looks.map((look) => [look.id, look]));
+  const drawn = new Map();
+  const colourOf = (id) => {
+    const look = byId.get(id);
+    if (!look) return background;
+    if (!drawn.has(id)) drawn.set(id, over(look.fill, colourOf(look.parent), look.fillOpacity));
+    return drawn.get(id);
+  };
+  return colourOf;
+}
+
+/** WCAG 2.1's contrast for a component's boundary against what is beside it (non-text contrast, 1.4.11). */
+export const NON_TEXT = 3;
+
+/**
+ * The layer legend's samples, by the layer's name: `{ tone, share }`, the tone
+ * its border is drawn in and the share of that tone its fill shows over the
+ * page's background, read from the sample as the browser paints it.
+ */
+export function legendSamples(page) {
+  return page.locator("[data-legend-layer]").evaluateAll((items) =>
+    items.map((item) => {
+      const sample = getComputedStyle(item.querySelector(".bl-legend-swatch"));
+      const page = getComputedStyle(document.querySelector("[data-testid='graph-canvas']"));
+      return { name: item.dataset.legendLayer, border: sample.borderTopColor, fill: sample.backgroundColor, page: page.backgroundColor };
+    })
+  ).then((samples) =>
+    new Map(
+      samples.map(({ name, border, fill, page: under }) => {
+        const [tone, painted, ground] = [rgbOf(border), rgbOf(fill), rgbOf(under)];
+        // The channel the tone stands furthest from the page in says the share most exactly.
+        const channel = [0, 1, 2].sort((a, b) => Math.abs(tone[b] - ground[b]) - Math.abs(tone[a] - ground[a]))[0];
+        const share = (painted[channel] - ground[channel]) / (tone[channel] - ground[channel]);
+        return [name, { tone: `rgb(${tone.join(",")})`, share }];
+      })
+    )
+  );
+}

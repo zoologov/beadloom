@@ -52,6 +52,8 @@
 
 /** The class of a box drawn closed: the stylesheet draws its title and tint, the map sets it. */
 export const COLLAPSED = "is-collapsed";
+/** The class of the one root that holds everything: the stylesheet draws it as the project's frame, the map sets it. */
+export const PROJECT_BOX = "is-project";
 /** The data an aggregated edge is told apart by. */
 export const AGGREGATE = "aggregate";
 /** The data a drawn end carries: how many of its aggregated edges the budget leaves out. */

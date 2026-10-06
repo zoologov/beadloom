@@ -8,13 +8,23 @@
 // (`layer_rank`, inherited through `part_of`) and, on a node that declares one,
 // the layer's tag token (`layer`); the layers are then the ranks that occur,
 // named by those tokens. The colour of a layer is a theme tone chosen by its
-// position in the order, top to bottom.
+// position in the order, top to bottom. Every node is drawn as the legend draws
+// its layer, whether it holds other nodes or not: a border in the tone over a
+// tint of it (`LAYER_FILL_SHARE`).
 
 /** Theme tones for the layers, top to bottom; a longer order repeats them. */
 export const LAYER_TONES = ["purple", "indigo", "green", "yellow", "red"];
 
-/** The tone of a node in no layer. */
-export const UNLAYERED_TONE = "gray";
+/**
+ * The tone of a node in no layer: the secondary text colour, a neutral that
+ * keeps WCAG's 3:1 for a boundary against the canvas in both themes, as every
+ * layer's tone does. The theme's grey, which it was, is a fill tone: 1.33:1 on
+ * the light canvas and 2.38:1 on the dark one, so such a node read as background.
+ */
+export const UNLAYERED_TONE = "text2";
+
+/** How much of its layer's tone a node's fill shows over what it is drawn on, in the legend as on the canvas. */
+export const LAYER_FILL_SHARE = 0.16;
 
 function toned(layers) {
   return layers

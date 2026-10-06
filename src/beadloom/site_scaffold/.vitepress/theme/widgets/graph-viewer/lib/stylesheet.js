@@ -6,14 +6,18 @@
 // The stylesheet is rebuilt whenever the tokens change, which is how the graph
 // follows VitePress's dark mode.
 //
-// A node is a card: its fill, a thin border in its layer's tone, its title in
-// the middle. Its status is a mark in its top right corner (`NODE_STATUSES`),
+// A node is drawn as the legend draws its layer, whether it holds other nodes or
+// not: a thin border in its layer's tone over a tint of it, its title in the
+// middle. Its status is a mark in its top right corner (`NODE_STATUSES`),
 // filled for an error finding or stale docs and a ring for warn findings only,
 // and never changes its border, which stays its layer's. A box that is open is a
-// light tint of its layer's tone inside a thin solid border, its title inside at
-// the top. On the landscape, which has no layers, a node's border is its health,
-// a contract edge is drawn by its look, and a broken one carries its verdict as
-// a badge.
+// fainter tint of its layer's tone inside a thin solid border, its title inside
+// at the top, so the nodes it holds stand out on it. The one box that holds
+// everything is the project's frame: a border a pixel wide on screen in a
+// neutral that keeps 3:1 against the canvas, over a faint tint of the text
+// colour, fainter than any node it holds. On the landscape, which has no layers,
+// a node is a card whose border is its health, a contract edge is drawn by its
+// look, and a broken one carries its verdict as a badge.
 //
 // Every line has one thin weight, at every zoom, whatever its kind, its count or
 // its state; kinds differ by colour and dash. A line is one colour from end to
@@ -32,25 +36,24 @@
 // danger outline. A dimmed node is drawn see-through, a dimmed line opaque in
 // its colour faded towards the background (`lib/edgePalette.js`).
 //
-// The map (`lib/levels.js`) adds its own looks. A closed box is drawn tinted; a
-// closed box's title, and a top-level node's while the map titles it, is drawn
-// at the size its data names, inside its box or above it on a plate with a
-// border (`lib/mapMarks.js`); a top-level node too small for its title is drawn
-// at the size its data names, around its laid-out box (`lib/grownBoxes.js`); an
-// aggregated edge is a solid line with an
-// arrowhead at each end edges arrive at, its count on a pill drawn over the
-// canvas (`model/pillOverlay.js`). Every size that keeps one size on screen
+// The map (`lib/levels.js`) adds its own looks. A closed box's title, and a
+// top-level node's while the map titles it, is drawn at the size its data names,
+// inside its box or above it on a plate with a border (`lib/mapMarks.js`); a
+// top-level node too small for its title is drawn at the size its data names,
+// around its laid-out box (`lib/grownBoxes.js`); an aggregated edge is a solid
+// line with an arrowhead at each end edges arrive at, its count on a pill drawn
+// over the canvas (`model/pillOverlay.js`). Every size that keeps one size on screen
 // whatever the zoom multiplies by the map's scale, which every mark of the map
 // and every line keeps in its data.
 
 import { mixRgb } from "../../../shared/theme-tokens/index.js";
 import { EDGE_STYLES, dashOf } from "../../../entities/graph-edge/index.js";
 import { NODE_STATUSES } from "../../../entities/graph-node/index.js";
-import { LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layer/index.js";
+import { LAYER_FILL_SHARE, LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layer/index.js";
 import { RING_TONES } from "../../../features/impact-view/index.js";
 import { DIMMED_SHARE, edgePaletteOf } from "./edgePalette.js";
 import { NO_SOURCE_HEAD, NO_TARGET_HEAD, STUB_AT, headEndsOf } from "./heads.js";
-import { AGGREGATE, COLLAPSED, HIDDEN_EDGES, LOOP_END } from "./levels.js";
+import { AGGREGATE, COLLAPSED, HIDDEN_EDGES, LOOP_END, PROJECT_BOX } from "./levels.js";
 import { arrowScaleOf, dashOffsetOf, dashOnScreen, edgeCornerRadiiOf, endHeadLength, lineWidthOf } from "./lineMarks.js";
 import { MAP_BOX, MAP_MARKS, MAP_TITLE, boxMarkInsetOf, boxMarkOf, plateLiftOf, scaleOf, titleOf } from "./mapMarks.js";
 
@@ -85,6 +88,17 @@ export const GEOMETRY = Object.freeze({
 const RING_FILL_SHARE = 0.55;
 /** How much of its tone an open box's tint shows. */
 const OPEN_BOX_TINT = 0.07;
+
+/**
+ * The project's frame, the one box that holds everything: its border's width on
+ * screen, in pixels, and its tone, the faintest neutral that keeps WCAG's 3:1 for
+ * a boundary against the canvas (3.10:1 light, 3.20:1 dark, measured); and the
+ * tone of its tint and how much of it shows, 1.09:1 and 1.12:1 against the
+ * canvas, where a node's tint stands at 1.2:1 or more. The theme's grey it was
+ * drawn in read as the canvas: a border at 1.35:1 and 2.52:1 over a tint at
+ * 1.02:1 and 1.05:1, one layout unit wide, 0.06 px at this portal's whole-graph fit.
+ */
+const PROJECT_FRAME = Object.freeze({ borderPx: 1, border: "text3", tint: "text1", tintShare: 0.05 });
 
 /**
  * The curve style of an edge the layout did not route. Every line drawn has a
@@ -161,6 +175,11 @@ function nodeRules(tokens) {
       selector: `node[tone = "${tone}"]`,
       style: { "border-color": tokens[tone] },
     })),
+    // A node of the architecture is tinted in its layer's tone, as the legend draws it; a landscape node has a health instead.
+    ...tones.map((tone) => ({
+      selector: `node[tone = "${tone}"][^health]`,
+      style: { "background-color": tokens[tone], "background-opacity": LAYER_FILL_SHARE },
+    })),
     {
       selector: ":parent",
       style: {
@@ -194,15 +213,27 @@ function nodeRules(tokens) {
       ];
     }),
     {
+      selector: `node.${PROJECT_BOX}`,
+      style: {
+        "border-color": tokens[PROJECT_FRAME.border],
+        // Inside the box, so the frame's width, which follows the zoom, never changes the box's size.
+        "border-position": "inside",
+        "border-width": (node) => PROJECT_FRAME.borderPx * scaleOf(node),
+        "background-color": tokens[PROJECT_FRAME.tint],
+        "background-opacity": PROJECT_FRAME.tintShare,
+      },
+    },
+    {
       selector: "node.is-selected",
       style: {
-        "background-color": tokens.bgAlt,
         "border-width": GEOMETRY.selectedBorder,
         "overlay-color": tokens.brand,
         "overlay-opacity": 0.12,
         "overlay-padding": 4,
       },
     },
+    // A selected node keeps its layer's tint; a landscape card, which has none, is drawn in the page's alternate background.
+    { selector: "node[health].is-selected", style: { "background-color": tokens.bgAlt } },
   ];
 }
 
@@ -324,7 +355,7 @@ function selectionRules(tokens, palette) {
   const rings = RING_TONES.flatMap((tone, ring) => [
     {
       selector: `node.ring-${ring}`,
-      style: { "background-color": mixRgb(tokens[tone], tokens.bgSoft, RING_FILL_SHARE) },
+      style: { "background-color": mixRgb(tokens[tone], tokens.bgSoft, RING_FILL_SHARE), "background-opacity": 1 },
     },
     {
       selector: `:parent.ring-${ring}`,
@@ -404,7 +435,7 @@ function mapRules(tokens) {
     {
       selector: `node.${COLLAPSED}`,
       style: {
-        "background-opacity": MAP_MARKS.collapsedOpacity,
+        "background-opacity": LAYER_FILL_SHARE,
         // A closed box's border is an open box's, so a box is drawn at ELK's size either way.
         "border-width": GEOMETRY.boxBorder,
       },

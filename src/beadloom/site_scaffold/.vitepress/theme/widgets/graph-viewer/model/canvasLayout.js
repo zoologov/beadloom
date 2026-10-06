@@ -63,9 +63,17 @@ function placeLeaves(cy, geometry) {
   });
 }
 
-/** How far inside its drawn edge a compound's children area begins: its padding and half its border. */
+/** How much of a border of each `border-position` Cytoscape draws outside a node's size, as a share of its width. */
+const BORDER_OUTSIDE = Object.freeze({ inside: 0, center: 0.5, outside: 1 });
+
+/**
+ * How far inside its drawn edge a compound's children area begins: its padding
+ * and the part of its border drawn outside its size — half of it, or none for
+ * a border drawn inside the box, as the project's frame is.
+ */
 function insetOf(compound) {
-  return compound.pstyle("padding").pfValue + compound.pstyle("border-width").pfValue / 2;
+  const border = compound.pstyle("border-width").pfValue * BORDER_OUTSIDE[compound.pstyle("border-position").value];
+  return compound.pstyle("padding").pfValue + border;
 }
 
 /** Whether Cytoscape draws `edge` as a loop: it joins a node to itself or to a box that holds it. */

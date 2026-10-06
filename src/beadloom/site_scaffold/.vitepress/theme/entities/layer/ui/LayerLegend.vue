@@ -3,15 +3,16 @@
 // The legend of the layers, top to bottom, in their colours: a small card per layer, as the canvas draws its nodes.
 
 import { TOKEN_VARIABLES } from "../../../shared/theme-tokens/index.js";
+import { LAYER_FILL_SHARE } from "../model/layers.js";
 
 defineProps({
   layers: { type: Array, required: true },
 });
 
-/** A layer's sample: a card with a border in the layer's tone over a light tint of it, as its boxes are drawn. */
+/** A layer's sample: a border in the layer's tone over a light tint of it, as each of its nodes is drawn. */
 function sampleOf(layer) {
   const tone = `var(${TOKEN_VARIABLES[layer.tone]})`;
-  return { borderColor: tone, background: `color-mix(in srgb, ${tone} 16%, var(--vp-c-bg))` };
+  return { borderColor: tone, background: `color-mix(in srgb, ${tone} ${LAYER_FILL_SHARE * 100}%, var(--vp-c-bg))` };
 }
 </script>
 
