@@ -22,7 +22,8 @@
 // across the box. The levels now draw a line between
 // nodes only where they are readable, keep an open box's outward edges at the
 // box, and route a loop like any other line; a line that leaves a node beside
-// where a head arrives starts behind its base. The cases read the states the
+// where a head arrives starts behind its base, and of two heads side by side on
+// one border, too near for both at the zoom drawn, one gives way. The cases read the states the
 // viewer draws: every box open as a reader's zoom opens it, from the lowest zoom
 // a box stays open at, and a selection, its node's own edges on top. A followed
 // line is drawn over every line that is not, and meets their heads by design.

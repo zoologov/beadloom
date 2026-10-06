@@ -176,15 +176,19 @@ test("lines that share their last run into a node end in one arrowhead, and a li
     .filter((look) => look.cornerRadii.length)
     .flatMap((look) => {
       const ends = [];
-      if (!look.aggregated || look.forward > 0) ends.push({ ...look, head: look.targetArrow });
-      if (look.aggregated && look.backward > 0) ends.push({ ...look, points: [...look.points].reverse(), head: look.sourceArrow });
+      if (!look.aggregated || look.forward > 0) ends.push({ ...look, head: look.targetArrow, sourceEnd: false });
+      if (look.aggregated && look.backward > 0) ends.push({ ...look, points: [...look.points].reverse(), head: look.sourceArrow, sourceEnd: true });
       return ends;
     });
   const groups = finalRunGroups(arrivals);
   requireShape(groups.some((group) => group.length > 1), "no two drawn lines share their last run");
 
+  // Of two heads side by side on one border, too near for both at the scale drawn, one gives way to the
+  // other (`heads.spec.js`): its line arrives on its own, with no head.
+  const gaveWay = new Set((await viewer(page, "droppedHeads")).map((d) => `${d.id}:${d.end}`));
   const heads = (group) => group.filter((end) => end.head !== "none").length;
-  expect(groups.filter((group) => heads(group) !== 1).map((group) => group.map((look) => look.id).join(" + "))).toEqual([]);
+  const alone = (group) => group.length === 1 && gaveWay.has(`${group[0].id}:${group[0].sourceEnd ? "source" : "target"}`);
+  expect(groups.filter((group) => heads(group) !== 1 && !alone(group)).map((group) => group.map((look) => look.id).join(" + "))).toEqual([]);
 });
 
 test("every routed line turns its corners at one radius on screen, so a branch leaves its trunk in a rounded merge", async ({

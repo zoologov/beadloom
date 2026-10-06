@@ -138,10 +138,11 @@ function styleKeyOf(edges) {
  * zoomDrawing, pending, destroy }`.
  *
  * `fitZoom()` gives the zoom of the whole-graph fit now; `onLevel()` is called
- * when the view opens or closes a box, and is expected to call `apply`. Nothing
- * is drawn differently until the first `apply`.
+ * when the view opens or closes a box, and is expected to call `apply`;
+ * `onRescale()` when the scale stepped and nothing else changed. Nothing is
+ * drawn differently until the first `apply`.
  */
-export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTIONS }) {
+export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}, options = LEVEL_OPTIONS }) {
   const tree = boxTreeOf(cy.nodes().map((node) => ({ id: node.id(), parent: node.isChild() ? node.parent().id() : null })));
   const nodes = new Map(cy.nodes().map((node) => [node.id(), node]));
   const edges = new Map(cy.edges().map((edge) => [edge.id(), edge]));
@@ -545,12 +546,20 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, options = LEVEL_OPTI
     return !sameBoxes(grownNow, grownBoxesNow([...nodes.values()].filter((node) => node.inside()).map((node) => node.id()), open));
   }
 
-  /** Work out the boxes wanted again, and have the level drawn again when they differ or a drawn box changed size. */
+  /**
+   * Work out the boxes wanted again, and have the level drawn again when they
+   * differ or a drawn box changed size; otherwise, when only the scale stepped,
+   * tell the canvas (`onRescale`), whose marks of shared lines depend on it.
+   */
   function evaluate() {
     if (destroyed) return;
     placed = true;
+    const before = scale;
     const resized = rescale();
-    if (sameSet(wanted(), open) && !resized) return;
+    if (sameSet(wanted(), open) && !resized) {
+      if (scale !== before) onRescale();
+      return;
+    }
     onLevel();
   }
 

@@ -116,8 +116,11 @@ for (const colorScheme of ["light", "dark"]) {
         new Set(["consumes", "depends_on", "produces", "uses", "violation"])
       );
       expect(looks.filter((look) => look.sourceArrow !== "none").map((look) => look.id)).toEqual([]);
-      // A line into an open box that its node's lines run on into is their stub: their heads are its (`levels.spec.js`).
-      const headless = finalRunGroups(looks).filter((group) => !group.some(hasTargetHead) && !group.every((look) => look.stub));
+      // A line into an open box that its node's lines run on into is their stub: their heads are its
+      // (`levels.spec.js`); and of two heads side by side on one border, too near for both at the scale drawn,
+      // one gives way to the other (`heads.spec.js`).
+      const gaveWay = new Set((await viewer(page, "droppedHeads")).filter((d) => d.end === "target").map((d) => d.id));
+      const headless = finalRunGroups(looks).filter((group) => !group.some(hasTargetHead) && !group.every((look) => look.stub || gaveWay.has(look.id)));
       expect(headless.map((group) => group.map((look) => look.id).join(" + "))).toEqual([]);
     });
 

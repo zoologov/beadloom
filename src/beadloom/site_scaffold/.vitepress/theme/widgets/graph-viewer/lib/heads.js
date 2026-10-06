@@ -174,6 +174,41 @@ export function departuresBeside(ends, dropped) {
 }
 
 /**
+ * The heads among `ends` (as `droppedHeadsOf` reads them) that give way to a
+ * head beside them on the same border, arriving the same way, too near for both
+ * at `least`, the narrowest a head is drawn now, in layout units, with `gap`
+ * between them: of two such heads the one drawn first keeps its own
+ * (`drawsBefore`). Lines that reach a side separately stay separate, and where
+ * the zoom leaves no room for two heads side by side, the one that gives way ends
+ * at the other's base. `dropped` is the ends already dropped; the answer is a set
+ * of `${id}\n${end}`.
+ */
+export function crowdedHeadsOf(ends, dropped, least, gap) {
+  const heads = ends.filter((end) => !end.headless && !dropped.has(`${end.id}\n${end.end}`));
+  const borders = new Map();
+  for (const end of heads) {
+    const way = wayOf(end);
+    const key = `${Math.round(way.x)},${Math.round(way.y)}|${Math.round(end.tip.x * way.x + end.tip.y * way.y)}`;
+    if (!borders.has(key)) borders.set(key, []);
+    borders.get(key).push({ end, way, across: end.tip.x * way.y - end.tip.y * way.x });
+  }
+  const out = new Set();
+  for (const row of borders.values()) {
+    row.sort((a, b) => a.across - b.across);
+    for (let i = 1; i < row.length; i += 1) {
+      const [a, b] = [row[i - 1], row[i]];
+      const apart = b.across - a.across;
+      // Ends a unit apart or nearer share a tip, and one head already (`droppedHeadsOf`).
+      if (apart <= SAME_END || apart > least + gap || out.has(`${a.end.id}\n${a.end.end}`)) continue;
+      const loud = (end) => ({ ...end, loud: LOUD_LOOKS.has(end.styleKey) });
+      const gives = drawsBefore(loud(a.end), loud(b.end)) ? b : a;
+      out.add(`${gives.end.id}\n${gives.end.end}`);
+    }
+  }
+  return out;
+}
+
+/**
  * The room each of `ends` has for an arrowhead: each end is `{ id, end, tip,
  * before, corner, beside, arrival }`, `before` the point its last run starts
  * from, `corner` how far from the tip that run is straight (to its last corner,

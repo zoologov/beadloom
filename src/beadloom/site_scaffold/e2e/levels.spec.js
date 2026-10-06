@@ -46,10 +46,12 @@ const ON_BORDER = 0.5;
 
 const sorted = (ids) => [...ids].sort();
 
-/** The top-level box holding the most nodes, the one a reader is likeliest to open. */
+/** The top-level box holding the most nodes, the one a reader is likeliest to open; the case is skipped without one. */
 function largestTopBox(data, tree) {
   const inside = (box) => data.nodes.filter((n) => withAncestors([n.id], tree.parents).has(box)).length;
-  return [...tree.topBoxes].sort((a, b) => inside(b) - inside(a) || (a < b ? -1 : 1))[0];
+  const box = [...tree.topBoxes].sort((a, b) => inside(b) - inside(a) || (a < b ? -1 : 1))[0];
+  requireShape(Boolean(box), "no box at the top of the containment tree");
+  return box;
 }
 
 /** The edges the filters show at rest: every drawn edge of the file (no filter is set). */

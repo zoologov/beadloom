@@ -13,7 +13,9 @@
 //   its head, by a class the stylesheet reads (`lib/heads.js`), and ends at the
 //   base of the head that stays; a line that reaches the end on its own keeps its own.
 //   A line that leaves its node beside where another's head arrives, close
-//   enough to run along the head's side, starts at that head's base too.
+//   enough to run along the head's side, starts at that head's base too; and of
+//   two heads side by side on one border, too near for both at the scale drawn
+//   now, one gives way, its line ending at the other's base.
 //   A line whose end lies on another line's way, which runs on through it — a
 //   node's own line into an open box, on the border its lines into the box's
 //   nodes cross — has no head there either: the head would sit across the line
@@ -30,9 +32,19 @@
 // control points, so their heads are drawn on one another and read as one,
 // while a loop ended short of its tip would bend away from the head it left.
 
-import { HEAD_ROOM, NO_SOURCE_HEAD, NO_TARGET_HEAD, SAME_END, departuresBeside, droppedHeadsOf, headEndsOf, headRoomsOf } from "../lib/heads.js";
+import {
+  HEAD_ROOM,
+  NO_SOURCE_HEAD,
+  NO_TARGET_HEAD,
+  SAME_END,
+  crowdedHeadsOf,
+  departuresBeside,
+  droppedHeadsOf,
+  headEndsOf,
+  headRoomsOf,
+} from "../lib/heads.js";
 import { AGGREGATE } from "../lib/levels.js";
-import { routePointsOf } from "../lib/lineMarks.js";
+import { LINE_MARKS, routePointsOf } from "../lib/lineMarks.js";
 import { routeIndexOf, routesAlong } from "../lib/routeIndex.js";
 
 /**
@@ -101,11 +113,12 @@ const sameRoom = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? nul
  *
  * `refresh()` reads the lines drawn now again and gives each shared last run
  * one arrowhead; call it whenever a filter, a selection or a level changes what
- * is drawn. `along(id, point)` gives the ids of the drawn edges that run along
+ * is drawn, and whenever `scale()`, the map's scale, does: two heads side by side
+ * on one border fit at one scale and not at another. `along(id, point)` gives the ids of the drawn edges that run along
  * edge `id` at `point`, in graph coordinates. `droppedHeads()` gives the ends that
  * draw no head, `[{ id, end }]`.
  */
-export function sharedLines(cy, paths) {
+export function sharedLines(cy, paths, { scale = () => 1 } = {}) {
   let drawnIds = "";
   let index = routeIndexOf([]);
   let lines = routeIndexOf([]);
@@ -146,6 +159,9 @@ export function sharedLines(cy, paths) {
       const [departure, arrival] = [byKey.get(key), byKey.get(head)];
       if (departure && arrival) arrival.corner = Math.min(arrival.corner, departure.corner);
     }
+    // Heads side by side on one border, too near for two at the scale drawn now: one gives way.
+    const s = scale();
+    for (const key of crowdedHeadsOf(ends, dropped, LINE_MARKS.smallestHead * s, LINE_MARKS.headClearance * s)) dropped.add(key);
     // A head on another line's way, where that line runs on through the tip, would sit across it: the line ends there without one.
     for (const end of ends) {
       if (end.headless || dropped.has(`${end.id}\n${end.end}`)) continue;

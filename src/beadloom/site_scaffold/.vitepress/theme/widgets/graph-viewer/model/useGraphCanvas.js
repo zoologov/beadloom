@@ -203,9 +203,9 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
       if (mine !== generation) return false;
       const drawn = await applyGeometry(instance, run.geometry);
       if (mine !== generation) return false;
-      shared = sharedLines(instance, drawn.paths);
+      shared = sharedLines(instance, drawn.paths, { scale: () => map?.scale() ?? 1 });
       followed = followedOverlay(instance, containerRef.value, { tokens });
-      map = canvasMap(instance, run.geometry, { fitZoom, onLevel: redraw });
+      map = canvasMap(instance, run.geometry, { fitZoom, onLevel: redraw, onRescale: refreshOverlay });
       // Laid over the followed lines, so no line is drawn over a count.
       pills = pillOverlay(instance, containerRef.value, { tokens, map: () => map });
       layout.value = run;
