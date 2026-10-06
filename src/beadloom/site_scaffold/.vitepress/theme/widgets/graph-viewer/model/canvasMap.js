@@ -43,7 +43,9 @@
 // title is tried at a few sizes inside its box and otherwise stands above it on
 // a plate (`lib/mapMarks.js`); which, is in the node's data (`mapTitle`), worked
 // out again at each step of the scale. A top-level node that is not a box takes
-// the map's title only while its own label would read smaller.
+// the map's title only while its own label would read smaller, and so does the
+// box that holds everything, on a plate above it where the overview's plan kept
+// the plate's room from its lines (`overviewPlan.js`).
 //
 // A top-level node the overview's plan draws larger than its layout, to hold its
 // title (`overviewPlan.js`, `lib/grownBoxes.js`), carries its drawn box in its
@@ -82,13 +84,13 @@ import {
 } from "../lib/levels.js";
 import { pathOutside } from "../lib/grownBoxes.js";
 import { STUB_AT } from "../lib/heads.js";
-import { MAP_BOX, MAP_TITLE, OUTWARD, TALLY, mapTitleOf, statusMarkInsetOf, statusMarkOf, titleBoxOf } from "../lib/mapMarks.js";
+import { MAP_BOX, MAP_MARKS, MAP_TITLE, OUTWARD, TALLY, mapTitleOf, statusMarkInsetOf, statusMarkOf, titleBoxOf } from "../lib/mapMarks.js";
 import { routePointsOf } from "../lib/lineMarks.js";
 import { pathOf, segmentsOf } from "../lib/routes.js";
 import { GEOMETRY } from "../lib/stylesheet.js";
 import { isLoop } from "./canvasLayout.js";
 import { loopLines } from "./loopLines.js";
-import { overviewPlanner } from "./overviewPlan.js";
+import { PROJECT_PLATE_SIDE, overviewPlanner } from "./overviewPlan.js";
 
 /** The source of a reveal that opens its boxes at any zoom: the test handle's. */
 export const FORCED = "test";
@@ -198,6 +200,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     plainEdges,
     routePointsOf: drawnRouteOf,
     titleOf: (id, at, hidden) => titleLookOf(id, at, hidden),
+    projectTitleOf: (at) => projectTitleAt(at),
     // A box is drawn at least as tall as it was laid out, and its status mark takes room by the height it is drawn at.
     leastBoxOf: (id, px, at, hidden) =>
       titleBoxOf(linesOf(id, hidden), px, at, measure, (height) => reservedOf(id, at, Math.max(height, geometry.boxes[id].y2 - geometry.boxes[id].y1))),
@@ -229,10 +232,23 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     return mapTitleOf(linesOf(id, hidden), size, at, measure, { reserved, natural: isBox ? null : GEOMETRY.nodeTitle });
   }
 
+  /**
+   * The title the box that holds everything stands on a plate with above it at
+   * `at`, while its own, drawn inside at a node's title's size in layout units,
+   * reads smaller than the smallest size a title is tried at: `{ px, inside,
+   * width }`, at the size a title stands on a plate at, as a box's title does
+   * that fits its box at none; or null.
+   */
+  function projectTitleAt(at) {
+    if (GEOMETRY.nodeTitle / at >= Math.min(...MAP_MARKS.titleSizes)) return null;
+    const px = MAP_MARKS.plateTitle;
+    return { px, inside: false, width: measure(linesOf(tree.wrapper, 0)[0], px) * at };
+  }
+
   /** The scale node `id`'s marks are laid out at now: the map's, or the overview plan's when the view is zoomed out past it. */
   function titleScaleOf(id) {
     const planned = planner.titleScale();
-    return planner.isTop(id) && planned ? Math.min(scale, planned) : scale;
+    return (planner.isTop(id) || id === tree.wrapper) && planned ? Math.min(scale, planned) : scale;
   }
 
   /**
@@ -261,10 +277,22 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
    */
   function dressTitle(node) {
     const id = node.id();
-    const mapped = node.hasClass(COLLAPSED) || (planner.isTop(id) && !tree.boxes.has(id));
     const at = titleScaleOf(id);
+    if (id === tree.wrapper) return dressProjectTitle(node, at);
+    const mapped = node.hasClass(COLLAPSED) || (planner.isTop(id) && !tree.boxes.has(id));
     const title = mapped ? titleLookOf(id, at, hiddenAt.get(id) || 0, grownNow.get(id)) : null;
     if (title) node.data({ [MAP_TITLE]: { ...title, side: planner.plateSideOf(id), scale: at }, [MAP_SCALE]: scale });
+    else node.removeData(MAP_TITLE);
+  }
+
+  /**
+   * Give the box that holds everything, `node`, its title on a plate above it at
+   * `at` while its own reads smaller than a title is drawn at the map's scale,
+   * and only where the overview's plan kept the plate's room from its lines.
+   */
+  function dressProjectTitle(node, at) {
+    const title = planner.hasProjectPlate() && projectTitleAt(scale) ? projectTitleAt(at) : null;
+    if (title) node.data({ [MAP_TITLE]: { ...title, side: PROJECT_PLATE_SIDE, scale: at }, [MAP_SCALE]: scale });
     else node.removeData(MAP_TITLE);
   }
 

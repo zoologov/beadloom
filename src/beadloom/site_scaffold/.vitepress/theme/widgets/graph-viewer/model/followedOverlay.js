@@ -10,8 +10,12 @@
 // a repair; a line drawn whole on top of the others does not.
 //
 // The drawing goes in passes: every casing, then every line, then the
-// arrowheads, then the label of the edge under the pointer, the one line that
-// shows its kind. A line of the map's shows no label here: its count is on its
+// arrowheads, then the title of each open box a followed line runs through,
+// then the label of the edge under the pointer, the one line that shows its
+// kind. A box's title sits in the room ELK keeps at the box's top, clear of its
+// children, and a line into a node of the first row can only arrive through it:
+// such a title is drawn again over the lines, on a patch of the box's own fill,
+// so the line runs under the title instead of striking it out. A line of the map's shows no label here: its count is on its
 // pill, drawn above this layer (`pillOverlay.js`), and in the note the viewer
 // shows while the pointer is on it. A bundle's lines run together and part, and a line drawn with
 // its own casing would cut a slit into the one drawn before it where they part;
@@ -28,18 +32,24 @@
 // so is what the last refresh made of the lines followed (`followed`).
 
 import { EDGE_STYLES, dashOf } from "../../../entities/graph-edge/index.js";
+import { mixRgb } from "../../../shared/theme-tokens/index.js";
 import { edgePaletteOf } from "../lib/edgePalette.js";
+import { crossesAny } from "../lib/grownBoxes.js";
 import { NO_SOURCE_HEAD, NO_TARGET_HEAD, headEndsOf } from "../lib/heads.js";
-import { AGGREGATE } from "../lib/levels.js";
+import { AGGREGATE, COLLAPSED } from "../lib/levels.js";
 import { LINE_MARKS, cornerRadiiOf, dashOffsetOf, endHeadLength, headLengthOf, lineWidthOf, routePointsOf } from "../lib/lineMarks.js";
-import { scaleOf } from "../lib/mapMarks.js";
+import { MAP_TITLE, scaleOf } from "../lib/mapMarks.js";
 import { HIGHLIGHTED_EDGES, HOVERED } from "./canvasMarks.js";
 import { overlayCanvas } from "./overlayCanvas.js";
 
 /** How many of the last frames' drawing times are kept. */
 const FRAMES_KEPT = 240;
 /** The passes a frame is drawn in, in order. */
-const PASSES = Object.freeze(["casings", "lines", "heads", "labels"]);
+const PASSES = Object.freeze(["casings", "lines", "heads", "titles", "labels"]);
+/** A node's main label alone, in the graph's coordinates. */
+const TITLE_BOUNDS = Object.freeze({ includeNodes: false, includeEdges: false, includeLabels: true, includeMainLabels: true, includeOverlays: false });
+/** What Cytoscape ends a title too wide for its room with. */
+const ELLIPSIS = "\u2026";
 /** A label's size and its plate's padding, in pixels on screen. */
 const LABEL = Object.freeze({ size: 11, padding: 2, plateOpacity: 0.9 });
 /** The arrowhead a line of the map's draws, whatever the edges it carries. */
@@ -65,6 +75,33 @@ function shapeOf(edge) {
   }
   const controls = edge.controlPoints() || [];
   return { routed: false, points: [edge.sourceEndpoint(), ...controls, edge.targetEndpoint()].map(point) };
+}
+
+/**
+ * `text` as Cytoscape draws it in `maxWidth` by `measure(text)`: whole when it
+ * fits, else as many of its first characters as fit with an ellipsis after them.
+ */
+function ellipsizedOf(text, maxWidth, measure) {
+  if (measure(text) < maxWidth) return text;
+  let kept = "";
+  for (const character of text) {
+    if (measure(kept + character + ELLIPSIS) > maxWidth) return kept + ELLIPSIS;
+    kept += character;
+  }
+  return kept;
+}
+
+/**
+ * The colour open box `node` is drawn in over the canvas's background `bg`:
+ * the tint of every box that holds it laid over the background in turn, then its own.
+ */
+function drawnFillOf(node, bg) {
+  let under = bg;
+  for (const box of [...node.ancestors().toArray().reverse(), node]) {
+    const tinted = mixRgb(box.style("background-color"), under, parseFloat(box.style("background-opacity")));
+    under = mixRgb(tinted, under, parseFloat(box.style("opacity")));
+  }
+  return under;
 }
 
 /** The rectangle around `points`, grown by `margin`. */
@@ -149,7 +186,8 @@ function headOutline(tip, from, length, shape) {
  * `tokens()` gives the resolved theme tokens now (`shared/theme-tokens`). Call
  * `refresh()` whenever the followed lines, the lines drawn or their looks change.
  * `followed()` gives `{ edges, passes }`: each followed line `{ id, colour,
- * casing, width }` and each pass with the ids it draws; `labelled()` the ids of
+ * casing, width }` and each pass with the ids it draws, the titles' pass with
+ * the lines it is drawn over and the boxes whose titles it draws (`boxes`); `labelled()` the ids of
  * the lines whose label is drawn; `frames()` `{ frames }`, each recent frame
  * `{ at, ms, drawn }`: when it was drawn (`performance.now()`), how long it took,
  * and how many lines it drew.
@@ -158,6 +196,7 @@ export function followedOverlay(cy, container, { tokens }) {
   const layer = overlayCanvas(container, "followed");
   const frames = [];
   let lines = [];
+  let titles = [];
   let look = null;
 
   /** What `edge` is drawn as when it is followed, read once per refresh. */
@@ -191,7 +230,58 @@ export function followedOverlay(cy, container, { tokens }) {
         .map((edge) => lineOf(edge, palette))
         .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     }
+    titles = lines.length ? titlesUnder(lines) : [];
     draw();
+  }
+
+  /**
+   * The titles of the open boxes a line of `lines` runs through, each with what
+   * draws it again: `{ id, rect, text, x, y, font, colour, fill, under }`, its
+   * place and size in the graph's coordinates and the lines that run through it.
+   * A title on a plate outside its box is the map's, and no line runs under it.
+   */
+  function titlesUnder(followedLines) {
+    const measurer = document.createElement("canvas").getContext("2d");
+    return cy
+      .nodes(":parent")
+      .filter((node) => node.visible() && !node.hasClass(COLLAPSED) && !node.data(MAP_TITLE) && Boolean(node.style("label")))
+      .map((node) => {
+        const rect = node.boundingBox(TITLE_BOUNDS);
+        const under = followedLines.filter((line) => crossesAny(rect, [line.shape.points])).map((line) => line.id);
+        if (!under.length) return null;
+        const font = `${node.style("font-weight")} ${node.pstyle("font-size").pfValue}px ${node.style("font-family")}`;
+        measurer.font = font;
+        const fill = drawnFillOf(node, look.bg);
+        const opacity = parseFloat(node.style("opacity")) * parseFloat(node.style("text-opacity"));
+        const box = node.boundingBox({ includeLabels: false, includeOverlays: false });
+        return {
+          id: node.id(),
+          rect,
+          text: ellipsizedOf(String(node.style("label")), node.pstyle("text-max-width").pfValue, (text) => measurer.measureText(text).width),
+          // Where Cytoscape draws a title above its box's top, moved in by its margin, its bottom on that line.
+          x: node.position().x + node.pstyle("text-margin-x").pfValue,
+          y: box.y1 + node.pstyle("text-margin-y").pfValue,
+          font,
+          colour: mixRgb(node.style("color"), fill, opacity),
+          fill,
+          under,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }
+
+  /** Draw each title a followed line runs through again, over the lines, on a patch of its box's fill. */
+  function drawTitles(context) {
+    context.textAlign = "center";
+    context.textBaseline = "bottom";
+    for (const title of titles) {
+      context.fillStyle = title.fill;
+      context.fillRect(title.rect.x1, title.rect.y1, title.rect.x2 - title.rect.x1, title.rect.y2 - title.rect.y1);
+      context.font = title.font;
+      context.fillStyle = title.colour;
+      context.fillText(title.text, title.x, title.y);
+    }
   }
 
   /** The sizes `line` is drawn at now, in layout units, at the map's scale its edge carries. */
@@ -295,6 +385,7 @@ export function followedOverlay(cy, container, { tokens }) {
             context.fill();
           }
         }
+        drawTitles(context);
         for (const { line, sizes } of shown) if (line.label) drawLabel(context, line, sizes);
         drawn = shown.length;
         layer.drew();
@@ -312,10 +403,13 @@ export function followedOverlay(cy, container, { tokens }) {
       const casing = look?.bg || null;
       return {
         edges: lines.map((line) => ({ id: line.id, colour: line.colour, casing, width: lineWidthOf(line.edge) })),
-        passes: PASSES.map((name) => ({
-          name,
-          edges: name === "labels" ? ids((line) => Boolean(line.label)) : name === "heads" ? ids((line) => line.heads.source || line.heads.target) : ids(() => true),
-        })),
+        passes: PASSES.map((name) => {
+          if (name === "titles") return { name, edges: [...new Set(titles.flatMap((title) => title.under))].sort(), boxes: titles.map((title) => title.id) };
+          return {
+            name,
+            edges: name === "labels" ? ids((line) => Boolean(line.label)) : name === "heads" ? ids((line) => line.heads.source || line.heads.target) : ids(() => true),
+          };
+        }),
       };
     },
     labelled: () => lines.filter((line) => line.label).map((line) => line.id),

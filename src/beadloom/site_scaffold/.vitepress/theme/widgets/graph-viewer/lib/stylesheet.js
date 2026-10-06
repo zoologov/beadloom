@@ -73,6 +73,12 @@ export const GEOMETRY = Object.freeze({
   statusMarkInset: 6,
   /** How far an open box's title sits below its top border. */
   boxTitleInset: 20,
+  /**
+   * The room an open box keeps above its children for its title: the title,
+   * drawn `boxTitleInset` in, ends about 22.5 below the border, and the children
+   * keep about the 12 ELK keeps from a border below it (`shared/elk`, `boxTop`).
+   */
+  boxTitleRoom: 36,
 });
 
 /** How much of a ring's tone a node's fill takes; the rest is the node's usual fill. */

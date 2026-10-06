@@ -448,6 +448,34 @@ test("zoomed out from the fit, no line runs under a title: a title keeps to the 
   expect(under).toEqual([]);
 });
 
+test("at the fit, and zoomed out from it, the title of the box that holds everything reads at a title's size, inside it or on a plate above it that no node covers and no line runs under", async ({
+  page,
+  request,
+}) => {
+  const tree = treeOf(await architectureData(request));
+  requireShape(Boolean(tree.wrapper), "no box that holds every node");
+  await openArchitecture(page);
+  const wrong = [];
+  const look = async (state) => {
+    const view = await viewOf(page);
+    const title = (await viewer(page, "boxTitles")).find((t) => t.id === tree.wrapper);
+    if (!title) return wrong.push(`${state}: no title drawn`);
+    // Fitted at the scale the overview was planned at, as every title is, so one step coarser where the fit lands past it.
+    const shrink = Math.min(1, (await viewer(page, "overviewPlan")).unit / (await viewer(page, "level")).scale);
+    if (title.fontSize < (Math.min(...TITLE_PX) * shrink) / Math.sqrt(1.25) - 1e-6) wrong.push(`${state}: drawn at ${title.fontSize.toFixed(2)} px`);
+    const rects = await nodeRects(page, view);
+    wrong.push(...Object.keys(rects).filter((id) => id !== tree.wrapper && rectsOverlap(title, rects[id])).map((id) => `${state}: under ${id}`));
+    const segments = segmentsOf(await viewer(page, "lineLooks"), view);
+    wrong.push(...[...new Set(segments.filter((s) => segmentInRect(s.a, s.b, title, 1)).map((s) => s.id))].map((id) => `${state}: ${id} under it`));
+    test.info().annotations.push({ type: "measured", description: `${state}: ${tree.wrapper}'s title ${title.fontSize.toFixed(1)} px${title.plate ? " on a plate" : ""}` });
+  };
+  await look("at the fit");
+  for (let step = 0; step < ZOOM_OUT_STEPS; step += 1) await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+  await twoFrames(page);
+  await look(`${ZOOM_OUT_STEPS} steps out`);
+  expect(wrong).toEqual([]);
+});
+
 /** The room a title keeps from its box's edges, in pixels on screen; a line of a title is this share of its size tall. */
 const TITLE_INSET_PX = 6;
 const TITLE_LINE_HEIGHT = 1.25;

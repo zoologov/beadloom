@@ -256,12 +256,14 @@ test("a hovered line is drawn on top in its full colour, over a casing in the ca
     expect(strength(edge), edge.id).toBeGreaterThanOrEqual(0);
   }
   expect(followed.edges.some((edge) => strength(edge) > 0)).toBe(true);
-  // Every casing is drawn before any line, so the lines of one bundle cut no slit into each other.
-  expect(followed.passes.map((pass) => pass.name)).toEqual(["casings", "lines", "heads", "labels"]);
+  // Every casing is drawn before any line, so the lines of one bundle cut no slit into each other;
+  // a title a line runs through is drawn again over the lines (`levels.spec.js`), and the label last.
+  expect(followed.passes.map((pass) => pass.name)).toEqual(["casings", "lines", "heads", "titles", "labels"]);
+  const labels = followed.passes.find((pass) => pass.name === "labels");
   // The pointer is over one edge, though not always the one whose middle it aimed at (`edges.spec.js`).
-  expect(followed.passes[3].edges).toHaveLength(1);
-  expect(along).toContain(followed.passes[3].edges[0]);
-  expect(await viewer(page, "shownEdgeLabels")).toEqual(followed.passes[3].edges);
+  expect(labels.edges).toHaveLength(1);
+  expect(along).toContain(labels.edges[0]);
+  expect(await viewer(page, "shownEdgeLabels")).toEqual(labels.edges);
 
   await page.mouse.move(2, 2);
   await expect.poll(async () => (await viewer(page, "followed")).edges).toEqual([]);
@@ -313,14 +315,17 @@ test("an open box is drawn with a thin solid border, a light tint and its title 
   await openEveryBox(page);
   const boxes = (await viewer(page, "nodeLooks")).filter((look) => look.isParent);
   requireShape(boxes.length > 0, "no box is drawn open");
+  // The box that holds everything, and no other, stands its title on a plate above it while its own
+  // would read smaller than the smallest size a title is drawn at (`overview.spec.js`).
+  const plated = new Set((await viewer(page, "boxTitles")).filter((title) => title.plate).map((title) => title.id));
+  expect([...plated].filter((id) => boxes.find((box) => box.id === id)?.parent)).toEqual([]);
 
   const wrong = boxes.filter(
     (box) =>
       box.borderStyle !== "solid" ||
       box.borderWidth > 1 ||
       box.fillOpacity > 0.1 ||
-      box.labelValign !== "top" ||
-      !(box.labelMarginY > 0)
+      (!plated.has(box.id) && (box.labelValign !== "top" || !(box.labelMarginY > 0)))
   );
   expect(wrong.map((box) => `${box.id}: ${box.borderStyle} ${box.borderWidth}, tint ${box.fillOpacity}, title ${box.labelValign} ${box.labelMarginY}`)).toEqual([]);
 });

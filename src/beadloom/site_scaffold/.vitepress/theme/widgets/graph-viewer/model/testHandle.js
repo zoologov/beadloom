@@ -375,6 +375,21 @@ function readers(source) {
       const zoom = cy().zoom();
       return cy().nodes(`[${MAP_TITLE}]`).filter((node) => node.visible()).map((node) => titleLookOf(node, zoom)).sort((a, b) => (a.id < b.id ? -1 : 1));
     },
+    // The title of every box drawn open, the box that holds everything included,
+    // where Cytoscape drew it: `[{ id, text, fontSize, plate, x1, y1, x2, y2 }]`,
+    // `fontSize` its size on screen, `plate` whether it stands on a plate outside
+    // its box (which `titles` reports as well), and its place on the canvas.
+    boxTitles: () => {
+      const zoom = cy().zoom();
+      return fileNodes()
+        .filter((node) => node.visible() && node.isParent() && !node.hasClass(COLLAPSED) && Boolean(node.style("label")))
+        .map((node) => {
+          const drawn = node.renderedBoundingBox(TITLE_BOUNDS);
+          const plate = Boolean(node.data(MAP_TITLE)) && !node.data(MAP_TITLE).inside;
+          return { id: node.id(), text: node.style("label"), fontSize: parseFloat(node.style("font-size")) * zoom, plate, x1: drawn.x1, y1: drawn.y1, x2: drawn.x2, y2: drawn.y2 };
+        })
+        .sort((a, b) => (a.id < b.id ? -1 : 1));
+    },
     // What each closed box says comes in and goes out, drawn last: `{ id: {
     // incoming, outgoing, text, shown, x1, y1, x2, y2 } }`, on the canvas in
     // pixels while `shown`.
@@ -408,7 +423,9 @@ function readers(source) {
     // walk: `{ edges, passes }`, each line `{ id, colour, casing, width }` — its
     // colour, the colour of the casing it is drawn over and its width in layout
     // units — and each pass of a frame in order, `{ name, edges }`, with the ids
-    // it draws. Empty when nothing is followed.
+    // it draws; the titles' pass, `{ name, edges, boxes }`, draws again the title
+    // of each open box in `boxes` over the lines in `edges` that run through it.
+    // Empty when nothing is followed.
     followed: () => JSON.parse(JSON.stringify(source.followed())),
     // What drawing the layer over the canvas cost, at Cytoscape's every drawing:
     // `{ frames }`, each recent frame `{ at, ms, drawn }`, when it was drawn

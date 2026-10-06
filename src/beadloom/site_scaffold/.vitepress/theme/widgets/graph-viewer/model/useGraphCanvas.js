@@ -39,6 +39,7 @@ import { followedOverlay } from "./followedOverlay.js";
 import { pillOverlay } from "./pillOverlay.js";
 import { sharedLines } from "./sharedLines.js";
 import { COLLAPSED, LOOP_BOX, LOOP_END } from "../lib/levels.js";
+import { GEOMETRY } from "../lib/stylesheet.js";
 
 /** Cytoscape's layout that places nothing, run when the graph is created. */
 const UNPLACED = Object.freeze({ name: "null" });
@@ -200,7 +201,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     layingOut.value = true;
     layoutError.value = null;
     try {
-      const run = await layOut(elkGraphOf(layoutInputOf(instance)));
+      // Each box keeps the room its title is drawn in above its children.
+      const run = await layOut(elkGraphOf({ ...layoutInputOf(instance), boxTop: GEOMETRY.boxTitleRoom }));
       if (mine !== generation) return false;
       const drawn = await applyGeometry(instance, run.geometry);
       if (mine !== generation) return false;

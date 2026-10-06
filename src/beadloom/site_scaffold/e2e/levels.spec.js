@@ -34,6 +34,8 @@ import {
   zoomIntoBox,
 } from "./support/levels.js";
 import { degreesOf } from "./support/map.js";
+import { boxOnScreen, rectsOverlap, segmentInRect, segmentsOf } from "./support/overview.js";
+import { drag } from "./support/pointer.js";
 import { requireShape } from "./support/shape.js";
 import { architectureData, openArchitecture, openEveryBox, viewer, withAncestors } from "./support/viewer.js";
 
@@ -382,4 +384,134 @@ test("zooming in from the fit, a top-level node drawn larger than its layout nev
     await twoFrames(page);
   }
   expect(shrunk).toEqual([]);
+});
+
+/** How many toolbar steps past the zoom where every box's nodes are readable the title cases look again. */
+const STEPS_PAST_READABLE = 4;
+
+/**
+ * What covers the title of an open box on the canvas now: `{ covered, read, over }`.
+ * `covered` lists `"state: …"`, each a drawn node other than the box and the
+ * boxes holding it whose shape reaches into the title, a line that runs through
+ * a title not drawn again over the lines on top, or a count's pill over it;
+ * `read` counts the titles read, so a case can tell none covered from none
+ * drawn, and `over` names the boxes whose title the layer of followed lines
+ * draws again over them.
+ */
+async function coveredTitles(page, tree, state) {
+  const view = { zoom: await viewer(page, "zoom"), pan: await viewer(page, "pan") };
+  const titles = await viewer(page, "boxTitles");
+  const shown = new Set(await viewer(page, "visibleIds"));
+  const boxes = Object.entries(await viewer(page, "nodeBoxes")).filter(([id]) => shown.has(id));
+  const segments = segmentsOf(await viewer(page, "lineLooks"), view);
+  const { pills } = await viewer(page, "pills");
+  const over = (await viewer(page, "followed")).passes.find((pass) => pass.name === "titles")?.boxes || [];
+  const covered = titles.flatMap((title) => {
+    const own = withAncestors([title.id], tree.parents);
+    const across = over.includes(title.id) ? [] : [...new Set(segments.filter((s) => segmentInRect(s.a, s.b, title)).map((s) => s.id))];
+    return [
+      ...boxes.filter(([id, box]) => !own.has(id) && rectsOverlap(title, boxOnScreen(box, view))).map(([id]) => `${state}: the title of ${title.id} under ${id}`),
+      ...across.map((id) => `${state}: ${id} across the title of ${title.id}`),
+      ...pills.filter((pill) => rectsOverlap(title, pill)).map((pill) => `${state}: the pill of ${pill.id} over the title of ${title.id}`),
+    ];
+  });
+  return { covered, read: titles.length, over };
+}
+
+/** The most the title case drags the view by at once, in pixels, so the pointer stays on the page. */
+const DRAG_STEP_PX = 250;
+/** How near the canvas's middle a node is brought, in pixels. */
+const NEAR_MIDDLE_PX = 20;
+
+/** Drag the view, from the canvas's middle, until node `id` is there: it may start off the canvas, where no drag can start. */
+async function bringToMiddle(page, id) {
+  const canvas = page.getByTestId("graph-canvas");
+  await canvas.scrollIntoViewIfNeeded();
+  const area = await canvas.boundingBox();
+  const middle = { x: area.x + area.width / 2, y: area.y + area.height / 2 };
+  const clamp = (d) => Math.max(-DRAG_STEP_PX, Math.min(DRAG_STEP_PX, d));
+  for (let step = 0; step < ZOOM_STEPS; step += 1) {
+    const b = (await viewer(page, "boxes"))[id];
+    const [dx, dy] = [middle.x - (b.x1 + b.x2) / 2, middle.y - (b.y1 + b.y2) / 2];
+    if (Math.hypot(dx, dy) <= NEAR_MIDDLE_PX) return;
+    await drag(page, middle, clamp(dx), clamp(dy));
+    await twoFrames(page);
+  }
+}
+
+/** Open every box, with its edges drawn as themselves or not, and zoom in until every box's nodes are readable. */
+async function everyBoxReadable(page, tree, { edges }) {
+  await openEveryBox(page, { edges });
+  const { boxes } = await viewer(page, "elkGeometry");
+  const readable = Math.max(...[...smallestChildOf(tree, boxes).values()].map((height) => READABLE_PX / height));
+  await zoomInUntil(page, async () => (await viewer(page, "zoom")) >= readable);
+  await settled(page);
+}
+
+test("no open box's title is covered by a node or crossed by a line: in a box opened by zooming into it, and with every box open at the zoom its nodes are readable at and further in", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const tree = treeOf(data);
+  requireShape(tree.boxes.size > 0, "no box in the containment tree");
+  await openArchitecture(page);
+  const covered = [];
+  let read = 0;
+  const look = async (state) => {
+    const found = await coveredTitles(page, tree, state);
+    covered.push(...found.covered);
+    read += found.read;
+  };
+  await look("at the fit");
+  if (tree.topBoxes.length) {
+    const target = largestTopBox(data, tree);
+    await zoomIntoBox(page, target);
+    await look(`${target} opened by zooming in`);
+  }
+
+  await openArchitecture(page);
+  await everyBoxReadable(page, tree, { edges: false });
+  await look(`every box open at zoom ${(await viewer(page, "zoom")).toFixed(3)}`);
+  for (let step = 0; step < STEPS_PAST_READABLE; step += 1) {
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await twoFrames(page);
+  }
+  await settled(page);
+  await look(`every box open at zoom ${(await viewer(page, "zoom")).toFixed(3)}`);
+  test.info().annotations.push({ type: "measured", description: `${read} open-box titles read over four states; ${covered.length} covered` });
+  expect(read).toBeGreaterThan(0);
+  expect(covered).toEqual([]);
+});
+
+test("a line drawn on top through an open box's title, as a hovered node's line into the first row of another box can run, runs under it: the title is drawn again over the lines on top", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const tree = treeOf(data);
+  await openArchitecture(page);
+  // Every edge drawn as itself: the lines a node's pointer can bring on top, and which of them runs through a title.
+  await everyBoxReadable(page, tree, { edges: true });
+  const view = { zoom: await viewer(page, "zoom"), pan: await viewer(page, "pan") };
+  const titles = await viewer(page, "boxTitles");
+  const through = (await viewer(page, "edgeRoutes"))
+    .filter((look) => look.key && !look.loop && !tree.boxes.has(look.source))
+    .map((look) => ({ look, title: titles.find((t) => segmentsOf([look], view).some((s) => segmentInRect(s.a, s.b, t))) }))
+    .filter(({ title }) => title)
+    .sort((a, b) => (a.look.key < b.look.key ? -1 : 1))[0];
+  requireShape(Boolean(through), "no edge between two open boxes whose line runs through the title of one of them");
+  const { look, title } = through;
+
+  await everyBoxReadable(page, tree, { edges: false });
+  await bringToMiddle(page, look.source);
+  const b = (await viewer(page, "boxes"))[look.source];
+  // From off the node, so the pointer arrives on it after the drag that centred it.
+  await page.mouse.move(2, 2);
+  await page.mouse.move((b.x1 + b.x2) / 2, (b.y1 + b.y2) / 2, { steps: 4 });
+  await expect.poll(async () => (await viewer(page, "followed")).edges.length).toBeGreaterThan(0);
+  const found = await coveredTitles(page, tree, `the pointer on ${look.source}`);
+  test.info().annotations.push({ type: "measured", description: `${look.key} runs through the title of ${title.id}; drawn again over the lines on top: ${found.over.join(", ") || "none"}` });
+  expect(found.covered).toEqual([]);
+  expect(found.over).toContain(title.id);
 });
