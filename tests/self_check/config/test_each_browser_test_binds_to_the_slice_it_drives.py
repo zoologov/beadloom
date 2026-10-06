@@ -34,6 +34,8 @@ SPEC_SLICE = {
     "bundles.spec.js": "site-graph-viewer",
     "card.spec.js": "site-node-card",
     "colours.spec.js": "site-graph-viewer",
+    # One count per node and per line, and a click on a box (BDL-078, beadloom-btkd.7).
+    "counts.spec.js": "site-graph-viewer",
     "data-version.spec.js": "site-architecture-data",
     # Nodes named `__proto__`, `constructor` and the like drawn like any other (BDL-078 F-ytcg).
     "data-ids.spec.js": "site-graph-viewer",

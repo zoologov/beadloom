@@ -8,7 +8,9 @@
 // does not recognise, so the card knows no forge), its
 // docs each with its freshness, its bound tests, its public symbols, its edges
 // by kind and direction, its rule findings, its activity and its debt, then the
-// node's page and the `ctx` and `why` commands to copy.
+// node's page and the `ctx` and `why` commands to copy. A box's card says as well
+// what it holds and where its edges to the outside go: how many to and from each
+// node its lines on the map join it to.
 //
 // Every value comes from the data file. A field the file holds nothing for says
 // "none"; a field a version 1 file does not carry at all says "not recorded",
@@ -17,7 +19,7 @@
 
 import { computed } from "vue";
 import { withBase } from "vitepress";
-import { edgeGroupsOf } from "../../../entities/graph-edge/index.js";
+import { boxEdgesOf, edgeGroupsOf } from "../../../entities/graph-edge/index.js";
 import { layerOfNode } from "../../../entities/layer/index.js";
 import { shellQuote } from "../../../shared/lib/index.js";
 import { CopyCommand } from "../../../shared/ui/index.js";
@@ -26,6 +28,8 @@ const props = defineProps({
   node: { type: Object, required: true },
   edges: { type: Array, default: () => [] },
   layers: { type: Array, default: () => [] },
+  // Each node's box, `{ id: parent | null }`: a box's card says what it holds.
+  parents: { type: Object, default: null },
 });
 const emit = defineEmits(["select", "close"]);
 
@@ -47,6 +51,9 @@ const docLinkOf = computed(() => {
 });
 
 const edgeGroups = computed(() => edgeGroupsOf(props.node.id, props.edges));
+// What a box holds and where its edges go, or null for a node that holds nothing.
+const contents = computed(() => (props.parents ? boxEdgesOf(props.node.id, props.edges, props.parents) : null));
+const sumOf = (entries) => entries.reduce((sum, entry) => sum + entry.count, 0);
 
 // The activity line: changed lines in 30 days and the level, which is relative
 // to the project. A node with no change in
@@ -160,6 +167,27 @@ const placements = computed(() =>
           <code v-for="name in node.public_symbols.names" :key="name">{{ name }}</code>
         </p>
       </details>
+    </section>
+
+    <section v-if="contents" data-card-field="contents">
+      <h4>Inside</h4>
+      <p class="bl-card-line" :data-contents-inside="contents.inside">
+        {{ contents.inside }} {{ contents.inside === 1 ? "node" : "nodes" }}
+      </p>
+      <h5>{{ sumOf(contents.out) }} {{ sumOf(contents.out) === 1 ? "edge" : "edges" }} out</h5>
+      <p v-if="!contents.out.length" class="bl-card-none">{{ NONE }}</p>
+      <ul v-else>
+        <li v-for="entry in contents.out" :key="entry.id" :data-contents-out="entry.id" :data-count="entry.count">
+          to <code>{{ entry.id }}</code>: {{ entry.count }}
+        </li>
+      </ul>
+      <h5>{{ sumOf(contents.in) }} {{ sumOf(contents.in) === 1 ? "edge" : "edges" }} in</h5>
+      <p v-if="!contents.in.length" class="bl-card-none">{{ NONE }}</p>
+      <ul v-else>
+        <li v-for="entry in contents.in" :key="entry.id" :data-contents-in="entry.id" :data-count="entry.count">
+          from <code>{{ entry.id }}</code>: {{ entry.count }}
+        </li>
+      </ul>
     </section>
 
     <section data-card-field="edges">

@@ -19,7 +19,8 @@
 // A node's edges to the outside that a level does not draw at rest — carried by
 // a line between boxes that hold it — are its **outward** edges (`outwardOf`):
 // a node inside an open box carries their count, and the map draws them while
-// the node is under the pointer or selected (`ownLinesOf`).
+// the node is under the pointer or selected (`ownLinesOf`); an open box selected
+// draws its own the same way (`outwardOfOpen`).
 //
 // A level is a set of open boxes and nothing more: nothing is laid out again, so
 // no box moves between levels. Which boxes are open is decided here as well:
@@ -33,10 +34,12 @@
 // - **What a selection needs**: a node the reader asked for is drawn as itself
 //   with its own edges (`boxesRevealing`): every box that holds it is open, and
 //   so is the node when it is a box, since an edge of a closed box is carried by
-//   its pair's aggregated edge. A walk opens what every node it reaches needs,
-//   except that a hub selected with nothing more opens only its own
-//   (`selectionReveals`): opening every box a hub reaches draws nearly the whole
-//   graph again.
+//   its pair's aggregated edge. A selection with nothing more asked opens only
+//   what its own node needs, which is what the pointer on the node needs too, so
+//   a click draws the node's edges on the lines a hover draws; a walk the reader
+//   asked for — deeper, one way, the rest hidden, or the impact — opens what
+//   every node it reaches needs (`selectionReveals`). A selected box opens at any
+//   zoom (`openInView`, `forced`): the box is what the reader asked to see.
 //
 // One root that holds everything (a project's own box) is always open: closed, it
 // would be the whole overview. An edge onto it from inside a closed box says
@@ -90,8 +93,6 @@ export const LEVEL_OPTIONS = Object.freeze({
   fitFloor: 1.3,
   /** The most aggregated edges a level draws; the weakest beyond it are counted on their ends. */
   budget: 100,
-  /** A node with at least this many drawn edges is a hub. */
-  hubDegree: 20,
 });
 
 /**
@@ -241,6 +242,27 @@ export function outwardOf(tree, open, edges, level) {
 }
 
 /**
+ * The outward edges of the open box `box` at `level` (`levelOf`, for `edges`):
+ * the edges with exactly one end inside it that the level draws neither as
+ * themselves nor on a line with the box as an end, nor as a loop onto a box that
+ * holds it — what a line of a box that holds it carries at rest, as
+ * `outwardOf` reads them for a closed one.
+ */
+export function outwardOfOpen(tree, box, edges, level) {
+  const carriedBy = new Map();
+  for (const pair of level.pairs.values()) for (const id of [...pair.forward, ...pair.backward]) carriedBy.set(id, pair.ends);
+  const originals = new Set(level.originals);
+  return edges
+    .filter((edge) => {
+      const [from, to] = [isWithin(tree, edge.source, box), isWithin(tree, edge.target, box)];
+      if (from === to || originals.has(edge.id) || !siblingsOf(tree, edge.source, edge.target)) return false;
+      const other = from ? edge.target : edge.source;
+      return !holdersOf(tree, box).includes(other) && !(carriedBy.get(edge.id) || []).includes(box);
+    })
+    .map((edge) => edge.id);
+}
+
+/**
  * The lines that draw the outward edges of the nodes in `exposed`: `{ originals,
  * pairs }`. `edges` maps an edge id to `{ id, source, target }`; `outward` is
  * `outwardOf`'s answer; `asItself(id)` says whether a drawn node can take an edge
@@ -322,17 +344,21 @@ export function readableZoomOf(id, smallest, options = LEVEL_OPTIONS) {
  * height (`smallestChildOf`); `open` the boxes open now, which close only below
  * the smaller height; `wanted` the boxes a selection or a search needs, open
  * wherever they are once their nodes are readable, as the view opens the
- * readable boxes it overlaps.
+ * readable boxes it overlaps; `forced` the boxes open at any zoom, each with
+ * every box that holds it, whose children open as the children of any open box do.
  */
-export function openInView(tree, boxes, smallest, open, view, wanted = new Set(), options = LEVEL_OPTIONS) {
+export function openInView(tree, boxes, smallest, open, view, wanted = new Set(), options = LEVEL_OPTIONS, forced = new Set()) {
   const next = new Set();
-  if (view.zoom < view.fitZoom * options.fitFloor) return next;
+  const past = view.zoom >= view.fitZoom * options.fitFloor;
   const visit = (ids) => {
     for (const id of ids) {
       const box = boxes[id];
-      if (!box || !(wanted.has(id) || overlaps(box, view.extent))) continue;
-      const needed = readableZoomOf(id, smallest, options) * (open.has(id) ? options.closeShare : 1);
-      if (view.zoom < needed) continue;
+      if (!box) continue;
+      if (!forced.has(id)) {
+        if (!past || !(wanted.has(id) || overlaps(box, view.extent))) continue;
+        const needed = readableZoomOf(id, smallest, options) * (open.has(id) ? options.closeShare : 1);
+        if (view.zoom < needed) continue;
+      }
       next.add(id);
       visit(tree.childBoxes.get(id) || []);
     }
@@ -353,11 +379,11 @@ export function zoomDrawingOf(tree, id, smallest, fitZoom, options = LEVEL_OPTIO
 
 /**
  * The nodes a selection draws as themselves: its own node, and every node its
- * walk reached unless the node is a hub (`degree` at least `options.hubDegree`)
- * and the reader asked for nothing more than the selection (`wholeWalk` false).
+ * walk reached when the reader asked for more than the selection (`wholeWalk`).
+ * With nothing more asked a selection opens what the pointer on its node would
+ * need, so the node's edges are drawn on the lines a hover draws them on.
  */
-export function selectionReveals(focus, walked, { degree, wholeWalk }, options = LEVEL_OPTIONS) {
+export function selectionReveals(focus, walked, { wholeWalk }) {
   if (!focus) return [];
-  if (!wholeWalk && degree >= options.hubDegree) return [focus];
-  return [focus, ...walked];
+  return wholeWalk ? [focus, ...walked] : [focus];
 }

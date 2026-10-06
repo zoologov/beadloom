@@ -3,14 +3,19 @@
 //
 // A line of the map that carries more than one edge says how many on a pill: a
 // rounded label drawn over every line (`model/pillOverlay.js`), so no later line
-// paints over it. A line that carries one edge needs none. The pill stands on
+// paints over it. A line that carries one edge needs none, unless it is asked to
+// say its count whatever it is (`always`): the lines a reader is shown for a node
+// under the pointer or selected, whose pills are placed before every other. The pill stands on
 // its own line, at a point tried every few pixels along it, and only where it
 // covers no node, no title, no arrowhead and no other pill, and is far enough
 // from the line's ends to leave its arrowheads whole. Of the free points the one
 // nearest the middle of the line wins, with a price for a corner under the pill
-// and for each other line it would cover. The heaviest lines are placed first. A
+// and for each other line it would cover. After the lines asked to say their
+// count, the heaviest lines are placed first. A
 // line with no free point has no pill, and its count is in the note the viewer
-// shows while the pointer is on the line.
+// shows while the pointer is on the line; but a line asked to say its count says
+// it anyway, clear of other pills only, or at its middle when even that finds no
+// point (`crowded`): the count of the lines a reader is shown for a node is never missing.
 //
 // A pill keeps one size on screen. It is placed once per step of the map's scale
 // (`model/canvasMap.js`, `scaleAt`) and drawn at that place at any zoom within
@@ -85,13 +90,17 @@ function crosses(a, b, r) {
   return true;
 }
 
-/** The best free point for a pill `size` (pixels) along `line`, or null. */
-function bestPointOf(line, size, { placed, blocked, segments }) {
+/**
+ * The points a pill may stand at along `line`, `[{ a, b, s, length, where, off }]`:
+ * every few pixels, far enough from each end for its arrowhead and half the
+ * pill `size`, nearest the line's middle first, then in the line's order.
+ */
+function candidatesOf(line, size) {
   const points = line.points;
   const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));
   const total = lengths.reduce((sum, length) => sum + length, 0);
   const room = line.heads.map((head) => (head ? END_ROOM_PX.head : END_ROOM_PX.bare));
-  let best = null;
+  const out = [];
   let along = 0;
   for (let i = 0; i < lengths.length; i += 1) {
     const [a, b] = [points[i], points[i + 1]];
@@ -99,35 +108,68 @@ function bestPointOf(line, size, { placed, blocked, segments }) {
     for (let s = STEP_PX / 2; s < lengths[i]; s += STEP_PX) {
       const where = along + s;
       if (where < room[0] + reach || where > total - room[1] - reach) continue;
-      const [x, y] = [a.x + ((b.x - a.x) * s) / lengths[i], a.y + ((b.y - a.y) * s) / lengths[i]];
-      const rect = { x1: x - size.width / 2, y1: y - size.height / 2, x2: x + size.width / 2, y2: y + size.height / 2 };
-      const roomy = { x1: rect.x1 - PILL_MARKS.gap, y1: rect.y1 - PILL_MARKS.gap, x2: rect.x2 + PILL_MARKS.gap, y2: rect.y2 + PILL_MARKS.gap };
-      if (placed.near(roomy).some((other) => overlaps(rect, other, PILL_MARKS.gap)) || blocked.near(rect).some((r) => overlaps(rect, r))) continue;
-      let price = (Math.abs(where - total / 2) / (total || 1)) * PRICE.offMiddle;
-      if (s < reach || lengths[i] - s < reach) price += PRICE.corner;
-      if (best && price >= best.price) continue;
-      const grown = { x1: rect.x1 - COVER_PX, y1: rect.y1 - COVER_PX, x2: rect.x2 + COVER_PX, y2: rect.y2 + COVER_PX };
-      const covered = new Set();
-      for (const segment of segments.near(grown)) if (segment.id !== line.id && crosses(segment.a, segment.b, grown)) covered.add(segment.id);
-      price += covered.size * PRICE.covers;
-      if (!best || price < best.price) best = { price, x, y, rect };
+      out.push({ a, b, s, length: lengths[i], reach, where, off: Math.abs(where - total / 2) / (total || 1) });
     }
     along += lengths[i];
   }
+  return out.sort((x, y) => x.off - y.off || x.where - y.where);
+}
+
+/**
+ * The best free point for a pill `size` (pixels) along `line`, or null. The
+ * points are tried nearest the middle first, and the search stops once a point's
+ * distance from the middle alone costs as much as the best found: no point
+ * further out can be cheaper.
+ */
+function bestPointOf(line, size, { placed, blocked, segments }) {
+  let best = null;
+  for (const { a, b, s, length, reach, off } of candidatesOf(line, size)) {
+    let price = off * PRICE.offMiddle;
+    if (best && price >= best.price) break;
+    const [x, y] = [a.x + ((b.x - a.x) * s) / length, a.y + ((b.y - a.y) * s) / length];
+    const rect = { x1: x - size.width / 2, y1: y - size.height / 2, x2: x + size.width / 2, y2: y + size.height / 2 };
+    const roomy = { x1: rect.x1 - PILL_MARKS.gap, y1: rect.y1 - PILL_MARKS.gap, x2: rect.x2 + PILL_MARKS.gap, y2: rect.y2 + PILL_MARKS.gap };
+    if (placed.near(roomy).some((other) => overlaps(rect, other, PILL_MARKS.gap)) || blocked.near(rect).some((r) => overlaps(rect, r))) continue;
+    if (s < reach || length - s < reach) price += PRICE.corner;
+    if (best && price >= best.price) continue;
+    const grown = { x1: rect.x1 - COVER_PX, y1: rect.y1 - COVER_PX, x2: rect.x2 + COVER_PX, y2: rect.y2 + COVER_PX };
+    const covered = new Set();
+    for (const segment of segments.near(grown)) if (segment.id !== line.id && crosses(segment.a, segment.b, grown)) covered.add(segment.id);
+    price += covered.size * PRICE.covers;
+    if (!best || price < best.price) best = { price, x, y, rect };
+  }
   return best;
+}
+
+/** The middle of the polyline `points` along its length, and the rectangle a pill `size` there covers. */
+function middleOf(points, size) {
+  const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));
+  let left = lengths.reduce((sum, length) => sum + length, 0) / 2;
+  let at = points[0];
+  for (let i = 0; i < lengths.length; i += 1) {
+    if (left <= lengths[i]) {
+      const share = lengths[i] ? left / lengths[i] : 0;
+      at = { x: points[i].x + (points[i + 1].x - points[i].x) * share, y: points[i].y + (points[i + 1].y - points[i].y) * share };
+      break;
+    }
+    left -= lengths[i];
+  }
+  return { x: at.x, y: at.y, rect: { x1: at.x - size.width / 2, y1: at.y - size.height / 2, x2: at.x + size.width / 2, y2: at.y + size.height / 2 } };
 }
 
 /**
  * The pills of `lines` at `scale` (layout units per pixel): `{ placed, dropped }`.
  *
- * Each line is `{ id, text, weight, points, heads }`: its count, how many edges
- * it carries, its route in the graph's coordinates and whether each end, first
- * and last, has an arrowhead. `drawn` are the routes of every line drawn,
+ * Each line is `{ id, text, weight, always, points, heads }`: its count, how
+ * many edges it carries, whether it says its count even when it is one, its
+ * route in the graph's coordinates and whether each end, first and last, has an
+ * arrowhead. `drawn` are the routes of every line drawn,
  * `[{ id, points }]`; `blocked` the rectangles no pill may cover — nodes, titles,
  * arrowheads — in the graph's coordinates; `measure(text)` a pill text's width
- * in pixels. A placed pill is `{ id, text, x, y, width, height }`: its centre in
- * the graph's coordinates and its size on screen; `dropped` names the lines that
- * carry more than one edge and found no free point.
+ * in pixels. A placed pill is `{ id, text, x, y, width, height, crowded }`: its
+ * centre in the graph's coordinates, its size on screen, and whether it stands
+ * where it covers something, a line asked to say its count having no free point;
+ * `dropped` names the lines that were to say their count and have no pill.
  */
 export function pillPlacesOf({ lines, drawn, blocked, scale, measure }) {
   const inPixels = (p) => ({ x: p.x / scale, y: p.y / scale });
@@ -143,18 +185,23 @@ export function pillPlacesOf({ lines, drawn, blocked, scale, measure }) {
   }
   const pills = [];
   const dropped = [];
+  // What a line asked to say its count may cover when nothing is free: everything but another pill.
+  const nothing = bucketsOf();
   const order = lines
-    .filter((line) => line.weight >= PILL_MIN_WEIGHT)
-    .sort((a, b) => b.weight - a.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    .filter((line) => line.weight >= PILL_MIN_WEIGHT || line.always)
+    .sort((a, b) => Number(Boolean(b.always)) - Number(Boolean(a.always)) || b.weight - a.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   for (const line of order) {
     const width = Math.max(PILL_MARKS.height, measure(line.text) + 2 * PILL_MARKS.paddingX);
     const room = { width: width * STEP_ROOM, height: PILL_MARKS.height * STEP_ROOM };
-    const best = bestPointOf({ ...line, points: line.points.map(inPixels) }, room, context);
+    const inScreen = { ...line, points: line.points.map(inPixels) };
+    let best = bestPointOf(inScreen, room, context);
+    const crowded = !best && Boolean(line.always);
+    if (crowded) best = bestPointOf(inScreen, room, { ...context, blocked: nothing }) || middleOf(inScreen.points, room);
     if (!best) {
       dropped.push(line.id);
       continue;
     }
-    pills.push({ id: line.id, text: line.text, x: best.x * scale, y: best.y * scale, width, height: PILL_MARKS.height });
+    pills.push({ id: line.id, text: line.text, x: best.x * scale, y: best.y * scale, width, height: PILL_MARKS.height, crowded });
     context.placed.add(best.rect, best.rect);
   }
   return { placed: pills, dropped: dropped.sort() };

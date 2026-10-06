@@ -27,14 +27,14 @@ import { neighbourhood, impact } from "./support/graph.js";
 import { architectureData, openArchitecture, viewer, withAncestors } from "./support/viewer.js";
 import { drag } from "./support/pointer.js";
 import { LACKING, requireShape } from "./support/shape.js";
-import { CLOSE_SHARE, FIT_FLOOR, READABLE_PX, againstReadability, inView } from "./support/levels.js";
+import { CLOSE_SHARE, FIT_FLOOR, READABLE_PX, againstReadability, inView, settled } from "./support/levels.js";
 import { openThemeModules } from "./support/themeModules.js";
 
 /** How far a drawn box may lie from where it is drawn at full detail, in layout units. */
 const DISPLACEMENT = 1e-6;
 /** How far a point of an aggregated route may lie from a member's route, in layout units. */
 const TOLERANCE = 0.5;
-/** A node with this many drawn edges is a hub: selected alone, it opens only its own boxes. */
+/** A node with this many drawn edges is a hub: the busiest reaches boxes out of the view a selection frames. */
 const HUB_DEGREE = 20;
 /** The screen size a map mark keeps, in pixels, within one zoom step of the restyle. */
 const STEP = 1.25;
@@ -426,7 +426,7 @@ test("zooming into a box opens it once its nodes are readable and draws its chil
   expect(await viewer(page, "openBoxes")).toEqual(tree.wrapper ? [tree.wrapper] : []);
 });
 
-test("a selection opens the boxes that hold it; a hub selected alone does not open its neighbours' boxes out of view", async ({
+test("a selection opens the boxes that hold its node and no other, hub or not; asked for more, its walk opens every box it reaches", async ({
   page,
   request,
 }) => {
@@ -437,39 +437,30 @@ test("a selection opens the boxes that hold it; a hub selected alone does not op
     .filter((n) => tree.depth(n.id) >= 2 && (degree.get(n.id) || 0) < HUB_DEGREE && !tree.boxes.has(n.id))
     .sort((a, b) => tree.depth(b.id) - tree.depth(a.id) || a.id.localeCompare(b.id))[0];
   requireShape(deep, "no node that is not a hub sits two levels below the top");
+  const hub = [...degree].filter(([id, d]) => d >= HUB_DEGREE && !tree.boxes.has(id)).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
+  requireShape(hub, `no node that holds nothing has ${HUB_DEGREE} drawn edges`);
 
-  // A node that is not a hub opens its own boxes and its neighbours'.
-  await openArchitecture(page, `?focus=${encodeURIComponent(deep.id)}`);
-  const walk = neighbourhood(data, deep.id, 1, "both").ids;
-  await expect
-    .poll(async () => {
-      const visible = new Set(await viewer(page, "visibleIds"));
-      return walk.filter((id) => !visible.has(id));
-    })
-    .toEqual([]);
-  const openNow = new Set(await viewer(page, "openBoxes"));
-  const holding = [...withAncestors(walk, tree.parents)].filter((id) => tree.boxes.has(id) && !walk.includes(id));
-  expect(holding.filter((id) => !openNow.has(id))).toEqual([]);
-
-  // A hub, selected alone, opens its own boxes; the boxes of its neighbours open only where the view, framed
-  // readably on the hub, shows them, and its edges into a box out of view stay on that box's lines, marked.
-  const hub = [...degree].filter(([, d]) => d >= HUB_DEGREE).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
-  requireShape(hub, `no node has ${HUB_DEGREE} drawn edges`);
-  await openArchitecture(page, `?focus=${encodeURIComponent(hub)}`);
-  const own = [...withAncestors([hub], tree.parents)].filter((id) => id !== hub);
-  const open = await viewer(page, "openBoxes");
-  expect(own.filter((id) => !open.includes(id))).toEqual([]);
-  const { boxes } = await viewer(page, "elkGeometry");
-  const { extent } = await viewer(page, "level");
-  const others = tree.topBoxes.filter((id) => !own.includes(id));
-  const neighbours = neighbourhood(data, hub, 1, "both").ids.filter((id) => id !== hub);
-  const reached = others.filter((box) => neighbours.some((id) => withAncestors([id], tree.parents).has(box) && id !== box));
-  const away = reached.filter((box) => !inView(boxes[box], extent));
-  requireShape(away.length > 0, "the busiest hub has no neighbour in a box of its own out of view");
-  expect(away.filter((box) => open.includes(box))).toEqual([]);
-  // Selected, the hub's own edges are drawn: into each such box, one line of its own, on the walk.
-  const marked = (await viewer(page, "ownLines")).filter((line) => line.ends.includes(hub) && line.walk).flatMap((line) => line.ends);
-  expect(away.filter((box) => !marked.includes(box))).toEqual([]);
+  // The pointer on a node opens no box, and a click draws the node's edges on the lines the pointer
+  // draws (owner, 2026-10-06): a selection with nothing more asked opens the boxes that hold its node.
+  // The boxes of its neighbours open only where the view, framed readably on it, shows them, and its
+  // edges into a box out of view are on lines of its own into that box, on the walk.
+  const away = {};
+  for (const subject of [deep.id, hub]) {
+    await openArchitecture(page, `?focus=${encodeURIComponent(subject)}`);
+    await settled(page);
+    const own = [...withAncestors([subject], tree.parents)].filter((id) => id !== subject);
+    const open = await viewer(page, "openBoxes");
+    expect(own.filter((id) => !open.includes(id)), subject).toEqual([]);
+    const geometry = (await viewer(page, "elkGeometry")).boxes;
+    const { extent } = await viewer(page, "level");
+    const neighbours = neighbourhood(data, subject, 1, "both").ids.filter((id) => id !== subject);
+    const reached = tree.topBoxes.filter((box) => !own.includes(box) && neighbours.some((id) => withAncestors([id], tree.parents).has(box) && id !== box));
+    away[subject] = reached.filter((box) => !inView(geometry[box], extent));
+    expect(away[subject].filter((box) => open.includes(box)), subject).toEqual([]);
+    const marked = (await viewer(page, "ownLines")).filter((line) => line.ends.includes(subject) && line.walk).flatMap((line) => line.ends);
+    expect(away[subject].filter((box) => !marked.includes(box)), subject).toEqual([]);
+  }
+  requireShape(away[hub].length > 0, "the busiest hub has no neighbour in a box of its own out of view");
 
   // Asked for more — two steps, or impact — the walk opens every box it reaches.
   for (const [query, ids] of [

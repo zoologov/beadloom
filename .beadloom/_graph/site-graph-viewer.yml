@@ -12,6 +12,7 @@ nodes:
     tests:
       - src/beadloom/site_scaffold/e2e/bundles.spec.js
       - src/beadloom/site_scaffold/e2e/colours.spec.js
+      - src/beadloom/site_scaffold/e2e/counts.spec.js
       - src/beadloom/site_scaffold/e2e/data-ids.spec.js
       - src/beadloom/site_scaffold/e2e/graph-viewer-instances.spec.js
       - src/beadloom/site_scaffold/e2e/heads.spec.js

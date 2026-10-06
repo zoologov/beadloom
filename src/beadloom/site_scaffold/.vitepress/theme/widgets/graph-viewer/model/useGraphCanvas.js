@@ -38,7 +38,7 @@ import { canvasMap } from "./canvasMap.js";
 import { followedOverlay } from "./followedOverlay.js";
 import { pillOverlay } from "./pillOverlay.js";
 import { sharedLines } from "./sharedLines.js";
-import { COLLAPSED, LOOP_BOX, LOOP_END } from "../lib/levels.js";
+import { COLLAPSED, LOOP_BOX, LOOP_END, endsOfLine } from "../lib/levels.js";
 import { GEOMETRY } from "../lib/stylesheet.js";
 
 /** Cytoscape's layout that places nothing, run when the graph is created. */
@@ -300,6 +300,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     const id = node.id();
     const distance = selection.distances.get(id);
     if (distance === undefined) {
+      // What a selected box holds is what was selected: drawn as it is, nothing dimmed.
+      if (selection.inside?.has(id)) return;
       if (!selection.keep.has(id)) node.addClass(outside);
       // A closed box that holds a node of the walk is part of what the selection frames.
       else if (node.hasClass(COLLAPSED)) node.addClass("holds-walk");
@@ -329,7 +331,17 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     if (!selection) return;
     const outside = selection.hide ? "is-outside" : "is-dimmed";
     instance.nodes().not(`.${LOOP_END}`).forEach((node) => markNode(node, selection, outside));
-    instance.edges().forEach((edge) => edge.addClass(walked(edge, selection) ? "is-walk-edge" : outside));
+    // A line between two parts of a selected box, or from one onto a box that holds it, is drawn as it is,
+    // as the box's contents are.
+    const inside = (edge) => {
+      if (!selection.inside) return false;
+      const { source, target } = endsOfLine(edge);
+      const kept = (id) => selection.inside.has(id) || Boolean(selection.holders?.has(id));
+      return kept(source) && kept(target) && (selection.inside.has(source) || selection.inside.has(target));
+    };
+    instance.edges().forEach((edge) => {
+      if (!inside(edge)) edge.addClass(walked(edge, selection) ? "is-walk-edge" : outside);
+    });
     const focus = instance.getElementById(selection.focus);
     if (focus.nonempty()) {
       focus.addClass("is-selected");
@@ -340,21 +352,26 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   /**
    * Mark `selection` on the canvas, or clear the marks when it is null.
    *
-   * `selection` is `{ focus, distances, edges, keep, hide, rings, risks, reveal }`:
-   * the walk's nodes by distance and its edge keys; `keep`, the nodes that are
-   * not outside (the walk and its containers); `hide`, whether what is outside
-   * is hidden rather than dimmed; in impact mode, `rings` (id to ring) and
-   * `risks` (the ids to mark); and `reveal`, the nodes the selection draws as
-   * themselves with their own edges, opening the boxes that hold them and the
-   * ones that are boxes. Every edge of the selected
-   * node is drawn, whatever the map's budget.
+   * `selection` is `{ focus, distances, edges, keep, hide, rings, risks, reveal,
+   * box, inside }`: the walk's nodes by distance and its edge keys; `keep`, the
+   * nodes that are not outside (the walk and its containers); `hide`, whether
+   * what is outside is hidden rather than dimmed; in impact mode, `rings` (id to
+   * ring) and `risks` (the ids to mark); `reveal`, the nodes the selection draws
+   * as themselves with their own edges, opening the boxes that hold them and the
+   * ones that are boxes; and when a box is selected, `box`, opened at any zoom,
+   * `inside`, everything it holds and itself, drawn unmarked, and `holders`, the
+   * boxes that hold it, a line onto which from inside is drawn unmarked too. Every edge of
+   * the selected node is drawn, whatever the map's budget, on the lines the
+   * pointer on it draws, and the lines of its walk say how many of the walk's
+   * edges they carry.
    */
   function markSelection(selection) {
     marked = selection;
     map?.reveal("selection", selection?.reveal || []);
+    map?.reveal("selected box", selection?.box ? [selection.box] : [], { anyZoom: true });
     map?.setExempt("selection", selection?.focus || null);
-    map?.expose("selection", selection?.focus ? [selection.focus] : []);
-    map?.setWalk(selection ? [...selection.edges] : null);
+    map?.expose("selection", selection?.focus ? [selection.focus] : [], { openBoxes: true });
+    map?.setWalk(selection ? [...selection.edges] : null, selection?.focus || null);
     redraw();
   }
 

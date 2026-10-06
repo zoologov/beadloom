@@ -71,6 +71,7 @@ import {
 import {
   NEIGHBOURHOOD_DEFAULTS,
   NeighbourhoodControls,
+  boxNeighbourhoodOf,
   neighbourhoodOf,
 } from "../../../features/select-neighbourhood/index.js";
 import {
@@ -82,13 +83,14 @@ import {
 } from "../../../features/impact-view/index.js";
 import { FullscreenButton, useFullscreen } from "../../../features/fullscreen/index.js";
 import { useUrlState } from "../../../features/url-state/index.js";
-import { withAncestors } from "../../../shared/lib/index.js";
+import { childrenOf, subtreeOf, withAncestors } from "../../../shared/lib/index.js";
 import { useThemeTokens } from "../../../shared/theme-tokens/index.js";
 import { buildElements } from "../lib/elements.js";
 import { buildStylesheet } from "../lib/stylesheet.js";
 import { edgePaletteOf } from "../lib/edgePalette.js";
 import { AGGREGATE, endsOfLine, selectionReveals } from "../lib/levels.js";
 import { useGraphCanvas } from "../model/useGraphCanvas.js";
+import { SAID } from "../model/canvasMap.js";
 import { keyHandler } from "../model/viewerKeys.js";
 import { exposeTestHandle } from "../model/testHandle.js";
 import { usePanelId } from "../model/usePanelId.js";
@@ -159,18 +161,29 @@ const neutralNeighbourhood = computed(
     state.dir === NEIGHBOURHOOD_DEFAULTS.dir &&
     Boolean(state.hide) === NEIGHBOURHOOD_DEFAULTS.hide
 );
-// How many drawn edges a node has: a hub's walk opens only its own boxes.
-const degreeOf = (id) =>
-  (drawnAdjacency.value.out.get(id)?.length || 0) + (drawnAdjacency.value.in.get(id)?.length || 0);
+const children = computed(() => childrenOf(parents.value));
+// What a selected box holds, itself included, or null when the selection is no
+// box. The impact mode walks from the box's own node, as from any other.
+const selectedBox = computed(() =>
+  !impactMode.value && children.value.has(state.focus) ? subtreeOf(state.focus, children.value) : null
+);
+// The boxes that hold the selected node: an edge onto one of them is no neighbour's.
+const holdersOfFocus = computed(() => {
+  const held = withAncestors([state.focus], parents.value);
+  held.delete(state.focus);
+  return held;
+});
 // What the search box finds, whose boxes it opens.
 const searched = computed(() => mode.searched(graph.value, state));
 
-// The walk from the selected node, or null when nothing is selected.
+// The walk from the selected node, or null when nothing is selected. A box's
+// neighbourhood is everything it holds taken as one node: its edges cross its border.
 const walk = computed(() => {
   if (!selectedNode.value) return null;
-  return impactMode.value
-    ? impactOf(state.focus, dependents.value)
-    : neighbourhoodOf(state.focus, drawnAdjacency.value, { depth: state.depth, dir: state.dir });
+  const options = { depth: state.depth, dir: state.dir };
+  if (impactMode.value) return impactOf(state.focus, dependents.value);
+  if (selectedBox.value) return boxNeighbourhoodOf(state.focus, selectedBox.value, holdersOfFocus.value, drawnAdjacency.value, options);
+  return neighbourhoodOf(state.focus, drawnAdjacency.value, options);
 });
 const summary = computed(() => {
   if (!walk.value || !impactMode.value) return null;
@@ -185,20 +198,23 @@ const summary = computed(() => {
 const selection = computed(() => {
   if (!walk.value) return null;
   const { distances, edges: walked } = walk.value;
+  const inside = selectedBox.value;
   return {
     focus: state.focus,
     distances,
     edges: walked,
-    keep: withAncestors(distances.keys(), parents.value),
+    keep: new Set([...withAncestors(distances.keys(), parents.value), ...(inside || [])]),
     hide: Boolean(state.hide),
     rings: summary.value
       ? new Map([...distances].map(([id, distance]) => [id, ringOf(distance)]))
       : null,
     risks: summary.value ? new Set(summary.value.risky.map((entry) => entry.id)) : null,
     reveal: selectionReveals(state.focus, [...distances.keys()], {
-      degree: degreeOf(state.focus),
       wholeWalk: impactMode.value || !neutralNeighbourhood.value,
     }),
+    box: inside ? state.focus : null,
+    inside,
+    holders: inside ? holdersOfFocus.value : null,
   };
 });
 
@@ -218,7 +234,8 @@ const legendColours = computed(() =>
 
 // A selection made anywhere — a tap on the canvas, the URL, the card, the impact
 // list — is framed, so the neighbourhood the reader asked for is in view and
-// readable (the owner's ruling 7).
+// readable (the owner's ruling 7). A selected box is framed whole, open: the box
+// is what the reader asked to see, and zooms further in himself.
 function select(id) {
   if (!nodeById.value.has(id) || state.focus === id) return;
   state.focus = id;
@@ -264,7 +281,8 @@ const bundleNote = computed(() => {
   const rest = ids.length - named.length;
   return `${ids.length} edges along this line: ${named.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}`;
 });
-// The edges an aggregated edge under the pointer carries, each way, named by its two ends.
+// The edges an aggregated edge under the pointer carries, each way, named by its
+// two ends; during a selection, the walk's edges it carries first, as its pill says.
 const aggregateNote = computed(() => {
   const ids = canvas.hoveredEdges.value;
   const instance = canvas.cy.value;
@@ -275,7 +293,10 @@ const aggregateNote = computed(() => {
   const way = (count, from, to) =>
     count ? `${count} ${count === 1 ? "edge" : "edges"} ${labelOf(from)} → ${labelOf(to)}` : "";
   const [a, b] = [edge.data("source"), edge.data("target")];
-  return [way(edge.data("forward"), a, b), way(edge.data("backward"), b, a)].filter(Boolean).join("; ");
+  const both = ({ forward, backward }) => [way(forward, a, b), way(backward, b, a)].filter(Boolean).join("; ");
+  const all = both({ forward: edge.data("forward"), backward: edge.data("backward") });
+  const said = edge.data(SAID);
+  return said ? `${both(said)} of the selection's walk, of ${all} in all` : all;
 });
 
 // How much of the canvas's right edge the panel lies over: in the page it
@@ -305,13 +326,19 @@ function laidOutBoxOf(ids) {
 /**
  * Frame the selection's neighbourhood, at no less than the zoom at which its
  * node, and every node the selection draws as itself, is drawn readably, centred
- * on the node where the walk does not fit at that zoom; with nothing selected,
- * fit everything visible.
+ * on the node where the walk does not fit at that zoom; a selected box whole,
+ * open at whatever zoom it fits at; with nothing selected, fit everything visible.
  */
 function frameSelection({ animate }) {
   nextTick(() => {
+    fitCanvasToContainer();
     const focus = selection.value?.focus;
     const map = canvas.map();
+    const whole = selection.value?.box ? laidOutBoxOf([focus]) : null;
+    if (whole && map) {
+      navigation.frame({ box: whole, focus: whole }, { animate });
+      return;
+    }
     const box = focus ? laidOutBoxOf([...selection.value.distances.keys()]) : null;
     if (!box || !map) {
       navigation.fit();
@@ -339,6 +366,17 @@ function frameSearch() {
     const leastZoom = Math.max(...found.map((id) => map.zoomDrawing(id)));
     navigation.frame({ box, focus: laidOutBoxOf(found.slice(0, 1)), leastZoom });
   });
+}
+
+/**
+ * Have the canvas take its container's size where the panel, opened by the
+ * selection, took room from it beside the canvas, as in full screen: a frame is
+ * measured on the canvas as it will be seen.
+ */
+function fitCanvasToContainer() {
+  const instance = canvas.cy.value;
+  const element = container.value;
+  if (instance && element && (element.clientWidth !== instance.width() || element.clientHeight !== instance.height())) canvas.resize();
 }
 
 /** Fit the canvas to its new size: the selection framed again, or everything visible. */
@@ -532,6 +570,7 @@ onBeforeUnmount(() => disposeHandle());
           :layer-name="selectedLayer"
           :edges="edges"
           :layers="layers"
+          :parents="parents"
           :contracts="graph.contracts"
           :select="select"
           :close="clearSelection"

@@ -251,7 +251,7 @@ async function selectedSeen(page, id) {
   };
 }
 
-test("selecting a node frames its neighbourhood at a zoom where it is drawn as itself and readable, and draws nothing unreadable: by the URL, a hub by the URL, and a tap", async ({
+test("selecting a node frames its neighbourhood at a zoom where it is drawn as itself and readable, and draws nothing unreadable: by the URL and a hub by the URL; a tap on a box frames the box whole", async ({
   page,
   request,
 }) => {
@@ -260,7 +260,7 @@ test("selecting a node frames its neighbourhood at a zoom where it is drawn as i
   const degree = degreesOf(data);
   const leaves = data.nodes.filter((n) => !tree.boxes.has(n.id) && tree.depth(n.id) >= 2);
   const quiet = leaves.filter((n) => (degree.get(n.id) || 0) > 0 && (degree.get(n.id) || 0) < HUB_DEGREE).sort((a, b) => tree.depth(b.id) - tree.depth(a.id) || (a.id < b.id ? -1 : 1))[0];
-  const hub = [...degree].filter(([id, d]) => d >= HUB_DEGREE && tree.parents[id] && tree.parents[id] !== tree.wrapper).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]?.[0];
+  const hub = [...degree].filter(([id, d]) => d >= HUB_DEGREE && !tree.boxes.has(id) && tree.parents[id] && tree.parents[id] !== tree.wrapper).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]?.[0];
   requireShape(Boolean(quiet) && Boolean(hub), "no node two levels down with a few edges, or no hub inside a box");
 
   const found = {};
@@ -269,7 +269,8 @@ test("selecting a node frames its neighbourhood at a zoom where it is drawn as i
     await settled(page);
     found[name] = { ...(await selectedSeen(page, id)), unreadable: await unreadableNodes(page, tree), zoom: await viewer(page, "zoom") };
   }
-  // A tap on a top-level box at the overview selects it: the view frames it, and what it opens is readable.
+  // A tap on a top-level box at the overview selects it: the view frames the whole box, open, even where
+  // its nodes are drawn smaller than a reader reads (owner, 2026-10-06): the box is what was asked for.
   await openArchitecture(page);
   await page.getByTestId("graph-canvas").scrollIntoViewIfNeeded();
   await twoFrames(page);
@@ -278,11 +279,18 @@ test("selecting a node frames its neighbourhood at a zoom where it is drawn as i
   await page.mouse.click((b.x1 + b.x2) / 2, b.y1 + Math.min(12, (b.y2 - b.y1) / 4));
   await expect.poll(() => viewer(page, "selection")).toBe(target);
   await settled(page);
-  found["a tap on a box"] = { ...(await selectedSeen(page, target)), unreadable: await unreadableNodes(page, tree), zoom: await viewer(page, "zoom") };
+  const canvas = await page.getByTestId("graph-canvas").boundingBox();
+  const whole = (await viewer(page, "boxes"))[target];
+  found["a tap on a box"] = {
+    ...(await selectedSeen(page, target)),
+    unreadable: [],
+    whole: whole.x1 >= canvas.x && whole.x2 <= canvas.x + canvas.width && whole.y1 >= canvas.y && whole.y2 <= canvas.y + canvas.height && (await viewer(page, "openBoxes")).includes(target),
+    zoom: await viewer(page, "zoom"),
+  };
   const readable = { drawn: true, tall: true, inCanvas: true, unreadable: [] };
   const { boxes } = await viewer(page, "elkGeometry");
   test.info().annotations.push({ type: "measured", description: JSON.stringify(Object.fromEntries(Object.entries(found).map(([k, v]) => [k, v.zoom]))) });
-  expect(Object.fromEntries(Object.entries(found).map(([k, v]) => [k, { drawn: v.drawn, tall: k === "a tap on a box" ? true : v.tall, inCanvas: v.inCanvas, unreadable: v.unreadable }]))).toEqual({
+  expect(Object.fromEntries(Object.entries(found).map(([k, v]) => [k, { drawn: v.drawn, tall: k === "a tap on a box" ? v.whole : v.tall, inCanvas: v.inCanvas, unreadable: v.unreadable }]))).toEqual({
     "by the URL": readable,
     "a hub by the URL": readable,
     "a tap on a box": readable,

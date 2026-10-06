@@ -33,6 +33,16 @@
 // with no head of its own (`STUB_AT`). A selection's walk draws its edges as
 // themselves wherever both their ends can take one. An edge from a node to a box
 // that holds it is drawn by a line of its own along its route (`loopLines.js`).
+// The walk's edges of the selected node itself are its own lines, the lines the
+// pointer on it draws: a click and a hover draw the same lines. A box selected
+// open draws its own outward edges the same way (`lib/levels.js`, `outwardOfOpen`).
+//
+// What a line says is how many edges it carries, each way. While a node or a box
+// is selected, a line that carries edges of its walk says how many of the walk's
+// edges it carries instead (`SAID`), so a node folded into its box by zooming out
+// still says its own count on the box's line; its arrowheads still show every
+// edge it carries. A line of a node under the pointer or selected says its count
+// even when it is one (`OWN_LINE`, `pillOverlay.js`).
 //
 // What a box or a line says on screen — every line's weight, arrowheads and
 // corners, a closed box's title and a top-level node's — keeps one size on
@@ -78,6 +88,7 @@ import {
   levelOf,
   openInView,
   outwardOf,
+  outwardOfOpen,
   ownLinesOf,
   smallestChildOf,
   zoomDrawingOf,
@@ -99,6 +110,10 @@ export const FORCED = "test";
 export const SCALE_STEP = 1.25;
 /** The style key an aggregated edge takes when one of its edges is a violation: it must not be lost. */
 const LOUDEST_STYLE = "violation";
+/** The data a line carries while it says a selection's walk rather than all it carries: `{ forward, backward }`. */
+export const SAID = "said";
+/** The data a node's own line carries, which says its count even when it is one. */
+export const OWN_LINE = "ownLine";
 
 const sameSet = (a, b) => a.size === b.size && [...a].every((id) => b.has(id));
 
@@ -166,7 +181,11 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   const reveals = new Map();
   const exempt = new Map();
   const exposures = new Map();
+  // The sources whose open boxes draw their own outward edges: a selected box's, not the pointer's.
+  const exposingOpen = new Set();
   let walkKeys = null;
+  // The node or box the walk was taken from: its own edges are its own lines, not the walk's.
+  let walkFocus = null;
   let shown = () => true;
   // How many times the filters have changed, and the level last worked out (`levelNow`).
   let shownVersion = 0;
@@ -319,9 +338,10 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
    */
   function wanted() {
     const needed = new Set();
-    for (const [source, boxes] of reveals) if (source !== FORCED) for (const box of boxes) needed.add(box);
-    const next = placed ? openInView(tree, geometry.boxes, smallest, open, viewNow(), needed, options) : new Set();
-    for (const box of reveals.get(FORCED) || []) next.add(box);
+    const forced = new Set();
+    for (const { boxes, anyZoom } of reveals.values()) for (const box of boxes) (anyZoom ? forced : needed).add(box);
+    const next = placed ? openInView(tree, geometry.boxes, smallest, open, viewNow(), needed, options, forced) : new Set();
+    for (const box of forced) next.add(box);
     if (tree.wrapper) next.add(tree.wrapper);
     return next;
   }
@@ -365,11 +385,14 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
 
   function dress(element, pair) {
     const members = [...pair.forward, ...pair.backward].map((id) => edges.get(id));
+    const said = pair.said || { forward: pair.forward.length, backward: pair.backward.length };
     const data = {
       forward: pair.forward.length,
       backward: pair.backward.length,
       weight: pair.weight,
-      countLabel: countLabelOf(pair.forward.length, pair.backward.length),
+      countLabel: countLabelOf(said.forward, said.backward),
+      saidWeight: said.forward + said.backward,
+      [OWN_LINE]: pair.name.startsWith("own\n"),
       styleKey: styleKeyOf(members),
       [MAP_SCALE]: scale,
     };
@@ -379,6 +402,8 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     const shown = path && (pathOutside(path, grownNow.get(a) || null, grownNow.get(b) || null) || path);
     const route = shown ? segmentsOf(shown, nodes.get(a).position(), nodes.get(b).position()) : null;
     element.data(data);
+    if (pair.said) element.data(SAID, pair.said);
+    else element.removeData(SAID);
     if (route) element.data("route", route);
     else element.removeData("route");
     if (stubs.has(pair.name)) element.data(STUB_AT, stubs.get(pair.name));
@@ -410,14 +435,20 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
    */
   function extrasOf(level, openNow, outward, kept) {
     const exposed = new Set();
-    for (const ids of exposures.values()) {
+    // An open box exposed draws its own outward edges, which its nodes carry at rest.
+    const ofOpen = new Map(outward);
+    for (const [source, ids] of exposures) {
       for (const id of ids) {
-        if (level.nodes.has(id) && id !== tree.wrapper && !(tree.boxes.has(id) && openNow.has(id))) exposed.add(id);
+        if (!level.nodes.has(id) || id === tree.wrapper) continue;
+        const isOpen = tree.boxes.has(id) && openNow.has(id);
+        if (isOpen && !exposingOpen.has(source)) continue;
+        exposed.add(id);
+        if (isOpen) ofOpen.set(id, outwardOfOpen(tree, id, plainEdges.filter((edge) => kept(edge.id)), level));
       }
     }
     // An end takes an edge drawn as itself when it is drawn at its laid-out size: a leaf, or an open box, on its route.
     const asItself = (id) => level.nodes.has(id) && !(tree.boxes.has(id) && !openNow.has(id)) && !grownNow.has(id);
-    const lines = ownLinesOf(tree, openNow, edgeById, outward, exposed, asItself);
+    const lines = ownLinesOf(tree, openNow, edgeById, ofOpen, exposed, asItself);
     const originals = new Set(lines.originals);
     for (const id of level.originals) originals.delete(id);
     const own = [...lines.pairs.values()].map((pair) => weigh(pair, kept)).filter((pair) => pair.weight > 0);
@@ -464,8 +495,10 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
       : [];
     // A selection's walk draws its edges as themselves wherever both their ends are drawn, a box open: a
     // node drawn larger than its layout is then drawn at its laid-out size, as the selection frames it.
+    // The edges of the selected node itself are its own lines, as the pointer on it draws them.
     const walked = walkKeys ? [...walkKeys].map((key) => edgeById.get(byKey.get(key))).filter(Boolean) : [];
-    const walk = walked.filter((edge) => !rest.has(edge.id) && takes(edge.source) && takes(edge.target));
+    const focus = new Set(walkFocus === null ? [] : [walkFocus]);
+    const walk = walked.filter((edge) => !rest.has(edge.id) && !isWithin(edge.source, focus) && !isWithin(edge.target, focus) && takes(edge.source) && takes(edge.target));
     return [...new Set([...full, ...walk].map((edge) => edge.id))];
   }
 
@@ -482,6 +515,19 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
       levelCache = { key, level, outward };
     }
     return levelCache;
+  }
+
+  /**
+   * What `pair` says while a selection's walk is marked and it carries edges of
+   * the walk no other line draws: how many each way, `{ forward, backward }`;
+   * otherwise null, and it says all it carries. A node's own line says its own.
+   */
+  function saidOf(pair) {
+    if (!walkKeys) return null;
+    const own = pair.name.startsWith("own\n");
+    const walkedOf = (ids) => ids.filter((id) => walkKeys.has(edges.get(id).data("key")) && (own || !drawnElsewhere.has(id))).length;
+    const said = { forward: walkedOf(pair.forward), backward: walkedOf(pair.backward) };
+    return said.forward + said.backward ? said : null;
   }
 
   /** Draw the level wanted now: the boxes open by the view and by every reveal. */
@@ -513,6 +559,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     drawnElsewhere = new Set([...extras.originals, ...extras.own.flatMap((pair) => [...pair.forward, ...pair.backward])]);
     // A line of a box whose every edge shown is drawn by another line now is not drawn twice.
     for (const pair of weighed) pair.twice = [...pair.forward, ...pair.backward].every((id) => drawnElsewhere.has(id));
+    for (const pair of [...weighed, ...extras.own]) pair.said = saidOf(pair);
     const drawnPairs = new Set([...weighed.filter((pair) => !pair.hidden && !pair.twice), ...extras.own].map((pair) => pair.name));
     const originals = new Set([...level.originals, ...extras.originals]);
 
@@ -635,25 +682,36 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     /**
      * Draw each node of `ids` as itself with its own edges, for `source`: every
      * box that holds one open, and each one that is a box, once its nodes are
-     * readable — at any zoom for the test handle (`FORCED`); an empty list lets them close.
+     * readable — at any zoom for the test handle (`FORCED`) and with `anyZoom`
+     * (a selected box); an empty list lets them close.
      */
-    reveal(source, ids) {
-      reveals.set(source, boxesRevealing(tree, ids || []));
+    reveal(source, ids, { anyZoom = source === FORCED } = {}) {
+      reveals.set(source, { boxes: boxesRevealing(tree, ids || []), anyZoom });
     },
     /**
      * Draw the outward edges of each node of `ids` for `source` (the pointer,
-     * the selection, the test handle); an empty list takes them back. True when
-     * the drawing changes.
+     * the selection, the test handle); an empty list takes them back. With
+     * `openBoxes`, an open box of `ids` draws its own too, as a selected box
+     * does; the pointer resting inside an open box draws nothing for it. True
+     * when the drawing changes.
      */
-    expose(source, ids) {
+    expose(source, ids, { openBoxes = false } = {}) {
       const before = exposures.get(source) || [];
       const after = [...new Set(ids || [])];
       exposures.set(source, after);
+      if (openBoxes) exposingOpen.add(source);
+      else exposingOpen.delete(source);
       return exposesOther(before, after);
     },
-    /** Draw the edges whose keys are in `keys`, a selection's walk, as themselves where both their ends can take one; null for none. */
-    setWalk(keys) {
+    /**
+     * Draw the edges whose keys are in `keys`, a selection's walk from `focus`,
+     * as themselves where both their ends can take one, and have every line that
+     * carries some say how many; null for none. The edges of `focus` itself, or
+     * of everything in it when it is a box, are its own lines (`expose`).
+     */
+    setWalk(keys, focus = null) {
       walkKeys = keys ? new Set(keys) : null;
+      walkFocus = keys ? focus : null;
     },
     /** Have an aggregated edge carry only the edges `predicate` keeps: the ones the filters show. */
     setShown(predicate) {
@@ -688,6 +746,12 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
       const entry = aggregates.get(pairOfElement.get(element.id()));
       if (!entry) return [];
       return [...entry.pair.forward, ...entry.pair.backward].filter((id) => !drawnElsewhere.has(id) || entry.pair.name.startsWith("own\n")).map((id) => edges.get(id).data("key"));
+    },
+    /** The keys of the walk's edges a node's own line `element` draws: the ones it carries that the walk took. */
+    walkedKeysOf(element) {
+      const entry = aggregates.get(pairOfElement.get(element.id()));
+      if (!entry || !walkKeys) return [];
+      return [...entry.pair.forward, ...entry.pair.backward].map((id) => edges.get(id).data("key")).filter((key) => walkKeys.has(key));
     },
     keysEachWay(pair) {
       const keyOf = (id) => edges.get(id).data("key");

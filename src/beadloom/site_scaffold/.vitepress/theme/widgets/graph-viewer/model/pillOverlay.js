@@ -9,7 +9,13 @@
 // drawn or the step of the map's scale changes. A pill keeps one size on screen.
 // While the pointer rests on a node, the pills of its lines are drawn as they are
 // and every other pill is faded, as their lines are; a pill of a line outside a
-// selection is faded too.
+// selection is faded too. A line says its count on a pill once it carries more
+// than one edge; a line of the node under the pointer, a node's own line and a
+// line of a selection's walk say it even when it is one, so the numbers on the
+// lines a reader is shown for a node add up to the node's count; such a pill is
+// drawn even where its line has no free place for it (`lib/pillPlaces.js`,
+// `crowded`). What a line says is its data's `countLabel` (`canvasMap.js`):
+// during a selection, how many of the walk's edges it carries.
 //
 // A closed box large enough on screen says how many edges come into it and go
 // out of it — the ones the budget leaves out included — in a line of small text
@@ -32,7 +38,8 @@ import { headLengthOf, routePointsOf } from "../lib/lineMarks.js";
 import { MAP_MARKS, MAP_TITLE, OUTWARD, TALLY } from "../lib/mapMarks.js";
 import { GEOMETRY } from "../lib/stylesheet.js";
 import { PILL_MARKS, pillPlacesOf } from "../lib/pillPlaces.js";
-import { BEHIND } from "./canvasMarks.js";
+import { BEHIND, IN_FRONT } from "./canvasMarks.js";
+import { OWN_LINE } from "./canvasMap.js";
 import { overlayCanvas } from "./overlayCanvas.js";
 
 /** How opaque a faded pill is drawn. */
@@ -78,11 +85,18 @@ export function pillOverlay(cy, container, { tokens, map }) {
   const pillFont = (look) => `600 ${PILL_MARKS.font}px ${look.font}`;
   const tallyFont = (look) => `${TALLY_MARKS.weight} ${TALLY_MARKS.size}px ${look.font}`;
 
-  /** Where each drawn line's pill stands, worked out again when the drawing or the scale's step changes. */
+  /** Whether a line says its count even when it is one: a line of the node under the pointer, a node's own line, a line of a walk. */
+  const saysOne = (edge) => edge.hasClass(IN_FRONT) || edge.hasClass("is-walk-edge") || Boolean(edge.data(OWN_LINE));
+
+  /**
+   * Where each drawn line's pill stands, worked out again when the drawing, the
+   * scale's step or the lines that say a count of one change.
+   */
   function placesNow(look) {
     const drawn = cy.edges().filter((edge) => edge.visible() && edge.data("route"));
     const lines = drawn.filter((edge) => edge.data(AGGREGATE));
-    const key = `${map()?.version()}|${lines.map((edge) => edge.id()).join(",")}|${look.font}`;
+    const ones = lines.filter(saysOne).map((edge) => edge.id());
+    const key = `${map()?.version()}|${lines.map((edge) => edge.id()).join(",")}|${ones.join(",")}|${look.font}`;
     if (places.key === key) return places;
     const scale = map()?.scale() || 1;
     const routes = drawn.map((edge) => ({ id: edge.id(), points: routePointsOf(edge) }));
@@ -96,10 +110,12 @@ export function pillOverlay(cy, container, { tokens, map }) {
       if (heads.source) blocked.push(headBoxOf(points[0], points[1], headLengthOf(edge)));
     }
     measurer.font = pillFont(look);
+    const always = new Set(ones);
     const { placed, dropped } = pillPlacesOf({
       lines: lines.map((edge) => {
         const heads = headEndsOf(edge);
-        return { id: edge.id(), text: String(edge.data("countLabel")), weight: edge.data("weight") || 1, points: routePointsOf(edge), heads: [heads.source, heads.target] };
+        const weight = edge.data("saidWeight") ?? edge.data("weight") ?? 1;
+        return { id: edge.id(), text: String(edge.data("countLabel")), weight, always: always.has(edge.id()), points: routePointsOf(edge), heads: [heads.source, heads.target] };
       }),
       drawn: routes,
       blocked,
@@ -136,7 +152,7 @@ export function pillOverlay(cy, container, { tokens, map }) {
       context.stroke();
       context.fillStyle = look.text1;
       context.fillText(pill.text, x, y + 0.5);
-      out.push({ id: pill.id, text: pill.text, ...rect, fontSize: PILL_MARKS.font, faded });
+      out.push({ id: pill.id, text: pill.text, ...rect, fontSize: PILL_MARKS.font, faded, crowded: pill.crowded });
     }
     context.globalAlpha = 1;
     return out;
@@ -227,7 +243,7 @@ export function pillOverlay(cy, container, { tokens, map }) {
 
   cy.on("render", draw);
   return {
-    /** The pills drawn last, `{ pills: [{ id, text, x1, y1, x2, y2, fontSize, faded }], dropped }`, on the canvas in pixels. */
+    /** The pills drawn last, `{ pills: [{ id, text, x1, y1, x2, y2, fontSize, faded, crowded }], dropped }`, on the canvas in pixels. */
     pills: () => ({ pills: shown.pills.map((pill) => ({ ...pill })), dropped: [...shown.dropped] }),
     /** Each closed box's tally, `{ id: { incoming, outgoing, text, shown, x1, y1, x2, y2 } }`, on the canvas in pixels. */
     tallies: () => JSON.parse(JSON.stringify(shown.tallies)),

@@ -246,10 +246,16 @@ function readers(source) {
     // border, without its label or Cytoscape's margin for antialiasing.
     nodeBoxes: () => idRecord(fileNodes().map((node) => [node.id(), drawnBoxOf(node)])),
     colours: () => colourEntries(cy()),
-    neighbourhood: () => ({
-      ids: idsOf(cy().nodes(".in-walk")),
-      edges: [...new Set(originals().filter(".is-walk-edge").map((edge) => edge.data("key")))].sort(),
-    }),
+    // The walk drawn: its nodes drawn, and its edges drawn, as themselves or on
+    // the selected node's own lines, which carry its edges as a hover draws them.
+    neighbourhood: () => {
+      const map = source.map();
+      const own = map ? map.ownLines().filter(({ element }) => element?.inside() && element.hasClass("is-walk-edge")).flatMap(({ element }) => map.walkedKeysOf(element)) : [];
+      return {
+        ids: idsOf(cy().nodes(".in-walk")),
+        edges: [...new Set([...originals().filter(".is-walk-edge").map((edge) => edge.data("key")), ...own])].sort(),
+      };
+    },
     dimmedIds: () => idsOf(cy().nodes(".is-dimmed")),
     rings: () =>
       idRecord(
@@ -364,8 +370,10 @@ function readers(source) {
     // stands on a plate beside its box because no such box fits.
     overviewPlan: () => source.map()?.plan() || null,
     // The pills drawn last: `{ pills, dropped }`, each pill `{ id, text, x1, y1,
-    // x2, y2, fontSize, faded }` on the canvas in pixels, `id` its line's, and
-    // `dropped` the lines that carry more than one edge and found no place for one.
+    // x2, y2, fontSize, faded, crowded }` on the canvas in pixels, `id` its line's,
+    // `crowded` when it covers something because its line, one a reader is shown
+    // for a node, had no free place; `dropped` the lines that were to say their
+    // count and have no pill.
     pills: () => source.pills(),
     // The title of every closed box and every top-level node the map titles:
     // `[{ id, text, sizePx, fontSize, inside, plate, x1, y1, x2, y2 }]`, `sizePx`
