@@ -40,13 +40,15 @@
 | `beadloom-jcng` | F-jcng | ✓ done | manifests as inputs: a go.mod, go.work or Package.swift edit re-resolves the imports it governs; a Go module path with no `/` is imported |
 | `beadloom-76mk` | F-76mk | ✓ done | flat Python tests bind |
 | `beadloom-stcx` | F-stcx | ✓ done | `vitepress dev` loads |
-| `beadloom-btkd.6` | dev | in progress | a nested open box's title is not covered (artefact left by V3) |
-| `beadloom-q63p` | T | blocked | PRD criteria measured |
+| `beadloom-btkd.6` | dev | ✓ done | no open box's title under a node (owner's no-artefact requirement): `f2eb84f0`, `23d04791`, `cd910b06`; every box keeps 36 units above its children (all 118 leaves here move down, up to 192 units; boxes +24 per level of boxes held); titles under a node, every box open: this portal 5 of 12 -> 0, six fixtures 10 of 10 -> 0; a hovered line through a title runs under it; the project box's title (0.55 px at this portal's fit) on a 12.5 px plate above it; the padding exposed two bundling misses on the adopter-sized graph (a lane bound masked at HEAD; a bus channel 3.3 units deep across a head, python fixture) -> joins and bus gap fixed; readings for the owner in the bead |
+| `beadloom-q63p` | T | in progress | PRD criteria measured |
 | `beadloom-ak1i` | R | blocked | review |
 | `beadloom-1hle` | W | blocked | docs |
 | `beadloom-hpat` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **Wave 9 closed (2026-10-06):** `beadloom-btkd.6` `f2eb84f0`, `23d04791`, `cd910b06` — every box keeps 36 units above its children: covered titles 5 of 12 -> 0 here, 10 -> 0 on the fixtures; the project title stands on a plate above the box at the fit; a followed line runs under a title. Layout moved: all 118 leaves down by up to 192 units, boxes grow 24 units per level; two bundling heuristics (joins, buses) fixed for the new geometry. Gate owner on the tree at `cd910b06`: 13,378 passed, 0 failed; ruff, mypy, lint, doctor clean; Playwright 240 of 240; planning 16.0 / 139.9 ms, bundling 38.9 ms, first drawing 6.2 s; adopters 18 of 18; `beadloom ci` rc 1 on sync-check alone (250 pairs -> W). Left: one touch between two "+N" badges. **All dev beads done.** T `beadloom-q63p` launched.
 
 - **Wave 8 closed (2026-10-06):** `beadloom-hnff` (V3) `da76249c`, `69ea0551`, `67b6d70a`, `d951994b`, `bf10030d`, `826a89c7` — a box opens when its nodes are readable (24 px; closes below 0.9 of it), a selection frames its neighbourhood at 0.51 (0 nodes under 21.6 px; before: 34+ nodes at 2-6 px), an open box keeps outward edges on its line, "+N" on nodes, own edges on hover/selection, loops drawn square along ELK's route to an invisible end on the box border. Leftovers to 0: heads with no room 41/7 -> 0 (the case now fails on them), loop heads 17 -> 0, loop diagonals 20 -> 0, the tui size jump gone. Gate owner on the tree at `bf10030d`: 13,378 passed, 0 failed; ruff, mypy, lint, doctor clean; Playwright 237 of 237 + performance 6 of 6 (planning 37.8 / 143.6 ms, bundling 39.4 ms, first drawing 6.3 s of 7.2); adopters 18 of 18; `beadloom ci` rc 1 on sync-check alone (246 pairs -> W). Departures surfaced: close threshold 0.9 not 0.8; smallest head 3 px not 4. Not fixed: a nested open box's title under its first row (ELK top padding 12) -> `beadloom-btkd.6`, launched; loops cross open boxes as long lines (ruling 13, the owner judges).
 
