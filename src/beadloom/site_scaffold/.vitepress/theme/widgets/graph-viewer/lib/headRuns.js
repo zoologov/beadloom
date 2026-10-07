@@ -15,6 +15,12 @@
 // end in common with it closer than `headRunClearance`; no such edge may run
 // along or across the length the last run gains, where it would run under the
 // head; and the run before the moved segment is shortened, never turned round.
+// Nor may the moved segment cross another line's last run nearer that line's
+// tip than `headRun`, or than it crosses it now, whatever ends the two have in
+// common: the room one head gains would be taken from the other's. Two edges
+// each way between two nodes one above the other arrive in one gap from both
+// sides, and a run lengthened into the lower node once crossed the edge going up
+// two units behind its tip, under its arrowhead at every zoom.
 //
 // Lines that share their last run move together, so they still share it; a line
 // that joins the shared run nearer the tip than the others limits how far they
@@ -94,13 +100,16 @@ function movedBack(members, way, by) {
  * - the moved segment runs along an edge with no end in common with it, closer
  *   than `clearance`, or crosses a box other than its ends' and their holders';
  * - the gained run runs along such an edge, crosses such a box, or is crossed by
- *   such an edge, which would then run under the head.
+ *   such an edge, which would then run under the head;
+ * - the moved segment crosses the last run of a line outside the group nearer
+ *   that line's tip than `headRun`, or than it crosses it as it stands: it would
+ *   run under that line's head.
  *
  * And it refuses every distance where a line outside the group runs along a
  * member's segment as it stands, a source's bus or a trunk: moving the segment
  * would part the channel they share.
  */
-function freeOf(drawing, members, way, furthest, clearance) {
+function freeOf(drawing, members, way, furthest, clearance, headRun) {
   // Refused distances: open intervals, and everything from `below` up.
   const refused = [];
   let below = Infinity;
@@ -137,6 +146,21 @@ function freeOf(drawing, members, way, furthest, clearance) {
       if (related(other)) return;
       const [e1, e2] = [byAt(c[fixed]), byAt(d[fixed])];
       if (Math.max(e1, e2) > 0) below = Math.min(below, Math.max(0, Math.min(e1, e2)) + 1 + 1e-9);
+    });
+    // Another line's last run across the moved segment's way: its head's room, kept.
+    drawing.segmentsAlong(along, (lo + hi) / 2, (hi - lo) / 2, reach.lo, reach.hi, (other, c, d) => {
+      if (ids.has(other.id) || c[moving] <= lo + 1 || c[moving] >= hi - 1) return;
+      const route = drawing.routes.get(other.id);
+      const tip = route[route.length - 1];
+      const [end, start] = near(d[fixed], tip[fixed]) && near(d[moving], tip[moving]) ? [d, c] : [c, d];
+      if (!near(end[fixed], tip[fixed]) || !near(end[moving], tip[moving])) return;
+      const [atTip, atStart] = [byAt(end[fixed]), byAt(start[fixed])];
+      // Crossed now, the run keeps the room it has up to `headRun`; crossed only once moved, `headRun`.
+      const crossedNow = Math.min(atTip, atStart) < 0 && Math.max(atTip, atStart) > 0;
+      const room = crossedNow ? Math.min(headRun, Math.abs(atTip)) : headRun;
+      // Past the tip the moved segment would run across the head's point: refused as near.
+      if (atStart < atTip) refused.push(Math.max(atTip - room, atStart), atTip + room);
+      else refused.push(atTip - room, Math.min(atTip + room, atStart));
     });
     // Boxes in the way of the moved segment or of the gained run.
     const swept =
@@ -181,7 +205,7 @@ export function lengthenHeadRuns(drawing, options) {
     const wanted = Math.min(options.headRun - shortest, limit);
     const steps = stepsFor(wanted, Math.min(wanted + options.headRun, limit), options.headRunStep);
     if (!steps.length) continue;
-    const free = freeOf(drawing, nearest, way, Math.max(...steps), options.headRunClearance);
+    const free = freeOf(drawing, nearest, way, Math.max(...steps), options.headRunClearance, options.headRun);
     for (const by of steps.filter(free)) {
       const candidate = movedBack(nearest, way, by);
       if (!candidate) continue;

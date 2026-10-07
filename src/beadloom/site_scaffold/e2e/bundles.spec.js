@@ -432,6 +432,82 @@ test("a node's bus leaves its side in one channel when an edge of its own child 
   expect(collinearPairs(routes)).toEqual([]);
 });
 
+/**
+ * Two nodes one above the other with an edge each way between them, in one
+ * gap 20 units deep, and a second edge into the lower one. ELK lays the two
+ * edges into the lower node in one channel 10 units above it and the edge going
+ * up straight beside them; the lower node's bus brings the two in at one point
+ * of its side, across the edge going up, 10 units behind that edge's tip. The
+ * Java fixture's graph with two edges more (`support/perturbedGraph.js`) is laid
+ * out so, to the unit.
+ */
+function oppositeEdgesDrawing() {
+  const boxes = {
+    upper: { x1: 101.33, y1: 206, x2: 264.33, y2: 253 },
+    lower: { x1: 74.17, y1: 273, x2: 237.17, y2: 320 },
+    side: { x1: 36, y1: 139, x2: 199, y2: 186 },
+  };
+  const nodes = Object.keys(boxes).map((id) => ({ id, parent: null }));
+  const edges = [
+    { id: "down", source: "upper", target: "lower" },
+    { id: "up", source: "lower", target: "upper" },
+    { id: "beside", source: "side", target: "lower" },
+  ];
+  const paths = {
+    down: [{ x: 210, y: 253 }, { x: 210, y: 263 }, { x: 196.42, y: 263 }, { x: 196.42, y: 273 }],
+    up: [{ x: 155.67, y: 273 }, { x: 155.67, y: 253 }],
+    beside: [{ x: 90.33, y: 186 }, { x: 90.33, y: 263 }, { x: 114.92, y: 263 }, { x: 114.92, y: 273 }],
+  };
+  return { nodes, edges, loops: [], boxes, paths };
+}
+
+/**
+ * How far behind the tip of each route's last run the nearest other route
+ * crosses it, in layout units; Infinity where none does. A line across a last
+ * run takes the room of the arrowhead drawn at its tip.
+ */
+function crossingsBehindTips(routes) {
+  return Object.fromEntries(
+    Object.entries(routes).map(([id, points]) => {
+      const [from, tip] = points.slice(-2);
+      const vertical = Math.abs(from.x - tip.x) < TOLERANCE;
+      const [fixed, moving] = vertical ? ["x", "y"] : ["y", "x"];
+      const [lo, hi] = [Math.min(from[moving], tip[moving]), Math.max(from[moving], tip[moving])];
+      let nearest = Infinity;
+      for (const [other, line] of Object.entries(routes)) {
+        if (other === id) continue;
+        for (let i = 1; i < line.length; i += 1) {
+          const [a, b] = [line[i - 1], line[i]];
+          if (Math.abs(a[moving] - b[moving]) > TOLERANCE) continue;
+          const [c1, c2] = [Math.min(a[fixed], b[fixed]), Math.max(a[fixed], b[fixed])];
+          if (c1 >= tip[fixed] - TOLERANCE || c2 <= tip[fixed] + TOLERANCE || a[moving] <= lo || a[moving] >= hi) continue;
+          nearest = Math.min(nearest, Math.abs(tip[moving] - a[moving]));
+        }
+      }
+      return [id, nearest];
+    })
+  );
+}
+
+test("a last run lengthened for its arrowhead does not cross another line's last run nearer that line's tip", async ({
+  page,
+}) => {
+  await openThemeModules(page);
+  const drawing = oppositeEdgesDrawing();
+  const { paths, unlengthened, room } = await page.evaluate(async (input) => {
+    const { BUNDLE_OPTIONS, bundleRoutes } = await import("/widgets/graph-viewer/lib/bundles.js");
+    // A head's run asked to be no length at all: the bundling with that pass moving nothing.
+    return { paths: bundleRoutes(input).paths, unlengthened: bundleRoutes(input, { headRun: 0 }).paths, room: BUNDLE_OPTIONS.headRun };
+  }, drawing);
+
+  const before = crossingsBehindTips(unlengthened);
+  const after = crossingsBehindTips(paths);
+  expect(before.up).toBe(10);
+  // Every crossing within a head's run of a tip stays where the bundling put it, or moves further from it.
+  const nearer = Object.keys(after).filter((id) => after[id] < Math.min(before[id], room) - TOLERANCE);
+  expect(nearer.map((id) => `${id}: crossed ${after[id]} units behind its tip, was ${before[id]}`)).toEqual([]);
+});
+
 /** The middles of the stretches two members of one bundle share, longest first, in graph coordinates. */
 function sharedStretches(bundles, routes) {
   const found = [];
