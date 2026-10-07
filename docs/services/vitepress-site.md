@@ -165,18 +165,34 @@ the case, naming the ones it states.
 |-------|-------------|---------|------|
 | Mean interval between canvas drawings while panning, at the fit and at zoom 1, on both graphs | `performance.spec.js` | 25 ms | 33.4 ms |
 | First drawing of the adopter-sized graph, median of three openings | `performance.spec.js` | 7,200 ms | 15,000 ms |
-| Longest main-thread task from the data file's arrival until the graph is placed | `layout.spec.js` | 1,000 ms | 2,000 ms |
+| Longest main-thread task from the data file's arrival until the graph is placed | `layout.spec.js` | 500 ms | 2,000 ms |
 | Rewriting the adopter-sized graph's routes into trunks and buses, alone, median of three | `performance.spec.js` | 50 ms | 400 ms |
 | Planning the overview's routes: this portal / the adopter-sized graph | `performance.spec.js` | 50 / 250 ms | 200 / 1,000 ms |
 | A zoom step and a hover, on both graphs (`GESTURE_MS`) | `performance.spec.js` | 60 / 50 ms | 560 / 470 ms |
 
 The `local` bounds were calibrated on an Apple M1 Max in headless Chromium without a GPU, where
-the viewer measured 16.7 ms per frame, a first drawing of 5,707 to 5,781 ms and a longest task of
-302 to 353 ms (`beadloom-m6k7.6`). The `ci` bounds are wide on purpose: no GitHub runner had
-measured them when they were written, and they catch ELK on the main thread or the whole graph
-drawn at the fit, not a 15% slowdown. Two structural guards hold the same regressions on any
+the viewer measured 16.7 ms per frame and a first drawing of 5,707 to 5,781 ms
+(`beadloom-m6k7.6`). The `ci` bounds are wide on purpose: they catch ELK on the main thread or the
+whole graph drawn at the fit, not a 15% slowdown. Most were written before a GitHub runner had
+measured them. The longest task's `local` bound and the bundling's `ci` bound are the two set from
+a runner's measurement (below). Two structural guards hold the same regressions on any
 machine: the whole-graph fit draws only the top-level boxes and at most 100 edges, and the pointer
 resting anywhere at the overview lifts the budget for one box at most (`map.spec.js`).
+
+**The longest task** (`beadloom-btkd.22`). On PR #94 the python adopter leg, on a GitHub-hosted
+Ubuntu runner, measured a 2,427 ms task, over the `ci` bound, on the adopter-sized graph built from
+a portal that declares no layers. That one task drew ELK's layout, measured the whole graph's fit
+over all 1,745 elements and planned the overview at the first drawing. On Darwin arm64 (headless
+Chromium, no GPU, the case alone) the same viewer took 608 to 615 ms in that task, and 2,478 to
+2,495 ms with the page's processor slowed four times, so the runner ran this work about four times
+slower. The `local` bound is the `ci` bound over that factor, 500 ms, so a task the runner would
+hold too long fails on the machine the change is made on. Against it the viewer before the fix
+measured 603, 607 and 626 ms. The fix measures the fit only when no plan gives the scale, gives
+the page a turn between drawing the layout and making the map, and draws no Cytoscape frame of
+the hidden graph meanwhile ([the viewer's page](vitepress-site/graph-viewer.md), Layout). After it
+the case measured 299 to 300 ms on that machine and 232 to 234 ms on this portal. Slowed four
+times, the work is two tasks of 460 to 471 ms and 1,244 to 1,265 ms. These figures after the fix
+were taken on Darwin arm64, not on a runner.
 
 The overview's planning, zoom-step and hover bounds came with BDL-078. Measured at `6b77893c`
 on Darwin arm64 (`beadloom-btkd.15`): planning 15.1 ms here and 133.1 ms at adopter size, a zoom

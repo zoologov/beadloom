@@ -28,6 +28,16 @@ in full screen it sits beside the canvas.
   reported as a `role=alert` note naming the error. The canvas stays hidden, because no node has a
   place, and the filter, neighbourhood, impact and navigation controls sit in a disabled
   `fieldset`. Panel and Full screen act on the viewer, not the graph, and stay on.
+  Cytoscape draws no frame while ELK runs: it is held in a batch (`useGraphCanvas.js`,
+  `undrawnUntil`), since a frame of the hidden, unplaced adopter-sized graph took 245 ms on
+  Darwin arm64. Once ELK answers, drawing the layout (`applyGeometry`) and making the map, which
+  plans the overview at its first drawing, take a task each. Between them the page gets a turn of
+  its event loop (`scheduler.yield()` where the browser has it, else a `MessageChannel` message),
+  with Cytoscape still held. The map's scale is the overview plan's from the first drawing, and
+  the whole-graph fit's scale, which reads every element in the graph, is measured only while no
+  plan has given one (`canvasMap.js`, `scaleNow`). Together these took the longest task on the
+  adopter-sized graph from 603 to 626 ms to 299 to 300 ms on Darwin arm64 (`beadloom-btkd.22`,
+  bound in [the site's page](../vitepress-site.md)).
 - **Selection.** A selected node is the start of a walk. In the neighbourhood the walk goes to the
   chosen depth and direction (`site-select-neighbourhood`); with **Impact** on it goes to
   everything that depends on the node, without a limit, by the mode's walk (`site-impact-view`).
