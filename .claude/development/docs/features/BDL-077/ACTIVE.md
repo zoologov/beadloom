@@ -1,13 +1,13 @@
 # ACTIVE: BDL-077 — The viewer draws edges like a classic diagram
 
 > **Last updated:** 2026-10-03
-> **Phase:** Development
+> **Phase:** Completed
 
 ---
 
 ## Current Bead
 
-**Bead:** `beadloom-zaba` (P: the owner's look in a browser, then the PR).
+**Bead:** none — BDL-077 shipped as PR #92 (`2f65cbd9`, 2026-10-04); epic `beadloom-m6k7` closed.
 **Goal:** ELK's routes, a map-like overview, trunks and buses, bridges on highlighted edges — from one layout.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
@@ -16,8 +16,8 @@
 - [x] R&D (`RND.md`), PRD approved, axes (`axes.md`), probes, RFC approved (2026-10-03)
 - [x] CONTEXT and PLAN — approval delegated by the owner ("дальше веди сам согласно claude.md и /coordinator", 2026-10-03)
 - [x] Beads: epic `beadloom-m6k7` + 10 from one plan; the R&D bead `beadloom-rcnz` closed
-- [ ] Development (E0–E5)
-- [ ] Test, review, docs, the owner's look, PR
+- [x] Development (E0–E5) and the fixes
+- [x] Test, review, docs, the owner's look, PR #92 merged (`2f65cbd9`)
 
 ## Results
 
@@ -25,7 +25,7 @@
 
 | Bead | Role | Status | Details |
 |---|---|---|---|
-| `beadloom-m6k7` | epic | ready | BDL-077 parent |
+| `beadloom-m6k7` | epic | ✓ done | BDL-077 parent |
 | `beadloom-rcnz` | R&D | ✓ done | path A/B, map and hub probes |
 | `beadloom-7y2i` | E1 | ✓ done | ELK in a worker, elkjs 0.12 direct |
 | `beadloom-nvux` | E0 | ✓ done | Arrange removed |
@@ -42,9 +42,11 @@
 | `beadloom-m6k7.6` | fix | ✓ done | review findings |
 | `beadloom-m6k7.5` | fix | ✓ done | two-rank second channel |
 | `beadloom-t3pw` | W | ✓ done | docs |
-| `beadloom-zaba` | P | in progress | owner's look, PR |
+| `beadloom-zaba` | P | ✓ done | owner's look, PR |
 
 ## Notes
+
+- **Shipped (2026-10-04):** PR #92 at `1fe422a0` green on every check — site-e2e 184 passed including the timed cases on a runner for the first time, site-adopters in seven legs all green — squash-merged as `2f65cbd9` after the owner's look ("Посмотрел, можно вливать mr"). The last CI round (`beadloom-m6k7.7`): a bus port off an unrelated edge's drop (the CI data file had one edge fewer — `beadloom-nh7h`), the bundling budget per environment (local 50 ms, CI 400 ms), site-adopters split into seven legs.
 
 - **W closed** `44b451eb`: viewer slice docs and the portal guide describe the code as built (routes, trunks and buses, the map, bridges, no Arrange, the performance bounds); stale 61 → 0 (710 pairs); `beadloom ci` rc 0; pytest 0 failed. Left: the `site-shared` node summary does not name the `ids` segment; nine surface-drift warnings.
 

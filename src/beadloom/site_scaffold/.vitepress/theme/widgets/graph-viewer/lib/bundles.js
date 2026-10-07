@@ -21,6 +21,9 @@
 //   lanes are counted at, then turns across to its own route.
 // - The **fallback**: an edge keeps its own route wherever a new segment would
 //   cross a box or run along an edge that has no end in common with it.
+// - A **head's run**: last, the lines arriving at one point of a node have their
+//   last bend moved back along their last run, where nothing is in the way, so
+//   an arrowhead and a little straight line behind it fit there (`headRuns.js`).
 //
 // A node is a leaf or a box alike: a box's edges leave its border as a leaf's
 // do, and a box with many edges would otherwise leave its side in a staircase as
@@ -37,8 +40,10 @@
 // threshold is a parameter (`BUNDLE_OPTIONS`); nothing here knows a project's
 // names. Everything is pure: routes in, routes out.
 
+import { idRecord } from "../../../shared/ids/index.js";
 import { busesAt } from "./buses.js";
 import { drawingOf } from "./bundleDrawing.js";
+import { lengthenHeadRuns } from "./headRuns.js";
 import { joinsAt } from "./joins.js";
 import { trunksOf } from "./trunks.js";
 
@@ -80,10 +85,18 @@ export const BUNDLE_OPTIONS = Object.freeze({
   cellSize: 512,
   /** The width of a band of the index over the routes' segments. */
   bandWidth: 16,
+  /** How long the last run into a node is made, where nothing is in the way: room for an arrowhead and its stem. */
+  headRun: 20,
+  /** The step the last bend is moved back in, from as far as `headRun` asks down to this. */
+  headRunStep: 2,
+  /** How close a moved segment may run along an unrelated edge: as far as ELK keeps two channels apart, less a little. */
+  headRunClearance: 8,
 });
 
 /**
- * The routes of a drawing with its fans bundled: `{ paths, trunks, buses }`.
+ * The routes of a drawing with its fans bundled: `{ paths, trunks, buses,
+ * headRuns }`, `headRuns` the groups of arrivals whose last bend moved back,
+ * each `{ members, by }` (`headRuns.js`).
  *
  * `nodes` are `{ id, parent }` (null at a root); `edges` are the routed edges,
  * `{ id, source, target }`, without the ones drawn as loops, and `loops` those,
@@ -104,5 +117,6 @@ export function bundleRoutes(drawing, overrides = {}) {
   const trunks = [...trunksLeading("out"), ...trunksLeading("in")];
   const joins = state.nodesByDegree(options.trunkDegree).flatMap((hub) => joinsAt(state, hub, busy, options));
   const buses = state.nodesByDegree(options.busDegree).flatMap((node) => busesAt(state, node, options));
-  return { paths: Object.fromEntries(state.routes), trunks: [...trunks, ...joins], buses };
+  const headRuns = lengthenHeadRuns(state, options);
+  return { paths: idRecord(state.routes), trunks: [...trunks, ...joins], buses, headRuns };
 }

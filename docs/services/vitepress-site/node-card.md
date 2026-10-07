@@ -19,7 +19,14 @@ In order, the card shows:
 - its layer, and whether the layer is the node's own tag or inherited through `part_of`;
 - its source, linked to the address the data file gives in `source_url`, and as plain text when
   the file gives none;
-- its activity (commits in 30 days and the level) and its debt with the reasons;
+- its activity and its debt with the reasons. Since BDL-078 the activity line states changed
+  lines in 30 days and the level, which is relative to the project: `412 lines changed in 30
+  days, hot`, `1 line changed in 30 days, cool` in the singular, and in words for the two levels
+  with no change in the window, `no change in 30 days, quiet` and `no change in 90 days, dormant`.
+  A data file written before lines were counted carries commits only and is said in commits
+  (`3 commits in 30 days, warm`); a node with no recorded activity says "not recorded", as on a
+  shallow clone that does not reach back 90 days. A level the card does not know is shown as
+  text;
 - its docs, each with its status and a link to the published copy when there is one;
 - its bound tests: the count, the files counted, the placement of each, and the files bound to
   the node itself;
@@ -27,6 +34,9 @@ In order, the card shows:
 - its edges grouped by kind and direction, a violation marked, and a click on the other end
   selects that node;
 - its rule findings with their severity;
+- for a box, when the viewer passes `parents`, an **Inside** section (`data-card-field=contents`,
+  BDL-078 `beadloom-btkd.7`): how many nodes it holds at any depth, and its edges out to and in
+  from each node its lines reach, with their counts (`boxEdgesOf`, `site-graph-edge`);
 - a link to the node's page, and `beadloom ctx <ref>` and `beadloom why <ref>` to copy.
 
 A field the data file holds nothing for says "none". A field a version 1 file does not carry at
@@ -34,7 +44,9 @@ all says "not recorded", because the two are different answers.
 
 ## Public API
 
-- `NodeCard` (Vue component). Props: `node`, `edges`, `layers`. Events: `select(id)`, `close`.
+- `NodeCard` (Vue component). Props: `node`, `edges`, `layers`, `parents` (each node's box,
+  `{ id: parent | null }`; `null`, the default, shows no Inside section). Events: `select(id)`,
+  `close`.
 
 ## Depends on
 
@@ -46,4 +58,6 @@ all says "not recorded", because the two are different answers.
 `src/beadloom/site_scaffold/e2e/card.spec.js`: every field the data file holds, "none" where it
 holds nothing, the layer's origin, every edge kind by direction with a click that moves the
 selection, the commands copied, the symbol cap, every doc and test file by name, a source
-linked per forge, and a source without a link when the file gives none.
+linked per forge, and a source without a link when the file gives none; the activity line in
+lines, in commits for an older file, in the singular for one, and in words for `quiet` and
+`dormant`.

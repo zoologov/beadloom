@@ -67,10 +67,11 @@ The same reading decides what protects an entry's BODY, which is what
 ``beadloom-l9ee`` was weighing. A body lost from an entry is detectable only
 where a claim holds its number, because the claim is a separate file that the
 loss cannot take with it — so ``unwritten-claim`` covers exactly the entries at
-or above the floor, and nothing covers the 235 below it.
+or above the floor, and nothing covers the entries below it — the population
+:attr:`IssueNumberReport.entries_below_floor` counts.
 
 **What the entry grammar can and cannot decide.** An entry is a line-start
-ordered-list number outside a fenced code block, which is how this log's 236
+ordered-list number outside a fenced code block, which is how this log's
 entries are written. A number stated only in a consolidated closed-entry heading
 (``### Import extraction depth — #159``) is NOT an entry and does not enter the
 duplicate leg — but it does enter :attr:`LogNumbers.mentioned`, so the allocator

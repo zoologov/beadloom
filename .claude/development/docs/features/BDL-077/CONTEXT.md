@@ -1,6 +1,6 @@
 # CONTEXT: BDL-077 — The viewer draws edges like a classic diagram
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-10-03
 > **Last updated:** 2026-10-04
 
@@ -106,6 +106,6 @@ Supplement A.
 
 ## Current Phase
 
-- **Phase:** Development
+- **Phase:** Done
 - **Current bead:** see ACTIVE.md
 - **Blockers:** none

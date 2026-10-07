@@ -1,5 +1,5 @@
 // beadloom:component=site-select-neighbourhood
-// A selected node's neighbourhood: what it reaches, what reaches it, or both.
+// A selected node's neighbourhood: what it reaches, what reaches it, or both; a selected box's, from everything it holds.
 //
 // "Both" is the union of the outgoing walk and the incoming walk, not a walk
 // that may turn round at every step. A turning walk would reach the other
@@ -34,4 +34,35 @@ export function neighbourhoodOf(focus, adjacency, { depth, dir }) {
     for (const key of walk.edges) edges.add(key);
   }
   return { distances, edges };
+}
+
+/**
+ * `adjacency` read with box `box` standing for everything in `inside` (the box
+ * and what it holds at any depth): the box's edges are every edge with exactly
+ * one end inside it, but for an edge onto a box of `holders`, which hold it and
+ * are no neighbour of it; a walk that comes back to a node inside stops there,
+ * since the box was reached at the start.
+ */
+function aroundBox(box, inside, holders, adjacency) {
+  const leaving = (map) => {
+    const out = [];
+    for (const id of inside) for (const step of map.get(id) || []) if (!inside.has(step.id) && !holders.has(step.id)) out.push(step);
+    return out;
+  };
+  const read = (map) => {
+    const own = leaving(map);
+    return { get: (id) => (id === box ? own : (map.get(id) || []).filter((step) => !inside.has(step.id))) };
+  };
+  return { out: read(adjacency.out), in: read(adjacency.in) };
+}
+
+/**
+ * The neighbourhood of box `box`, which holds `inside` (itself included) and is
+ * held by `holders`: the neighbourhood of one node whose edges are every edge
+ * crossing the box's border to a node that does not hold it, `{ distances,
+ * edges }` as `neighbourhoodOf` gives them. The nodes inside are not on the
+ * walk: they are what was selected.
+ */
+export function boxNeighbourhoodOf(box, inside, holders, adjacency, options) {
+  return neighbourhoodOf(box, aroundBox(box, inside, holders, adjacency), options);
 }

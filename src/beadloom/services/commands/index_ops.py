@@ -7,10 +7,14 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 
 from beadloom.services.commands._root import _warn_missing_parsers, main
+
+if TYPE_CHECKING:
+    from beadloom.infrastructure.git_activity import GitHistory
 
 
 # beadloom:domain=reindex
@@ -80,6 +84,7 @@ def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
         click.echo(f"Imports: {result.imports_indexed}")
         click.echo(f"Rules:   {result.rules_loaded}")
     _echo_tests_line(project_root)
+    _echo_activity_line(result.activity_history)
     if result.errors:
         click.echo("")
         for err in result.errors:
@@ -92,6 +97,15 @@ def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
     # Warn about missing language parsers when symbols == 0.
     if result.symbols_indexed == 0 and not result.nothing_changed:
         _warn_missing_parsers(project_root)
+
+
+def _echo_activity_line(history: GitHistory | None) -> None:
+    """Say what history activity was measured on, when it is shallow (BDL-078 btkd.9)."""
+    from beadloom.infrastructure.git_activity import activity_history_note
+
+    note = activity_history_note(history)
+    if note:
+        click.echo(f"Activity: {note}")
 
 
 def _echo_tests_line(project_root: Path) -> None:

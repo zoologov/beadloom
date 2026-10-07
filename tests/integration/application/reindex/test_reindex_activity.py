@@ -168,3 +168,55 @@ class TestReindexGitActivityGracefulDegradation:
         # No activity key when git is unavailable
         assert "activity" not in extra
         conn.close()
+
+
+class TestReindexStoresActivityByChangedLines:
+    """BDL-078 F-activity: the stored activity carries lines and a box rolls up its parts."""
+
+    def test_a_box_stores_the_lines_of_its_parts(self, tmp_path: Path) -> None:
+        from tests.support.squash_merged_repo import (
+            API_BRANCH_COMMITS,
+            PARSER_LINES,
+            UI_LINES,
+            build_squash_merged_project,
+        )
+
+        root = build_squash_merged_project(tmp_path / "repo").root
+        reindex(root)
+
+        conn = open_db(index_path(root))
+        stored = {
+            str(row["ref_id"]): json.loads(row["extra"]).get("activity")
+            for row in conn.execute("SELECT ref_id, extra FROM nodes")
+        }
+        conn.close()
+        assert stored["core"]["lines_30d"] == PARSER_LINES
+        assert stored["app"]["lines_30d"] == PARSER_LINES + API_BRANCH_COMMITS + UI_LINES
+        assert stored["config"]["lines_90d"] == 4
+        levels = {ref: stored[ref]["level"] for ref in ("app", "core", "api", "config", "legacy")}
+        # BDL-078 `beadloom-btkd.1`: boxes (app, core) rank among boxes, leaves among leaves.
+        assert levels == {
+            "app": "hot",
+            "core": "cool",
+            "api": "warm",
+            "config": "quiet",
+            "legacy": "dormant",
+        }
+
+    def test_the_files_the_project_excludes_are_not_stored_as_change(
+        self, tmp_path: Path
+    ) -> None:
+        from tests.support.squash_merged_repo import (
+            build_squash_merged_project,
+            exclude_from_activity,
+        )
+
+        root = build_squash_merged_project(tmp_path / "repo").root
+        exclude_from_activity(root, "src/app/config/*")
+        reindex(root)
+
+        conn = open_db(index_path(root))
+        row = conn.execute("SELECT extra FROM nodes WHERE ref_id = ?", ("config",)).fetchone()
+        conn.close()
+        stored = json.loads(row["extra"])["activity"]
+        assert (stored["lines_90d"], stored["commits_90d"], stored["level"]) == (0, 0, "dormant")

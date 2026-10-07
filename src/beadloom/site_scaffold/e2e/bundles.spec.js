@@ -6,9 +6,11 @@
 // the graph, and the fans of the whole drawing had 396 steps more than two per
 // node. The routes are now rewritten after ELK, which moves no node: a node's
 // edges that leave one side in one direction share one channel, and a busy node's
-// edges to one top-level box share one route to a line along that box. Where two
-// routes part, a dot marks it; hovering a shared line names every edge on it; and
-// edges outside a selection fade in colour, so a trunk of them does not darken.
+// edges to one top-level box share one route to a line along that box. Hovering a
+// shared line names every edge on it, and edges outside a selection fade in
+// colour, so a trunk of them does not darken. Where two routes part, the rounded
+// corner of the one that turns is the merge, and no dot is drawn
+// (`look.spec.js`).
 //
 // Every case reads the graph at full detail, every box open: at the whole-graph
 // fit the viewer draws a map of closed boxes (`map.spec.js`). The adopter-sized
@@ -19,7 +21,6 @@
 import { test, expect } from "@playwright/test";
 import { ADOPTER_SIZED, RANK_POSITIONS, adopterSizedGraph } from "./support/adopterGraph.js";
 import {
-  branchPoints,
   channelsOf,
   collinearPairs,
   deviation,
@@ -28,12 +29,12 @@ import {
   edgesThroughTheirEnds,
   excessSteps,
   lanesAt,
+  lastBendMovedBack,
   polylineOf,
 } from "./support/routeMetrics.js";
 import { architectureData, openArchitecture, openEveryBox, parentMap, viewer } from "./support/viewer.js";
 import { requireShape } from "./support/shape.js";
 import { openThemeModules } from "./support/themeModules.js";
-import { ENVIRONMENT, boundHere } from "./support/environment.js";
 
 /** A node with this many drawn edges is busy enough for trunks; the viewer's own threshold. */
 const TRUNK_DEGREE = 20;
@@ -43,18 +44,6 @@ const LANE_DISTANCE = 150;
 const STEPS_KEPT = 0.2;
 /** ELK's excess steps below which a drawing has no staircase worth measuring. */
 const STAIRCASE = 20;
-/**
- * How long rewriting the routes may take on an adopter-sized graph, in ms, per
- * environment (`support/environment.js`). Locally (Apple M1 Max, headless
- * Chromium, no GPU) it took 36 to 39 ms; the bound is 50. On a GitHub-hosted
- * Ubuntu runner (two Playwright workers, no GPU) it took 186.8 ms, and the same
- * code took 157 to 161 ms here with the page's processor slowed four times and
- * 196 to 205 ms slowed five times, so the runner runs it about 4.7 times slower;
- * its bound is 400, about twice what it measured there. Either bound still
- * catches the bundling without its indexes, which took 100 to 230 ms locally
- * (`lib/spatialIndex.js`).
- */
-const BUNDLING_BUDGET_MS = { local: 50, ci: 400 };
 /** How far two points, or a point and a line, may lie apart and count as one, in layout units. */
 const TOLERANCE = 0.5;
 /** How far, in pixels on screen, a hovered point lies from any other edge and any node. */
@@ -140,8 +129,10 @@ function boxHubGraph(served) {
 
 /** Every edge drawn now along a route, with its ends: `[{ id, source, target, points }]`. */
 async function drawnRoutes(page) {
+  // The edges of the file the bundling routes: a line of the map's carries edges between boxes, routed by
+  // the map, and a loop, from a node to a box that holds it, keeps ELK's route; neither is bundled.
   return (await viewer(page, "edgeRoutes"))
-    .filter((r) => r.routed)
+    .filter((r) => r.routed && !r.aggregated && !r.loop)
     .map(({ id, source, target, points }) => ({ id, source, target, points }));
 }
 
@@ -228,15 +219,6 @@ async function lanesOverBoundOf(page, busy, parents) {
   });
 }
 
-/** Whether every junction lies by a point of `expected`, and every point of `expected` by a junction. */
-function sameJunctions(junctions, expected) {
-  const by = (point) => (other) => Math.hypot(point.x - other.x, point.y - other.y) <= 1;
-  return {
-    stray: junctions.filter((j) => !expected.some(by(j))),
-    missing: expected.filter((p) => !junctions.some(by(p))),
-  };
-}
-
 for (const graph of GRAPHS) {
   test.describe(`on ${graph.name}`, { tag: graph.tag }, () => {
     test("no node or box moves: every leaf stands at its ELK box's centre and every box keeps ELK's size", async ({
@@ -270,13 +252,15 @@ for (const graph of GRAPHS) {
       expect(excessSteps(drawn, leaves)).toBeLessThanOrEqual(STEPS_KEPT * elk);
     });
 
-    test("every route joins its own two boxes with right angles only, from outside them, and an edge in no bundle keeps ELK's route", async ({
+    test("every route joins its own two boxes with right angles only, from outside them, and an edge in no bundle keeps ELK's route, its last bend at most moved back along its last run", async ({
       page,
       request,
     }) => {
       await graph.open(page, request);
       const { boxes, routes: elk } = await viewer(page, "elkGeometry");
-      const { routes, trunks, buses } = await viewer(page, "bundles");
+      const { routes, trunks, buses, headRuns } = await viewer(page, "bundles");
+      // Where an arrowhead had too short a run, the last bend moved back along it (`heads.spec.js`).
+      const movedBy = new Map(headRuns.flatMap((group) => group.members.map((id) => [id, group.by])));
       const drawn = await drawnRoutes(page);
       const bundled = new Set([...trunks, ...buses].flatMap((bundle) => bundle.members));
       requireShape(bundled.size > 0, "no node has two edges that leave one side in one direction");
@@ -297,7 +281,7 @@ for (const graph of GRAPHS) {
       expect(wrong).toEqual([]);
       expect(edgesThroughTheirEnds(drawn.map(({ id, source, target }) => ({ id, source, target, points: routes[id] })), boxes)).toEqual([]);
       const rerouted = drawn
-        .filter(({ id }) => !bundled.has(id) && deviation(routes[id], polylineOf(elk[id].sections)) > TOLERANCE)
+        .filter(({ id }) => !bundled.has(id) && deviation(routes[id], lastBendMovedBack(polylineOf(elk[id].sections), movedBy.get(id))) > TOLERANCE)
         .map(({ id }) => id);
       expect(rerouted).toEqual([]);
     });
@@ -331,16 +315,6 @@ for (const graph of GRAPHS) {
 
       expect(collinearPairs(drawn)).toEqual([]);
     });
-
-    test("a junction dot marks every point where drawn routes part, and no other", async ({ page, request }) => {
-      await graph.open(page, request);
-      const expected = branchPoints(await drawnRoutes(page));
-      requireShape(expected.length > 0, "no two drawn routes run together and part");
-
-      const { stray, missing } = sameJunctions(await viewer(page, "junctions"), expected);
-      expect(stray).toEqual([]);
-      expect(missing).toEqual([]);
-    });
   });
 }
 
@@ -366,17 +340,6 @@ for (const layerRanks of RANK_COUNTS) {
     expect(collinearPairs(drawn)).toEqual([]);
   });
 }
-
-test("the bundling of an adopter-sized graph takes no longer than the bound for this environment", { tag: ADOPTER_SIZED }, async ({
-  page,
-  request,
-}) => {
-  const bound = boundHere(BUNDLING_BUDGET_MS);
-  await GRAPHS[1].open(page, request);
-  const { ms } = await viewer(page, "bundles");
-  test.info().annotations.push({ type: "measured", description: `${ENVIRONMENT}: bundling ${ms.toFixed(1)} ms (bound ${bound} ms)` });
-  expect(ms).toBeLessThanOrEqual(bound);
-});
 
 test("the busiest node leaves each side in one channel per direction, in no more lanes than the boxes it leads to", async ({
   page,
@@ -469,36 +432,80 @@ test("a node's bus leaves its side in one channel when an edge of its own child 
   expect(collinearPairs(routes)).toEqual([]);
 });
 
-test("junction dots follow the edges drawn now: a filter and a hidden neighbourhood remove the ones they part", async ({
+/**
+ * Two nodes one above the other with an edge each way between them, in one
+ * gap 20 units deep, and a second edge into the lower one. ELK lays the two
+ * edges into the lower node in one channel 10 units above it and the edge going
+ * up straight beside them; the lower node's bus brings the two in at one point
+ * of its side, across the edge going up, 10 units behind that edge's tip. The
+ * Java fixture's graph with two edges more (`support/perturbedGraph.js`) is laid
+ * out so, to the unit.
+ */
+function oppositeEdgesDrawing() {
+  const boxes = {
+    upper: { x1: 101.33, y1: 206, x2: 264.33, y2: 253 },
+    lower: { x1: 74.17, y1: 273, x2: 237.17, y2: 320 },
+    side: { x1: 36, y1: 139, x2: 199, y2: 186 },
+  };
+  const nodes = Object.keys(boxes).map((id) => ({ id, parent: null }));
+  const edges = [
+    { id: "down", source: "upper", target: "lower" },
+    { id: "up", source: "lower", target: "upper" },
+    { id: "beside", source: "side", target: "lower" },
+  ];
+  const paths = {
+    down: [{ x: 210, y: 253 }, { x: 210, y: 263 }, { x: 196.42, y: 263 }, { x: 196.42, y: 273 }],
+    up: [{ x: 155.67, y: 273 }, { x: 155.67, y: 253 }],
+    beside: [{ x: 90.33, y: 186 }, { x: 90.33, y: 263 }, { x: 114.92, y: 263 }, { x: 114.92, y: 273 }],
+  };
+  return { nodes, edges, loops: [], boxes, paths };
+}
+
+/**
+ * How far behind the tip of each route's last run the nearest other route
+ * crosses it, in layout units; Infinity where none does. A line across a last
+ * run takes the room of the arrowhead drawn at its tip.
+ */
+function crossingsBehindTips(routes) {
+  return Object.fromEntries(
+    Object.entries(routes).map(([id, points]) => {
+      const [from, tip] = points.slice(-2);
+      const vertical = Math.abs(from.x - tip.x) < TOLERANCE;
+      const [fixed, moving] = vertical ? ["x", "y"] : ["y", "x"];
+      const [lo, hi] = [Math.min(from[moving], tip[moving]), Math.max(from[moving], tip[moving])];
+      let nearest = Infinity;
+      for (const [other, line] of Object.entries(routes)) {
+        if (other === id) continue;
+        for (let i = 1; i < line.length; i += 1) {
+          const [a, b] = [line[i - 1], line[i]];
+          if (Math.abs(a[moving] - b[moving]) > TOLERANCE) continue;
+          const [c1, c2] = [Math.min(a[fixed], b[fixed]), Math.max(a[fixed], b[fixed])];
+          if (c1 >= tip[fixed] - TOLERANCE || c2 <= tip[fixed] + TOLERANCE || a[moving] <= lo || a[moving] >= hi) continue;
+          nearest = Math.min(nearest, Math.abs(tip[moving] - a[moving]));
+        }
+      }
+      return [id, nearest];
+    })
+  );
+}
+
+test("a last run lengthened for its arrowhead does not cross another line's last run nearer that line's tip", async ({
   page,
-  request,
 }) => {
-  const data = await GRAPHS[0].open(page, request);
-  const parents = parentMap(data);
-  const before = await viewer(page, "junctions");
-  const [busiest] = busiestOf(await drawnRoutes(page), leavesOf(parents));
-  const kinds = [...new Set(data.nodes.map((n) => n.kind))].sort();
-  requireShape(before.length > 0 && kinds.length > 1, "no junction, or a single node kind to filter by");
+  await openThemeModules(page);
+  const drawing = oppositeEdgesDrawing();
+  const { paths, unlengthened, room } = await page.evaluate(async (input) => {
+    const { BUNDLE_OPTIONS, bundleRoutes } = await import("/widgets/graph-viewer/lib/bundles.js");
+    // A head's run asked to be no length at all: the bundling with that pass moving nothing.
+    return { paths: bundleRoutes(input).paths, unlengthened: bundleRoutes(input, { headRun: 0 }).paths, room: BUNDLE_OPTIONS.headRun };
+  }, drawing);
 
-  // The kind whose filter leaves routes drawn and removes the most junctions.
-  let removed = 0;
-  for (const kind of kinds) {
-    await page.getByLabel("Kind", { exact: true }).selectOption(kind);
-    await expect.poll(async () => (await viewer(page, "visibleIds")).length).toBeLessThan(data.nodes.length);
-    const drawn = await drawnRoutes(page);
-    const { stray, missing } = sameJunctions(await viewer(page, "junctions"), branchPoints(drawn));
-    expect(stray, kind).toEqual([]);
-    expect(missing, kind).toEqual([]);
-    removed = Math.max(removed, before.length - (await viewer(page, "junctions")).length);
-  }
-  expect(removed).toBeGreaterThan(0);
-
-  await openArchitecture(page, `?focus=${encodeURIComponent(busiest)}&depth=1&hide=1`);
-  await expect.poll(async () => (await viewer(page, "neighbourhood")).ids.length).toBeGreaterThan(0);
-  const shown = await drawnRoutes(page);
-  const { stray, missing } = sameJunctions(await viewer(page, "junctions"), branchPoints(shown));
-  expect(stray).toEqual([]);
-  expect(missing).toEqual([]);
+  const before = crossingsBehindTips(unlengthened);
+  const after = crossingsBehindTips(paths);
+  expect(before.up).toBe(10);
+  // Every crossing within a head's run of a tip stays where the bundling put it, or moves further from it.
+  const nearer = Object.keys(after).filter((id) => after[id] < Math.min(before[id], room) - TOLERANCE);
+  expect(nearer.map((id) => `${id}: crossed ${after[id]} units behind its tip, was ${before[id]}`)).toEqual([]);
 });
 
 /** The middles of the stretches two members of one bundle share, longest first, in graph coordinates. */

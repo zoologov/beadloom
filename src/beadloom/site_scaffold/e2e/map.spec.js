@@ -5,42 +5,45 @@
 // apart, and on an adopter-sized graph a frame took over 160 ms without a GPU.
 // The overview now draws the boxes at the top, and each edge with an end inside a
 // closed box is carried by one aggregated edge per pair of drawn ends, its count
-// split by direction. A box opens where the reader zooms in, and a selection opens
-// the boxes it needs. Every level is a view of the one layout: no box moves.
+// split by direction. A box opens where the reader zooms in far enough for its
+// nodes to be readable, and a selection opens the boxes it needs; an open box keeps
+// its outward edges at the box (`levels.spec.js`). Every level is a view of the
+// one layout: no box moves.
 
 import { test, expect } from "@playwright/test";
 import { ADOPTER_SIZED, adopterSizedGraph } from "./support/adopterGraph.js";
 import { landscapeData, openLandscape } from "./support/landscape.js";
-import { distanceToPolyline, edgesThroughBoxes, polylineOf } from "./support/routeMetrics.js";
+import { edgesThroughBoxes } from "./support/routeMetrics.js";
 import {
   AGGREGATE_BUDGET,
   budgetLeftOut,
   degreesOf,
   drawnEdgesOf,
   levelOf,
+  smallestChildOf,
   treeOf,
 } from "./support/map.js";
 import { neighbourhood, impact } from "./support/graph.js";
 import { architectureData, openArchitecture, viewer, withAncestors } from "./support/viewer.js";
 import { drag } from "./support/pointer.js";
 import { LACKING, requireShape } from "./support/shape.js";
+import { CLOSE_SHARE, FIT_FLOOR, READABLE_PX, againstReadability, inView, settled } from "./support/levels.js";
 import { openThemeModules } from "./support/themeModules.js";
 
-/** A box opens at this larger side on screen, in pixels, and closes below 0.8 of it. */
-const OPEN_SIDE_PX = 600;
-const CLOSE_SIDE_PX = 0.8 * OPEN_SIDE_PX;
-/** ... and only once the view is zoomed in this far past the whole-graph fit. */
-const FIT_FLOOR = 1.3;
 /** How far a drawn box may lie from where it is drawn at full detail, in layout units. */
 const DISPLACEMENT = 1e-6;
 /** How far a point of an aggregated route may lie from a member's route, in layout units. */
 const TOLERANCE = 0.5;
-/** A node with this many drawn edges is a hub: selected alone, it opens only its own boxes. */
+/** A node with this many drawn edges is a hub: the busiest reaches boxes out of the view a selection frames. */
 const HUB_DEGREE = 20;
 /** The screen size a map mark keeps, in pixels, within one zoom step of the restyle. */
 const STEP = 1.25;
-const COUNT_LABEL_PX = 11;
-const BOX_TITLE_PX = 14;
+/** A count's size on its pill, in pixels: drawn over the canvas, it is that size at every zoom. */
+const COUNT_PILL_PX = 10.5;
+/** The one weight every line is drawn at, in pixels on screen (`look.spec.js`). */
+const LINE_PX = 1.35;
+/** The sizes a closed box's title is tried at, in pixels on screen. */
+const BOX_TITLE_PX = [14, 12.5, 11, 10];
 /** The most zoom steps a case takes before it gives up. */
 const ZOOM_STEPS = 30;
 /** How far inside the canvas's edges a point the pointer aims at lies, in pixels. */
@@ -126,7 +129,7 @@ for (const graph of GRAPHS) {
       expect(drawn.filter((r) => !top.has(r.source) || !top.has(r.target)).map((r) => r.id)).toEqual([]);
     });
 
-    test("an aggregated edge has an arrowhead at each end its edges arrive at, its counts in its label, and a route between its two boxes along one of its edges", async ({
+    test("an aggregated edge has an arrowhead at each end its edges arrive at, its counts in its label, and a square route from the border of one of its boxes, as drawn, to the other's through no other box", async ({
       page,
       request,
     }) => {
@@ -134,17 +137,22 @@ for (const graph of GRAPHS) {
       const tree = treeOf(data);
       const edges = (await viewer(page, "aggregatedEdges")).filter((e) => e.drawn);
       requireShape(edges.length > 0, "no edge between two boxes at the top of the containment tree");
-      const { boxes, routes } = await viewer(page, "elkGeometry");
+      // As drawn: at the overview a node too small for its title is drawn larger than ELK laid it out (`overview.spec.js`).
+      const boxes = await viewer(page, "nodeBoxes");
 
+      // An end its edges arrive at draws a head, unless it shares its last run with a line that draws it.
+      const dropped = new Set((await viewer(page, "droppedHeads")).map((d) => `${d.id}:${d.end}`));
+      const headAt = (e, end, arrow) => arrow !== "none" || dropped.has(`${e.id}:${end}`);
       const arrows = edges.filter(
-        (e) => (e.targetArrow !== "none") !== e.forwardKeys.length > 0 || (e.sourceArrow !== "none") !== e.backwardKeys.length > 0
+        (e) => headAt(e, "target", e.targetArrow) !== e.forwardKeys.length > 0 || headAt(e, "source", e.sourceArrow) !== e.backwardKeys.length > 0
       );
       expect(arrows.map((e) => e.id)).toEqual([]);
       const counts = (e) => [e.forwardKeys.length, e.backwardKeys.length].filter(Boolean);
       expect(edges.filter((e) => e.label !== counts(e).join(" + ")).map((e) => e.id)).toEqual([]);
 
       // Every aggregated edge between two boxes neither of which holds the other is routed: from the
-      // border of one to the border of the other, at right angles, along one of its edges' routes.
+      // border of one to the border of the other, at right angles. At the overview its route is the
+      // overview's own, routed afresh between the boxes (`overview.spec.js`), not one of its edges'.
       const holds = (outer, inner) => withAncestors([inner], tree.parents).has(outer);
       const between = edges.filter((e) => !holds(e.ends[0], e.ends[1]) && !holds(e.ends[1], e.ends[0]));
       expect(between.length).toBeGreaterThan(0);
@@ -154,9 +162,7 @@ for (const graph of GRAPHS) {
       const off = between.filter((e) => {
         const [first, last] = [e.points[0], e.points[e.points.length - 1]];
         const square = e.points.slice(1).every((p, i) => Math.abs(p.x - e.points[i].x) < TOLERANCE || Math.abs(p.y - e.points[i].y) < TOLERANCE);
-        const members = e.members.map((id) => polylineOf(routes[id].sections));
-        const alongOne = members.some((m) => e.points.every((p) => distanceToPolyline(p, m) <= TOLERANCE));
-        return !square || !alongOne || !onBorder(first, boxes[e.ends[0]]) || !onBorder(last, boxes[e.ends[1]]);
+        return !square || !onBorder(first, boxes[e.ends[0]]) || !onBorder(last, boxes[e.ends[1]]);
       });
       expect(off.map((e) => e.id)).toEqual([]);
       const drawnBoxes = Object.fromEntries((await viewer(page, "visibleIds")).map((id) => [id, boxes[id]]));
@@ -179,17 +185,29 @@ for (const graph of GRAPHS) {
       const levels = Array.from({ length: deepest + 1 }, (_, index) => index);
       const orders = [levels, [...levels].reverse(), [levels[levels.length - 1], ...levels.slice(0, -1)]];
 
+      // A box keeps its centre, and its sides but where it is drawn larger than its layout: a
+      // top-level node too small for its title at the overview, and the box that holds it, drawn
+      // around it (`overview.spec.js`). Such a box still holds the box it was laid out as.
+      const top = new Set(Object.keys(tree.parents).filter((id) => tree.parents[id] === tree.wrapper));
       let largest = 0;
+      const shrunk = [];
       for (const order of orders) {
         for (const level of order) {
           await reveal(page, [...tree.boxes].filter((id) => tree.depth(id) === level));
           const drawn = await viewer(page, "nodeBoxes");
           for (const [id, box] of Object.entries(drawn)) {
-            for (const side of ["x1", "y1", "x2", "y2"]) largest = Math.max(largest, Math.abs(box[side] - reference[id][side]));
+            const was = reference[id];
+            largest = Math.max(largest, Math.abs(box.x1 + box.x2 - was.x1 - was.x2) / 2, Math.abs(box.y1 + box.y2 - was.y1 - was.y2) / 2);
+            const larger = top.has(id) || id === tree.wrapper;
+            for (const side of ["x1", "y1", "x2", "y2"]) {
+              const outward = side.endsWith("1") ? was[side] - box[side] : box[side] - was[side];
+              if (larger ? outward < -DISPLACEMENT : Math.abs(outward) > DISPLACEMENT) shrunk.push(`${id} ${side} at level ${level}`);
+            }
           }
         }
       }
       expect(largest).toBeLessThanOrEqual(DISPLACEMENT);
+      expect(shrunk).toEqual([]);
     });
   });
 }
@@ -354,23 +372,7 @@ test("at the overview 101 pairs of boxes joined by one edge each draw 100 aggreg
   );
 });
 
-/** Whether the box `box` is in view, by the viewer's extent. */
-const inView = (box, extent) => box.x2 > extent.x1 && box.x1 < extent.x2 && box.y2 > extent.y1 && box.y1 < extent.y2;
-
-/** The top-level boxes that break the rule at the view `level` reports: open when they should not be, or closed when they should be open. */
-function againstTheRule(level, boxes, topBoxes) {
-  const past = level.zoom >= FIT_FLOOR * level.fitZoom;
-  const open = new Set(level.open);
-  return topBoxes.filter((id) => {
-    const b = boxes[id];
-    const side = Math.max(b.x2 - b.x1, b.y2 - b.y1) * level.zoom;
-    const seen = past && inView(b, level.extent);
-    if (seen && side >= OPEN_SIDE_PX && !open.has(id)) return true;
-    return open.has(id) && !(seen && side >= CLOSE_SIDE_PX);
-  });
-}
-
-test("zooming into a box opens it and draws its children, and zooming out closes it again", async ({
+test("zooming into a box opens it once its nodes are readable and draws its children, and zooming out closes it again", async ({
   page,
   request,
 }) => {
@@ -379,6 +381,7 @@ test("zooming into a box opens it and draws its children, and zooming out closes
   requireShape(tree.topBoxes.length > 0, "no box at the top of the containment tree");
   await openArchitecture(page);
   const { boxes } = await viewer(page, "elkGeometry");
+  const smallest = smallestChildOf(tree, boxes);
   const level = await viewer(page, "level");
   expect(level.fitZoom).toBeCloseTo(await viewer(page, "zoom"), 6);
   // The largest top-level box, aimed at with the pointer.
@@ -399,7 +402,7 @@ test("zooming into a box opens it and draws its children, and zooming out closes
   if (Math.hypot(dx, dy) > MARGIN_PX) await drag(page, from, dx, dy);
   const step = async (name) => {
     await page.getByRole("button", { name, exact: true }).click();
-    await expect.poll(async () => againstTheRule(await viewer(page, "level"), boxes, tree.topBoxes)).toEqual([]);
+    await expect.poll(async () => againstReadability(await viewer(page, "level"), tree, boxes, smallest)).toEqual([]);
   };
 
   let opened = false;
@@ -410,19 +413,12 @@ test("zooming into a box opens it and draws its children, and zooming out closes
   expect(opened).toBe(true);
   const shown = new Set(await viewer(page, "visibleIds"));
   expect(children.filter((id) => !shown.has(id))).toEqual([]);
-  // When it opened at the first step that made it 600 px, it is under 750; one step out it is
-  // under 600 and over 480, and stays open: it closes only below 0.8 of the size it opens at.
-  // When it opened at the step that passed the floor instead, one step out is under the floor.
+  // When it opened at the first step that made its nodes readable, one step out they are under the
+  // readable height and over the share it closes below only when that share is under one step.
   await step("Zoom out");
-  const zoom = await viewer(page, "zoom");
-  const side = Math.max(boxes[target].x2 - boxes[target].x1, boxes[target].y2 - boxes[target].y1) * zoom;
-  if (zoom >= FIT_FLOOR * level.fitZoom) {
-    expect(side).toBeGreaterThanOrEqual(CLOSE_SIDE_PX);
-    expect(side).toBeLessThan(OPEN_SIDE_PX);
-    expect(await viewer(page, "openBoxes")).toContain(target);
-  } else {
-    expect(await viewer(page, "openBoxes")).not.toContain(target);
-  }
+  const height = smallest.get(target) * (await viewer(page, "zoom"));
+  const open = (await viewer(page, "openBoxes")).includes(target);
+  expect(open).toBe(height >= READABLE_PX * CLOSE_SHARE && (await viewer(page, "zoom")) >= FIT_FLOOR * level.fitZoom);
 
   for (let taken = 0; taken < ZOOM_STEPS && (await viewer(page, "zoom")) > level.fitZoom * 1.05; taken += 1) {
     await step("Zoom out");
@@ -430,7 +426,7 @@ test("zooming into a box opens it and draws its children, and zooming out closes
   expect(await viewer(page, "openBoxes")).toEqual(tree.wrapper ? [tree.wrapper] : []);
 });
 
-test("a selection opens the boxes that hold it, at any zoom; a hub selected alone does not open its neighbours' boxes", async ({
+test("a selection opens the boxes that hold its node and no other, hub or not; asked for more, its walk opens every box it reaches", async ({
   page,
   request,
 }) => {
@@ -441,34 +437,30 @@ test("a selection opens the boxes that hold it, at any zoom; a hub selected alon
     .filter((n) => tree.depth(n.id) >= 2 && (degree.get(n.id) || 0) < HUB_DEGREE && !tree.boxes.has(n.id))
     .sort((a, b) => tree.depth(b.id) - tree.depth(a.id) || a.id.localeCompare(b.id))[0];
   requireShape(deep, "no node that is not a hub sits two levels below the top");
+  const hub = [...degree].filter(([id, d]) => d >= HUB_DEGREE && !tree.boxes.has(id)).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
+  requireShape(hub, `no node that holds nothing has ${HUB_DEGREE} drawn edges`);
 
-  // A node that is not a hub opens its own boxes and its neighbours'.
-  await openArchitecture(page, `?focus=${encodeURIComponent(deep.id)}`);
-  const walk = neighbourhood(data, deep.id, 1, "both").ids;
-  await expect
-    .poll(async () => {
-      const visible = new Set(await viewer(page, "visibleIds"));
-      return walk.filter((id) => !visible.has(id));
-    })
-    .toEqual([]);
-  const openNow = new Set(await viewer(page, "openBoxes"));
-  const holding = [...withAncestors(walk, tree.parents)].filter((id) => tree.boxes.has(id) && !walk.includes(id));
-  expect(holding.filter((id) => !openNow.has(id))).toEqual([]);
-
-  // A hub, selected alone, opens its own boxes; its edges into the others stay aggregated, and marked.
-  const hub = [...degree].filter(([, d]) => d >= HUB_DEGREE).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
-  requireShape(hub, `no node has ${HUB_DEGREE} drawn edges`);
-  await openArchitecture(page, `?focus=${encodeURIComponent(hub)}`);
-  const own = [...withAncestors([hub], tree.parents)].filter((id) => id !== hub);
-  const open = await viewer(page, "openBoxes");
-  expect(own.filter((id) => !open.includes(id))).toEqual([]);
-  const others = tree.topBoxes.filter((id) => !own.includes(id));
-  const neighbours = neighbourhood(data, hub, 1, "both").ids.filter((id) => id !== hub);
-  const reached = others.filter((box) => neighbours.some((id) => withAncestors([id], tree.parents).has(box) && id !== box));
-  requireShape(reached.length > 0, "the busiest hub has no neighbour in a box of its own");
-  expect(reached.filter((box) => open.includes(box))).toEqual([]);
-  const marked = (await viewer(page, "aggregatedEdges")).filter((e) => e.ends.includes(hub) && e.walk).flatMap((e) => e.ends);
-  expect(reached.filter((box) => !marked.includes(box))).toEqual([]);
+  // The pointer on a node opens no box, and a click draws the node's edges on the lines the pointer
+  // draws (owner, 2026-10-06): a selection with nothing more asked opens the boxes that hold its node.
+  // The boxes of its neighbours open only where the view, framed readably on it, shows them, and its
+  // edges into a box out of view are on lines of its own into that box, on the walk.
+  const away = {};
+  for (const subject of [deep.id, hub]) {
+    await openArchitecture(page, `?focus=${encodeURIComponent(subject)}`);
+    await settled(page);
+    const own = [...withAncestors([subject], tree.parents)].filter((id) => id !== subject);
+    const open = await viewer(page, "openBoxes");
+    expect(own.filter((id) => !open.includes(id)), subject).toEqual([]);
+    const geometry = (await viewer(page, "elkGeometry")).boxes;
+    const { extent } = await viewer(page, "level");
+    const neighbours = neighbourhood(data, subject, 1, "both").ids.filter((id) => id !== subject);
+    const reached = tree.topBoxes.filter((box) => !own.includes(box) && neighbours.some((id) => withAncestors([id], tree.parents).has(box) && id !== box));
+    away[subject] = reached.filter((box) => !inView(geometry[box], extent));
+    expect(away[subject].filter((box) => open.includes(box)), subject).toEqual([]);
+    const marked = (await viewer(page, "ownLines")).filter((line) => line.ends.includes(subject) && line.walk).flatMap((line) => line.ends);
+    expect(away[subject].filter((box) => !marked.includes(box)), subject).toEqual([]);
+  }
+  requireShape(away[hub].length > 0, "the busiest hub has no neighbour in a box of its own out of view");
 
   // Asked for more — two steps, or impact — the walk opens every box it reaches.
   for (const [query, ids] of [
@@ -554,22 +546,25 @@ test("the map's marks keep their size on screen as the view zooms", async ({ pag
   for (let step = 0; step < 4; step += 1) {
     const zoom = await viewer(page, "zoom");
     const edges = (await viewer(page, "aggregatedEdges")).filter((e) => e.drawn);
-    const { collapsed } = await viewer(page, "level");
-    readings.push({ zoom, edges, collapsed });
+    const { pills } = await viewer(page, "pills");
+    const titles = await viewer(page, "titles");
+    readings.push({ zoom, edges, pills, titles });
     await page.getByRole("button", { name: "Zoom out", exact: true }).click();
     await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   }
-  for (const { zoom, edges, collapsed } of readings) {
-    expect(edges.length + collapsed.length).toBeGreaterThan(0);
-    const one = edges.find((e) => e.weight === 1) || edges[0];
-    const base = one ? one.width / (1.5 + 1.1 * Math.log2(one.weight)) : null;
-    if (one) expect(within(base * zoom, 1), `edge width at zoom ${zoom}`).toBe(true);
-    expect(edges.filter((e) => !within(e.fontSize * zoom, COUNT_LABEL_PX)).map((e) => e.id)).toEqual([]);
-    expect(collapsed.filter((b) => !within(b.fontSize * zoom, BOX_TITLE_PX)).map((b) => b.id)).toEqual([]);
+  for (const [step, { zoom, edges, pills, titles }] of readings.entries()) {
+    expect(edges.length + titles.length).toBeGreaterThan(0);
+    // One weight whatever the count an aggregated edge carries: the count is on its pill.
+    expect(edges.filter((e) => !within(e.width * zoom, LINE_PX)).map((e) => `${e.id} at zoom ${zoom}`)).toEqual([]);
+    expect(pills.filter((p) => p.fontSize !== COUNT_PILL_PX).map((p) => p.id)).toEqual([]);
+    // At the fit a title has the size it was fitted at, one of the few it is tried at; zoomed out
+    // past the fit, a top-level one shrinks with its box rather than outgrow it (`overview.spec.js`).
+    const off = titles.filter((t) => !BOX_TITLE_PX.includes(t.sizePx) || (step === 0 ? !within(t.fontSize, t.sizePx) : t.fontSize > t.sizePx * STEP + 1e-6));
+    expect(off.map((t) => `${t.id} at zoom ${zoom}`)).toEqual([]);
   }
 });
 
-test("a box too small for its title shows the title outside it", async ({ page, request }) => {
+test("a box too small for its title is drawn larger around its laid-out box, its title inside", async ({ page, request }) => {
   const served = await architectureData(request);
   const node = (id, parent) => ({ id, label: id, kind: parent ? "component" : "domain", parent: parent || id, findings: [], doc_status: "fresh", lint_clean: true });
   const small = "a-box-whose-title-is-far-longer-than-the-one-node-it-holds";
@@ -590,7 +585,13 @@ test("a box too small for its title shows the title outside it", async ({ page, 
   await openArchitecture(page);
 
   const titles = Object.fromEntries((await viewer(page, "level")).collapsed.map((b) => [b.id, b.outside]));
-  expect(titles).toEqual({ [small]: true, big: false });
+  expect(titles).toEqual({ [small]: false, big: false });
+  const { boxes: elk } = await viewer(page, "elkGeometry");
+  const drawn = await viewer(page, "nodeBoxes");
+  const width = (box) => box.x2 - box.x1;
+  expect(width(drawn[small])).toBeGreaterThan(width(elk[small]));
+  expect(width(drawn.big)).toBeCloseTo(width(elk.big), 6);
+  expect((await viewer(page, "overviewPlan")).grown).toEqual([small]);
 });
 
 test("the landscape has no boxes, so no levels: every service is drawn", async ({ page, request }) => {

@@ -295,3 +295,33 @@ class TestTheGoModFileIsReadAsGoWritesIt:
     def test_a_go_mod_with_no_module_line_maps_nothing(self, tmp_path: Path) -> None:
         modules = _tree(tmp_path, {"go.mod": "go 1.22\n"})
         assert modules.package_directory("example.org/quay/berths", "main.go") is None
+
+
+class TestTheManifestsTheReadingRestsOn:
+    """``beadloom-jcng``: every file whose text decides an answer, so a change to one is seen."""
+
+    def test_every_go_mod_and_go_work_with_its_text_in_path_order(self, tmp_path: Path) -> None:
+        work = "go 1.22\n\nuse ./services/orders\n"
+        orders = "module example.org/orders\n"
+        modules = _tree(
+            tmp_path,
+            {
+                "go.work": work,
+                "services/orders/go.mod": orders,
+                "services/orders/orders.go": _PACKAGE,
+            },
+        )
+
+        assert modules.manifests == (("go.work", work), ("services/orders/go.mod", orders))
+
+    def test_a_module_a_workspace_uses_where_the_search_does_not_look(
+        self, tmp_path: Path
+    ) -> None:
+        work = "go 1.22\n\nuse ./_shared/money\n"
+        money = "module example.org/money\n"
+        modules = _tree(tmp_path, {"go.work": work, "_shared/money/go.mod": money})
+
+        assert modules.manifests == (("_shared/money/go.mod", money), ("go.work", work))
+
+    def test_a_project_with_no_go_module_rests_on_nothing(self, tmp_path: Path) -> None:
+        assert _tree(tmp_path, {"main.py": "print(1)\n"}).manifests == ()

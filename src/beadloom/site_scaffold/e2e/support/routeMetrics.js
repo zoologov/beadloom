@@ -46,6 +46,21 @@ export function polylineOf(sections) {
   return points;
 }
 
+/**
+ * The route `points` with its last bend, and the corner before it, moved `by`
+ * back along its last run: the change the viewer may make to give an arrowhead
+ * room (`lib/headRuns.js`).
+ */
+export function lastBendMovedBack(points, by) {
+  const n = points.length;
+  if (n < 4 || !by) return points;
+  const [bend, tip] = [points[n - 2], points[n - 1]];
+  const length = Math.hypot(tip.x - bend.x, tip.y - bend.y) || 1;
+  const back = { x: ((bend.x - tip.x) / length) * by, y: ((bend.y - tip.y) / length) * by };
+  const moved = (p) => ({ x: p.x + back.x, y: p.y + back.y });
+  return [...points.slice(0, n - 3), moved(points[n - 3]), moved(bend), tip];
+}
+
 /** The distance from `point` to the segment from `a` to `b`. */
 function distanceToSegment(point, a, b) {
   const dx = b.x - a.x;
@@ -344,63 +359,6 @@ export function lanesAt(routes, node, box, distance) {
   return Object.fromEntries(
     Object.entries(sides).map(([side, { xs, others }]) => [side, { lanes: distinctLines(xs).length, others }])
   );
-}
-
-/** The compass directions a polyline leaves `point` in, when the point lies on it; empty when not. */
-function directionsAt(points, point) {
-  const directions = new Set();
-  for (let i = 1; i < points.length; i += 1) {
-    const a = points[i - 1];
-    const b = points[i];
-    if (distanceToSegment(point, a, b) > SAME) continue;
-    for (const end of [a, b]) {
-      const dx = end.x - point.x;
-      const dy = end.y - point.y;
-      if (Math.abs(dx) < SAME && Math.abs(dy) < SAME) continue;
-      directions.add(Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "E" : "W") : dy > 0 ? "S" : "N");
-    }
-  }
-  return directions;
-}
-
-/**
- * Where drawn routes branch: `[{ x, y, edges }]`. A point branches when two
- * routes through it share a direction out of it and differ in another — they ran
- * together and part there. Two routes that cross share no direction, and two
- * that run on together differ in none. Read by comparing every route with every
- * other at every corner, the slow way, so it checks a faster finder.
- */
-export function branchPoints(routes) {
-  const found = [];
-  const boxes = routes.map(({ points }) => ({
-    x1: Math.min(...points.map((p) => p.x)) - SAME,
-    x2: Math.max(...points.map((p) => p.x)) + SAME,
-    y1: Math.min(...points.map((p) => p.y)) - SAME,
-    y2: Math.max(...points.map((p) => p.y)) + SAME,
-  }));
-  for (const route of routes) {
-    for (const point of route.points.slice(1, -1)) {
-      if (found.some((f) => Math.abs(f.x - point.x) < SAME && Math.abs(f.y - point.y) < SAME)) continue;
-      const through = [];
-      routes.forEach((other, i) => {
-        const b = boxes[i];
-        if (point.x < b.x1 || point.x > b.x2 || point.y < b.y1 || point.y > b.y2) return;
-        const directions = directionsAt(other.points, point);
-        if (directions.size) through.push({ id: other.id, directions });
-      });
-      const edges = new Set();
-      for (const a of through) {
-        for (const b of through) {
-          if (a === b) continue;
-          const shared = [...a.directions].some((d) => b.directions.has(d));
-          const differ = a.directions.size !== b.directions.size || [...a.directions].some((d) => !b.directions.has(d));
-          if (shared && differ) edges.add(a.id);
-        }
-      }
-      if (edges.size) found.push({ x: point.x, y: point.y, edges: [...edges].sort() });
-    }
-  }
-  return found;
 }
 
 /**

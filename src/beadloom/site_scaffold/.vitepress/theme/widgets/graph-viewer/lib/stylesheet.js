@@ -6,79 +6,148 @@
 // The stylesheet is rebuilt whenever the tokens change, which is how the graph
 // follows VitePress's dark mode.
 //
-// Colour means the layer: a node's border, and a box's tint, are its layer's
-// tone. Status is a separate accent, drawn by `NODE_STATUSES`: an error finding
-// gets a danger ring, stale docs a warning ring, and warn findings only a
-// double warning ring. Each edge kind has its own line style. On the
-// landscape, which has no layers, a node's border is its health, a contract
-// edge is drawn by its look, and a broken one carries its verdict as a badge.
+// A node is drawn as the legend draws its layer, whether it holds other nodes or
+// not: a thin border in its layer's tone over a tint of it, its title in the
+// middle, its corners rounded at one radius on screen whatever its size and the
+// zoom, a box's as a card's (`lib/corners.js`). Its status is a mark in its top right corner (`NODE_STATUSES`),
+// filled for an error finding or stale docs and a ring for warn findings only,
+// and never changes its border, which stays its layer's. A box that is open is a
+// fainter tint of its layer's tone inside a thin solid border, its title inside
+// at the top, so the nodes it holds stand out on it. The one box that holds
+// everything is the project's frame: a border a pixel wide on screen in a
+// neutral that keeps 3:1 against the canvas, over a faint tint of the text
+// colour, fainter than any node it holds. On the landscape, which has no layers,
+// a node is a card whose border is its health, a contract edge is drawn by its
+// look, and a broken one carries its verdict as a badge.
+//
+// Every line has one thin weight, at every zoom, whatever its kind, its count or
+// its state; kinds differ by colour and dash. A line is one colour from end to
+// end (`lib/edgePalette.js`), and its arrowhead carries the direction: one size
+// on screen where its run has room for it, on a straight run of its own, and one
+// head where lines share their last run, the others ending at its base
+// (`lib/lineMarks.js`, `lib/heads.js`). A followed line is drawn again
+// on top by the layer over the canvas, with its label when it is under the
+// pointer (`model/followedOverlay.js`); Cytoscape draws no edge label but a
+// landscape badge. While the pointer rests on a node, its lines are drawn on
+// top in the same way and every other line falls back to a fainter look.
 //
 // A selection adds three looks. Outside the neighbourhood or the impact set a
 // node or edge is dimmed, or hidden when the reader asks for it. In impact mode
 // a node's fill is its distance ring's tone, and a risky node carries a dashed
-// danger outline.
+// danger outline. A dimmed node is drawn see-through, a dimmed line opaque in
+// its colour faded towards the background (`lib/edgePalette.js`).
 //
-// A dimmed node is drawn see-through; a dimmed edge is drawn opaque in its colour
-// faded towards the background. Edges bundled into one trunk are drawn along the
-// same line, and see-through ones would add up there: ten at a seventh of full
-// strength draw the trunk at four fifths. Opaque faded ones draw it at the
-// strength of one. Every edge along a hovered line is drawn wider, so a trunk
-// under the pointer shows every edge it carries.
-//
-// The map (`lib/levels.js`) adds its own looks. A closed box is drawn tinted, its
-// title in the middle, or above it when the box is too narrow for it; an
-// aggregated edge is a solid line as wide as the count of edges it carries, with
-// an arrowhead at each end edges arrive at and the counts as its label. Those
-// marks keep one size on screen whatever the zoom: each multiplies its size by
-// the map's scale, which the map keeps in its data.
+// The map (`lib/levels.js`) adds its own looks. A closed box's title, and a
+// top-level node's while the map titles it, is drawn at the size its data names,
+// inside its box or above it on a plate with a border (`lib/mapMarks.js`); a
+// top-level node too small for its title is drawn at the size its data names,
+// around its laid-out box (`lib/grownBoxes.js`); an aggregated edge is a solid
+// line with an arrowhead at each end edges arrive at, its count on a pill drawn
+// over the canvas (`model/pillOverlay.js`). Every size that keeps one size on screen
+// whatever the zoom multiplies by the map's scale, which every mark of the map
+// and every line keeps in its data.
 
 import { mixRgb } from "../../../shared/theme-tokens/index.js";
-import { EDGE_STYLES } from "../../../entities/graph-edge/index.js";
+import { EDGE_STYLES, dashOf } from "../../../entities/graph-edge/index.js";
 import { NODE_STATUSES } from "../../../entities/graph-node/index.js";
-import { LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layer/index.js";
+import { LAYER_FILL_SHARE, LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layer/index.js";
 import { RING_TONES } from "../../../features/impact-view/index.js";
-import { AGGREGATE, COLLAPSED, HIDDEN_EDGES } from "./levels.js";
-import { MAP_MARKS, aggregateWidthOf, scaleOf, titleFits, titleOf, titleSizeOf } from "./mapMarks.js";
+import { DIMMED_SHARE, edgePaletteOf } from "./edgePalette.js";
+import { NO_SOURCE_HEAD, NO_TARGET_HEAD, STUB_AT, headEndsOf } from "./heads.js";
+import { CORNER } from "./corners.js";
+import { AGGREGATE, COLLAPSED, HIDDEN_EDGES, LOOP_END, PROJECT_BOX } from "./levels.js";
+import { arrowScaleOf, dashOffsetOf, dashOnScreen, edgeCornerRadiiOf, endHeadLength, lineWidthOf } from "./lineMarks.js";
+import { MAP_BOX, MAP_MARKS, MAP_TITLE, boxMarkInsetOf, boxMarkOf, plateLiftOf, scaleOf, titleOf } from "./mapMarks.js";
 
+/**
+ * A node's sizes, in layout units. `outerWidth` and `outerHeight` are a leaf's
+ * size with its border, the size the layout places it by, and the same whatever
+ * its status: a status is a mark inside the card, so a finding moves no node.
+ */
 export const GEOMETRY = Object.freeze({
-  nodeWidth: 160,
-  nodeHeight: 44,
-  edgeWidth: 1.8,
-  violationWidth: 3.2,
-  selectedEdgeWidth: 3.6,
-  walkEdgeWidth: 2.8,
+  outerWidth: 163,
+  outerHeight: 47,
+  /** A node's title size, in layout units. */
+  nodeTitle: 12,
+  cardBorder: 1.5,
+  boxBorder: 1,
+  selectedBorder: 3,
   riskOutlineWidth: 4,
-  statusBorderWidth: 5,
-  // A double border needs the width to show both of its lines.
-  doubleBorderWidth: 7,
+  /** A status mark's side, and how far it sits in from the card's top right corner. */
+  statusMark: 10,
+  statusMarkInset: 6,
+  /** How far an open box's title sits below its top border. */
+  boxTitleInset: 20,
+  /**
+   * The room an open box keeps above its children for its title: the title,
+   * drawn `boxTitleInset` in, ends about 22.5 below the border, and the children
+   * keep about the 12 ELK keeps from a border below it (`shared/elk`, `boxTop`).
+   */
+  boxTitleRoom: 36,
 });
 
 /** How much of a ring's tone a node's fill takes; the rest is the node's usual fill. */
 const RING_FILL_SHARE = 0.55;
-/** How visible a node or edge outside the selection stays when it is dimmed. */
-const DIMMED_OPACITY = 0.14;
+/** How much of its tone an open box's tint shows. */
+const OPEN_BOX_TINT = 0.07;
 
 /**
- * The curve style of an edge the layout did not route: Cytoscape draws an edge
- * into the node's own box as a loop, whatever its style, and `bezier` is that
- * loop's style.
+ * The project's frame, the one box that holds everything: its border's width on
+ * screen, in pixels, and its tone, the faintest neutral that keeps WCAG's 3:1 for
+ * a boundary against the canvas (3.10:1 light, 3.20:1 dark, measured); and the
+ * tone of its tint and how much of it shows, 1.09:1 and 1.12:1 against the
+ * canvas, where a node's tint stands at 1.2:1 or more. The theme's grey it was
+ * drawn in read as the canvas: a border at 1.35:1 and 2.52:1 over a tint at
+ * 1.02:1 and 1.05:1, one layout unit wide, 0.06 px at this portal's whole-graph fit.
+ */
+const PROJECT_FRAME = Object.freeze({ borderPx: 1, border: "text3", tint: "text1", tintShare: 0.05 });
+
+/**
+ * The curve style of an edge the layout did not route. Every line drawn has a
+ * route — an edge into the node's own box too, by a line of its own to an end
+ * on the box's border (`model/loopLines.js`) — so this is a fallback only.
  */
 export const CURVE_STYLE = "bezier";
 
-/** The radius of a routed edge's rounded corners, in layout units. */
-export const ROUTE_CORNER_RADIUS = 6;
+/** A loop's end's side, in layout units: a point, drawn as nothing. */
+const LOOP_END_SIDE = 0.01;
 
 /** How many decimals a route's numbers keep: far below a pixel, and never in exponent form. */
 const ROUTE_DECIMALS = 6;
 
-/** How much of the full colour the source end of an edge keeps: direction reads as light to dark. */
-const SOURCE_END_SHARE = 0.35;
-
 /** A landscape node's border tone by its health. */
 const HEALTH_TONES = Object.freeze({ healthy: "green", broken: "danger", neutral: "gray" });
 
-/** The contract looks drawn as heavy as a violation: the ones that hurt. */
+/** The contract looks drawn above the others, like a violation: the ones that hurt. */
 const PROBLEM_STYLE_KEYS = Object.freeze(["contract-broken", "contract-drift"]);
+
+/** The SVG of a status mark in `colour`: a filled dot, or a ring. */
+function markSvg(shape, colour) {
+  const half = GEOMETRY.statusMark / 2;
+  const body =
+    shape === "ring"
+      ? `<circle cx="${half}" cy="${half}" r="${half - 1.25}" fill="none" stroke="${colour}" stroke-width="2.5"/>`
+      : `<circle cx="${half}" cy="${half}" r="${half - 0.5}" fill="${colour}"/>`;
+  const size = GEOMETRY.statusMark;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${body}</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/** The look of a status mark in the top right corner: a size in layout units, or a function of the node. */
+function markStyle(image, size, inset) {
+  return {
+    "background-image": image,
+    "background-fit": "none",
+    "background-clip": "none",
+    "background-image-containment": "over",
+    "background-width": size,
+    "background-height": size,
+    "background-position-x": "100%",
+    "background-position-y": "0%",
+    "background-offset-x": typeof inset === "function" ? (node) => -inset(node) : -inset,
+    "background-offset-y": inset,
+  };
+}
 
 function nodeRules(tokens) {
   const tones = [...LAYER_TONES, UNLAYERED_TONE];
@@ -91,30 +160,39 @@ function nodeRules(tokens) {
         "text-halign": "center",
         color: tokens.text1,
         "font-family": tokens.font,
-        "font-size": "12px",
+        "font-size": `${GEOMETRY.nodeTitle}px`,
         "font-weight": 600,
-        width: GEOMETRY.nodeWidth,
-        height: GEOMETRY.nodeHeight,
+        width: GEOMETRY.outerWidth - GEOMETRY.cardBorder,
+        height: GEOMETRY.outerHeight - GEOMETRY.cardBorder,
         shape: "round-rectangle",
         "background-color": tokens.bgSoft,
-        "border-width": 3,
+        "border-width": GEOMETRY.cardBorder,
+        "border-style": "solid",
         "border-color": tokens[UNLAYERED_TONE],
         "text-wrap": "ellipsis",
-        "text-max-width": GEOMETRY.nodeWidth - 16,
+        "text-max-width": GEOMETRY.outerWidth - 20,
       },
     },
+    // The radius the map gives a drawn node's corners, in layout units (`lib/corners.js`); a node it gives none keeps Cytoscape's own.
+    { selector: `node[${CORNER}]`, style: { "corner-radius": (node) => node.data(CORNER) } },
     ...tones.map((tone) => ({
       selector: `node[tone = "${tone}"]`,
       style: { "border-color": tokens[tone] },
     })),
+    // A node of the architecture is tinted in its layer's tone, as the legend draws it; a landscape node has a health instead.
+    ...tones.map((tone) => ({
+      selector: `node[tone = "${tone}"][^health]`,
+      style: { "background-color": tokens[tone], "background-opacity": LAYER_FILL_SHARE },
+    })),
     {
       selector: ":parent",
       style: {
-        "background-opacity": 0.07,
+        "background-opacity": OPEN_BOX_TINT,
+        "border-width": GEOMETRY.boxBorder,
         "text-valign": "top",
         "text-halign": "center",
+        "text-margin-y": GEOMETRY.boxTitleInset,
         "font-weight": 700,
-        "border-style": "dashed",
         // ELK leaves the room around a box's children, and the box is drawn at
         // ELK's size (`geometryRules`); Cytoscape adds no padding of its own,
         // which would push a box past ELK's where ELK's room is narrower.
@@ -131,25 +209,35 @@ function nodeRules(tokens) {
       selector: `node[health = "${health}"]`,
       style: { "border-color": tokens[tone] },
     })),
-    ...Object.entries(NODE_STATUSES).map(([status, look]) => ({
-      selector: `node[status = "${status}"]`,
+    ...Object.entries(NODE_STATUSES).flatMap(([status, look]) => {
+      const image = markSvg(look.mark, tokens[look.tone]);
+      return [
+        { selector: `node[status = "${status}"]`, style: markStyle(image, GEOMETRY.statusMark, GEOMETRY.statusMarkInset) },
+        { selector: `node.${COLLAPSED}[status = "${status}"]`, style: markStyle(image, boxMarkOf, boxMarkInsetOf) },
+      ];
+    }),
+    {
+      selector: `node.${PROJECT_BOX}`,
       style: {
-        "border-color": tokens[look.tone],
-        ...(look.border === "double"
-          ? { "border-style": "double", "border-width": GEOMETRY.doubleBorderWidth }
-          : { "border-width": GEOMETRY.statusBorderWidth }),
+        "border-color": tokens[PROJECT_FRAME.border],
+        // Inside the box, so the frame's width, which follows the zoom, never changes the box's size.
+        "border-position": "inside",
+        "border-width": (node) => PROJECT_FRAME.borderPx * scaleOf(node),
+        "background-color": tokens[PROJECT_FRAME.tint],
+        "background-opacity": PROJECT_FRAME.tintShare,
       },
-    })),
+    },
     {
       selector: "node.is-selected",
       style: {
-        "background-color": tokens.bgAlt,
-        "border-width": 6,
+        "border-width": GEOMETRY.selectedBorder,
         "overlay-color": tokens.brand,
         "overlay-opacity": 0.12,
         "overlay-padding": 4,
       },
     },
+    // A selected node keeps its layer's tint; a landscape card, which has none, is drawn in the page's alternate background.
+    { selector: "node[health].is-selected", style: { "background-color": tokens.bgAlt } },
   ];
 }
 
@@ -158,8 +246,9 @@ const pixels = (value) => `${decimal(value)}px`;
 
 /**
  * The rules that draw ELK's geometry: a box at the size ELK gave it, and an edge
- * along ELK's route (`lib/routes.js`). Their values are read from each element's
- * data, so a stylesheet rebuilt for another theme draws the same geometry.
+ * along ELK's route (`lib/routes.js`) with its corners rounded (`lib/lineMarks.js`).
+ * Their values are read from each element's data, so a stylesheet rebuilt for
+ * another theme draws the same geometry.
  */
 function geometryRules() {
   const box = (node) => node.data("box");
@@ -182,7 +271,7 @@ function geometryRules() {
       selector: "edge[route]",
       style: {
         "curve-style": "round-segments",
-        "segment-radii": ROUTE_CORNER_RADIUS,
+        "segment-radii": (edge) => edgeCornerRadiiOf(edge).map(decimal).join(" ") || "0",
         "edge-distances": "endpoints",
         "source-endpoint": (edge) => route(edge).sourceEndpoint.map(pixels).join(" "),
         "target-endpoint": (edge) => route(edge).targetEndpoint.map(pixels).join(" "),
@@ -193,29 +282,39 @@ function geometryRules() {
   ];
 }
 
-function edgeRules(tokens) {
-  const byKey = Object.entries(EDGE_STYLES).map(([key, look]) => {
-    const colour = tokens[look.tone];
-    const style = {
-      "line-style": look.line,
-      "line-color": colour,
-      "line-fill": "linear-gradient",
-      "line-gradient-stop-colors": [mixRgb(colour, tokens.bg, SOURCE_END_SHARE), colour],
-      "line-gradient-stop-positions": [0, 70],
-      "target-arrow-color": colour,
-      "source-arrow-color": colour,
+/**
+ * A line's style as Cytoscape draws its dash: a dotted line is a pattern of dots
+ * in pixels on screen, shifted to end a dash inside its head (`dashOffsetOf`).
+ */
+function dashStyle(look) {
+  const pattern = dashOf(look);
+  if (!pattern.length) return { "line-style": "solid" };
+  return {
+    "line-style": "dashed",
+    "line-dash-pattern": (edge) => dashOnScreen(pattern, edge),
+    "line-dash-offset": (edge) => dashOffsetOf(edge, dashOnScreen(pattern, edge), look.arrow),
+  };
+}
+
+function edgeRules(tokens, palette) {
+  const byKey = Object.entries(EDGE_STYLES).map(([key, look]) => ({
+    selector: `edge[styleKey = "${key}"]`,
+    style: {
+      ...dashStyle(look),
+      "line-color": palette[key].rest,
+      "target-arrow-color": palette[key].rest,
+      "source-arrow-color": palette[key].rest,
       "target-arrow-shape": look.arrow,
-    };
-    if (look.dash) style["line-dash-pattern"] = look.dash;
-    return { selector: `edge[styleKey = "${key}"]`, style };
-  });
+    },
+  }));
   return [
     {
       selector: "edge",
       style: {
-        width: GEOMETRY.edgeWidth,
+        width: lineWidthOf,
+        "line-fill": "solid",
         "curve-style": CURVE_STYLE,
-        "arrow-scale": 1.1,
+        "arrow-scale": arrowScaleOf,
         "font-family": tokens.font,
         "font-size": "11px",
         color: tokens.text1,
@@ -226,43 +325,41 @@ function edgeRules(tokens) {
       },
     },
     ...byKey,
-    { selector: 'edge[styleKey = "violation"]', style: { width: GEOMETRY.violationWidth, "z-index": 8 } },
-    ...PROBLEM_STYLE_KEYS.map((key) => ({
-      selector: `edge[styleKey = "${key}"]`,
-      style: { width: GEOMETRY.violationWidth, "z-index": 8 },
-    })),
+    { selector: 'edge[styleKey = "violation"]', style: { "z-index": 8 } },
+    ...PROBLEM_STYLE_KEYS.map((key) => ({ selector: `edge[styleKey = "${key}"]`, style: { "z-index": 8 } })),
     {
       selector: "edge[badge]",
       style: { label: "data(badge)", color: tokens.danger, "font-weight": 700, "font-size": "10px" },
     },
-    { selector: "edge.is-selected-edge", style: { width: GEOMETRY.selectedEdgeWidth, "z-index": 10 } },
-    { selector: "edge.is-selected-edge, edge.is-hovered", style: { label: "data(label)" } },
   ];
 }
 
-/** An edge outside the selection: its own look faded towards the background, at full opacity. */
-function dimmedEdgeRules(tokens) {
-  const fade = (colour) => mixRgb(colour, tokens.bg, DIMMED_OPACITY);
-  return Object.entries(EDGE_STYLES).map(([key, look]) => {
-    const colour = tokens[look.tone];
-    return {
-      selector: `edge.is-dimmed[styleKey = "${key}"]`,
-      style: {
-        "line-color": fade(colour),
-        "line-gradient-stop-colors": [fade(mixRgb(colour, tokens.bg, SOURCE_END_SHARE)), fade(colour)],
-        "target-arrow-color": fade(colour),
-        "source-arrow-color": fade(colour),
-        "text-opacity": DIMMED_OPACITY,
-      },
-    };
-  });
+/** An edge behind the lines of the node under the pointer (`model/canvasMarks.js`, `BEHIND`): its own look faded towards the background. */
+function behindEdgeRules(palette) {
+  return Object.keys(EDGE_STYLES).map((key) => ({
+    selector: `edge.is-behind[styleKey = "${key}"]`,
+    style: { "line-color": palette[key].behind, "target-arrow-color": palette[key].behind, "source-arrow-color": palette[key].behind },
+  }));
 }
 
-function selectionRules(tokens) {
+/** An edge outside the selection: its own look faded towards the background, at full opacity. */
+function dimmedEdgeRules(palette) {
+  return Object.keys(EDGE_STYLES).map((key) => ({
+    selector: `edge.is-dimmed[styleKey = "${key}"]`,
+    style: {
+      "line-color": palette[key].dimmed,
+      "target-arrow-color": palette[key].dimmed,
+      "source-arrow-color": palette[key].dimmed,
+      "text-opacity": DIMMED_SHARE,
+    },
+  }));
+}
+
+function selectionRules(tokens, palette) {
   const rings = RING_TONES.flatMap((tone, ring) => [
     {
       selector: `node.ring-${ring}`,
-      style: { "background-color": mixRgb(tokens[tone], tokens.bgSoft, RING_FILL_SHARE) },
+      style: { "background-color": mixRgb(tokens[tone], tokens.bgSoft, RING_FILL_SHARE), "background-opacity": 1 },
     },
     {
       selector: `:parent.ring-${ring}`,
@@ -270,7 +367,7 @@ function selectionRules(tokens) {
     },
   ]);
   return [
-    { selector: "edge.is-walk-edge", style: { width: GEOMETRY.walkEdgeWidth, "z-index": 9 } },
+    { selector: "edge.is-walk-edge", style: { "z-index": 9 } },
     ...rings,
     {
       selector: "node.is-risk",
@@ -282,13 +379,79 @@ function selectionRules(tokens) {
         "outline-opacity": 1,
       },
     },
-    { selector: "node.is-dimmed", style: { opacity: DIMMED_OPACITY } },
-    ...dimmedEdgeRules(tokens),
-    { selector: "edge.is-along-hover", style: { width: GEOMETRY.walkEdgeWidth, "z-index": 11 } },
+    { selector: "node.is-dimmed", style: { opacity: DIMMED_SHARE } },
+    ...behindEdgeRules(palette),
+    ...dimmedEdgeRules(palette),
   ];
 }
 
-/** The map's looks: a closed box and its title, an aggregated edge, a count of hidden edges. */
+/** Where a map title is drawn, inside its box or on a plate on one side of it: its alignment, and which way it is lifted off the box. */
+const PLATE_PLACES = Object.freeze({
+  inside: { valign: "center", halign: "center", x: 0, y: 0 },
+  above: { valign: "top", halign: "center", x: 0, y: -1 },
+  below: { valign: "bottom", halign: "center", x: 0, y: 1 },
+  right: { valign: "center", halign: "right", x: 1, y: 0 },
+  left: { valign: "center", halign: "left", x: -1, y: 0 },
+});
+
+/** How much of the text colour a title plate's border takes over the background. */
+const PLATE_BORDER_SHARE = 0.3;
+
+/** A map title's look: its size, its place inside its box or on one side of it, and the plate it stands on outside. */
+function mapTitleRule(tokens) {
+  const title = (node) => node.data(MAP_TITLE);
+  // The scale the title was laid out at: the map's, or the overview plan's when the view is zoomed out past it.
+  const at = (node) => title(node).scale || scaleOf(node);
+  const outside = (node) => !title(node).inside;
+  const placeOf = (node) => (outside(node) ? title(node).side : "inside");
+  return {
+    selector: `node[${MAP_TITLE}]`,
+    style: {
+      label: titleOf,
+      "text-wrap": "wrap",
+      "font-weight": 700,
+      "font-size": (node) => title(node).px * at(node),
+      "text-valign": (node) => PLATE_PLACES[placeOf(node)].valign,
+      "text-halign": (node) => PLATE_PLACES[placeOf(node)].halign,
+      "text-margin-x": (node) => PLATE_PLACES[placeOf(node)].x * plateLiftOf(at(node)),
+      "text-margin-y": (node) => PLATE_PLACES[placeOf(node)].y * plateLiftOf(at(node)),
+      // Wide enough for the widest line, so a title is never wrapped where it was measured whole.
+      "text-max-width": (node) => title(node).width + at(node),
+      "text-background-color": tokens.bg,
+      "text-background-opacity": (node) => (outside(node) ? 1 : 0),
+      "text-background-shape": "round-rectangle",
+      "text-background-padding": (node) => `${MAP_MARKS.platePadding * at(node)}px`,
+      "text-border-width": (node) => (outside(node) ? MAP_MARKS.plateBorder * at(node) : 0),
+      "text-border-color": mixRgb(tokens.text1, tokens.bg, PLATE_BORDER_SHARE),
+      "text-border-opacity": (node) => (outside(node) ? 1 : 0),
+    },
+  };
+}
+
+/** The border a node of the map is drawn with at rest: a closed box's, or a card's. */
+const borderOf = (node) => (node.hasClass(COLLAPSED) ? GEOMETRY.boxBorder : GEOMETRY.cardBorder);
+
+/**
+ * The size `node`'s shape is drawn at, in layout units, `{ width, height }`, read
+ * from its data as the rules here size it: the box the map draws it as, its
+ * border taken off; ELK's box; or a card's. Read from the data rather than from
+ * Cytoscape, whose sizes trail a change of the data made in the same batch.
+ */
+export function drawnSizeOf(node) {
+  const grown = node.data(MAP_BOX);
+  if (grown) return { width: grown.width - borderOf(node), height: grown.height - borderOf(node) };
+  const box = node.data("box");
+  if (box) return { width: box.width, height: box.height };
+  return { width: GEOMETRY.outerWidth - GEOMETRY.cardBorder, height: GEOMETRY.outerHeight - GEOMETRY.cardBorder };
+}
+
+/** How far `node`'s border reaches outside its shape at rest, in layout units: half of it, drawn on its edge; none of the project's frame, drawn inside. */
+export function rimOf(node) {
+  if (node.hasClass(PROJECT_BOX)) return 0;
+  return (node.isParent() || node.hasClass(COLLAPSED) ? GEOMETRY.boxBorder : GEOMETRY.cardBorder) / 2;
+}
+
+/** The map's looks: a closed box and its title, a top-level node's title and size, an aggregated edge, a count of hidden edges. */
 function mapRules(tokens) {
   const tones = [...LAYER_TONES, UNLAYERED_TONE];
   return [
@@ -296,15 +459,20 @@ function mapRules(tokens) {
     {
       selector: `node.${COLLAPSED}`,
       style: {
-        label: titleOf,
-        "text-wrap": "wrap",
-        "font-weight": 700,
-        "font-size": (node) => MAP_MARKS.boxTitle * scaleOf(node),
-        "text-valign": (node) => (titleFits(node) ? "center" : "top"),
-        "text-max-width": (node) => (titleFits(node) ? node.data("box").width : titleSizeOf(node).width + 1),
-        "background-opacity": MAP_MARKS.collapsedOpacity,
+        "background-opacity": LAYER_FILL_SHARE,
+        // A closed box's border is an open box's, so a box is drawn at ELK's size either way.
+        "border-width": GEOMETRY.boxBorder,
       },
     },
+    {
+      // A node drawn larger than its layout: the size its data names, its border included, around its centre.
+      selector: `node[${MAP_BOX}]`,
+      style: {
+        width: (node) => drawnSizeOf(node).width,
+        height: (node) => drawnSizeOf(node).height,
+      },
+    },
+    mapTitleRule(tokens),
     ...tones.map((tone) => ({
       selector: `node.${COLLAPSED}[tone = "${tone}"]`,
       style: { "background-color": tokens[tone] },
@@ -312,30 +480,43 @@ function mapRules(tokens) {
     {
       selector: `edge[${AGGREGATE}]`,
       style: {
-        width: aggregateWidthOf,
         "line-style": "solid",
-        "line-fill": "solid",
-        label: "data(countLabel)",
-        "font-size": (edge) => MAP_MARKS.countLabel * scaleOf(edge),
-        "font-weight": 700,
-        "text-rotation": "none",
-        "text-background-padding": (edge) => `${2 * scaleOf(edge)}px`,
-        "source-arrow-shape": (edge) => (edge.data("backward") ? "triangle" : "none"),
-        "target-arrow-shape": (edge) => (edge.data("forward") ? "triangle" : "none"),
+        "source-arrow-shape": (edge) => (headEndsOf(edge).source ? "triangle" : "none"),
+        "target-arrow-shape": (edge) => (headEndsOf(edge).target ? "triangle" : "none"),
         "z-index": 5,
       },
     },
   ];
 }
 
+/**
+ * The ends that draw no arrowhead because another line on their last run draws
+ * it (`lib/heads.js`), or that start where another line arrives along its last
+ * run: such a line ends at that head's base rather than on into the head, past
+ * its sides near the tip and in its own colour across it.
+ */
+const SHARED_HEAD_RULES = [
+  // An edge drawn as itself into an open box its node's other lines run on into ends there as their stub, with no head.
+  { selector: `edge[${STUB_AT}][!${AGGREGATE}]`, style: { "target-arrow-shape": (edge) => (headEndsOf(edge).target ? EDGE_STYLES[edge.data("styleKey")]?.arrow || "triangle" : "none") } },
+  { selector: `edge.${NO_TARGET_HEAD}`, style: { "target-arrow-shape": "none", "target-distance-from-node": (edge) => endHeadLength(edge, "target") } },
+  { selector: `edge.${NO_SOURCE_HEAD}`, style: { "source-arrow-shape": "none", "source-distance-from-node": (edge) => endHeadLength(edge, "source") } },
+];
+
 /** The whole stylesheet for resolved `tokens` (see `shared/theme-tokens`). */
 export function buildStylesheet(tokens) {
+  const palette = edgePaletteOf(tokens);
   return [
     ...nodeRules(tokens),
-    ...edgeRules(tokens),
+    ...edgeRules(tokens, palette),
     ...geometryRules(),
-    ...selectionRules(tokens),
+    ...selectionRules(tokens, palette),
     ...mapRules(tokens),
+    ...SHARED_HEAD_RULES,
+    {
+      // Where a loop meets its box's border: a point with no look, no title and no events.
+      selector: `node.${LOOP_END}`,
+      style: { width: LOOP_END_SIDE, height: LOOP_END_SIDE, "background-opacity": 0, "border-width": 0, label: "", events: "no", "overlay-opacity": 0, "background-image": "none" },
+    },
     { selector: ".is-hidden, .is-outside", style: { display: "none" } },
   ];
 }

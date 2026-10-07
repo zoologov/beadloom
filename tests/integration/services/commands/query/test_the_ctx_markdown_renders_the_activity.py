@@ -48,11 +48,12 @@ class TestContextBundleActivity:
 
             mock_activity.return_value = {
                 "infra": GitActivity(
-                    commits_30d=45,
+                    commits_30d=12,
                     commits_90d=120,
                     last_commit_date="2026-02-15",
                     top_contributors=["alice", "bob"],
                     activity_level="hot",
+                    lines_30d=45,
                 ),
             }
             reindex(project)
@@ -97,3 +98,67 @@ class TestContextBundleActivity:
         md = _format_markdown(bundle)
         assert "Activity:" in md
         assert "dormant" in md
+
+
+def _markdown_with(project: Path, db_path: Path, level: str, lines: int) -> str:
+    """Reindex with *level* and *lines* recorded for ``infra`` and render its ctx markdown."""
+    write_two_nodes_with_sources(project)
+    from beadloom.infrastructure.git_activity import GitActivity
+
+    recorded = GitActivity(
+        commits_30d=1,
+        commits_90d=1,
+        last_commit_date="2026-10-01",
+        top_contributors=[],
+        activity_level=level,
+        lines_30d=lines,
+    )
+    with patch("beadloom.application.reindex.analyze_git_activity") as mock_activity:
+        mock_activity.return_value = {"infra": recorded}
+        reindex(project)
+
+    from beadloom.context_oracle.builder import build_context
+    from beadloom.services.cli import _format_markdown
+
+    conn = open_db(db_path)
+    bundle = build_context(conn, ["infra"])
+    conn.close()
+    return _format_markdown(bundle)
+
+
+class TestCtxMarkdownSaysChangedLines:
+    """BDL-078 F-activity: ctx words activity as the node card does."""
+
+    def test_a_changed_node_shows_its_lines_and_level(self, project: Path, db_path: Path) -> None:
+        md = _markdown_with(project, db_path, "warm", 340)
+        assert "warm (340 lines changed in 30 days)" in md
+
+    def test_one_changed_line_is_singular(self, project: Path, db_path: Path) -> None:
+        """BDL-078 ``beadloom-btkd.18`` (review m3): not "1 lines changed"."""
+        md = _markdown_with(project, db_path, "hot", 1)
+        assert "hot (1 line changed in 30 days)" in md
+
+    @pytest.mark.parametrize(
+        ("level", "words"),
+        [("quiet", "no change in 30 days"), ("dormant", "no change in 90 days")],
+    )
+    def test_no_change_is_said_in_words(
+        self, project: Path, db_path: Path, level: str, words: str
+    ) -> None:
+        md = _markdown_with(project, db_path, level, 0)
+        assert f"{level} ({words})" in md
+
+    def test_every_level_has_its_mark(self, project: Path, db_path: Path) -> None:
+        from beadloom.infrastructure.git_activity import ACTIVITY_LEVELS
+        from beadloom.services.commands.query import ACTIVITY_MARKS
+
+        assert set(ACTIVITY_MARKS) == set(ACTIVITY_LEVELS)
+
+
+def test_an_older_activity_counts_one_commit_in_the_singular() -> None:
+    """An activity recorded before lines were counted is said in commits, 1 singular."""
+    from beadloom.services.commands.query import _describe_activity
+
+    assert _describe_activity({"level": "warm", "commits_30d": 1}).endswith(
+        "warm (1 commit in 30 days)"
+    )

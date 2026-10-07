@@ -37,7 +37,9 @@ from typing import TYPE_CHECKING, TypeGuard
 
 from beadloom.context_oracle.test_binding import (
     PLACEMENT_BESIDE_CODE,
+    PLACEMENT_IMPORTED,
     PLACEMENT_MIRROR,
+    PLACEMENT_NAMED,
     PLACEMENT_OVERRIDE,
     PLACEMENT_UNOWNED,
     PLACEMENT_UNPLACED,
@@ -57,6 +59,7 @@ from beadloom.infrastructure.repository import (
     count_other_kind_test_files,
     count_test_files_by_placement,
     label_test_kind,
+    read_unbound_test_files,
     source_covers,
 )
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
@@ -245,8 +248,9 @@ def index_test_files(
     """Rebuild the test tables and every node's ``extra["tests"]`` from the binding.
 
     *code_files* are the project's indexed code paths, which the mirror resolves
-    against. Imports are resolved by the code-import resolver, so this runs after
-    ``code_symbols`` and ``file_index`` are populated. A file whose hash matches
+    against, and the code-import resolver reads an imported module's existence
+    from them. It runs after ``code_symbols`` is populated, which the resolver's
+    annotation fallback reads. A file whose hash matches
     the one recorded is not parsed again: the incremental reindex runs this on
     every change, and re-reading an unchanged suite is the cost it must not pay.
     """
@@ -266,7 +270,7 @@ def index_test_files(
             "SELECT ref_id, prefix FROM test_overrides ORDER BY ref_id, prefix"
         ).fetchall()
     ]
-    resolve = _memoised_resolver(project_root, conn, scan_paths, layout.roots[0])
+    resolve = _memoised_resolver(project_root, conn, scan_paths, layout.roots[0], code_files)
 
     conn.execute("DELETE FROM test_files")
     conn.execute("DELETE FROM test_imports")
@@ -280,6 +284,7 @@ def index_test_files(
             if recorded and recorded[0] == digest
             else read_test_file(text, suffix=PurePosixPath(path).suffix)
         )
+        imports = [(line, module, resolve(module)) for line, module in contents.imports]
         binding = bind_test_file(
             path,
             code_files=code_files,
@@ -287,6 +292,7 @@ def index_test_files(
             node_sources=node_sources,
             overrides=overrides,
             layout=layout,
+            imported_refs=[ref_id for _, _, ref_id in imports if ref_id is not None],
         )
         counts[path] = contents.test_count
         conn.execute(
@@ -297,7 +303,7 @@ def index_test_files(
         conn.executemany(
             "INSERT OR IGNORE INTO test_imports "
             "(file_path, line_number, import_path, resolved_ref_id) VALUES (?, ?, ?, ?)",
-            [(path, line, module, resolve(module)) for line, module in contents.imports],
+            [(path, line, module, ref_id) for line, module, ref_id in imports],
         )
         bound.append(binding)
 
@@ -359,20 +365,27 @@ def _recorded_contents(conn: sqlite3.Connection) -> dict[str, tuple[str, TestFil
 
 
 def _memoised_resolver(
-    project_root: Path, conn: sqlite3.Connection, scan_paths: list[str], root: str
+    project_root: Path,
+    conn: sqlite3.Connection,
+    scan_paths: list[str],
+    root: str,
+    code_files: Collection[str],
 ) -> Callable[[str], str | None]:
     """Resolve a dotted import to its owning node, once per import path.
 
     A suite imports the same few hundred modules thousands of times, and the
     resolver's answer for a Python import depends on the import path alone.
+    Whether an imported module exists is read from *code_files*, the tree this
+    run indexed, and not from a table an earlier run filled (``beadloom-nh7h``).
     """
+    source_files = frozenset(code_files)
     anchor = project_root / root
     cache: dict[str, str | None] = {}
 
     def resolve(import_path: str) -> str | None:
         if import_path not in cache:
             cache[import_path] = resolve_import_to_node(
-                import_path, anchor, conn, scan_paths=scan_paths
+                import_path, anchor, conn, scan_paths=scan_paths, source_files=source_files
             )
         return cache[import_path]
 
@@ -441,6 +454,14 @@ def kind_counts(conn: sqlite3.Connection) -> dict[str, int]:
     return count_other_kind_test_files(conn)
 
 
+def unbound_test_files(conn: sqlite3.Connection) -> list[tuple[str, str]]:
+    """Each test file the binding could not place, by path, with its placement.
+
+    BDL-078 ``beadloom-76mk``: ``init`` names them.
+    """
+    return read_unbound_test_files(conn)
+
+
 def needs_full_test_reindex(conn: sqlite3.Connection) -> bool:
     """Whether this index predates the test tables and must be rebuilt in full."""
     return get_meta(conn, TEST_INDEX_VERSION_KEY) != TEST_INDEX_VERSION
@@ -456,8 +477,12 @@ def describe_placements(counts: dict[str, int], kinds: dict[str, int]) -> str:
     phrase over both was true of neither (BDL-074 F1).
     """
     beside = counts.get(PLACEMENT_BESIDE_CODE, 0)
-    bound = counts.get(PLACEMENT_MIRROR, 0) + counts.get(PLACEMENT_OVERRIDE, 0) + beside
-    bound_phrase = f"{bound} bound to a node" + (f" ({beside} beside the code)" if beside else "")
+    flat = counts.get(PLACEMENT_NAMED, 0) + counts.get(PLACEMENT_IMPORTED, 0)
+    bound = counts.get(PLACEMENT_MIRROR, 0) + counts.get(PLACEMENT_OVERRIDE, 0) + beside + flat
+    means = [f"{beside} beside the code"] if beside else []
+    if flat:
+        means.append(f"{flat} flat, by the module named or imported")
+    bound_phrase = f"{bound} bound to a node" + (f" ({', '.join(means)})" if means else "")
     parts = [bound_phrase, f"{counts.get(PLACEMENT_UNPLACED, 0)} unplaced"]
     if counts.get(PLACEMENT_UNOWNED):
         parts.append(f"{counts[PLACEMENT_UNOWNED]} unowned")

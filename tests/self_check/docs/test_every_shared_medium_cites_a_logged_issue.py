@@ -14,10 +14,8 @@ import re
 from beadloom.application.waves import (
     SHARED_MEDIA,
 )
+from beadloom.doc_sync.issue_numbers import declared_log
 from tests.support.repository_root import REPO_ROOT
-
-#: The log every shared medium cites its evidence from.
-_UX_LOG = REPO_ROOT / ".claude" / "development" / "BDL-UX-Issues.md"
 
 
 class TestTheSecondClauseCannotBeSilencedWhileAWaveHoldsTwo:
@@ -25,14 +23,17 @@ class TestTheSecondClauseCannotBeSilencedWhileAWaveHoldsTwo:
 
     def test_every_medium_cites_an_issue_that_exists_in_the_log(self) -> None:
         """TRUE HERE IS NOT TRUE — the evidence has to resolve to a real entry."""
-        log = _UX_LOG.read_text(encoding="utf-8")
+        # The log every shared medium cites its evidence from, at the path this
+        # repository declares under `issue_log:` rather than a second copy of it.
+        log = declared_log(REPO_ROOT).log.read_text(encoding="utf-8")
         # `~~` marks a CLOSED entry, which is still an entry: the citation
         # resolves to a real observation whether or not the defect is fixed.
         # Reading only the open form made closing a cited issue delete the
         # evidence for a medium that is still shared (`beadloom-mr2l.78`).
-        numbered = set(re.findall(r"^(\d+)\. (?:~~)?\[", log, flags=re.MULTILINE))
-        historical = set(re.findall(r"Opened #(\d+)", log))
-        known = numbered | historical
+        # A closed entry whose text moved to the archive keeps a one-line
+        # entry in the log for exactly this reader; the `Opened #N` lines of
+        # the chronology left with the archive and are no longer read.
+        known = set(re.findall(r"^(\d+)\. (?:~~)?\[", log, flags=re.MULTILINE))
         assert known, "the UX log yielded no entries — the fixture, not the code, is wrong"
         for medium in SHARED_MEDIA:
             cited = re.findall(r"#(\d+)", medium.evidence)

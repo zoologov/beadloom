@@ -8,18 +8,22 @@
 // findings' severities for the node's status. A field a version 1 file does not
 // carry is no risk, because nothing says it is one.
 
+import { idRecord } from "../../../shared/ids/index.js";
+
 /** The severity of a finding that breaks a rule; every other severity warns. */
 const ERROR_SEVERITY = "error";
 
 /**
- * The statuses a node is drawn with, most severe first: its theme tone, its
- * border style and the legend's words. Only an error finding is a violation; a
- * node with warn findings only is drawn in a look of its own.
+ * The statuses a node is drawn with, most severe first: its theme tone, the
+ * mark it puts in the node's corner — `filled`, or a `ring` — and the legend's
+ * words. A status never changes the node's border, which is its layer's. Only an
+ * error finding is a violation; a node with warn findings only is drawn in a
+ * look of its own, a ring, apart from the filled marks of what needs fixing.
  */
 export const NODE_STATUSES = Object.freeze({
-  violation: Object.freeze({ tone: "danger", border: "solid", legend: "rule violation (error)" }),
-  stale: Object.freeze({ tone: "warning", border: "solid", legend: "stale docs" }),
-  warned: Object.freeze({ tone: "warning", border: "double", legend: "rule warning" }),
+  violation: Object.freeze({ tone: "danger", mark: "filled", legend: "rule violation (error)" }),
+  stale: Object.freeze({ tone: "warning", mark: "filled", legend: "stale docs" }),
+  warned: Object.freeze({ tone: "warning", mark: "ring", legend: "rule warning" }),
 });
 
 /**
@@ -49,7 +53,8 @@ export function isFlagged(node) {
 }
 
 /**
- * Each node's container, `{ id: parentId | null }`.
+ * Each node's container, `{ id: parentId | null }`, a record without a prototype
+ * (`idRecord`), so a node named `__proto__` or `constructor` is a key like any other.
  *
  * A parent that is not itself a node of the file, or a node that names itself
  * (the root service is `part_of` itself), has none: Cytoscape rejects a dangling
@@ -57,7 +62,7 @@ export function isFlagged(node) {
  */
 export function parentMapOf(nodes) {
   const ids = new Set(nodes.map((n) => n.id));
-  const parents = {};
+  const parents = idRecord();
   for (const n of nodes) {
     parents[n.id] = n.parent && n.parent !== n.id && ids.has(n.parent) ? n.parent : null;
   }

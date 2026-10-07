@@ -186,24 +186,39 @@ so a picture is as current as the build that published it.
 
 ### Reading the picture
 
-- **Boxes and lanes.** Domains and services are boxes around their features and components. The
-  lanes are the layers the project declares, top to bottom, and a node's border and a box's tint
-  are its layer's colour. The layer names come from the project's own declaration, so an adopter
-  sees its own names.
-- **Node status.** A node carries at most one status, in this order: a solid red border is a rule
-  violation (a finding of severity `error`, what `beadloom lint --strict` fails on); a solid
-  yellow border is stale docs; a double yellow border is a rule warning (findings of severity
-  `warn` only). A node with none keeps its layer's colour.
-- **Edges.** Each kind has its own line: `depends_on` solid (an import), `uses` dotted (a declared
-  runtime use), `consumes` and `produces` dashed with different dashes. A `depends_on` edge the
-  layer rule finds against is red, dashed and thicker, exactly when `beadloom lint` reports it.
-  The arrow is at the target, and the line is lighter at its source end. An edge's label shows on
-  hover and on the selected node's edges.
-- **Routes.** An edge runs at right angles, around every box it does not connect, and enters its
-  target's box on a side, where the arrowhead is. An edge from a node into the box that holds it
-  is drawn as a small loop inside that box.
-- **The legend** under the canvas lists the layers, the node statuses and the edge kinds that are
-  actually drawn, so it never names something the canvas does not show.
+BDL-078 gave the viewer its present look. If you knew the earlier one: there are no thick lines,
+no bridges, no dots where lines part and no colour gradient along a line any more.
+
+- **Nodes are cards.** Every node, a feature or a domain box alike, is a card in its layer's
+  colour: a thin border over a light tint of it, its title in the middle, its corners rounded at
+  one radius on screen at every zoom. The layers are the ones the project declares, top to
+  bottom, so an adopter sees its own names; a node in no layer is drawn in a neutral grey and the
+  legend then names **no layer**. An open box is a fainter tint inside a thin solid border, with
+  its title inside at the top. The one box that holds the whole project is a frame: a border a
+  pixel wide and a tint fainter than any node.
+- **Node status is a mark in the corner.** A node carries at most one status, as a dot in its top
+  right corner, and its border stays its layer's: a filled red dot is a rule violation (a finding
+  of severity `error`, what `beadloom lint --strict` fails on), a filled yellow dot is stale docs,
+  a yellow ring is a rule warning (findings of severity `warn` only). A node with none has no
+  mark.
+- **One thin line weight.** Every line is drawn at one thin weight at every zoom, whatever its
+  kind or how many edges it carries. Kinds differ by colour and dash: `depends_on` solid in a
+  light neutral (an import), `uses` dotted (a declared runtime use), `consumes` and `produces`
+  dashed with different dashes and tones. A `depends_on` edge the layer rule finds against is
+  dashed in red, exactly when `beadloom lint` reports it. A line is one colour from end to end.
+- **Arrowheads carry the direction.** A head is one size on screen and stands on a straight piece
+  of line at least as long as itself. Lines that share their last run into a node or a box end in
+  one arrowhead, not one per line; lines that reach a side separately keep their own, with a gap
+  between them.
+- **Routes.** A line runs at right angles, around every box it does not connect, and enters its
+  target on a side. Where lines that ran together part, the turning line leaves in a rounded merge
+  on the stroke. An edge from a node into the box that holds it is drawn the same way, a square
+  line from the node to the box's border.
+- **Labels on hover.** A line's kind is shown only while the pointer is on it. Counts are on pills
+  (below).
+- **The legend** under the canvas lists the layers, the node statuses (each as a small card with
+  its mark) and the edge kinds actually drawn, each sample in the colour the canvas uses, so it
+  never names something the canvas does not show.
 
 ### Laying out
 
@@ -216,34 +231,56 @@ If the layout cannot run, a note above the canvas says so and names the error. T
 hidden and the filters, the neighbourhood, Impact and the navigation buttons are off. Panel and
 Full screen still work, and the static summary on the page remains the source of truth.
 
-### The overview is a map
+### The overview
 
 At the whole-graph fit the architecture is drawn like a map: the top-level boxes, closed, and
-between two boxes one line that carries every edge between them and their contents.
+between two of them one line that carries every edge between them and their contents.
 
-- **An aggregated line** shows its count each way as its label (`3 + 1`), has an arrowhead at
-  each end its edges arrive at, and is wider the more edges it carries. With the pointer on it, a
-  note says how many edges run each way between its two ends. It takes a violation's look when
-  any edge it carries is a violation.
+- **Its own routing.** The overview's lines are routed together, around every box and title:
+  parallel lines keep a visible gap, each line runs straight into its box with room for its
+  arrowhead, no line runs under a title, and lines inside the project's frame stay inside it.
+  Measured on this repository's graph before and after BDL-078: overlapping arrowhead pairs went
+  from 12 to 0, the smallest gap between parallel lines from 0.8 px to 7.1 px, lines under a
+  title from 13 to 0. The routes are planned once for what the filters show; zooming or opening
+  a box moves none of them.
+- **Calm by default.** At rest the lines are thin and light. Point at a box, or select it, and its
+  lines and their counts come forward while every other line fades; move away and all are back
+  at rest.
+- **Counts on pills.** A line that carries more than one edge says how many on a small pill on the
+  line, which no other line paints over and which covers no box, title, arrowhead or other pill.
+  A line that carries one edge has no pill. Where a pill finds no free place it is left out, and
+  the line's count shows in the note while the pointer is on the line. A closed box large enough
+  on screen says how many edges come in and go out in its lower right corner, `in 12 · out 7`.
+- **Titles.** A box's title is drawn inside it at 14, 12.5, 11 or 10 px, the largest that fits. A
+  top-level box too small for its title is drawn a little larger around its place, never moving;
+  where even that does not fit one line, the name is broken onto two. Only a title neither way
+  fits stands beside its box on a plate with a border, and no line runs under it.
 - **At most 100 lines.** When the map would draw more, the weakest lines are left out, and each
   box counts its lines left out as **+N** under its title. With the pointer on a box, or the box
   selected, all of its lines are drawn.
-- **Zooming in opens boxes.** Once you have zoomed in past 1.3 times the whole-graph fit, a box in
-  view opens when its larger side reaches about 600 pixels on screen, and closes again below about
-  480. An open box draws its children and their edges, and boxes inside it open the same way.
-  Nothing moves between levels: every box keeps its place and size.
-- **A selection opens what it needs**, at any zoom. A click on a closed box opens and selects it. A
-  node selected from the search, a link, the card or a node page is drawn with its own edges, and
-  the boxes that hold it open. The neighbourhood and Impact open the boxes of every node they
-  reach. A **hub**, a node with twenty or more drawn edges, is the exception: selected with the
-  default neighbourhood (depth 1, both directions, dimmed), it opens only its own boxes, and its
-  edges to other boxes stay aggregated. Change the depth, the direction or the hide setting, or
-  turn on Impact, to open its neighbours as well.
+
+The overview is made for a project whose top level fits the canvas. For a project whose
+top-level boxes come out a few pixels across, a further grouping tier is deferred; such an
+overview is drawn as it lays out.
+
+### Zooming in: boxes open when you can read them
+
+- **A box opens when its nodes are readable.** Once you have zoomed in past 1.3 times the
+  whole-graph fit, a box in view opens when its smallest node is about 24 pixels tall on screen,
+  and closes again below 90% of that. An open box draws its children and the edges among them,
+  and boxes inside it open the same way. Nothing moves between levels: every box keeps its place
+  and size.
+- **An open box keeps its outward edges on its own lines.** An edge between a node inside the box
+  and anything outside it stays on the box's line to that neighbour, so opening a box moves no
+  line and changes no count around it. A node inside whose edges leave the box this way carries
+  a small **+N** badge on its right side. Point at the node, or select it, and its own edges to
+  the outside are drawn on top, one line to each box they reach, each with its count.
+- **Edges to the box's own container** stay drawn, as square lines to the border.
 - **Filters compose with the map.** The search box opens the boxes that hold its matches. Other
   filters open nothing: a closed box stays closed, and its lines carry only the edges the filters
   show.
-- **Labels keep their size.** A closed box's title and a line's count stay the same size on screen
-  as you zoom. A box too small for its title shows the title above it.
+- **Marks keep their size.** Line weight, arrowheads, corners, titles and pills keep one size on
+  screen as you zoom.
 
 The landscape has no boxes, so it is always drawn in full.
 
@@ -256,19 +293,19 @@ viewer gathers them instead, without moving any node:
   that side and run along one line before each turns off into its own lane.
 - **A trunk.** A node with twenty or more drawn edges sends its edges to one top-level box along
   one route, up to a line along that box, where each drops in where it enters.
-- **A dot** marks each point where edges that ran together part.
 
-With the pointer on a shared line, every edge along it is drawn wider, and a note over the canvas
-names them: the first eight, then "and N more". Outside a selection, edges fade in colour rather
-than turning see-through, so a trunk of faded edges is no darker than one faded edge.
+Where edges that ran together part, the turning one leaves in a rounded merge; there is no dot.
+With the pointer on a shared line, a note over the canvas names the edges along it: the first
+eight, then "and N more". Outside a selection, edges fade in colour rather than turning
+see-through, so a trunk of faded edges is no darker than one faded edge.
 
-### Bridges
+### Following a line
 
-A highlighted edge, the one under the pointer or one on the selection's neighbourhood or impact
-walk, hops over every other edge it crosses, with a small half circle, so you can follow it
-through a busy area. Edges of one trunk or bus carry no bridge between them, because they read as
-one line. With nothing highlighted there are no bridges. A hop too small to see is not drawn, so
-at the whole-graph fit of a fully opened graph you zoom in to see them.
+The line under the pointer, the lines of the node under the pointer, and every line of a
+selection's walk are drawn on top of everything they cross, in their full colour, over a thin
+casing in the canvas's colour that clears the lines beneath. So you can follow one line through a
+busy area without anything drawn across it. Where such a line runs through an open box's title,
+the title is drawn again over it.
 
 ### Moving around
 
@@ -301,6 +338,15 @@ toolbar controls set the neighbourhood:
 - **Hide the rest:** hide what the neighbourhood leaves out instead of dimming it. The boxes
   around what it reached stay.
 
+A selection — a click, a search, a link, the card or a node page — zooms and pans the view to the
+neighbourhood, never so far out that the node is too small to read, in a short animation, or at
+once when your browser asks for reduced motion. A click on a box selects the box: it opens, is
+framed whole, keeps its contents at full strength, and draws its edges to the outside as pointing
+at it does; its card says what it holds. Selecting a node with the default neighbourhood draws its
+edges on the same lines pointing at it draws them, each line with its count; change the depth,
+the direction or the hide setting, or turn on Impact, to open the boxes of every node the walk
+reaches.
+
 A click on the empty canvas, or `Esc`, clears the selection and shows the whole graph again.
 
 ### Impact on the architecture
@@ -328,8 +374,8 @@ imports, and it does not follow `produces`. The two commands are the code-level 
 
 On `/landscape` a service is a node and a contract is an edge from its producer to its consumer.
 A service's border is its health: green healthy, red broken, grey neutral. A contract edge is
-drawn by its health: healthy solid green, drifting dashed yellow, broken dashed red and thicker
-with its verdict as a badge, neutral dotted grey (external, expected, dead or unmapped). The
+drawn by its health: healthy solid green, drifting dashed yellow, broken dashed red with its
+verdict as a badge, neutral dotted grey (external, expected, dead or unmapped). The
 neighbourhood controls work here as on the architecture.
 
 **Impact on the landscape** walks each contract from its producer to its consumers, then to their
@@ -353,14 +399,27 @@ risk through an unverified contract.
 The panel shows a card for the selected node, one kind per mode.
 
 - **The architecture card:** the node's id and summary; kind, lifecycle, tags; its layer and
-  whether that is its own tag or inherited from its container; its source; its activity (commits
-  in 30 days and a level); its debt with the reasons; its docs, each with its sync status and a
+  whether that is its own tag or inherited from its container; its source; its activity; its debt
+  with the reasons; its docs, each with its sync status and a
   link to the published copy when there is one; its bound tests with their count, placement
   and the files bound to the node itself; its first 50 public symbols and how many more there
   are; its edges by kind and direction, where a click selects the other end; its rule
   findings with their severity; a link to its page; `beadloom ctx <ref>` and
-  `beadloom why <ref>` to copy. "None" means the data file holds nothing for the field; "not
+  `beadloom why <ref>` to copy; for a box, what it holds and how many of its edges go out to and
+  come in from each neighbour. "None" means the data file holds nothing for the field; "not
   recorded" means the file does not carry the field at all.
+- **Activity** counts changed lines (added plus deleted) over the last 30 days, not commits, so a
+  squash-merged history reads the same as any other: `412 lines changed in 30 days, hot`. The
+  levels are relative to your project: among the nodes changed in 30 days, the busiest tenth is
+  `hot`, the next three tenths `warm` and the rest `cool`; a node with no change in 30 days but
+  some in 90 says `no change in 30 days, quiet`, and none in 90 `no change in 90 days, dormant`.
+  Boxes are ranked among boxes and include their parts' changes; other nodes are ranked among
+  themselves. Because the levels are relative, a node's level can change when the rest of the
+  project does. Lock files, files git's attributes mark `linguist-generated` or `binary`, and
+  the patterns your project lists under `activity.exclude` in `.beadloom/config.yml` do not count
+  (see [Getting Started](../getting-started.md#configuration)). Activity is measured on the
+  history the build checked out: on a shallow clone that does not reach back 90 days it is not
+  recorded and the card says "not recorded".
 - **The source link** points at the source as it was in the commit the site was generated from.
   The repository is the one `site.repo_url` declares, else the project's `origin`. The generator
   writes the link for a forge it recognises by the host: GitHub, GitLab, Bitbucket, Gitea,
@@ -726,6 +785,11 @@ cd site && npm ci && npm run docs:build
 npm run docs:preview          # or `npm run docs:dev` for a live-reload dev server
 ```
 
+`npm run dev-check` starts the dev server, loads a page with a Mermaid diagram and the
+architecture page in Chromium (after `npx playwright install chromium`), and fails on any page
+error. The shipped config pre-bundles `mermaid` and the layout engine's worker for the dev server,
+which a page with a diagram needs under `vitepress dev` (BDL-078).
+
 Everything under the portal directory is output: `beadloom init` ignores `/site/` in
 `.gitignore` (see [Getting Started](../getting-started.md#what-init-writes)), and nothing there
 needs committing. Your own portal files go under `.beadloom/site/`.
@@ -761,7 +825,9 @@ Pages workflow: .github/workflows/beadloom-portal.yml written (base /tidewater/,
 ```
 
 The workflow does in CI what `docs site` did locally: it installs the same beadloom version with
-`beadloom[languages]` on Python 3.12, runs `beadloom reindex` and `beadloom docs site --out <dir>`,
+`beadloom[languages]` on Python 3.12, checks the repository out with its whole history
+(`fetch-depth: 0`, because node activity is measured on the history the clone holds), runs
+`beadloom reindex` and `beadloom docs site --out <dir>`,
 sets up the Node major the scaffold declares, runs `npm ci` and `npm run docs:build`, and deploys
 `<dir>/.vitepress/dist` with `actions/upload-pages-artifact` and `actions/deploy-pages`.
 
@@ -895,6 +961,12 @@ reproducible and the generated tree diffable in review.
   computed in a Web Worker; trunks, buses and junction dots for busy nodes; the overview as a map
   of top-level boxes and aggregated lines that opens as you zoom in; bridges on highlighted
   edges; Arrange removed.
+- **The viewer looks finished (BDL-078):** one thin line weight, arrowheads one size on screen, one
+  head per shared last run, rounded merges; bridges, junction dots and the colour gradient
+  removed, a followed line drawn on top over a casing instead; nodes as cards with a corner status
+  mark; the overview routed on its own and calm by default, counts on pills; open boxes keeping
+  their outward edges on their own lines with a "+N" per node; boxes opening when their nodes are
+  readable; a selection framed; activity by changed lines with levels relative to the project.
 - **Deferred:** REST/OpenAPI + gRPC contracts in the federated map.
 
 See the [`beadloom docs site` CLI reference](../services/cli.md#beadloom-docs-site),

@@ -8,7 +8,9 @@
 // does not recognise, so the card knows no forge), its
 // docs each with its freshness, its bound tests, its public symbols, its edges
 // by kind and direction, its rule findings, its activity and its debt, then the
-// node's page and the `ctx` and `why` commands to copy.
+// node's page and the `ctx` and `why` commands to copy. A box's card says as well
+// what it holds and where its edges to the outside go: how many to and from each
+// node its lines on the map join it to.
 //
 // Every value comes from the data file. A field the file holds nothing for says
 // "none"; a field a version 1 file does not carry at all says "not recorded",
@@ -17,7 +19,7 @@
 
 import { computed } from "vue";
 import { withBase } from "vitepress";
-import { edgeGroupsOf } from "../../../entities/graph-edge/index.js";
+import { boxEdgesOf, edgeGroupsOf } from "../../../entities/graph-edge/index.js";
 import { layerOfNode } from "../../../entities/layer/index.js";
 import { shellQuote } from "../../../shared/lib/index.js";
 import { CopyCommand } from "../../../shared/ui/index.js";
@@ -26,6 +28,8 @@ const props = defineProps({
   node: { type: Object, required: true },
   edges: { type: Array, default: () => [] },
   layers: { type: Array, default: () => [] },
+  // Each node's box, `{ id: parent | null }`: a box's card says what it holds.
+  parents: { type: Object, default: null },
 });
 const emit = defineEmits(["select", "close"]);
 
@@ -47,6 +51,33 @@ const docLinkOf = computed(() => {
 });
 
 const edgeGroups = computed(() => edgeGroupsOf(props.node.id, props.edges));
+// What a box holds and where its edges go, or null for a node that holds nothing.
+const contents = computed(() => (props.parents ? boxEdgesOf(props.node.id, props.edges, props.parents) : null));
+const sumOf = (entries) => entries.reduce((sum, entry) => sum + entry.count, 0);
+
+// The activity line: changed lines in 30 days and the level, which is relative
+// to the project. A node with no change in
+// its window says so in words, not as a low count. A data file written before
+// lines were counted carries commits only, and is said in commits. One line or
+// one commit is said in the singular.
+const NO_CHANGE = new Map([
+  ["quiet", "no change in 30 days"],
+  ["dormant", "no change in 90 days"],
+]);
+/** `count` followed by `one` when it is 1, and by `many` otherwise. */
+const countOf = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+const activityLine = computed(() => {
+  const activity = props.node.activity;
+  if (!activity) return NOT_RECORDED;
+  const level = activity.level || "";
+  let said = NO_CHANGE.get(level);
+  if (said === undefined) {
+    said = activity.lines_30d === undefined
+      ? `${countOf(activity.commits_30d ?? 0, "commit", "commits")} in 30 days`
+      : `${countOf(activity.lines_30d, "line", "lines")} changed in 30 days`;
+  }
+  return level ? `${said}, ${level}` : said;
+});
 
 const placements = computed(() =>
   Object.entries(props.node.tests?.placement || {}).sort(([a], [b]) => a.localeCompare(b))
@@ -84,12 +115,7 @@ const placements = computed(() =>
         <code v-else>{{ node.source }}</code>
       </dd>
       <dt>Activity</dt>
-      <dd data-card-field="activity">
-        <template v-if="!node.activity">{{ NOT_RECORDED }}</template>
-        <template v-else>
-          {{ node.activity.commits_30d ?? 0 }} commits in 30 days<template v-if="node.activity.level">, {{ node.activity.level }}</template>
-        </template>
-      </dd>
+      <dd data-card-field="activity">{{ activityLine }}</dd>
       <dt>Debt</dt>
       <dd data-card-field="debt">
         <template v-if="node.debt === undefined">{{ NOT_RECORDED }}</template>
@@ -144,6 +170,27 @@ const placements = computed(() =>
           <code v-for="name in node.public_symbols.names" :key="name">{{ name }}</code>
         </p>
       </details>
+    </section>
+
+    <section v-if="contents" data-card-field="contents">
+      <h4>Inside</h4>
+      <p class="bl-card-line" :data-contents-inside="contents.inside">
+        {{ contents.inside }} {{ contents.inside === 1 ? "node" : "nodes" }}
+      </p>
+      <h5>{{ sumOf(contents.out) }} {{ sumOf(contents.out) === 1 ? "edge" : "edges" }} out</h5>
+      <p v-if="!contents.out.length" class="bl-card-none">{{ NONE }}</p>
+      <ul v-else>
+        <li v-for="entry in contents.out" :key="entry.id" :data-contents-out="entry.id" :data-count="entry.count">
+          to <code>{{ entry.id }}</code>: {{ entry.count }}
+        </li>
+      </ul>
+      <h5>{{ sumOf(contents.in) }} {{ sumOf(contents.in) === 1 ? "edge" : "edges" }} in</h5>
+      <p v-if="!contents.in.length" class="bl-card-none">{{ NONE }}</p>
+      <ul v-else>
+        <li v-for="entry in contents.in" :key="entry.id" :data-contents-in="entry.id" :data-count="entry.count">
+          from <code>{{ entry.id }}</code>: {{ entry.count }}
+        </li>
+      </ul>
     </section>
 
     <section data-card-field="edges">

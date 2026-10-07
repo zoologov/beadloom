@@ -1,6 +1,6 @@
 # PLAN: BDL-077 — The viewer draws edges like a classic diagram
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-10-03
 
 ---

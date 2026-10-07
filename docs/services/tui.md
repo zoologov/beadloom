@@ -59,7 +59,7 @@ Main overview showing architecture health at a glance.
 - **DebtGaugeWidget** -- Debt score with severity coloring (green 0-20, yellow 21-50, red 51+) and direction arrow. Shows `Debt: computing…` until the background worker reports a score.
 - **Screen description** -- A label describing the screen purpose ("Architecture overview: graph structure, git activity, lint & debt health").
 - **GraphTreeWidget** -- Interactive tree built from `part_of` edges showing the architecture hierarchy. Each node label includes a doc status indicator (green circle = fresh, yellow triangle = stale, red X = missing) and an edge count badge. Nodes are sorted by kind (service > domain > feature) then alphabetically. Selecting a node emits a `NodeSelected` message that updates the summary bar.
-- **ActivityWidget** -- Per-domain git activity displayed as colored progress bars (green >=70%, yellow >=30%, dim <30%). Shows `Analyzing git history…` until the background worker reports results.
+- **ActivityWidget** -- Per-node git activity (BDL-078 F-activity): each node's bar is its changed lines in 30 days relative to the busiest node shown, styled by its level (`LEVEL_STYLES`: `hot` bold green, `warm` yellow, `cool` cyan, `quiet` and `dormant` dim), followed by the lines and level in words (`412 lines, hot`, `1 line, cool`) or, for `quiet` and `dormant`, `no change in 30 days, quiet` / `no change in 90 days, dormant`. The words come from `NO_CHANGE_WORDS` and `count_in_words`, re-exported by `application/graph_reads`, so they match `ctx` and the node card. An activity recorded before changed lines were counted reads as 0 lines. Shows `Analyzing git history…` until the background worker reports results.
 - **LintPanelWidget** -- Violation counts with severity icons (error, warning, info) and individual violation details (rule name, affected node, description). A row stating how much of its edge set a layer rule judged LEADS the list and renders its MESSAGE, where the numbers are: such a row carries no `from_ref_id` and the rule description beside it describes the boundary rather than how much of it was looked at, so the panel used to print `architecture-layers (?)` and the rule's own description (BDL-070 A4). It leads for the reason `lint --format github` puts its `::notice::` first — the reach of a check is what the findings under it are true of. The header counts are unchanged: a population is counted exactly as every other finding is.
 - **StatusBarWidget** -- Node count, edge count, doc count, a count of stale doc-code PAIRS rendered as `N stale pair(s)`, watcher status indicator, and last action message. Supports auto-dismissing notifications. It printed a bare `N stale` until BDL-069 `beadloom-rqma.5`; the sentence now comes from the shared `StaleCount`, the same one the `s` key's notification uses.
 - **Action bar** -- Keybinding hints at the bottom of the screen showing available actions: `[Enter]explore`, `[r]eindex`, `[l]int`, `[s]ync-check`, `[S]napshot`, `[?]help`.
@@ -262,7 +262,8 @@ src/beadloom/tui/
     graph_tree.py          -- GraphTreeWidget + NodeSelected message
     debt_gauge.py          -- DebtGaugeWidget
     lint_panel.py          -- LintPanelWidget
-    activity.py            -- ActivityWidget
+    activity.py            -- ActivityWidget, LEVEL_STYLES
+    domain_list.py         -- DomainList (OptionList of the domains; DomainSelected, NodeSelected messages)
     status_bar.py          -- StatusBarWidget
     node_detail_panel.py   -- NodeDetailPanel
     dependency_path.py     -- DependencyPathWidget
@@ -307,7 +308,7 @@ Module `src/beadloom/tui/data_providers.py`:
 - `LintDataProvider` -- `get_violations()`, `get_violation_count()`. Each row carries `rule_name`, `rule_type`, `severity`, `from_ref_id`, `to_ref_id`, `description` and `message`. This provider is one of the two surfaces in the product that call `evaluate_all` without ever building a `LintResult`, so a finding is the only thing that reaches it — and the layer rule states its population IN the message. `rule_type` and `message` were both dropped before BDL-070 A4, which is why the numbers never reached the screen
 - `SyncDataProvider` -- `get_sync_results()`, `get_stale_count()`, `get_coverage()`. Since BDL-061 S4b it passes the project's resolved document-section requirements into `check_sync`, so the dashboard sees the `incomplete` document-shape rows the CI gate sees rather than a quieter view of the same project
 - `DebtDataProvider` -- `get_debt_report()`, `get_score()`
-- `ActivityDataProvider` -- `get_activity()`; reads git activity through `application/graph_reads.analyze_git_activity`, never `infrastructure.git_activity` directly — the `tui-no-direct-infra` boundary forbids it, and since BDL-UX #172 the rule can actually say so
+- `ActivityDataProvider` -- `get_activity()`; passes the `part_of` containers (`graph_reads.get_part_of_containers`), so a box reads with its parts, and the project's `activity.exclude` patterns (`application.activity_settings.activity_exclusions`), as the reindex does (BDL-078); reads git activity through `application/graph_reads.analyze_git_activity`, never `infrastructure.git_activity` directly — the `tui-no-direct-infra` boundary forbids it, and since BDL-UX #172 the rule can actually say so
 - `WhyDataProvider` -- `analyze(ref_id, reverse=False)`
 - `ContextDataProvider` -- `get_context(ref_id)`, `estimate_tokens(text)`
 

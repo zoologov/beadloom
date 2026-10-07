@@ -88,10 +88,22 @@ def _rel_date(days_ago: int) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
 
+def _numstat_log(commits: list[tuple[str, str, str, list[tuple[str, int]]]]) -> str:
+    """``git log --format=<RS>%H<US>%cI<US>%aN --numstat -z`` output for *commits*.
+
+    Each commit is ``(hash, date, author, [(path, changed lines), ...])``; the
+    lines are written as added, none deleted.
+    """
+    out: list[str] = []
+    for commit_hash, date, author, files in commits:
+        entries = "".join(f"{lines}\t0\t{path}\0" for path, lines in files)
+        out.append(f"\x1e{commit_hash}\x1f{date}\x1f{author}\0\n{entries}")
+    return "".join(out)
+
+
 # Sample git-log output with RELATIVE dates so window classification is
 # deterministic. Four commits land inside the 30-day window; one (mno345)
-# lands in the 30-90 day window. The mock bypasses git's ``--since``, so
-# every commit below is also within the 90-day bucket.
+# lands in the 30-90 day window.
 #
 # Commit -> touched nodes -> windows:
 #   abc123 (Alice):   src/auth -> auth        | 30d + 90d
@@ -100,30 +112,17 @@ def _rel_date(days_ago: int) -> str:
 #   jkl012 (Charlie): src/auth, src/core      | 30d + 90d
 #   mno345 (Alice):   src/core -> core        | 90d only (45 days ago)
 #
-# Resulting counts: auth 30d=3 / 90d=3 ; core 30d=2 / 90d=3.
-_SAMPLE_GIT_LOG = f"""\
-abc123 {_rel_date(2)} Alice
-
-src/auth/login.py
-src/auth/utils.py
-
-def456 {_rel_date(3)} Bob
-
-src/auth/login.py
-
-ghi789 {_rel_date(4)} Alice
-
-src/core/engine.py
-
-jkl012 {_rel_date(5)} Charlie
-
-src/auth/utils.py
-src/core/engine.py
-
-mno345 {_rel_date(45)} Alice
-
-src/core/engine.py
-"""
+# Resulting counts: auth 30d=3 / 90d=3, 9 lines in 30d ; core 30d=2 / 90d=3,
+# 5 lines in 30d and 25 in 90d.
+_SAMPLE_GIT_LOG = _numstat_log(
+    [
+        ("abc123", _rel_date(2), "Alice", [("src/auth/login.py", 3), ("src/auth/utils.py", 2)]),
+        ("def456", _rel_date(3), "Bob", [("src/auth/login.py", 1)]),
+        ("ghi789", _rel_date(4), "Alice", [("src/core/engine.py", 4)]),
+        ("jkl012", _rel_date(5), "Charlie", [("src/auth/utils.py", 3), ("src/core/engine.py", 1)]),
+        ("mno345", _rel_date(45), "Alice", [("src/core/engine.py", 20)]),
+    ]
+)
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +158,10 @@ class TestGitActivityDataclass:
 
 
 class TestActivityLevels:
-    """Test all 4 activity levels via mocked git output."""
+    """The log format and the levels it yields, via mocked git output.
+
+    The relative level rule itself is pinned in ``test_activity_by_changed_lines.py``.
+    """
 
     def _run_with_mock(
         self,
@@ -174,72 +176,40 @@ class TestActivityLevels:
         ):
             return analyze_git_activity(tmp_path, source_dirs)
 
-    def test_hot_activity(self, tmp_path: Path) -> None:
-        """More than 20 commits in 30 days -> hot."""
-        # Generate 25 commit entries for src/auth/ within last 15 days
-        now = datetime.now()
-        lines: list[str] = []
-        for i in range(25):
-            dt = now - timedelta(days=(i % 15))
-            date_str = dt.strftime("%Y-%m-%dT10:00:00+00:00")
-            lines.append(f"hash{i} {date_str} Alice")
-            lines.append("")
-            lines.append("src/auth/login.py")
-            lines.append("")
-        stdout = "\n".join(lines) + "\n"
+    def test_a_binary_entry_is_a_change_of_zero_lines(self, tmp_path: Path) -> None:
+        """``numstat`` reads ``-`` for a binary file: a commit, no lines."""
+        stdout = f"\x1ebin1\x1f{_rel_date(1)}\x1fAlice\0\n-\t-\tsrc/db/blob.bin\0"
+        result = self._run_with_mock(tmp_path, stdout, {"db": "src/db"})
+        assert (result["db"].commits_30d, result["db"].lines_30d) == (1, 0)
+        assert result["db"].activity_level == "cool"
 
-        result = self._run_with_mock(
-            tmp_path,
-            stdout,
-            {"auth": "src/auth"},
+    def test_a_rename_entry_counts_at_the_new_path(self, tmp_path: Path) -> None:
+        """A rename leaves the path empty and names the old and new paths after it."""
+        stdout = (
+            f"\x1emv1\x1f{_rel_date(1)}\x1fAlice\0\n"
+            "2\t1\t\0src/old/x.py\0src/new/x.py\0"
         )
-        assert "auth" in result
-        assert result["auth"].activity_level == "hot"
-        assert result["auth"].commits_30d > 20
+        result = self._run_with_mock(tmp_path, stdout, {"old": "src/old", "new": "src/new"})
+        assert result["new"].lines_30d == 3
+        assert result["old"].lines_30d == 0
+        assert result["old"].commits_30d == result["new"].commits_30d == 1
 
-    def test_warm_activity(self, tmp_path: Path) -> None:
-        """5-20 commits in 30 days -> warm."""
-        now = datetime.now()
-        lines: list[str] = []
-        for i in range(10):
-            dt = now - timedelta(days=(i % 15))
-            date_str = dt.strftime("%Y-%m-%dT10:00:00+00:00")
-            lines.append(f"hash{i} {date_str} Bob")
-            lines.append("")
-            lines.append("src/api/routes.py")
-            lines.append("")
-        stdout = "\n".join(lines) + "\n"
-
-        result = self._run_with_mock(
-            tmp_path,
-            stdout,
-            {"api": "src/api"},
+    def test_a_record_that_does_not_parse_is_skipped(self, tmp_path: Path) -> None:
+        """A header without its three fields, or with no date, is not a commit."""
+        stdout = (
+            "\x1enot-a-header\0\n1\t0\tsrc/db/x.py\0"
+            "\x1eh1\x1fnot-a-date\x1fAlice\0\n1\t0\tsrc/db/x.py\0"
+            f"\x1eh2\x1f{_rel_date(1)}\x1fAlice\0\ngarbage\0"
         )
-        assert "api" in result
-        assert result["api"].activity_level == "warm"
-        assert 5 <= result["api"].commits_30d <= 20
+        result = self._run_with_mock(tmp_path, stdout, {"db": "src/db"})
+        assert (result["db"].commits_30d, result["db"].lines_30d) == (0, 0)
 
-    def test_cold_activity(self, tmp_path: Path) -> None:
-        """1-4 commits in 30 days -> cold."""
-        now = datetime.now()
-        lines: list[str] = []
-        for i in range(2):
-            dt = now - timedelta(days=5 + i)
-            date_str = dt.strftime("%Y-%m-%dT10:00:00+00:00")
-            lines.append(f"hash{i} {date_str} Charlie")
-            lines.append("")
-            lines.append("src/db/models.py")
-            lines.append("")
-        stdout = "\n".join(lines) + "\n"
-
-        result = self._run_with_mock(
-            tmp_path,
-            stdout,
-            {"db": "src/db"},
-        )
-        assert "db" in result
-        assert result["db"].activity_level == "cold"
-        assert 1 <= result["db"].commits_30d <= 4
+    def test_a_utc_z_date_is_read(self, tmp_path: Path) -> None:
+        """A committer date ending in ``Z`` is read on Python 3.10 as well."""
+        when = (datetime.now(tz=timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        stdout = _numstat_log([("z1", when, "Alice", [("src/db/x.py", 2)])])
+        result = self._run_with_mock(tmp_path, stdout, {"db": "src/db"})
+        assert result["db"].lines_30d == 2
 
     def test_dormant_activity(self, tmp_path: Path) -> None:
         """0 commits in 90 days -> dormant."""
@@ -384,13 +354,17 @@ class TestMultipleSourceDirs:
         auth = activities["auth"]
         assert auth.commits_30d == 3
         assert auth.commits_90d == 3
-        assert auth.activity_level == "cold"
+        assert (auth.lines_30d, auth.lines_90d) == (9, 9)
+        # Two nodes changed in 30 days: the busier (auth, 9 lines) is hot.
+        assert auth.activity_level == "hot"
 
         # core: 3 commits total (ghi789, jkl012, mno345). Two are within 30d
         # (ghi789, jkl012); mno345 is 45 days ago -> 90d only.
         core = activities["core"]
         assert core.commits_30d == 2
         assert core.commits_90d == 3
+        assert (core.lines_30d, core.lines_90d) == (5, 25)
+        assert core.activity_level == "cool"
 
     def test_top_contributors(self, tmp_path: Path) -> None:
         """Top contributors are correctly ranked by commit count."""
@@ -476,7 +450,10 @@ class TestIntegrationRealGitRepo:
         auth = result["auth"]
         assert auth.commits_30d == 3
         assert auth.commits_90d == 3
-        assert auth.activity_level == "cold"
+        # login.py: "v1" added (1), then replaced by "v2" (1 + 1); utils.py added (1).
+        assert (auth.lines_30d, auth.lines_90d) == (4, 4)
+        # The only node, and changed: the busiest node of the project is hot.
+        assert auth.activity_level == "hot"
         assert auth.last_commit_date != ""
         assert len(auth.top_contributors) == 2
         # Test User has 2 commits, Other Dev has 1

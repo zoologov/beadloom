@@ -99,7 +99,7 @@ TESTS_KEYS = {"files", "file_count", "count", "placement"}
 #: records more — among them the names of a node's most frequent committers —
 #: and the data file is published, so a key reaches it only by being listed here
 #: (BDL-076 R1 finding M2).
-ACTIVITY_KEYS = {"commits_30d", "level"}
+ACTIVITY_KEYS = {"commits_30d", "lines_30d", "level"}
 
 #: What a declared layer carries at the top level.
 LAYER_KEYS = {"name", "rank", "tag", "token"}
@@ -560,6 +560,8 @@ def test_the_activity_carries_only_what_the_card_shows(shop: sqlite3.Connection)
     conn = shop
     recorded = {
         "level": "warm",
+        "lines_30d": 41,
+        "lines_90d": 120,
         "commits_30d": 3,
         "commits_90d": 9,
         "last_commit": "2026-09-29",
@@ -570,7 +572,13 @@ def test_the_activity_carries_only_what_the_card_shows(shop: sqlite3.Connection)
     conn.commit()
     data = build_architecture_view_data(conn)
 
-    assert _nodes(data)["orders"]["activity"] == {"level": "warm", "commits_30d": 3}
+    # BDL-078 F-activity: the card says "N lines changed in 30 days", so lines_30d
+    # is published; lines_90d is not shown and stays in the index.
+    assert _nodes(data)["orders"]["activity"] == {
+        "level": "warm",
+        "lines_30d": 41,
+        "commits_30d": 3,
+    }
     for node in _nodes(data).values():
         activity = node["activity"]
         assert activity is None or set(activity) <= ACTIVITY_KEYS, node["id"]

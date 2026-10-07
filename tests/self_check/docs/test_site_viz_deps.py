@@ -192,10 +192,11 @@ def test_violation_edges_have_their_own_style() -> None:
 
 
 def test_the_viewer_renders_a_legend_derived_from_the_data() -> None:
-    """The legend lists the layers and the drawn edge kinds, both read off the data."""
+    """The legend lists the layers, a node in no layer and the drawn edge kinds, off the data."""
     viewer = _read("widgets/graph-viewer/ui/GraphViewer.vue")
-    assert '<LayerLegend :layers="layers" />' in viewer
-    assert '<EdgeLegend :keys="legendKeys" />' in viewer
+    assert '<LayerLegend :layers="layers" :unlayered="unlayered" />' in viewer
+    assert "hasUnlayeredNode(" in viewer
+    assert '<EdgeLegend :keys="legendKeys"' in viewer
     assert "legendKeysOf(" in viewer
 
 
@@ -219,7 +220,8 @@ def test_full_screen_covers_the_viewers_whole_space() -> None:
 def test_filters_hide_rather_than_remove_and_keep_containers() -> None:
     """Filters HIDE nodes, keep the containers of shown nodes, and re-fit to what shows."""
     canvas = _read("widgets/graph-viewer/model/useGraphCanvas.js")
-    assert 'toggleClass("is-hidden"' in canvas
+    # A class, set only where it changes (`setClass`): the node stays in the graph, not drawn.
+    assert 'setClass(node, "is-hidden"' in canvas
     assert 'display: "none"' in _read("widgets/graph-viewer/lib/stylesheet.js")
     assert "withAncestors(" in _read("features/filter-graph/lib/visibleIds.js")
     navigation = _read("features/navigate-graph/model/useGraphNavigation.js")

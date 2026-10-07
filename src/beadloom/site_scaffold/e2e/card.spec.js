@@ -20,7 +20,7 @@ function richness(node) {
     node.tests?.count,
     (node.public_symbols?.names || []).length,
     (node.findings || []).length,
-    node.activity?.commits_30d,
+    node.activity?.lines_30d ?? node.activity?.commits_30d,
     node.debt,
     node.url,
   ].filter(Boolean).length;
@@ -74,7 +74,7 @@ test("the card shows every field the data file holds for the node", async ({ pag
     await expect(field(page, "findings")).toContainText(finding.rule);
     await expect(field(page, "findings")).toContainText(finding.message);
   }
-  await expect(field(page, "activity")).toContainText(String(node.activity.commits_30d));
+  await expect(field(page, "activity")).toContainText(node.activity.level);
   if (node.debt) await expect(field(page, "debt")).toContainText(String(node.debt.score));
   await expect(field(page, "page").locator("a")).toHaveAttribute("href", new RegExp(`${node.url}(\\.html)?$`));
   await expect(field(page, "commands")).toContainText(`beadloom ctx ${node.id}`);
@@ -115,6 +115,34 @@ for (const [name, empty] of Object.entries(EMPTIED)) {
     await openArchitecture(page, `?focus=${node.id}`);
 
     expect(await fieldValue(page, name)).toBe("none");
+  });
+}
+
+// The activity line: changed lines in 30 days with the level, which is relative
+// to the project; a node with no change
+// says so in words rather than as a low count. A data file written before lines
+// were counted is said in the commits it carries. One line or one commit is said
+// in the singular.
+const ACTIVITY_LINES = [
+  { activity: { lines_30d: 1234, commits_30d: 3, level: "hot" }, says: "1234 lines changed in 30 days, hot" },
+  { activity: { lines_30d: 0, commits_30d: 1, level: "cool" }, says: "0 lines changed in 30 days, cool" },
+  { activity: { lines_30d: 1, commits_30d: 1, level: "cool" }, says: "1 line changed in 30 days, cool" },
+  { activity: { lines_30d: 0, commits_30d: 0, level: "quiet" }, says: "no change in 30 days, quiet" },
+  { activity: { lines_30d: 0, commits_30d: 0, level: "dormant" }, says: "no change in 90 days, dormant" },
+  { activity: { commits_30d: 2, level: "cold" }, says: "2 commits in 30 days, cold" },
+  { activity: { commits_30d: 1, level: "cold" }, says: "1 commit in 30 days, cold" },
+];
+
+for (const { activity, says } of ACTIVITY_LINES) {
+  test(`the card's activity reads "${says}"`, async ({ page, request }) => {
+    const data = await architectureData(request);
+    const node = richest(data);
+    node.activity = activity;
+    await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+
+    await openArchitecture(page, `?focus=${node.id}`);
+
+    expect(await fieldValue(page, "activity")).toBe(says);
   });
 }
 

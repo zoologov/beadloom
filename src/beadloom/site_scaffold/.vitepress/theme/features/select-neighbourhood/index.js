@@ -1,7 +1,7 @@
 // beadloom:component=site-select-neighbourhood
 // Public API of the `select-neighbourhood` feature.
 
-export { neighbourhoodOf } from "./lib/neighbourhood.js";
+export { boxNeighbourhoodOf, neighbourhoodOf } from "./lib/neighbourhood.js";
 export {
   ALL_DEPTHS,
   DEPTH_CHOICES,

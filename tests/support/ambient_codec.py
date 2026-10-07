@@ -55,11 +55,15 @@ class AmbientTextMode:
         encoding = kwargs.pop("encoding", None)
         errors = kwargs.pop("errors", None)
         text = kwargs.pop("text", None)
-        completed = self._real(argv, **kwargs)  # bytes: text mode is emulated here
-        if encoding is None and not text:
-            return completed
+        text_mode = encoding is not None or bool(text)
         codec = encoding or self._ambient
         handler = errors or "strict"
+        if text_mode and isinstance(kwargs.get("input"), str):
+            # Text mode encodes ``input`` with the codec it decodes with.
+            kwargs["input"] = kwargs["input"].encode(codec, handler)
+        completed = self._real(argv, **kwargs)  # bytes: text mode is emulated here
+        if not text_mode:
+            return completed
         return subprocess.CompletedProcess(
             completed.args,
             completed.returncode,

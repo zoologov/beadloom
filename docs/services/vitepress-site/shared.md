@@ -25,14 +25,19 @@ every other layer does.
 - `cytoscape`: `loadCytoscape()` imports Cytoscape in the browser only, once. It loads Cytoscape
   alone: the layout is not Cytoscape's.
 - `elk`: the layered layout, run by elkjs 0.12 in a Web Worker so that the page's main thread is
-  never held by it. `elkGraphOf({ nodes, edges })` builds the ELK graph with the fixed options
+  never held by it. `elkGraphOf({ nodes, edges, boxTop })` builds the ELK graph with the fixed options
   `LAYERED_OPTIONS` (layered, direction down, orthogonal edge routing, `INCLUDE_CHILDREN`, each
   node's layer rank as its partition) and asks for every box and section in root coordinates
-  (`elk.json.shapeCoords` and `elk.json.edgeCoords` set to `ROOT`). Nothing about the canvas is
+  (`elk.json.shapeCoords` and `elk.json.edgeCoords` set to `ROOT`). Every box carries its own
+  padding, `[top=boxTop, left=12, bottom=12, right=12]`: ELK's own 12 units on three sides and
+  `boxTop` above its children, the room its title is drawn in, 12 when none is given (BDL-078
+  `beadloom-btkd.6`; the viewer passes 36, `GEOMETRY.boxTitleRoom`), so no child stands under
+  an open box's title. Nothing about the canvas is
   handed over, neither its shape nor where a node stands, so the layout depends on the graph
   alone. `layOut(graph)` resolves to `{ geometry, source, ms }`: `geometry` is
   `{ boxes, routes }`, a frozen box `{ x1, y1, x2, y2 }` per node and a route
-  `{ source, target, sections }` per edge, each section a polyline of points. `source` is
+  `{ source, target, sections }` per edge, each section a polyline of points, both records
+  without a prototype (`idRecord`). `source` is
   `worker` when ELK ran for this call and `cache` when the layout was already kept or under way.
   The page keeps the last eight layouts, keyed by the ELK graph, so every viewer of one data
   file (the page, full screen, a node page) shares one layout. One worker serves the page.
@@ -43,7 +48,12 @@ every other layer does.
   waiting.
 - `ids`: `freshId(base, taken)`, the id for a thing the viewer makes itself: `base`, primed (`'`)
   until no id in `taken` has it. ELK's root graph and Cytoscape's edge ids use it, so no node of
-  the data file can collide with them. The segment imports nothing, so a module that runs
+  the data file can collide with them. `idRecord(entries)` (BDL-078 `beadloom-ytcg`) is a record
+  without a prototype keyed by the data file's ids: a plain object answers `constructor` or
+  `toString` for a key it was never given, and assigning `__proto__` replaces its prototype, so
+  a node of that name dropped out of every walk over the object. Every map keyed by a node id in
+  the viewer is a `Map` or such a record: the containment map, the layout's boxes and routes, the
+  bundling's paths and the test handle's records. The segment imports nothing, so a module that runs
   without VitePress can use it. `elk` tells the root apart from the nodes by position, not by
   id.
 - `echarts`: the lazily loaded ECharts component and the dashboard's palette.
@@ -55,8 +65,8 @@ every other layer does.
 
 - `shared/lib/index.js`, `shared/theme-tokens/index.js`, `shared/cytoscape/index.js`,
   `shared/elk/index.js` (`elkGraphOf`, `LAYERED_OPTIONS`, `layOut`, `warmUpLayout`),
-  `shared/ids/index.js` (`freshId`), `shared/echarts/index.js` and `shared/ui/index.js`, one
-  public file per segment.
+  `shared/ids/index.js` (`freshId`, `idRecord`), `shared/echarts/index.js` and
+  `shared/ui/index.js`, one public file per segment.
 
 ## Depends on
 

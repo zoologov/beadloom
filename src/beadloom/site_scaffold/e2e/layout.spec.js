@@ -26,12 +26,20 @@ const END_TOLERANCE = 1;
  * The longest one task may hold the page's main thread while the graph is laid
  * out, per environment (`support/environment.js`). ELK takes 2 to 3 s over the
  * adopter-sized graph on an Apple M1 Max, and on the main thread it held the page
- * that long in one task. With ELK in the worker the longest task in that window
- * measured 302 to 353 ms there (headless Chromium, no GPU, beside four other
- * cases). A build server is slower and unmeasured, so its bound is wider; ELK on
- * the main thread there would take longer still.
+ * that long in one task; it runs in a worker now, and what is left is the
+ * viewer's own work before and after it.
+ *
+ * On a GitHub-hosted Ubuntu runner the longest task took 2,427 ms on the
+ * adopter-sized graph built from a portal that declares no layers, in one task
+ * that drew the layout, measured the whole graph's fit and planned the overview.
+ * The same viewer took 608 to 615 ms in that task on an Apple M-series machine
+ * (headless Chromium, no GPU, the case alone) and 2,478 to 2,495 ms with the
+ * page's processor slowed four times: the runner runs this work about four times
+ * slower. The build server's bound stays 2,000 ms; the local one is that bound
+ * over the runner's factor, 500 ms, so a task the runner would hold too long is
+ * seen on the machine the change is made on.
  */
-const LONGEST_TASK_MS = { local: 1000, ci: 2000 };
+const LONGEST_TASK_MS = { local: 500, ci: 2000 };
 
 /** The architecture page's path, under any base. */
 const ARCHITECTURE_PAGE = /\/architecture\.html$/;

@@ -199,26 +199,35 @@ class TestTheWalkUpStopsAtTheScanRoot:
         self, tmp_path: Path, conn: sqlite3.Connection
     ) -> None:
         self._node(conn, "site", "web/")
-        assert resolve_import_to_node("typing", tmp_path, conn, scan_paths=["web/theme"]) is None
+        resolved = resolve_import_to_node(
+            "typing", tmp_path, conn, scan_paths=["web/theme"], source_files=()
+        )
+        assert resolved is None
 
     def test_a_node_whose_source_is_the_scan_root_is_not_reached(
         self, tmp_path: Path, conn: sqlite3.Connection
     ) -> None:
         self._node(conn, "everything", "lib/")
-        assert resolve_import_to_node("typing", tmp_path, conn, scan_paths=["lib"]) is None
+        resolved = resolve_import_to_node(
+            "typing", tmp_path, conn, scan_paths=["lib"], source_files=()
+        )
+        assert resolved is None
 
     def test_a_trailing_slash_on_the_scan_path_is_the_same_scan_root(
         self, tmp_path: Path, conn: sqlite3.Connection
     ) -> None:
         self._node(conn, "everything", "lib/")
-        assert resolve_import_to_node("typing", tmp_path, conn, scan_paths=["lib/"]) is None
+        resolved = resolve_import_to_node(
+            "typing", tmp_path, conn, scan_paths=["lib/"], source_files=()
+        )
+        assert resolved is None
 
     def test_a_package_below_the_scan_root_still_resolves(
         self, tmp_path: Path, conn: sqlite3.Connection
     ) -> None:
         self._node(conn, "billing", "lib/billing/")
         assert resolve_import_to_node(
-            "billing.invoices.render", tmp_path, conn, scan_paths=["lib"]
+            "billing.invoices.render", tmp_path, conn, scan_paths=["lib"], source_files=()
         ) == ("billing")
 
 
@@ -323,6 +332,7 @@ class TestGoImportsResolveThroughTheirModule:
     ) -> None:
         index_imports(tmp_path, go_conn)
         assert _imports(go_conn) == {
+            ("cmd/quay/main.go", "fmt", None),
             ("cmd/quay/main.go", "net/http", None),
             ("cmd/quay/main.go", "example.org/quay/internal/berths", "berths"),
             ("cmd/quay/main.go", "github.com/google/uuid", None),

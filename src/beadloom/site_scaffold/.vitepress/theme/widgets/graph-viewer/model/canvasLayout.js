@@ -17,6 +17,7 @@
 // beside that layout: a node page or full screen that draws the same layout
 // draws the same bundles without computing them again.
 
+import { idRecord } from "../../../shared/ids/index.js";
 import { bundleRoutes } from "../lib/bundles.js";
 import { centreOf, compoundSizeOf, pathOf, segmentsOf } from "../lib/routes.js";
 
@@ -62,9 +63,17 @@ function placeLeaves(cy, geometry) {
   });
 }
 
-/** How far inside its drawn edge a compound's children area begins: its padding and half its border. */
+/** How much of a border of each `border-position` Cytoscape draws outside a node's size, as a share of its width. */
+const BORDER_OUTSIDE = Object.freeze({ inside: 0, center: 0.5, outside: 1 });
+
+/**
+ * How far inside its drawn edge a compound's children area begins: its padding
+ * and the part of its border drawn outside its size — half of it, or none for
+ * a border drawn inside the box, as the project's frame is.
+ */
 function insetOf(compound) {
-  return compound.pstyle("padding").pfValue + compound.pstyle("border-width").pfValue / 2;
+  const border = compound.pstyle("border-width").pfValue * BORDER_OUTSIDE[compound.pstyle("border-position").value];
+  return compound.pstyle("padding").pfValue + border;
 }
 
 /** Whether Cytoscape draws `edge` as a loop: it joins a node to itself or to a box that holds it. */
@@ -92,14 +101,18 @@ function childrenBoxOf(compound) {
  * them, and its box is computed again at once. The deepest boxes go first,
  * since a box's children include the boxes inside it, and each box's place is
  * fixed before all of its children can be hidden.
+ *
+ * `reachOf(id)` gives the room a compound holds besides its children as drawn,
+ * or null: the most the overview's boxes drawn larger than their layout ever
+ * take (`canvasMap.js`), so a compound is the same size at every zoom.
  */
-export function fitCompounds(cy, geometry) {
+export function fitCompounds(cy, geometry, reachOf = () => null) {
   cy.nodes()
     .filter((node) => node.isParent() && geometry.boxes[node.id()])
     .sort((a, b) => b.ancestors().length - a.ancestors().length)
     .forEach((compound) => {
       const box = geometry.boxes[compound.id()];
-      compound.data("box", compoundSizeOf(box, childrenBoxOf(compound), insetOf(compound)));
+      compound.data("box", compoundSizeOf(box, childrenBoxOf(compound), insetOf(compound), reachOf(compound.id())));
       compound.updateCompoundBounds(true);
     });
 }
@@ -118,7 +131,7 @@ function drawingOf(cy, geometry) {
   const ends = (edge) => ({ id: edge.id(), source: edge.source().id(), target: edge.target().id() });
   const edges = laidOut.filter((edge) => !isLoop(edge)).map(ends);
   const loops = laidOut.filter(isLoop).map(ends);
-  const paths = Object.fromEntries(edges.map(({ id }) => [id, pathOf(geometry.routes[id])]));
+  const paths = idRecord(edges.map(({ id }) => [id, pathOf(geometry.routes[id])]));
   return { nodes, edges, loops, boxes: geometry.boxes, paths };
 }
 

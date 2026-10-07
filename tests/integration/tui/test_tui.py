@@ -899,53 +899,63 @@ class TestActivityWidget:
         assert "No activity data" in text.plain
 
     def test_render_with_activities(self) -> None:
-        """ActivityWidget renders domain names and activity bars."""
+        """Each node shows its changed lines and its level; the bar is relative to the busiest.
+
+        BDL-078 F-activity: the levels are hot / warm / cool / quiet / dormant and
+        the measure is changed lines, not commits.
+        """
+        from beadloom.infrastructure.git_activity import GitActivity
         from beadloom.tui.widgets.activity import ActivityWidget
 
-        # Use a simple dict with commits_30d attribute simulation
-        class MockActivity:
-            def __init__(self, commits_30d: int) -> None:
-                self.commits_30d = commits_30d
+        def activity(lines: int, level: str) -> GitActivity:
+            return GitActivity(
+                commits_30d=1,
+                commits_90d=1,
+                last_commit_date="2026-10-01",
+                top_contributors=[],
+                activity_level=level,
+                lines_30d=lines,
+                lines_90d=lines,
+            )
 
-        activities = {
-            "auth": MockActivity(25),
-            "payments": MockActivity(5),
-        }
-        widget = ActivityWidget(activities=activities)
-        text = widget.render()
-        plain = text.plain
+        widget = ActivityWidget(
+            activities={"auth": activity(300, "hot"), "payments": activity(30, "cool")}
+        )
+        plain = widget.render().plain
 
-        assert "auth" in plain
-        assert "payments" in plain
-        assert "50%" in plain
-        assert "10%" in plain
+        assert "300 lines, hot" in plain
+        assert "30 lines, cool" in plain
+        auth_line = next(line for line in plain.splitlines() if "auth" in line)
+        assert "\u2591" not in auth_line  # the busiest node fills its bar
 
     def test_render_with_dict_activities(self) -> None:
-        """ActivityWidget handles dict-based activity data."""
+        """ActivityWidget reads the activity as the index stores it, a dict."""
         from beadloom.tui.widgets.activity import ActivityWidget
 
-        activities = {
-            "graph": {"commits_30d": 15},
-        }
-        widget = ActivityWidget(activities=activities)
-        text = widget.render()
+        widget = ActivityWidget(activities={"graph": {"lines_30d": 15, "level": "warm"}})
+        assert "15 lines, warm" in widget.render().plain
 
-        assert "graph" in text.plain
-        assert "30%" in text.plain
-
-    def test_render_caps_at_100(self) -> None:
-        """ActivityWidget caps activity level at 100%."""
+    def test_one_changed_line_is_singular(self) -> None:
+        """BDL-078 ``beadloom-btkd.18`` (review m3): not "1 lines"."""
         from beadloom.tui.widgets.activity import ActivityWidget
 
-        class MockActivity:
-            def __init__(self, commits_30d: int) -> None:
-                self.commits_30d = commits_30d
+        widget = ActivityWidget(activities={"graph": {"lines_30d": 1, "level": "hot"}})
+        assert "1 line, hot" in widget.render().plain
 
-        activities = {"auth": MockActivity(200)}
-        widget = ActivityWidget(activities=activities)
-        text = widget.render()
+    def test_no_change_is_said_in_words(self) -> None:
+        """Quiet and dormant name the absence of change, not a low count."""
+        from beadloom.tui.widgets.activity import ActivityWidget
 
-        assert "100%" in text.plain
+        widget = ActivityWidget(
+            activities={
+                "config": {"lines_30d": 0, "level": "quiet"},
+                "legacy": {"lines_30d": 0, "level": "dormant"},
+            }
+        )
+        plain = widget.render().plain
+
+        assert "no change in 30 days, quiet" in plain
+        assert "no change in 90 days, dormant" in plain
 
     def test_render_default_empty(self) -> None:
         """ActivityWidget with no constructor args shows no data."""
@@ -961,7 +971,7 @@ class TestActivityWidget:
         widget = ActivityWidget(activities={})
         assert "No activity data" in widget.render().plain
 
-        widget._activities = {"test": {"commits_30d": 42}}
+        widget._activities = {"test": {"lines_30d": 42, "level": "hot"}}
         assert "test" in widget.render().plain
 
 
@@ -4187,46 +4197,49 @@ class TestContextDataProviderErrors:
 class TestWidgetRenderingWithNoneData:
     """Tests for widget rendering with None or empty data."""
 
-    def test_activity_widget_none_activity_level(self) -> None:
-        """ActivityWidget._activity_level handles None gracefully."""
-        from beadloom.tui.widgets.activity import _activity_level
+    def test_activity_widget_none_activity(self) -> None:
+        """_lines_30d and _level_of read nothing from None."""
+        from beadloom.tui.widgets.activity import _level_of, _lines_30d
 
-        assert _activity_level(None) == 0
+        assert _lines_30d(None) == 0
+        assert _level_of(None) == ""
 
-    def test_activity_widget_zero_commits_30d(self) -> None:
-        """ActivityWidget._activity_level returns 0 for zero commits."""
-        from beadloom.tui.widgets.activity import _activity_level
+    def test_activity_widget_an_older_index_has_no_lines(self) -> None:
+        """An activity recorded before lines were counted reads as zero lines."""
+        from beadloom.tui.widgets.activity import _lines_30d
 
-        assert _activity_level({"commits_30d": 0}) == 0
+        assert _lines_30d({"commits_30d": 7, "level": "cold"}) == 0
 
     def test_activity_widget_unknown_type(self) -> None:
-        """ActivityWidget._activity_level returns 0 for unknown types."""
-        from beadloom.tui.widgets.activity import _activity_level
+        """_lines_30d and _level_of read nothing from an unknown type."""
+        from beadloom.tui.widgets.activity import _level_of, _lines_30d
 
-        assert _activity_level("not_a_valid_type") == 0
+        assert _lines_30d("not_a_valid_type") == 0
+        assert _level_of("not_a_valid_type") == ""
 
-    def test_render_bar_zero_level(self) -> None:
-        """_render_bar returns empty bar for zero level."""
+    def test_render_bar_zero_percent(self) -> None:
+        """_render_bar returns an empty bar for zero."""
         from beadloom.tui.widgets.activity import _render_bar
 
-        bar, style = _render_bar(0)
-        assert style == "dim"
+        bar = _render_bar(0)
+        assert "\u2588" not in bar
         assert "\u2591" in bar  # light shade char
 
-    def test_render_bar_100_level(self) -> None:
-        """_render_bar returns full bar for 100 level."""
+    def test_render_bar_100_percent(self) -> None:
+        """_render_bar returns a full bar for 100."""
         from beadloom.tui.widgets.activity import _render_bar
 
-        bar, style = _render_bar(100)
-        assert style == "green"
+        bar = _render_bar(100)
+        assert "\u2591" not in bar
         assert "\u2588" in bar  # full block char
 
-    def test_render_bar_medium_level(self) -> None:
-        """_render_bar returns yellow for medium level."""
-        from beadloom.tui.widgets.activity import _render_bar
+    def test_every_level_has_its_own_style(self) -> None:
+        """The five levels are styled, busiest brightest; an unknown level is plain."""
+        from beadloom.infrastructure.git_activity import ACTIVITY_LEVELS
+        from beadloom.tui.widgets.activity import LEVEL_STYLES, _style_of
 
-        _bar, style = _render_bar(50)
-        assert style == "yellow"
+        assert set(LEVEL_STYLES) == set(ACTIVITY_LEVELS)
+        assert _style_of("cold") == ""
 
     def test_lint_severity_icon_info(self) -> None:
         """_severity_icon returns info icon for unknown severity."""

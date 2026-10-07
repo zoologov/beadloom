@@ -1,5 +1,5 @@
 # beadloom:service=tui
-"""Activity widget showing per-domain git activity levels."""
+"""Activity widget showing per-node changed lines and activity levels."""
 
 from __future__ import annotations
 
@@ -8,48 +8,69 @@ from typing import Any
 from rich.text import Text
 from textual.widgets import Static
 
+from beadloom.application.graph_reads import NO_CHANGE_WORDS, count_in_words
+
 # Bar rendering constants
 _BAR_MAX_WIDTH = 20
 _BAR_CHAR_FILLED = "\u2588"  # full block
 _BAR_CHAR_EMPTY = "\u2591"  # light shade
+_PERCENT = 100
+
+#: The style of each activity level, busiest brightest (BDL-078 F-activity: the
+#: levels are relative to the project, measured in changed lines).
+LEVEL_STYLES: dict[str, str] = {
+    "hot": "bold green",
+    "warm": "yellow",
+    "cool": "cyan",
+    "quiet": "dim",
+    "dormant": "dim",
+}
 
 
-def _activity_level(activity: Any) -> int:
-    """Extract a numeric activity level (0-100) from a GitActivity object or dict."""
-    if activity is None:
-        return 0
-    # GitActivity dataclass has commits_30d and activity_level attributes
-    if hasattr(activity, "commits_30d"):
-        # Normalize: cap at 50 commits for 100%
-        return min(int(activity.commits_30d) * 2, 100)
+def _field(activity: Any, name: str, attribute: str) -> object:
+    """A field of a GitActivity object or of the dict the index stores; ``None`` if absent."""
     if isinstance(activity, dict):
-        return min(int(activity.get("commits_30d", 0)) * 2, 100)
-    return 0
+        return activity.get(name)
+    return getattr(activity, attribute, None)
 
 
-def _render_bar(level: int, width: int = _BAR_MAX_WIDTH) -> tuple[str, str]:
-    """Render a progress bar string and its style.
+def _lines_30d(activity: Any) -> int:
+    """Changed lines in 30 days; 0 for an activity recorded before lines were counted."""
+    value = _field(activity, "lines_30d", "lines_30d")
+    return value if isinstance(value, int) else 0
 
-    Returns (bar_string, style).
-    """
-    filled = max(0, min(width, int(level / 100 * width)))
-    empty = width - filled
-    bar = _BAR_CHAR_FILLED * filled + _BAR_CHAR_EMPTY * empty
 
-    if level >= 70:
-        style = "green"
-    elif level >= 30:
-        style = "yellow"
-    else:
-        style = "dim"
+def _level_of(activity: Any) -> str:
+    """The activity level, or ``""`` when none is recorded."""
+    value = _field(activity, "level", "activity_level")
+    return value if isinstance(value, str) else ""
 
-    return bar, style
+
+def _style_of(level: str) -> str:
+    """The style of *level*; plain for a level this widget does not know."""
+    return LEVEL_STYLES.get(level, "")
+
+
+def _describe(activity: Any) -> str:
+    """The activity in words, as the node card words it."""
+    level = _level_of(activity)
+    if level in NO_CHANGE_WORDS:
+        return f"{NO_CHANGE_WORDS[level]}, {level}"
+    lines = count_in_words(_lines_30d(activity), "line")
+    return f"{lines}, {level}" if level else lines
+
+
+def _render_bar(percent: int, width: int = _BAR_MAX_WIDTH) -> str:
+    """A bar *percent* full."""
+    filled = max(0, min(width, int(percent / _PERCENT * width)))
+    return _BAR_CHAR_FILLED * filled + _BAR_CHAR_EMPTY * (width - filled)
 
 
 class ActivityWidget(Static):
-    """Displays per-domain git activity as progress bars.
+    """Displays per-node git activity as bars.
 
-    Each domain shows its name and a bar representing relative activity level.
+    Each node shows its name, a bar of its changed lines in 30 days relative to
+    the busiest node shown, and its lines and level in words.
     """
 
     DEFAULT_CSS = """
@@ -84,16 +105,17 @@ class ActivityWidget(Static):
             text.append("\n  No activity data")
             return text
 
+        busiest = max((_lines_30d(a) for a in self._activities.values()), default=0)
         for ref_id in sorted(self._activities):
             activity = self._activities[ref_id]
-            level = _activity_level(activity)
-            bar, style = _render_bar(level)
+            percent = _lines_30d(activity) * _PERCENT // busiest if busiest else 0
+            style = _style_of(_level_of(activity))
 
             text.append("\n  ")
             text.append(f"{ref_id:<20s}", style="bold")
             text.append(" ")
-            text.append(bar, style=style)
-            text.append(f" {level}%", style="dim")
+            text.append(_render_bar(percent), style=style)
+            text.append(f" {_describe(activity)}", style="dim")
 
         return text
 

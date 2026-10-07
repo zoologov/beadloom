@@ -4,8 +4,12 @@
 // `part_of` is not drawn as a line: it is the nesting of a node inside its
 // container's box. Every other kind has one line style, so a reader tells them
 // apart without colour, and one tone, a theme token the stylesheet resolves.
-// A `depends_on` edge the layer rule judged against the declared direction is a
-// violation and is drawn red, dashed and thicker, whatever else it is.
+// Every line has one weight: kinds differ by colour and dash, never by width. A
+// line at rest takes a share of its tone over the background (`strength`): an
+// import is a light neutral, other kinds most of their tone, and a `depends_on`
+// edge the layer rule judged against the declared direction is a violation,
+// drawn dashed in the full danger colour, whatever else it is. A dash pattern is
+// in pixels on screen, so it reads the same at every zoom.
 //
 // The legend is derived from the edges that are drawn (`legendKeysOf`), so it
 // cannot list a kind the canvas does not show.
@@ -28,9 +32,20 @@ export function contractStyleKey(look) {
   return `contract-${look}`;
 }
 
+/** How much of its tone a line of an import takes at rest: a light neutral the other kinds stand out from. */
+const IMPORT_STRENGTH = 0.4;
+/** How much of its tone a line of any other kind takes at rest. */
+const KIND_STRENGTH = 0.82;
+/** A line that reports a problem is drawn in its full tone. */
+const PROBLEM_STRENGTH = 1;
+
+/** The dash pattern a dotted line is drawn with, in pixels on screen: a dot and a gap. */
+export const DOT_PATTERN = Object.freeze([1.5, 2.5]);
+
 /**
- * Each drawn kind: its label, legend text, line style, dash pattern, arrow and
- * tone, and how the card titles its edges out of a node and into it.
+ * Each drawn kind: its label, legend text, line style, dash pattern (pixels on
+ * screen), arrow, tone and the share of the tone it takes at rest, and how the
+ * card titles its edges out of a node and into it.
  */
 export const EDGE_STYLES = {
   depends_on: {
@@ -40,7 +55,8 @@ export const EDGE_STYLES = {
     incoming: "Depended on by",
     line: "solid",
     arrow: "triangle",
-    tone: "text2",
+    tone: "text1",
+    strength: IMPORT_STRENGTH,
   },
   uses: {
     label: "uses",
@@ -50,6 +66,7 @@ export const EDGE_STYLES = {
     line: "dotted",
     arrow: "vee",
     tone: "indigo",
+    strength: KIND_STRENGTH,
   },
   consumes: {
     label: "consumes",
@@ -60,6 +77,7 @@ export const EDGE_STYLES = {
     dash: [6, 3],
     arrow: "triangle",
     tone: "green",
+    strength: KIND_STRENGTH,
   },
   produces: {
     label: "produces",
@@ -70,6 +88,7 @@ export const EDGE_STYLES = {
     dash: [2, 3],
     arrow: "triangle",
     tone: "purple",
+    strength: KIND_STRENGTH,
   },
   [VIOLATION_KEY]: {
     label: "depends on, against the layers",
@@ -78,6 +97,7 @@ export const EDGE_STYLES = {
     dash: [8, 4],
     arrow: "triangle",
     tone: "danger",
+    strength: PROBLEM_STRENGTH,
   },
   [contractStyleKey("healthy")]: {
     label: "contract, healthy",
@@ -85,6 +105,7 @@ export const EDGE_STYLES = {
     line: "solid",
     arrow: "triangle",
     tone: "green",
+    strength: KIND_STRENGTH,
   },
   [contractStyleKey("drift")]: {
     label: "contract, drifting",
@@ -93,6 +114,7 @@ export const EDGE_STYLES = {
     dash: [6, 3],
     arrow: "triangle",
     tone: "warning",
+    strength: KIND_STRENGTH,
   },
   [contractStyleKey("broken")]: {
     label: "contract, broken",
@@ -101,6 +123,7 @@ export const EDGE_STYLES = {
     dash: [8, 4],
     arrow: "triangle",
     tone: "danger",
+    strength: PROBLEM_STRENGTH,
   },
   [contractStyleKey("neutral")]: {
     label: "contract, neutral",
@@ -108,8 +131,15 @@ export const EDGE_STYLES = {
     line: "dotted",
     arrow: "triangle",
     tone: "gray",
+    strength: KIND_STRENGTH,
   },
 };
+
+/** The dash pattern of a look, in pixels on screen: none for a solid line. */
+export function dashOf(look) {
+  if (look.line === "dotted") return DOT_PATTERN;
+  return look.line === "dashed" ? look.dash : [];
+}
 
 /** Whether an edge of this kind is drawn as a line. */
 export function isDrawnKind(kind) {

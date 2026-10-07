@@ -5,17 +5,21 @@ folder builds its own fixture project in a ``Given``; indexing it and reading th
 answer back are the same for all of them, so they live here once. Nothing is
 stubbed: the real ``reindex`` runs, and ``beadloom why`` is invoked through the
 CLI the way an adopter runs it.
+
+The comparison with a fresh index of a copy of the tree is shared by every scenario
+that edits a tree and updates its index (``beadloom-nh7h``, ``beadloom-jcng``).
 """
 
 from __future__ import annotations
 
 import json
+import shutil
 import sqlite3
 from typing import TYPE_CHECKING, Any
 
 import pytest
 from click.testing import CliRunner
-from pytest_bdd import parsers, then, when
+from pytest_bdd import given, parsers, then, when
 
 from beadloom.application.reindex import reindex
 from beadloom.services.cli import main
@@ -55,6 +59,11 @@ def state() -> dict[str, Any]:
 
 @when("the project is indexed")
 def _indexed(state: dict[str, Any]) -> None:
+    reindex(state["root"])
+
+
+@given("the project is indexed")
+def _indexed_first(state: dict[str, Any]) -> None:
     reindex(state["root"])
 
 
@@ -117,3 +126,23 @@ def _recorded_unresolved(state: dict[str, Any], import_path: str, file_path: str
 @then(parsers.parse('the import "{import_path}" of "{file_path}" is on line {line:d}'))
 def _on_line(state: dict[str, Any], import_path: str, file_path: str, line: int) -> None:
     assert [number for number, _ in _imports(state["root"], file_path, import_path)] == [line]
+
+
+_IMPORT_ROWS = "SELECT file_path, line_number, import_path, resolved_ref_id FROM code_imports"
+_DEPENDS_ON_ROWS = "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'depends_on'"
+
+
+def _sorted_rows(root: Path, sql: str) -> list[tuple[object, ...]]:
+    with _connect(root) as conn:
+        return sorted(tuple(row) for row in conn.execute(sql).fetchall())
+
+
+@then("every resolved import and every derived edge equals a fresh index of the same tree")
+def _equals_fresh(tmp_path: Path, state: dict[str, Any]) -> None:
+    """Index a copy of the tree in a directory that never held an index, and compare."""
+    root: Path = state["root"]
+    fresh = tmp_path / "fresh"
+    shutil.copytree(root, fresh, ignore=shutil.ignore_patterns("beadloom.db*"))
+    reindex(fresh)
+    assert _sorted_rows(root, _IMPORT_ROWS) == _sorted_rows(fresh, _IMPORT_ROWS)
+    assert _sorted_rows(root, _DEPENDS_ON_ROWS) == _sorted_rows(fresh, _DEPENDS_ON_ROWS)

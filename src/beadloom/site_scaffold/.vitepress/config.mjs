@@ -35,4 +35,16 @@ export default withMermaid({
     socialLinks: site.repoUrl ? [{ icon: site.repoIcon, link: site.repoUrl }] : [],
   },
   mermaid: {},
+  // The Mermaid plugin loads `mermaid` from inside VitePress's own client, which
+  // the dev server serves without pre-bundling, so Mermaid's CommonJS
+  // dependencies (`fastdom` first) reach the browser as they are and a page
+  // throws before it mounts. Pre-bundling Mermaid turns them into ES modules.
+  // The layout worker's ELK engine is named too: the optimizer does not scan
+  // workers, so it would find the engine only on the first visit to the
+  // architecture page and reload that page under the reader. The build bundles
+  // everything and is not affected; `npm run dev-check` loads the pages under
+  // the dev server to keep it that way.
+  vite: {
+    optimizeDeps: { include: ["mermaid", "elkjs/lib/elk-worker.min.js"] },
+  },
 });

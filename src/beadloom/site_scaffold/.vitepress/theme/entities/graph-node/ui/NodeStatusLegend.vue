@@ -1,6 +1,10 @@
 <script setup>
 // beadloom:component=site-graph-node
-// The legend of the node statuses that are drawn: one border sample per status.
+// The legend of the node statuses that are drawn: a small card per status, with its mark in the corner.
+//
+// A sample is drawn as the canvas draws a node with that status: a card whose
+// border is a layer's, never the status's, and the status's mark in its top
+// right corner, filled or a ring (`NODE_STATUSES`).
 
 import { computed } from "vue";
 import { TOKEN_VARIABLES } from "../../../shared/theme-tokens/index.js";
@@ -13,14 +17,16 @@ const props = defineProps({
 const entries = computed(() =>
   props.statuses
     .filter((status) => NODE_STATUSES[status])
-    .map((status) => ({
-      status,
-      text: NODE_STATUSES[status].legend,
-      sample: {
-        borderStyle: NODE_STATUSES[status].border,
-        borderColor: `var(${TOKEN_VARIABLES[NODE_STATUSES[status].tone]})`,
-      },
-    }))
+    .map((status) => {
+      const look = NODE_STATUSES[status];
+      const tone = `var(${TOKEN_VARIABLES[look.tone]})`;
+      return {
+        status,
+        text: look.legend,
+        shape: look.mark,
+        mark: { borderColor: tone, backgroundColor: look.mark === "filled" ? tone : "transparent" },
+      };
+    })
 );
 </script>
 
@@ -33,7 +39,9 @@ const entries = computed(() =>
       class="bl-legend-item"
       :data-legend-status="entry.status"
     >
-      <span class="bl-legend-sample" :style="entry.sample" />
+      <span class="bl-legend-card">
+        <span class="bl-legend-mark" :data-legend-mark="entry.shape" :style="entry.mark" />
+      </span>
       {{ entry.text }}
     </span>
   </template>
@@ -49,11 +57,23 @@ const entries = computed(() =>
   align-items: center;
   gap: 5px;
 }
-.bl-legend-sample {
+.bl-legend-card {
+  position: relative;
   display: inline-block;
-  width: 12px;
+  width: 20px;
   height: 12px;
-  border-width: 4px;
+  border: 1.5px solid var(--vp-c-gray-1);
   border-radius: 3px;
+  background: var(--vp-c-bg-soft);
+}
+.bl-legend-mark {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  box-sizing: border-box;
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid;
+  border-radius: 50%;
 }
 </style>

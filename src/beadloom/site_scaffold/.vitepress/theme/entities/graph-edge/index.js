@@ -3,10 +3,12 @@
 
 export {
   CONTAINMENT_KIND,
+  DOT_PATTERN,
   DRAWN_KINDS,
   EDGE_STYLES,
   VIOLATION_KEY,
   contractStyleKey,
+  dashOf,
   isDrawnKind,
   isViolation,
   legendKeysOf,
@@ -21,4 +23,5 @@ export {
   edgeGroupsOf,
   edgeKeyOf,
 } from "./model/adjacency.js";
+export { boxEdgesOf } from "./model/boxEdges.js";
 export { default as EdgeLegend } from "./ui/EdgeLegend.vue";

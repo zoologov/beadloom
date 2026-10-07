@@ -188,7 +188,7 @@ exactly as BDL-070 A2 left it.
 | Doc gaps -- untracked | Nodes with source but no sync_state | `application/debt_report/collect.py` |
 | Complexity -- oversized | Symbol count per node vs threshold | `application/debt_report/collect.py` |
 | Complexity -- fan-out | Edge count per node vs threshold | `application/debt_report/collect.py` |
-| Complexity -- dormant | `analyze_git_activity()` with dormant level | `infrastructure/git_activity.py` |
+| Complexity -- dormant | `analyze_git_activity()` with dormant level (no change in 90 days; a box read with its `part_of` parts, the project's `activity.exclude` patterns applied; BDL-078) | `infrastructure/git_activity.py` |
 | Test gaps | `nodes.extra["tests"]` with an empty `test_files`, from the test binding | `application/debt_report/collect.py` |
 
 #### What the untested count was counted over (BDL-074 C2)

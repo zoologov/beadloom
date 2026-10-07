@@ -20,16 +20,26 @@
 //
 // A node's edges are drawn bundled, several along one line. When the pointer is
 // on a line that more than one edge runs along, a note over the canvas names
-// them, since the line alone cannot say which edges it carries. A highlighted
-// edge — under the pointer, or on a selection's walk — hops over every other
-// edge it crosses, so it can be followed through a busy area.
+// them, since the line alone cannot say which edges it carries. A followed
+// edge — under the pointer, or on a selection's walk — is drawn on top of every
+// edge it crosses, over a casing, so it can be followed through a busy area.
 //
 // The graph is drawn like a map (`lib/levels.js`): at the whole-graph fit the
 // boxes at the top and one aggregated edge per pair of them, more detail where
-// the reader zooms in. A selection opens the boxes that hold its node, and those
-// of every node its walk reaches unless the node is a hub selected with nothing
-// more asked; a search opens the boxes that hold what it finds. The pointer on an
-// aggregated edge names how many edges it carries each way.
+// the reader zooms in: a box opens once its nodes are readable. An open box keeps
+// its edges to the outside on its own lines; a node in it says how many of its
+// edges those carry ("+N"), and the pointer on it, or a selection of it, draws
+// them. Selecting a node — by a tap, the URL, the card or the impact list —
+// frames its neighbourhood, never below the zoom at which the node is drawn as
+// itself and readable, in an animated move unless the reader asks for reduced
+// motion. A selection with nothing more asked opens the boxes that hold its
+// node, and only those. A walk the reader asked for (deeper, one way, the rest
+// hidden, or the impact) also opens those of every node it reaches
+// (`selectionReveals`). A search frames what it finds, readably, and opens the
+// boxes that hold it. The pointer on an aggregated edge names how many edges
+// it carries each way. At the overview the lines between top-level nodes are
+// routed together, thin and light, with their counts on pills; the pointer on a
+// node draws its lines in front of the rest.
 //
 // The toolbar, the canvas, the panel and the legend are all inside one root
 // element, and that element is what goes full screen, so full screen and the
@@ -53,7 +63,7 @@ import {
   dependentsOf,
   legendKeysOf,
 } from "../../../entities/graph-edge/index.js";
-import { LayerLegend, layerOfNode, layersOf } from "../../../entities/layer/index.js";
+import { LayerLegend, hasUnlayeredNode, layerOfNode, layersOf } from "../../../entities/layer/index.js";
 import {
   NAVIGATION_OPTIONS,
   NavigationControls,
@@ -62,6 +72,7 @@ import {
 import {
   NEIGHBOURHOOD_DEFAULTS,
   NeighbourhoodControls,
+  boxNeighbourhoodOf,
   neighbourhoodOf,
 } from "../../../features/select-neighbourhood/index.js";
 import {
@@ -73,12 +84,14 @@ import {
 } from "../../../features/impact-view/index.js";
 import { FullscreenButton, useFullscreen } from "../../../features/fullscreen/index.js";
 import { useUrlState } from "../../../features/url-state/index.js";
-import { withAncestors } from "../../../shared/lib/index.js";
+import { childrenOf, subtreeOf, withAncestors } from "../../../shared/lib/index.js";
 import { useThemeTokens } from "../../../shared/theme-tokens/index.js";
 import { buildElements } from "../lib/elements.js";
 import { buildStylesheet } from "../lib/stylesheet.js";
-import { AGGREGATE, selectionReveals } from "../lib/levels.js";
+import { edgePaletteOf } from "../lib/edgePalette.js";
+import { AGGREGATE, boxTreeOf, endsOfLine, selectionReveals } from "../lib/levels.js";
 import { useGraphCanvas } from "../model/useGraphCanvas.js";
+import { SAID } from "../model/aggregateElements.js";
 import { keyHandler } from "../model/viewerKeys.js";
 import { exposeTestHandle } from "../model/testHandle.js";
 import { usePanelId } from "../model/usePanelId.js";
@@ -118,6 +131,13 @@ const edges = computed(() => graph.value.edges);
 const nodeById = computed(() => new Map(nodes.value.map((node) => [node.id, node])));
 const parents = computed(() => parentMapOf(nodes.value));
 const layers = computed(() => layersOf(nodes.value, graph.value.layers));
+// Whether the legend names a node in no layer: one is drawn in that tone. The
+// box that holds everything is not, whatever its layer: it is the project's frame.
+const unlayered = computed(() => {
+  if (!mode.layered) return false;
+  const { wrapper } = boxTreeOf(nodes.value.map((node) => ({ id: node.id, parent: parents.value[node.id] })));
+  return hasUnlayeredNode(nodes.value.filter((node) => node.id !== wrapper), layers.value);
+});
 const options = computed(() => mode.filterOptions(graph.value, layers.value));
 const statuses = computed(() => statusesOf(nodes.value));
 const legendKeys = computed(() =>
@@ -149,18 +169,29 @@ const neutralNeighbourhood = computed(
     state.dir === NEIGHBOURHOOD_DEFAULTS.dir &&
     Boolean(state.hide) === NEIGHBOURHOOD_DEFAULTS.hide
 );
-// How many drawn edges a node has: a hub's walk opens only its own boxes.
-const degreeOf = (id) =>
-  (drawnAdjacency.value.out.get(id)?.length || 0) + (drawnAdjacency.value.in.get(id)?.length || 0);
+const children = computed(() => childrenOf(parents.value));
+// What a selected box holds, itself included, or null when the selection is no
+// box. The impact mode walks from the box's own node, as from any other.
+const selectedBox = computed(() =>
+  !impactMode.value && children.value.has(state.focus) ? subtreeOf(state.focus, children.value) : null
+);
+// The boxes that hold the selected node: an edge onto one of them is no neighbour's.
+const holdersOfFocus = computed(() => {
+  const held = withAncestors([state.focus], parents.value);
+  held.delete(state.focus);
+  return held;
+});
 // What the search box finds, whose boxes it opens.
 const searched = computed(() => mode.searched(graph.value, state));
 
-// The walk from the selected node, or null when nothing is selected.
+// The walk from the selected node, or null when nothing is selected. A box's
+// neighbourhood is everything it holds taken as one node: its edges cross its border.
 const walk = computed(() => {
   if (!selectedNode.value) return null;
-  return impactMode.value
-    ? impactOf(state.focus, dependents.value)
-    : neighbourhoodOf(state.focus, drawnAdjacency.value, { depth: state.depth, dir: state.dir });
+  const options = { depth: state.depth, dir: state.dir };
+  if (impactMode.value) return impactOf(state.focus, dependents.value);
+  if (selectedBox.value) return boxNeighbourhoodOf(state.focus, selectedBox.value, holdersOfFocus.value, drawnAdjacency.value, options);
+  return neighbourhoodOf(state.focus, drawnAdjacency.value, options);
 });
 const summary = computed(() => {
   if (!walk.value || !impactMode.value) return null;
@@ -175,20 +206,23 @@ const summary = computed(() => {
 const selection = computed(() => {
   if (!walk.value) return null;
   const { distances, edges: walked } = walk.value;
+  const inside = selectedBox.value;
   return {
     focus: state.focus,
     distances,
     edges: walked,
-    keep: withAncestors(distances.keys(), parents.value),
+    keep: new Set([...withAncestors(distances.keys(), parents.value), ...(inside || [])]),
     hide: Boolean(state.hide),
     rings: summary.value
       ? new Map([...distances].map(([id, distance]) => [id, ringOf(distance)]))
       : null,
     risks: summary.value ? new Set(summary.value.risky.map((entry) => entry.id)) : null,
     reveal: selectionReveals(state.focus, [...distances.keys()], {
-      degree: degreeOf(state.focus),
       wholeWalk: impactMode.value || !neutralNeighbourhood.value,
     }),
+    box: inside ? state.focus : null,
+    inside,
+    holders: inside ? holdersOfFocus.value : null,
   };
 });
 
@@ -199,15 +233,19 @@ const panelId = usePanelId();
 // The panel opens when a node is selected; the toolbar's "Panel" button toggles it.
 const panelOpen = ref(Boolean(state.focus));
 const { tokens } = useThemeTokens(root);
+// The colour of each edge style at rest, as the canvas draws it: the legend draws its samples in them.
+const legendColours = computed(() =>
+  tokens.value
+    ? Object.fromEntries(Object.entries(edgePaletteOf(tokens.value)).map(([key, colours]) => [key, colours.rest]))
+    : {}
+);
 
-// A selection made anywhere but on the canvas — the URL, the card, the impact
-// list, the toolbar — is framed, so what the reader asked for is in view. A tap
-// on the canvas is not: the reader is already looking at the node.
-let frameNextSelection = true;
-
-function select(id, { frame = true } = {}) {
+// A selection made anywhere — a tap on the canvas, the URL, the card, the impact
+// list — is framed, so the neighbourhood the reader asked for is in view and
+// readable (the owner's ruling 7). A selected box is framed whole, open: the box
+// is what the reader asked to see, and zooms further in himself.
+function select(id) {
   if (!nodeById.value.has(id) || state.focus === id) return;
-  frameNextSelection = frame;
   state.focus = id;
 }
 function clearSelection() {
@@ -223,10 +261,10 @@ function toggleImpact() {
 
 const canvas = useGraphCanvas(container, {
   options: NAVIGATION_OPTIONS,
-  fitZoom: () => navigation.fitZoom(),
-  background: () => tokens.value?.bg,
+  fitZoom: (options) => navigation.fitZoom(options),
+  tokens: () => tokens.value,
   onNodeTap: (id) => {
-    select(id, { frame: false });
+    select(id);
     focusCanvas();
   },
   onBackgroundTap: () => {
@@ -245,13 +283,14 @@ const bundleNote = computed(() => {
   if (ids.length < 2 || !instance) return "";
   const labelOf = (id) => nodeById.value.get(id)?.label || id;
   const named = ids.slice(0, NAMED_EDGES).map((id) => {
-    const edge = instance.getElementById(id);
-    return `${labelOf(edge.data("source"))} → ${labelOf(edge.data("target"))}`;
+    const ends = endsOfLine(instance.getElementById(id));
+    return `${labelOf(ends.source)} → ${labelOf(ends.target)}`;
   });
   const rest = ids.length - named.length;
   return `${ids.length} edges along this line: ${named.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}`;
 });
-// The edges an aggregated edge under the pointer carries, each way, named by its two ends.
+// The edges an aggregated edge under the pointer carries, each way, named by its
+// two ends; during a selection, the walk's edges it carries first, as its pill says.
 const aggregateNote = computed(() => {
   const ids = canvas.hoveredEdges.value;
   const instance = canvas.cy.value;
@@ -262,7 +301,10 @@ const aggregateNote = computed(() => {
   const way = (count, from, to) =>
     count ? `${count} ${count === 1 ? "edge" : "edges"} ${labelOf(from)} → ${labelOf(to)}` : "";
   const [a, b] = [edge.data("source"), edge.data("target")];
-  return [way(edge.data("forward"), a, b), way(edge.data("backward"), b, a)].filter(Boolean).join("; ");
+  const both = ({ forward, backward }) => [way(forward, a, b), way(backward, b, a)].filter(Boolean).join("; ");
+  const all = both({ forward: edge.data("forward"), backward: edge.data("backward") });
+  const said = edge.data(SAID);
+  return said ? `${both(said)} of the selection's walk, of ${all} in all` : all;
 });
 
 // How much of the canvas's right edge the panel lies over: in the page it
@@ -280,15 +322,77 @@ const navigation = useGraphNavigation(() => canvas.cy.value, {
   getInset: () => ({ right: coveredRight() }),
 });
 
-/** Fit the selection's walk, with the closed boxes that hold part of it, when there is one; else everything visible. */
-function frameSelection() {
-  nextTick(() => navigation.fit(selection.value ? ".in-walk, .holds-walk" : undefined));
+/** The laid-out box around the nodes `ids` the filters show, or null. */
+function laidOutBoxOf(ids) {
+  const boxes = canvas.layout.value?.geometry.boxes;
+  const shown = visible.value.nodes;
+  const held = boxes ? ids.filter((id) => boxes[id] && (!shown || shown.has(id))).map((id) => boxes[id]) : [];
+  if (!held.length) return null;
+  return held.reduce((a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) }));
 }
 
+/**
+ * Frame the selection's neighbourhood, at no less than the zoom at which its
+ * node, and every node the selection draws as itself, is drawn readably, centred
+ * on the node where the walk does not fit at that zoom; a selected box whole,
+ * open at whatever zoom it fits at; with nothing selected, fit everything visible.
+ */
+function frameSelection({ animate }) {
+  nextTick(() => {
+    fitCanvasToContainer();
+    const focus = selection.value?.focus;
+    const map = canvas.map();
+    const whole = selection.value?.box ? laidOutBoxOf([focus]) : null;
+    if (whole && map) {
+      navigation.frame({ box: whole, focus: whole }, { animate });
+      return;
+    }
+    const box = focus ? laidOutBoxOf([...selection.value.distances.keys()]) : null;
+    if (!box || !map) {
+      navigation.fit();
+      return;
+    }
+    const leastZoom = Math.max(...[focus, ...selection.value.reveal].map((id) => map.zoomDrawing(id)));
+    navigation.frame({ box, focus: laidOutBoxOf([focus]), leastZoom }, { animate });
+  });
+}
+
+/**
+ * Frame what the search box finds, when it finds anything and nothing is
+ * selected, at no less than the zoom at which what it finds is drawn readably,
+ * centred on the first where it does not fit; else fit everything visible.
+ */
+function frameSearch() {
+  nextTick(() => {
+    const found = selection.value ? [] : searched.value;
+    const box = laidOutBoxOf(found);
+    const map = canvas.map();
+    if (!box || !map) {
+      navigation.fit();
+      return;
+    }
+    const leastZoom = Math.max(...found.map((id) => map.zoomDrawing(id)));
+    navigation.frame({ box, focus: laidOutBoxOf(found.slice(0, 1)), leastZoom });
+  });
+}
+
+/**
+ * Have the canvas take its container's size where the panel, opened by the
+ * selection, took room from it beside the canvas, as in full screen: a frame is
+ * measured on the canvas as it will be seen.
+ */
+function fitCanvasToContainer() {
+  const instance = canvas.cy.value;
+  const element = container.value;
+  if (instance && element && (element.clientWidth !== instance.width() || element.clientHeight !== instance.height())) canvas.resize();
+}
+
+/** Fit the canvas to its new size: the selection framed again, or everything visible. */
 function refit() {
   nextTick(() => {
     canvas.resize();
-    navigation.fit();
+    if (selection.value) frameSelection({ animate: false });
+    else navigation.fit();
   });
 }
 const fullscreen = useFullscreen(root, { onChange: refit });
@@ -316,7 +420,8 @@ async function render() {
   canvas.reveal("search", searched.value);
   canvas.showOnly(visible.value.nodes, visible.value.contracts);
   canvas.markSelection(selection.value);
-  frameSelection();
+  if (selection.value) frameSelection({ animate: false });
+  else frameSearch();
 }
 
 watch(data, render);
@@ -329,13 +434,12 @@ watch(visible, (shown) => {
   if (!canvas.ready.value) return;
   canvas.reveal("search", searched.value);
   canvas.showOnly(shown.nodes, shown.contracts);
-  navigation.fit();
+  frameSearch();
 });
 watch(selection, (current) => {
   if (!canvas.ready.value) return;
   canvas.markSelection(current);
-  if (current && frameNextSelection) frameSelection();
-  frameNextSelection = true;
+  if (current) frameSelection({ animate: true });
 });
 watch(
   () => state.focus,
@@ -356,12 +460,16 @@ onMounted(() => {
     impactSummary: () => summary.value,
     layout: () => canvas.layout.value,
     bundles: () => canvas.bundles.value,
-    junctions: () => canvas.junctions(),
-    bridges: () => canvas.bridges(),
-    bridgeFrames: () => canvas.bridgeFrames(),
+    followed: () => canvas.followed(),
+    labelled: () => canvas.labelled(),
+    frames: () => canvas.frames(),
+    droppedHeads: () => canvas.droppedHeads(),
+    pills: () => canvas.pills(),
+    tallies: () => canvas.tallies(),
+    outward: () => canvas.outward(),
     hoveredEdges: () => canvas.hoveredEdges.value,
     map: () => canvas.map(),
-    revealNodes: (ids) => canvas.revealNow("test", ids),
+    revealNodes: (ids, options) => canvas.revealNow("test", ids, options),
   });
 });
 onBeforeUnmount(() => disposeHandle());
@@ -470,6 +578,7 @@ onBeforeUnmount(() => disposeHandle());
           :layer-name="selectedLayer"
           :edges="edges"
           :layers="layers"
+          :parents="parents"
           :contracts="graph.contracts"
           :select="select"
           :close="clearSelection"
@@ -484,9 +593,9 @@ onBeforeUnmount(() => disposeHandle());
     </div>
 
     <div class="bl-viewer-legend" aria-label="Legend">
-      <LayerLegend :layers="layers" />
+      <LayerLegend :layers="layers" :unlayered="unlayered" />
       <NodeStatusLegend :statuses="statuses" />
-      <EdgeLegend :keys="legendKeys" />
+      <EdgeLegend :keys="legendKeys" :colours="legendColours" />
     </div>
   </div>
 </template>
@@ -555,6 +664,8 @@ onBeforeUnmount(() => disposeHandle());
   flex: 1 1 auto;
 }
 .bl-viewer-canvas {
+  /* The layer of followed lines lies over Cytoscape's drawing, inside the same border. */
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
   height: var(--bl-viewer-height);

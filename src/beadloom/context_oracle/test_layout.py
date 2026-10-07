@@ -43,6 +43,11 @@ or beside the code.
   code has modules named like tests (this one has five ``test_*.py`` modules
   under ``src/``) switches it off, because a file name cannot tell a test module
   from a module about tests.
+- ``flat_tests`` — whether a Python test directly under a root, in no kind folder
+  (``tests/test_invoice.py``), binds to the node owning the module its name names,
+  else to the one node its imports reach (BDL-078 ``beadloom-76mk``). Default
+  ``false``: a name is the guess the mirror replaced, so the project states it, and
+  ``init`` declares it for a Python project, whose tests most often sit there.
 
 Every default is an ecosystem's own convention, and only that (owner ruling
 2026-09-28). JS/TS: Jest's default ``testMatch`` — ``*.test.*``, ``*.spec.*``, and
@@ -146,6 +151,7 @@ class TestLayout:
     declared_kinds: frozenset[str] = field(default_factory=frozenset)
     beside_code: bool = True
     mirrors: tuple[tuple[str, str], ...] = DEFAULT_MIRRORS
+    flat_tests: bool = False
 
     def framework_of(self, path: str) -> str | None:
         """The framework whose pattern the project-relative *path* matches first, or ``None``.
@@ -187,6 +193,13 @@ class TestLayout:
             return kinds[parts[0]], "/".join(parts[1:])
         return None
 
+    def is_flat(self, path: str) -> bool:
+        """Whether *path* sits directly in one of the roots, with no folder between."""
+        return any(
+            path.startswith(f"{root}/") and _FOLDER not in path[len(root) + 1 :]
+            for root in self.roots
+        )
+
     def mirror_of(self, path: str) -> tuple[str, str, str] | None:
         """The test tree *path* sits in, the code tree it mirrors and the path below it."""
         for test_root, code_root in self.mirrors:
@@ -218,6 +231,7 @@ class TestLayout:
             frameworks=tuple(framework for framework, _ in self.patterns),
             mirror_roots=present_mirror_roots,
             patterns=self.patterns,
+            flat_tests=self.flat_tests,
         )
 
 
@@ -279,6 +293,7 @@ def layout_from_config(config: Mapping[str, object]) -> tuple[TestLayout, list[s
         declared_kinds=declared,
         beside_code=_beside_code(block.get("beside_code"), problems),
         mirrors=_mirrors(block.get("mirrors"), problems),
+        flat_tests=_flat_tests(block.get("flat_tests"), problems),
     )
     return layout, problems
 
@@ -378,6 +393,18 @@ def _beside_code(value: object, problems: list[str]) -> bool:
             "the default (true) is used"
         )
         return True
+    return value
+
+
+def _flat_tests(value: object, problems: list[str]) -> bool:
+    if value is None:
+        return False
+    if not isinstance(value, bool):
+        problems.append(
+            f"`{CONFIG_KEY}.flat_tests` in {CONFIG_PATH} must be true or false; "
+            "the default (false) is used"
+        )
+        return False
     return value
 
 

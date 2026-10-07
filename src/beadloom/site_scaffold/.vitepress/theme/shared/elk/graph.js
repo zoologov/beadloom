@@ -14,6 +14,10 @@
 //
 // The root is a graph of ELK's, not a node of the drawing, and its id shares
 // ELK's node ids with the drawing's: it is named so that no node has its name.
+// Its padding is the margin around the whole drawing. A box of the drawing is
+// padded on its own: ELK keeps 12 units between a box's border and its
+// children, and a box keeps `boxTop` above them, the room its title is drawn
+// in, so no child stands under the title.
 
 import { freshId } from "../ids/index.js";
 
@@ -28,6 +32,9 @@ export const LAYERED_OPTIONS = Object.freeze({
   "elk.spacing.nodeNode": "45",
   "elk.padding": "[top=36,left=24,bottom=24,right=24]",
 });
+
+/** The room ELK keeps between a box's border and its children, in layout units, on every side but the top. */
+const BOX_SIDE = 12;
 
 /** Every coordinate of the answer in the root's frame. */
 const ROOT_COORDINATES = Object.freeze({
@@ -48,25 +55,28 @@ function laneOf(node) {
     : {};
 }
 
+/** ELK's padding of a box: `top` above its children, ELK's own room on every other side. */
+const boxPaddingOf = (top) => ({ "elk.padding": `[top=${top},left=${BOX_SIDE},bottom=${BOX_SIDE},right=${BOX_SIDE}]` });
+
 /**
  * The ELK graph of `nodes` and `edges`.
  *
  * A node is `{ id, parent, width, height, partition }`: `parent` is the id of
  * the node that contains it, or null. A node some other node names as its parent
  * is a box, sized by ELK, so its own size is not handed over. An edge is
- * `{ id, source, target }`. Nothing about where the graph will be drawn is
- * handed over, neither the drawing area's shape nor where a node stands now, so
- * the layout depends on the graph alone.
+ * `{ id, source, target }`. `boxTop` is the room each box keeps above its
+ * children, in layout units, ELK's own 12 when none is given. Nothing about where
+ * the graph will be drawn is handed over, neither the drawing area's shape nor
+ * where a node stands now, so the layout depends on the graph alone.
  */
-export function elkGraphOf({ nodes, edges }) {
+export function elkGraphOf({ nodes, edges, boxTop = BOX_SIDE }) {
   const containers = new Set(nodes.map((node) => node.parent).filter(Boolean));
   const byId = new Map();
   const root = { id: freshId(ROOT_NAME, new Set(nodes.map((node) => node.id))), children: [], edges: [] };
   for (const node of nodes) {
     const shape = { id: node.id, layoutOptions: laneOf(node) };
-    if (!containers.has(node.id)) {
-      Object.assign(shape, { width: node.width, height: node.height });
-    }
+    if (containers.has(node.id)) Object.assign(shape.layoutOptions, boxPaddingOf(boxTop));
+    else Object.assign(shape, { width: node.width, height: node.height });
     byId.set(node.id, shape);
   }
   for (const node of nodes) {

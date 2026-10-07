@@ -146,6 +146,18 @@ def get_part_of_children(conn: sqlite3.Connection, ref_id: str) -> list[NodeRow]
     return [_node(r) for r in rows]
 
 
+def get_part_of_containers(conn: sqlite3.Connection) -> dict[str, list[str]]:
+    """Return ``{ref_id: [the nodes it is part_of]}`` for every node with a container."""
+    rows = conn.execute(
+        "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'part_of' "
+        "ORDER BY src_ref_id, dst_ref_id"
+    ).fetchall()
+    containers: dict[str, list[str]] = {}
+    for row in rows:
+        containers.setdefault(str(row["src_ref_id"]), []).append(str(row["dst_ref_id"]))
+    return containers
+
+
 def get_outgoing_edges(conn: sqlite3.Connection, ref_id: str) -> list[EdgeRow]:
     """Return edges leaving *ref_id* ordered by ``(kind, dst_ref_id)``."""
     rows = conn.execute(
@@ -400,6 +412,13 @@ PLACEMENT_OTHER_KIND = "other_kind"
 #: Inside a node's source, outside every test root: bound to the node covering it
 #: (BDL-074 G2) — ``foo_test.go`` beside ``foo.go``, ``test_x.py`` beside ``x.py``.
 PLACEMENT_BESIDE_CODE = "beside_code"
+#: Directly under a test root, in a layout that declares ``flat_tests``: bound to the
+#: node owning the module its name names — ``tests/test_x.py`` names ``x.py``
+#: (BDL-078 ``beadloom-76mk``).
+PLACEMENT_NAMED = "named"
+#: Directly under a test root, in a layout that declares ``flat_tests``, named after
+#: no module one node owns: bound to the one node its imports reach (``beadloom-76mk``).
+PLACEMENT_IMPORTED = "imported"
 
 #: The ``kind`` values an ``other_kind`` file carries, beside the placement vocabulary
 #: for the same reason (BDL-074 F1): the binding assigns them and the rule engine names
@@ -438,7 +457,9 @@ class RecordedTestLayout:
     *patterns* each group's patterns, in the order they are matched — empty in a
     record written before ``beadloom-2mj3.15``, which named the groups alone;
     *absent_roots* the roots in force the project does not have, so a reader names
-    the roots that exist and can say which were looked for (``beadloom-2mj3.17``).
+    the roots that exist and can say which were looked for (``beadloom-2mj3.17``);
+    *flat_tests* whether a Python test directly under a root binds by the module it
+    names, then by its imports — off in a record written before ``beadloom-76mk``.
     """
 
     kind_prefixes: Mapping[str, tuple[str, ...]]
@@ -449,6 +470,7 @@ class RecordedTestLayout:
     mirror_roots: tuple[str, ...] = ()
     patterns: tuple[tuple[str, tuple[str, ...]], ...] = ()
     absent_roots: tuple[str, ...] = ()
+    flat_tests: bool = False
 
     def encode(self) -> str:
         """The record as the JSON the ``meta`` table holds."""
@@ -462,6 +484,7 @@ class RecordedTestLayout:
                 "mirror_roots": list(self.mirror_roots),
                 "patterns": [[name, list(group)] for name, group in self.patterns],
                 "absent_roots": list(self.absent_roots),
+                "flat_tests": self.flat_tests,
             },
             sort_keys=True,
         )
@@ -496,6 +519,7 @@ def read_test_layout(conn: sqlite3.Connection) -> RecordedTestLayout | None:
                 for name, group in raw.get("patterns", ())
             ),
             absent_roots=tuple(str(root) for root in raw.get("absent_roots", ())),
+            flat_tests=bool(raw.get("flat_tests", False)),
         )
     except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
         return None
@@ -515,6 +539,25 @@ def count_test_files_by_placement(conn: sqlite3.Connection) -> dict[str, int]:
     except sqlite3.OperationalError:
         return {}
     return {str(row["placement"]): int(row["n"]) for row in rows}
+
+
+def read_unbound_test_files(conn: sqlite3.Connection) -> list[tuple[str, str]]:
+    """Each indexed test file bound to no node and placed by no kind folder, with its placement.
+
+    By path. The ``other_kind`` files are left out: a kind folder places them and
+    they bind to no node by design, so they are not files the binding could not
+    place (BDL-078 ``beadloom-76mk``). Empty for an index without the test tables,
+    as :func:`count_test_files_by_placement` is.
+    """
+    try:
+        rows = conn.execute(
+            "SELECT path, placement FROM test_files "
+            "WHERE ref_id IS NULL AND placement != ? ORDER BY path",
+            (PLACEMENT_OTHER_KIND,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [(str(row[0]), str(row[1])) for row in rows]
 
 
 def count_other_kind_test_files(conn: sqlite3.Connection) -> dict[str, int]:

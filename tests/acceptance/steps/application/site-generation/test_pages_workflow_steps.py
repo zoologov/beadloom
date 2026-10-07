@@ -247,3 +247,15 @@ def _refused_base(world: dict[str, Any]) -> None:
     result = world["result"]
     assert result.exit_code == 1
     assert "site.base" in result.stderr
+
+
+@then("the Pages workflow checks out the full history before it indexes the project")
+def _full_history(world: dict[str, Any]) -> None:
+    steps = _build_steps(world)
+    uses = [str(step.get("uses", "")) for step in steps]
+    runs = [str(step.get("run", "")) for step in steps]
+    checkout = next(i for i, used in enumerate(uses) if used.startswith("actions/checkout@"))
+    indexing = next(i for i, run in enumerate(runs) if run.startswith("beadloom reindex"))
+    assert checkout < indexing
+    # 0 is "all history" to actions/checkout; its default, 1, is a single commit.
+    assert steps[checkout].get("with", {}).get("fetch-depth") == 0, steps[checkout]

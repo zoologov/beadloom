@@ -6,7 +6,10 @@
 // already absolute and no parent's offset is added here. The geometry is frozen:
 // one layout serves every viewer of the same graph, and none of them may move it.
 // The root is ELK's graph, not a node, so it is told apart by where it stands,
-// never by its id, which a node of the drawing may share.
+// never by its id, which a node of the drawing may share. Both maps are keyed by
+// the drawing's ids and have no prototype (`idRecord`), so any id is a key of its own.
+
+import { idRecord } from "../ids/index.js";
 
 const pointOf = ({ x, y }) => Object.freeze({ x, y });
 
@@ -42,8 +45,8 @@ function routeOf(edge) {
  * section is a polyline of `{ x, y }` points from the source's end to the target's.
  */
 export function geometryOf(laidOut) {
-  const boxes = {};
-  const routes = {};
+  const boxes = idRecord();
+  const routes = idRecord();
   const visit = (shape) => {
     for (const edge of shape.edges || []) routes[edge.id] = routeOf(edge);
     for (const child of shape.children || []) {

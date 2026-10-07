@@ -15,6 +15,7 @@ from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config, script_blocks
 from beadloom.graph.go_modules import GoModules
+from beadloom.graph.import_manifests import record_manifests
 from beadloom.graph.jvm_packages import JVM_EXTENSIONS, JvmPackages, read_jvm_packages
 from beadloom.graph.rules.layers import part_of_ancestors
 from beadloom.graph.swift_packages import SwiftPackages
@@ -23,7 +24,7 @@ from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Collection, Iterator, Sequence
     from pathlib import Path
 
     from tree_sitter import Node as TSNode
@@ -38,9 +39,11 @@ _TS_ALIAS_MAP: dict[str, str] = {
     "~/": "src/",
 }
 
-# Go standard library packages with no '/' in their path are not recorded at
-# all (heuristic); the others are recorded and stay unresolved, because
-# ``resolve_go_import`` maps only the modules the project holds.
+# Every Go import is recorded, the standard library's too: which path names the
+# standard library is the resolver's answer, because ``resolve_go_import`` maps
+# only the modules the project holds. A path with no '/' is not always the
+# standard library — ``module tidewater`` is imported as ``"tidewater"`` — and
+# the extractor, which reads no ``go.mod``, cannot tell (``beadloom-jcng``).
 
 
 @dataclass(frozen=True)
@@ -210,7 +213,7 @@ def _extract_ts_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
 
 
 def _extract_go_import_spec(spec: TSNode, file_path: str) -> ImportInfo | None:
-    """Extract a single Go import spec, returning None for stdlib imports."""
+    """Extract a single Go import spec, returning None for an empty path."""
     # Find the interpreted_string_literal
     for child in spec.children:
         if child.type == "interpreted_string_literal":
@@ -219,9 +222,6 @@ def _extract_go_import_spec(spec: TSNode, file_path: str) -> ImportInfo | None:
                 if sub.type == "interpreted_string_literal_content":
                     path = sub.text.decode("utf-8") if sub.text else ""
                     if not path:
-                        return None
-                    # Skip stdlib: no '/' in path
-                    if "/" not in path:
                         return None
                     return ImportInfo(
                         file_path=file_path,
@@ -936,6 +936,7 @@ def resolve_import_to_node(
     conn: sqlite3.Connection,
     scan_paths: list[str] | None = None,
     *,
+    source_files: Collection[str],
     is_ts: bool = False,
 ) -> str | None:
     """Map an import path to a graph node ref_id.
@@ -943,7 +944,9 @@ def resolve_import_to_node(
     Strategy (in order):
     1. Ownership of the imported FILE — the most specific node whose source
        covers it. This is the same rule the importing side uses, so an edge
-       always connects the two nodes that actually own the two files.
+       always connects the two nodes that actually own the two files. A
+       candidate is the imported file only when it is one of *source_files*,
+       the project-relative POSIX paths of the source files in the tree.
     2. Code-symbols annotation lookup (``# beadloom:domain=X``).
     3. Hierarchical source-prefix matching against ``nodes.source``.
 
@@ -951,6 +954,13 @@ def resolve_import_to_node(
     directory path, which can never match a node whose source is a file — so
     every import used to land on the nearest enclosing directory node, silently
     collapsing feature/component dependencies into their domain (BDL-UX #144).
+
+    Whether a candidate exists is read from *source_files* and from no table of
+    the index (``beadloom-nh7h``). It used to be read from ``code_symbols`` or
+    ``file_index``: a module of re-exports holds no symbol, and a full reindex
+    fills ``file_index`` only after it resolves the imports, so a fresh index
+    resolved ``tui``'s import of ``graph_reads`` to ``application`` and a second
+    reindex of the same tree to ``graph-reads``.
 
     Returns ``None`` if no mapping found.
     """
@@ -960,12 +970,7 @@ def resolve_import_to_node(
 
     # Strategy 1: the node that owns the imported file.
     for candidate in possible_files:
-        indexed = conn.execute(
-            "SELECT 1 FROM code_symbols WHERE file_path = ? "
-            "UNION ALL SELECT 1 FROM file_index WHERE path = ? LIMIT 1",
-            (candidate, candidate),
-        ).fetchone()
-        if indexed is None:
+        if candidate not in source_files:
             continue
         owner = get_owning_ref_id(conn, candidate)
         if owner is not None:
@@ -1088,6 +1093,8 @@ def resolve_jvm_import(
     conn: sqlite3.Connection,
     scan_paths: list[str],
     packages: JvmPackages,
+    *,
+    source_files: Collection[str],
 ) -> str | None:
     """Map a Java or Kotlin *import_path* to the node that owns the package it names.
 
@@ -1104,7 +1111,9 @@ def resolve_jvm_import(
     (the re-review's finding m5).
     """
     if packages.package(import_path) is None:
-        return resolve_import_to_node(import_path, file_path, conn, scan_paths=scan_paths)
+        return resolve_import_to_node(
+            import_path, file_path, conn, scan_paths=scan_paths, source_files=source_files
+        )
     owners = {get_owning_ref_id(conn, f"{folder}/") for folder in packages.folders(import_path)}
     return owners.pop() if len(owners) == 1 else None
 
@@ -1296,21 +1305,83 @@ def create_import_edges(conn: sqlite3.Connection) -> int:
 _TS_EXTENSIONS = frozenset({".ts", ".tsx", ".js", ".jsx", ".vue"})
 
 
-def _index_one_file(
-    file_path: Path,
-    project_root: Path,
-    conn: sqlite3.Connection,
-    scan_paths: list[str],
-    go_modules: GoModules,
-    swift_packages: SwiftPackages,
-    jvm_packages: JvmPackages,
-) -> int:
-    """Index one source file's imports into ``code_imports``; return the count.
+@dataclass(frozen=True)
+class _ImportTree:
+    """What every import of one indexing run is resolved against: the tree as it is now.
 
-    *go_modules* is read only when the file is Go, *swift_packages* only when it
-    is Swift, and each only once per run. *jvm_packages* holds the packages the
-    project's Java and Kotlin files declare, read once per run.
+    An answer is a function of this and of the graph's nodes, and of nothing an
+    earlier run left in the index (``beadloom-nh7h``). *source_files* are the
+    project-relative POSIX paths of the source files under the scan paths; the
+    manifest readers each read their files once, on first use.
     """
+
+    project_root: Path
+    scan_paths: list[str]
+    languages: dict[str, frozenset[str]]
+    source_files: frozenset[str]
+    go_modules: GoModules
+    swift_packages: SwiftPackages
+    jvm_packages: JvmPackages
+
+
+def _read_import_tree(project_root: Path, files: Sequence[Path]) -> _ImportTree:
+    """Read the tree one run resolves its imports against; *files* are its source files."""
+    scan_paths = resolve_scan_paths(project_root)
+    return _ImportTree(
+        project_root=project_root,
+        scan_paths=scan_paths,
+        languages=scan_path_languages(project_root, scan_paths, files),
+        source_files=frozenset(path.relative_to(project_root).as_posix() for path in files),
+        go_modules=GoModules(project_root),
+        swift_packages=SwiftPackages(project_root),
+        jvm_packages=read_jvm_packages(project_root, files),
+    )
+
+
+def _resolve_import(
+    tree: _ImportTree, conn: sqlite3.Connection, importer: str, import_path: str
+) -> str | None:
+    """Resolve one import of the file at *importer*, a project-relative path.
+
+    The one dispatch both the extraction of a file and the re-resolution of a
+    stored row go through, so the two cannot answer differently.
+    """
+    importer_posix = importer.replace("\\", "/")
+    suffix = posixpath.splitext(importer_posix)[1]
+    file_path = tree.project_root / importer_posix
+    scan_paths = _scan_paths_for(suffix, tree.scan_paths, tree.languages)
+    is_ts = suffix in _TS_EXTENSIONS
+    if suffix == _GO_EXTENSION:
+        return resolve_go_import(
+            import_path, importer_posix, tree.project_root, conn, tree.go_modules
+        )
+    if suffix == _SWIFT_EXTENSION and tree.swift_packages.declares(_swift_module(import_path)):
+        return resolve_swift_import(
+            import_path, importer_posix, tree.project_root, conn, tree.swift_packages
+        )
+    if suffix in JVM_EXTENSIONS and tree.jvm_packages:
+        return resolve_jvm_import(
+            import_path,
+            file_path,
+            conn,
+            scan_paths,
+            tree.jvm_packages,
+            source_files=tree.source_files,
+        )
+    if is_ts and is_relative_specifier(import_path):
+        return resolve_relative_import(import_path, importer_posix, tree.project_root, conn)
+    return resolve_import_to_node(
+        import_path,
+        file_path,
+        conn,
+        scan_paths=scan_paths,
+        source_files=tree.source_files,
+        is_ts=is_ts,
+    )
+
+
+def _index_one_file(file_path: Path, tree: _ImportTree, conn: sqlite3.Connection) -> int:
+    """Index one source file's imports into ``code_imports``; return the count."""
     imports = extract_imports(file_path)
     if not imports:
         return 0
@@ -1321,37 +1392,10 @@ def _index_one_file(
         return 0
 
     file_hash = hashlib.sha256(content.encode()).hexdigest()
-    relative = file_path.relative_to(project_root)
-    rel_path = str(relative)
-    is_ts = file_path.suffix in _TS_EXTENSIONS
+    rel_path = str(file_path.relative_to(tree.project_root))
 
     for imp in imports:
-        if file_path.suffix == _GO_EXTENSION:
-            resolved = resolve_go_import(
-                imp.import_path, relative.as_posix(), project_root, conn, go_modules
-            )
-        elif file_path.suffix == _SWIFT_EXTENSION and swift_packages.declares(
-            _swift_module(imp.import_path)
-        ):
-            resolved = resolve_swift_import(
-                imp.import_path, relative.as_posix(), project_root, conn, swift_packages
-            )
-        elif file_path.suffix in JVM_EXTENSIONS and jvm_packages:
-            resolved = resolve_jvm_import(
-                imp.import_path, file_path, conn, scan_paths, jvm_packages
-            )
-        elif is_ts and is_relative_specifier(imp.import_path):
-            resolved = resolve_relative_import(
-                imp.import_path, relative.as_posix(), project_root, conn
-            )
-        else:
-            resolved = resolve_import_to_node(
-                imp.import_path,
-                file_path,
-                conn,
-                scan_paths=scan_paths,
-                is_ts=is_ts,
-            )
+        resolved = _resolve_import(tree, conn, rel_path, imp.import_path)
         conn.execute(
             "INSERT INTO code_imports"
             " (file_path, line_number, import_path, resolved_ref_id, file_hash)"
@@ -1364,6 +1408,40 @@ def _index_one_file(
     return len(imports)
 
 
+def _reresolve_stored_imports(
+    tree: _ImportTree, conn: sqlite3.Connection, *, skip: Collection[str]
+) -> int:
+    """Resolve every stored import again, except those of the files in *skip*.
+
+    An import's answer depends on files other than its own: on whether the file
+    it names exists, and on that file's annotations. An incremental run that
+    re-read only the files it touched kept the answer an import got when its
+    target was absent, or still present, so it disagreed with a fresh index of
+    the same tree (``beadloom-nh7h``). The rows are not parsed again; each
+    answer is cached per importer folder and import path, which is everything a
+    dispatch reads of the importer. Returns the number of rows whose answer
+    changed.
+    """
+    rows = conn.execute(
+        "SELECT id, file_path, import_path, resolved_ref_id FROM code_imports"
+    ).fetchall()
+    cache: dict[tuple[str, str, str], str | None] = {}
+    changed = 0
+    for row_id, importer, import_path, stored in rows:
+        if importer in skip:
+            continue
+        folder, name = posixpath.split(str(importer).replace("\\", "/"))
+        key = (folder, posixpath.splitext(name)[1], str(import_path))
+        if key not in cache:
+            cache[key] = _resolve_import(tree, conn, str(importer), str(import_path))
+        if cache[key] != stored:
+            conn.execute(
+                "UPDATE code_imports SET resolved_ref_id = ? WHERE id = ?", (cache[key], row_id)
+            )
+            changed += 1
+    return changed
+
+
 def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     """Scan all source files and index their imports into the code_imports table.
 
@@ -1371,25 +1449,11 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     After indexing, creates ``depends_on`` edges from resolved imports.
     Returns the count of imports indexed.
     """
-    scan_paths = resolve_scan_paths(project_root)
     files = _collect_source_files(project_root)
-    languages = scan_path_languages(project_root, scan_paths, files)
-    go_modules = GoModules(project_root)
-    swift_packages = SwiftPackages(project_root)
-    jvm_packages = read_jvm_packages(project_root, files)
-    total = sum(
-        _index_one_file(
-            file_path,
-            project_root,
-            conn,
-            _scan_paths_for(file_path.suffix, scan_paths, languages),
-            go_modules,
-            swift_packages,
-            jvm_packages,
-        )
-        for file_path in files
-    )
+    tree = _read_import_tree(project_root, files)
+    total = sum(_index_one_file(file_path, tree, conn) for file_path in files)
     conn.commit()
+    record_manifests(conn, tree.go_modules, tree.swift_packages)
 
     # Create depends_on edges from resolved imports.
     refresh_import_edges(conn)
@@ -1413,42 +1477,32 @@ def reindex_file_imports(
     reported a clean boundary over a real violation (BDL-UX #142). Both lists
     are project-relative paths.
 
-    The derived ``depends_on`` edge set is rebuilt afterwards, so an import
-    that disappeared stops being a dependency instead of lingering.
+    Every other file's imports are then resolved again against the same tree,
+    without parsing them, because a touched or removed file can change what an
+    untouched one's import names (``beadloom-nh7h``), and so can a manifest: a
+    caller that saw only a manifest change passes both lists empty
+    (``beadloom-jcng``). The result equals a fresh index of the tree, and the
+    fingerprint of the manifests it was read through is recorded. The derived
+    ``depends_on`` edge set is rebuilt afterwards, so an import that disappeared
+    stops being a dependency instead of lingering.
 
     Returns the number of imports indexed for the touched files.
     """
     for rel_path in (*touched, *removed):
         conn.execute("DELETE FROM code_imports WHERE file_path = ?", (rel_path,))
 
-    scan_paths = resolve_scan_paths(project_root)
-    files = _collect_source_files(project_root)
-    languages = scan_path_languages(project_root, scan_paths, files)
+    tree = _read_import_tree(project_root, _collect_source_files(project_root))
     extensions = _supported_extensions()
-    go_modules = GoModules(project_root)
-    swift_packages = SwiftPackages(project_root)
-    # Every JVM file's declaration is read only when a touched file is Java or Kotlin.
-    jvm_packages = (
-        read_jvm_packages(project_root, files)
-        if any(posixpath.splitext(path)[1] in JVM_EXTENSIONS for path in touched)
-        else JvmPackages(())
-    )
     total = 0
     for rel_path in touched:
         file_path = project_root / rel_path
         if file_path.suffix not in extensions or not file_path.is_file():
             continue
-        total += _index_one_file(
-            file_path,
-            project_root,
-            conn,
-            _scan_paths_for(file_path.suffix, scan_paths, languages),
-            go_modules,
-            swift_packages,
-            jvm_packages,
-        )
+        total += _index_one_file(file_path, tree, conn)
+    _reresolve_stored_imports(tree, conn, skip=frozenset(touched))
 
     conn.commit()
+    record_manifests(conn, tree.go_modules, tree.swift_packages)
     refresh_import_edges(conn)
     return total
 

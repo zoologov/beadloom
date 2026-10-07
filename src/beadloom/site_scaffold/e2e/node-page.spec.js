@@ -27,16 +27,21 @@ function pageOf(node) {
   return `${node.url.replace(/^\//, "")}.html`;
 }
 
+/** Whether node `id` holds another: a box, whose page selects the box (`counts.spec.js`). */
+function holdsAnother(data, id) {
+  return Object.values(parentMap(data)).includes(id);
+}
+
 /**
- * The node with a page whose one-step neighbourhood is largest, and which reaches
- * out and in: under `prefix` when a node there qualifies, under any page otherwise.
- * A graph need not hold the kind the prefix names; a Go service's packages, as
- * `beadloom init` writes them, include no domain.
+ * The node holding no other with a page whose one-step neighbourhood is largest,
+ * and which reaches out and in: under `prefix` when a node there qualifies, under
+ * any page otherwise. A graph need not hold the kind the prefix names; a Go
+ * service's packages, as `beadloom init` writes them, include no domain.
  */
 function subjectOf(data, prefix) {
   const reach = (id) => neighbourhood(data, id, 1, "both").ids.length;
   const qualifying = data.nodes
-    .filter((n) => n.url)
+    .filter((n) => n.url && !holdsAnother(data, n.id))
     .filter((n) => neighbourhood(data, n.id, 1, "out").ids.length > 1)
     .filter((n) => neighbourhood(data, n.id, 1, "in").ids.length > 1);
   const preferred = qualifying.filter((n) => n.url.startsWith(prefix));
@@ -58,9 +63,32 @@ test("a node page opens with its node selected, its neighbourhood marked and its
   await waitForViewer(page);
 
   expect(await viewer(page, "selection")).toBe(node.id);
+  // The selection opens the boxes its node needs; the neighbourhood is read with every box open.
+  await openEveryBox(page, { edges: false });
   await expect.poll(() => viewer(page, "neighbourhood")).toEqual(neighbourhood(data, node.id, 1, "both"));
   await expect(page.locator(`${CARD} [data-card-field='kind']`)).toContainText(node.kind);
   await expect(page.locator(".vp-doc .mermaid")).toHaveCount(0);
+});
+
+test("a box's page opens with the box selected, open and framed whole, and its card says what it holds", async ({ page, request }) => {
+  const data = await architectureData(request);
+  const parents = parentMap(data);
+  // A box inside another: the box that holds everything is framed whole by any fit.
+  const box = data.nodes.filter((n) => n.url && parents[n.id] && holdsAnother(data, n.id)).sort((a, b) => a.id.localeCompare(b.id))[0];
+  requireShape(box, "no box inside another has a page");
+
+  await page.goto(pageOf(box));
+  await waitForViewer(page);
+
+  expect(await viewer(page, "selection")).toBe(box.id);
+  await expect.poll(() => viewer(page, "openBoxes")).toContain(box.id);
+  const canvas = await page.getByTestId("graph-canvas").boundingBox();
+  const drawn = (await viewer(page, "boxes"))[box.id];
+  const inside = Object.keys(parents).filter((id) => id !== box.id && withAncestors([id], parents).has(box.id)).length;
+  expect({
+    framed: drawn.x1 >= canvas.x && drawn.x2 <= canvas.x + canvas.width && drawn.y1 >= canvas.y && drawn.y2 <= canvas.y + canvas.height,
+    inside: await page.locator(`${CARD} [data-card-field='contents'] [data-contents-inside]`).getAttribute("data-contents-inside"),
+  }).toEqual({ framed: true, inside: String(inside) });
 });
 
 test("from the node page every toolbar control works and the selection moves freely", async ({
@@ -69,7 +97,7 @@ test("from the node page every toolbar control works and the selection moves fre
 }) => {
   const data = await architectureData(request);
   const node = subjectOf(data, "/domains/");
-  const next = neighbourhood(data, node.id, 1, "out").ids.find((id) => id !== node.id);
+  const next = neighbourhood(data, node.id, 1, "out").ids.find((id) => id !== node.id && !holdsAnother(data, id));
 
   await page.goto(pageOf(node));
   await waitForViewer(page);
@@ -118,7 +146,7 @@ test("a selection cleared on a node page stays cleared after a reload", async ({
 test("a page under other/ opens focused on its node the same way", async ({ page, request }) => {
   const data = await architectureData(request);
   const node = data.nodes
-    .filter((n) => n.url && n.url.startsWith("/other/"))
+    .filter((n) => n.url && n.url.startsWith("/other/") && !holdsAnother(data, n.id))
     .sort((a, b) => a.id.localeCompare(b.id))[0];
   requireShape(
     node,
@@ -129,6 +157,7 @@ test("a page under other/ opens focused on its node the same way", async ({ page
   await waitForViewer(page);
 
   expect(await viewer(page, "selection")).toBe(node.id);
+  await openEveryBox(page, { edges: false });
   await expect.poll(() => viewer(page, "neighbourhood")).toEqual(neighbourhood(data, node.id, 1, "both"));
 });
 

@@ -28,6 +28,7 @@ The reindex module orchestrates the complete data pipeline that transforms YAML 
 | `nothing_changed` | `bool` | `False` | `True` when incremental reindex detects no file changes |
 | `errors` | `list[str]` | `[]` | Fatal errors encountered during reindex |
 | `warnings` | `list[str]` | `[]` | Non-fatal warnings (e.g., duplicate doc references) |
+| `activity_history` | `GitHistory \| None` | `None` | The history a full reindex measured activity on (BDL-078 `beadloom-btkd.9`); `None` on an incremental run, outside git, or when no node has a source |
 
 ### Constants
 
@@ -98,7 +99,7 @@ defect class this project has already paid for twice (BDL-UX #142, #146).
 | 5 | Extract and index code symbols from source files | `context_oracle.code_indexer.extract_symbols` |
 | 5b | Extract code imports and create `depends_on` edges | `graph.import_resolver.index_imports` |
 | 5c | Load architecture rules from `.beadloom/_graph/rules.yml` | `graph.rule_engine.load_rules` |
-| 5e | Analyze git activity and store in `nodes.extra` | `_store_git_activity` |
+| 5e | Analyze git activity (changed lines, roll-up into boxes, relative levels, the project's `activity.exclude` patterns) and store in `nodes.extra` | `_store_git_activity` |
 | 5f | Extract API routes and store in `nodes.extra` | `_extract_and_store_routes` |
 | 5g | Populate `file_index` — BEFORE anything derives ownership from it | `_populate_file_index` |
 | 5h | Index test files into `test_files` / `test_imports` and rebuild every node's `extra["tests"]` from the binding | `test_index.index_test_files` |
@@ -146,8 +147,16 @@ step does not change that. Each file is bound by
 
 - `test_files(path, kind, ref_id, placement, test_count, file_hash)`;
 - `test_imports(file_path, line_number, import_path, resolved_ref_id)`, each import resolved by
-  `graph.import_resolver.resolve_import_to_node`, memoised per import path. Imports are read
-  from Python files only; a file in another language is counted by suffix and records none.
+  `graph.import_resolver.resolve_import_to_node`, memoised per import path. Whether an imported
+  module exists is read from the code files this run indexed (`source_files`), not from a table
+  an earlier run filled (BDL-078 `beadloom-nh7h`). Imports are read from Python files only; a
+  file in another language is counted by suffix and records none.
+
+A flat Python test, directly in a root with no kind folder (`tests/test_invoice.py`), binds only
+when the layout declares `flat_tests` (BDL-078 `beadloom-76mk`; `init` writes
+`tests: {flat_tests: true}` for a Python project): to the one node owning the module its name
+names (placement `named`), else to the one node its resolved imports reach (`imported`), else to
+nothing. The resolved imports are handed to `bind_test_file` as `imported_refs`.
 
 It runs after `file_index` is populated (step 5g), because a test's imports resolve through the
 same ownership as the code's. A file whose hash matches the recorded one is not parsed again.
@@ -181,13 +190,24 @@ Tests:   623 files (278 bound to a node, 167 unplaced, 75 acceptance step, 103 s
 ```
 
 The bound and unplaced counts are always printed. The bound count covers the `mirror`,
-`override` and `beside_code` placements, and names the last in parentheses when non-zero
-(`N bound to a node (B beside the code)`, BDL-074 G2). `W unowned` appears only when non-zero. The
+`override`, `beside_code`, `named` and `imported` placements, and names the last three in
+parentheses when non-zero (`N bound to a node (B beside the code, K flat, by the module named
+or imported)`, BDL-074 G2 and BDL-078). `W unowned` appears only when non-zero. The
 `other_kind` files are named by their recorded kind, one entry per kind with its count
 (`A acceptance step`, `S self-check`; a kind without a label is named as recorded), because
 the two bind differently and one phrase over both was true of neither (BDL-074 F1). An index
 without the test tables prints no `Tests:` line. The line above is this repository's, measured
 by `beadloom reindex` on 2026-09-28.
+
+On a shallow clone a full reindex prints one more line after `Tests:`, from
+`git_activity.activity_history_note` (BDL-078 `beadloom-btkd.9`); a full history prints none:
+
+```
+Activity: not measured on history: shallow (1 commit), which does not reach back 90 days; check out the full history (actions/checkout fetch-depth: 0)
+```
+
+`test_index.unbound_test_files(conn)` lists every test file bound to no node, by path, with its
+placement; `beadloom init` prints them under its own `Tests:` line.
 
 ### Incremental Reindex Pipeline
 
@@ -201,12 +221,12 @@ by `beadloom reindex` on 2026-09-28.
    - The index predates derived-edge provenance (`meta.import_edge_provenance` absent or older). One rebuild is required because a derived `depends_on` edge is otherwise indistinguishable from a graph-declared one, so refreshing the first would delete the second.
    - The index predates the test tables (`meta.test_index_version` absent or not `1`, `needs_full_test_reindex`). Only a full rebuild reads the `tests:` declarations.
    - Any graph YAML file changed, detected via `_graph_yaml_changed()` which directly compares hashes for files with `kind == "graph"` (belt-and-suspenders check that catches changes even when `file_index` is stale).
-4. **Early return** if no files changed and the test index matches the test files on disk (`is_test_index_current`; test files under the roots are not in `file_index`, so a test-only change is detected by hashing the files under the roots and test trees, and a test layout that differs from the one `meta.test_layout` records is a change too) (sets `nothing_changed=True`, updates meta timestamp, takes health snapshot).
+4. **Early return** if no files changed, no import manifest changed (`graph.import_manifests.manifests_changed`: a `go.mod`, `go.work` or `Package.swift` an import is resolved through, compared by the fingerprint `meta.import_manifests` holds; BDL-078 `beadloom-jcng`) and the test index matches the test files on disk (`is_test_index_current`; test files under the roots are not in `file_index`, so a test-only change is detected by hashing the files under the roots and test trees, and a test layout that differs from the one `meta.test_layout` records is a change too) (sets `nothing_changed=True`, updates meta timestamp, takes health snapshot).
 5. **True incremental path**:
    - Snapshot `symbols_hash` from `sync_state` before modifications for drift preservation.
    - Delete old data for changed and deleted files (from `docs`, `code_symbols`, `sync_state`).
    - Re-index changed and added files individually.
-   - **Re-extract imports** for the code files touched, forget those deleted, then rebuild the derived `depends_on` edge set (`reindex_file_imports`). Without this step `code_imports` — and therefore every `forbid_import`, cycle and layer rule — described the tree as it was at the last FULL rebuild, so the documented `reindex && lint` loop reported a clean boundary over a real violation (BDL-UX #142).
+   - **Re-extract imports** for the code files touched, forget those deleted, **re-resolve every stored import of the files not touched** (a file added or removed changes what an untouched importer resolves to; BDL-078 `beadloom-nh7h`), then rebuild the derived `depends_on` edge set (`reindex_file_imports`). A manifest change alone re-resolves every stored import without re-reading a file (`_refresh_imports(..., manifests_moved=True)`), since what a file imports does not depend on a manifest. An incremental index and a fresh reindex of the same tree resolve every import identically. Without this step `code_imports` — and therefore every `forbid_import`, cycle and layer rule — described the tree as it was at the last FULL rebuild, so the documented `reindex && lint` loop reported a clean boundary over a real violation (BDL-UX #142).
    - Re-extract API routes and update `nodes.extra`.
    - Rebuild `sync_state` from scratch (full table delete + rebuild) with preserved `symbols_hash`.
    - Rebuild FTS5 search index.
@@ -361,6 +381,24 @@ def _load_rules_into_db(
 
 Load architecture rules from `rules.yml` into the `rules` table. `_serialize_rule` covers **every** rule type the loader produces — deny, require, cycle, import-boundary, forbid-edge, layer, cardinality, unregistered-feature-candidate, module-coverage, scenario-coverage, doc-area-coherence, summary-facts, and since BDL-074 C3 the three suite rules — and raises `TypeError` on a type it does not know, so a rule type added to the loader without a serializer fails loudly instead of vanishing from the `rules` table. Each rule is stored WHOLE: a `forbid_import` exemption, a `scenario_coverage.non_behavioural` declaration and a `doc_area_coherence` threshold are all part of what the rule currently means, and a reader of the table must not see a stricter rule than the one that runs. `summary_facts` stores an empty definition because it has no configuration to store. A layer rule's `exempt:` entries are stored for the same reason, and since BDL-070 B4 there is a reader that needs them: the architecture view reads its layer rule from this table and asks that rule which edges to draw red, so an index without the entries would make the site flag crossings the Gate excuses. The key is written only when the rule declares entries, so the row of a project that excuses none is unchanged. The suite rules are stored whole by `_serialize_suite_rule`, with their exemptions for the same reason: `test_binding` as `{files?, for?, exempt?}`, where each `exempt` entry carries `files` or `nodes` with its `reason` and `until`; `test_import_boundary` as `{from_glob, to_glob, of?, exempt?}`, with `forbid_import`'s `{from, to, reason, until}` entries; and `scenario_binding` as `{features, exempt?}`. A key marked `?` is written only when the rule declares it.
 
+### Activity Settings
+
+Module `src/beadloom/application/activity_settings.py` (BDL-078 `beadloom-btkd.1`, annotated
+`feature=reindex`) reads the `activity:` block of `.beadloom/config.yml`:
+
+- `ACTIVITY_KEY` -- `"activity"`.
+- `read_activity_exclusions(project_root) -> tuple[tuple[str, ...], tuple[Refusal, ...]]` --
+  the usable `exclude:` patterns and a `Refusal` for each key the block does not read
+  (`activity.<key>`), an `exclude:` that is not a list (`activity.exclude`) and an entry that is
+  not a non-empty string (`activity.exclude[i]`). A refused entry is dropped; the usable ones
+  are kept.
+- `activity_exclusions(project_root) -> tuple[str, ...]` -- the usable patterns only, as the
+  reindex, the debt report and the TUI apply them.
+
+A pattern without `/` matches a file name in any folder; a pattern with `/` matches the whole
+path from the project root, and `*` crosses directories (unlike `.gitignore`, where it stops at
+`/`). `beadloom config-check` and the Gate's `config-check` step block on the refusals.
+
 ### Test Index Functions
 
 Module `src/beadloom/application/reindex/test_index.py`:
@@ -392,6 +430,9 @@ Module `src/beadloom/application/reindex/test_index.py`:
   delegating to `infrastructure.repository.count_other_kind_test_files`.
 - `describe_placements(counts, kinds) -> str` -- the text after `Tests:` on the reindex output;
   *kinds* is `kind_counts`, each named through `infrastructure.repository.label_test_kind`.
+- `unbound_test_files(conn) -> list[tuple[str, str]]` -- each test file bound to no node, by
+  path, with its placement, the `other_kind` files left out (BDL-078 `beadloom-76mk`; read by
+  `init`). Delegates to `infrastructure.repository.read_unbound_test_files`.
 
 `change_detection.code_paths(files) -> frozenset[str]` gives the code paths of a
 `_scan_project_files` result, as POSIX paths, which the mirror resolves against.
@@ -424,10 +465,10 @@ def _extract_and_store_routes(project_root: Path, conn: sqlite3.Connection) -> N
 Scan source files for API routes using `_EXT_TO_LANG` for language detection and store aggregated results in `nodes.extra["routes"]`. A route is stored on every node whose source its file lies under, by path component, as `infrastructure.node_source.NodeSource.holds` answers: the file is the source, or continues it past a `/`. A node whose source is `''` or absent is given no route. Until BDL-069 `beadloom-rqma.4` the match was a string prefix, so `src/ledger/` took the routes of `src/ledger_archive/` and a root with `source: ''` took every route. The store is the whole answer, not a merge: a node that holds no route now loses its `routes` key, so a route deleted from the code, or attributed under the old rule, is withdrawn by the next reindex that runs. Before, a node was only ever written when it had routes, and measured on a foreign repository an incremental reindex after a code change left the prefix-attributed route in place. An incremental reindex that finds no changed file returns before this step, so an index built under the old rule keeps those routes until a file changes or `reindex --full` runs.
 
 ```python
-def _store_git_activity(conn: sqlite3.Connection, project_root: Path) -> None
+def _store_git_activity(conn: sqlite3.Connection, project_root: Path) -> GitHistory | None
 ```
 
-Analyze git activity via `analyze_git_activity()` and store results in `nodes.extra["activity"]` (level, commits_30d, commits_90d, last_commit, top_contributors).
+Analyze git activity via `analyze_git_activity()` and store results in `nodes.extra["activity"]` (level, commits_30d, commits_90d, lines_30d, lines_90d, last_commit, top_contributors). It passes the `part_of` containers (`get_part_of_containers`), so a box rolls up its parts, and the project's `activity.exclude` patterns (`application.activity_settings.activity_exclusions`). Since BDL-078 `beadloom-btkd.18` it reads the clone's history once (`read_git_history`) at the instant it measures and hands both to the analysis. It returns that `GitHistory`, which the full reindex stores as `ReindexResult.activity_history`; `None` when no node has a source or git cannot say. On a shallow clone that does not reach back 90 days no activity is stored.
 
 ```python
 def _compute_file_hash(path: Path) -> str
@@ -515,6 +556,7 @@ class ReindexResult:
     nothing_changed: bool = False
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    activity_history: GitHistory | None = None
 ```
 
 ## Invariants

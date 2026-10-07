@@ -8,13 +8,27 @@
 // (`layer_rank`, inherited through `part_of`) and, on a node that declares one,
 // the layer's tag token (`layer`); the layers are then the ranks that occur,
 // named by those tokens. The colour of a layer is a theme tone chosen by its
-// position in the order, top to bottom.
+// position in the order, top to bottom. Every node is drawn as the legend draws
+// its layer, whether it holds other nodes or not: a border in the tone over a
+// tint of it (`LAYER_FILL_SHARE`). A node in no layer is drawn the same way in a
+// neutral tone of its own, and the legend names it where the graph has one.
 
 /** Theme tones for the layers, top to bottom; a longer order repeats them. */
 export const LAYER_TONES = ["purple", "indigo", "green", "yellow", "red"];
 
-/** The tone of a node in no layer. */
-export const UNLAYERED_TONE = "gray";
+/**
+ * The tone of a node in no layer: the secondary text colour, a neutral that
+ * keeps WCAG's 3:1 for a boundary against the canvas in both themes, as every
+ * layer's tone does. The theme's grey, which it was, is a fill tone: 1.33:1 on
+ * the light canvas and 2.38:1 on the dark one, so such a node read as background.
+ */
+export const UNLAYERED_TONE = "text2";
+
+/** What the legend calls a node in no layer, beside the layers' names. */
+export const UNLAYERED_NAME = "no layer";
+
+/** How much of its layer's tone a node's fill shows over what it is drawn on, in the legend as on the canvas. */
+export const LAYER_FILL_SHARE = 0.16;
 
 function toned(layers) {
   return layers
@@ -56,6 +70,11 @@ export function layersOf(nodes, declared) {
 /** The layer a node is in, or null. */
 export function layerOfNode(node, layers) {
   return layers.find((layer) => layer.rank === node.layer_rank) || null;
+}
+
+/** Whether any of `nodes` is in none of `layers`, and so drawn in `UNLAYERED_TONE`. */
+export function hasUnlayeredNode(nodes, layers) {
+  return nodes.some((node) => !layerOfNode(node, layers));
 }
 
 /** The theme tone of the node's layer. */

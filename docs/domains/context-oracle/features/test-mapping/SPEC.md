@@ -26,10 +26,12 @@ the binding is derived from the test file's path. The name-guessing heuristic it
 replaced (`test_mapper.py`) was deleted in BDL-074 C2, once its last caller, the
 debt report, read the binding instead.
 
-A test binds in one of three ways, and never by a guess at its name: by the
-**mirror** of its path under a test root or a build tool's test tree, by its place
-**beside the code** inside a node's source, or by a node's **`tests:`** declaration.
-A file none of the three reaches binds to nothing and records why.
+A test binds in one of three ways, and never by a guess at its name the project did not
+declare: by the **mirror** of its path under a test root or a build tool's test tree, by its
+place **beside the code** inside a node's source, or by a node's **`tests:`** declaration. A
+fourth way is opt-in (BDL-078 `beadloom-76mk`): with **`flat_tests`** declared, a Python test
+directly in a root binds by the module its name names, then by its imports. A file none of
+them reaches binds to nothing and records why.
 
 ### Configuration: the test layout
 
@@ -45,6 +47,7 @@ project that declares nothing is read by the defaults below.
 | `patterns` | the five framework groups below | replaces all five groups |
 | `mirrors` | `src/test/java: src/main/java`, `src/test/kotlin: src/main/kotlin`, `Tests: Sources` | replaces all three trees |
 | `beside_code` | `true` | `true` or `false` |
+| `flat_tests` | `false` | `true` or `false`; `init` writes `true` for a project whose languages include `.py` (BDL-078). A value that is not a boolean is reported, and `false` stands |
 
 `test/` and `spec/` joined `tests/` as default roots by the owner's ruling of 2026-09-28
 (`beadloom-2mj3.15`, NG1), in place of a walk over the whole project, and a top-level
@@ -138,9 +141,10 @@ module about tests. A project with such modules has to switch it off the same wa
 
 ### The binding rule
 
-`bind_test_file(path, *, code_files, scan_paths, node_sources, overrides, layout=)`
-returns a `BoundTestFile` (`path`, `kind`, `ref_id`, `placement`). `layout` defaults to
-`TestLayout()`. It applies these steps in order:
+`bind_test_file(path, *, code_files, scan_paths, node_sources, overrides, layout=,
+imported_refs=())` returns a `BoundTestFile` (`path`, `kind`, `ref_id`, `placement`). `layout`
+defaults to `TestLayout()`; `imported_refs` are the nodes the file's resolved imports reach,
+which the reindex passes. It applies these steps in order:
 
 1. **Declaration.** A node may list path prefixes under an optional `tests:` key in
    its graph YAML. The prefixes are resolved like `source:` — a trailing `/` is a
@@ -167,8 +171,17 @@ returns a `BoundTestFile` (`path`, `kind`, `ref_id`, `placement`). `layout` defa
    `self_check` are laid out by folder but are not bound here (`OTHER_KINDS`):
    acceptance scenarios bind by their `@node:` tag
    ([scenario binding](../../../graph/features/scenario-binding/SPEC.md)).
-   A file under a root but in no kind folder, or directly in one, is `unplaced`. A
-   file under an other kind is `other_kind`.
+   A file under a root but in no kind folder, or directly in one, is `unplaced`, unless
+   step 4a binds it. A file under an other kind is `other_kind`.
+4a. **Flat test** (BDL-078 `beadloom-76mk`, only when the layout declares `flat_tests`). A
+   `.py` file directly in a root, with no folder between (`TestLayout.is_flat`), binds to
+   the node owning the module its name names — `test_<m>.py` or `<m>_test.py` names
+   `<m>.py` or `<m>/__init__.py` anywhere in the code — when exactly one node owns a module
+   of that name. Placement: `named`. Otherwise it binds to the one node its resolved imports
+   reach (`imported_refs`). Placement: `imported`. Two or more candidates, or none, leave it
+   `unplaced`. The declaration is what makes the name a statement the project made rather
+   than a guess: as a default it would have bound this repository's 164 exempted flat files
+   and turned their exemptions into stale-exemption findings.
 5. **Mirror.** For a mirrored kind, `mirrored_code_path()` turns the path beneath
    the kind folder into a code path. `tests/unit/<path>/test_<name>.py` names
    `<root><path>/<name>.py`, and `<name>_test.py` names the same module. When
@@ -193,6 +206,8 @@ mirrored path.
 | `mirror` | yes | The mirrored code path is owned by a node: under a mirrored kind folder, or in a build tool's test tree |
 | `beside_code` | yes | Outside every root and test tree, inside a node's source (BDL-074 G2) |
 | `override` | yes | A node's `tests:` declaration covers the file |
+| `named` | yes | A flat Python test, `flat_tests` declared: the one node owning the module its name names (BDL-078) |
+| `imported` | yes | A flat Python test, `flat_tests` declared, naming no single module: the one node its imports reach (BDL-078) |
 | `unowned` | no | Under `unit`/`integration` or a test tree, and no node owns the mirrored code path |
 | `unplaced` | no | Not under a kind folder or a test tree, and not inside a node's source: the layout has not reached the file |
 | `other_kind` | no | Under `acceptance` or `self_check`; the file's recorded `kind` says which (BDL-074 F1) |
@@ -227,7 +242,7 @@ convention does now, and the declaration that restores the retired mapper's figu
 | Non-goal | The retired mapper | What Beadloom does | The declaration that binds it |
 |----------|--------------------|--------------------|-------------------------------|
 | NG2 — an Xcode sibling test target (`ShopTests/` beside `Shop/`) is not paired by default | paired it by the file name | the pairing depends on the project's own name, so no fixed folder can be a default. `ShopTests/` is outside every root, test tree and node source, so it is not read: `ctx` shows 0 bound and the debt report counts every covered node untested, with the recognition clause | one line, `tests.mirrors: {ShopTests: Shop}`, which binds `ShopTests/BillingTests.swift` to the node owning `Shop/Billing/` |
-| NG3 — a test is not bound by what it imports, nor by a folder named after a node (`tests/<ref>/`) | bound it by `import <ref>` or the folder name | an import names fixtures, helpers and collaborators as well as the subject. The file is read and counted `unplaced`, and the debt report withholds its untested count, so the score does not move | a node's `tests:` list (`tests: [tests/billing/]`), or the mirror layout |
+| NG3 — a test is not bound by what it imports, nor by a folder named after a node (`tests/<ref>/`) | bound it by `import <ref>` or the folder name | an import names fixtures, helpers and collaborators as well as the subject. The file is read and counted `unplaced`, and the debt report withholds its untested count, so the score does not move. The one exception is declared: a flat Python test in a root, with `flat_tests: true`, binds by its name and then by its imports (step 4a, BDL-078) | a node's `tests:` list (`tests: [tests/billing/]`), the mirror layout, or `tests.flat_tests: true` for flat Python tests |
 | NG4 — a framework is not named from a marker file without a test file (`conftest.py`, `jest.config.*`, an empty `src/test/` or `*Tests/` folder) | named the framework, estimated `low` and counted untested 0 | the framework reads `none` and every covered node counts untested, with the recognition clause | none: a project with no test says so and scores that |
 
 For an Xcode project the three mean: its tests in `ShopTests/` are not read until it declares
@@ -382,8 +397,9 @@ the `test_files` table records each file's placement.
 ## Invariants
 
 - Nothing is guessed: a test file binds by a declaration, by the mirror of its path
-  under a root or a test tree, or by its place inside a node's source, and otherwise
-  binds to nothing and records why (its placement). A file's path decides only whether
+  under a root or a test tree, by its place inside a node's source, or — only when the
+  layout declares `flat_tests` — by the module a flat Python test names or the one node its
+  imports reach, and otherwise binds to nothing and records why (its placement). A file's path decides only whether
   it is a test, by the declared patterns, never which node it tests.
 - A file outside every root, every test tree and every node's source is not read, and the
   readers that state a count state what a test file is read by, every time.
@@ -409,7 +425,8 @@ Module `src/beadloom/context_oracle/test_layout.py` (BDL-074 G2):
 
 - `TestLayout` — frozen dataclass: `roots`, `patterns` (`(framework, patterns)` pairs),
   `kind_folders`, `declared_kinds`, `beside_code`, `mirrors` (`(test tree, code tree)`
-  pairs). Methods: `framework_of(path) -> str | None` (the first group whose pattern the
+  pairs), `flat_tests` (BDL-078). `is_flat(path) -> bool` answers whether a path sits
+  directly in one of the roots. Methods: `framework_of(path) -> str | None` (the first group whose pattern the
   project-relative path matches; a bare file name is a path with no folder, which a name
   pattern matches and a folder pattern does not), `is_test_file(path) -> bool`,
   `folder_of(kind) -> str`,
@@ -439,8 +456,9 @@ Module `src/beadloom/context_oracle/test_binding.py`:
 - `TEST_ROOT` (`"tests"`, the root the unplaced sentence names with no recorded layout),
   `MIRRORED_KINDS` (`unit`, `integration`,
   re-exported from `test_layout`), `OTHER_KINDS` (`acceptance`, `self_check`).
-- `PLACEMENT_MIRROR`, `PLACEMENT_BESIDE_CODE`, `PLACEMENT_OVERRIDE`, `PLACEMENT_UNOWNED`,
-  `PLACEMENT_UNPLACED`, `PLACEMENT_OTHER_KIND` — the placement values. Defined in
+- `PLACEMENT_MIRROR`, `PLACEMENT_BESIDE_CODE`, `PLACEMENT_OVERRIDE`, `PLACEMENT_NAMED`,
+  `PLACEMENT_IMPORTED`, `PLACEMENT_UNOWNED`, `PLACEMENT_UNPLACED`, `PLACEMENT_OTHER_KIND` —
+  the placement values. Defined in
   `infrastructure/repository.py` since BDL-074 C3 and re-exported here under the same
   names, so an import from this module still answers. The vocabulary sits below both of
   its readers: this module assigns a placement and the rule engine's `test_binding` judges
@@ -498,8 +516,10 @@ Module `src/beadloom/infrastructure/repository.py`:
 
 - `PLACEMENT_MIRROR` (`"mirror"`), `PLACEMENT_BESIDE_CODE` (`"beside_code"`),
   `PLACEMENT_OVERRIDE` (`"override"`), `PLACEMENT_UNOWNED` (`"unowned"`),
-  `PLACEMENT_UNPLACED` (`"unplaced"`), `PLACEMENT_OTHER_KIND` (`"other_kind"`) — where the
-  placement values are defined.
+  `PLACEMENT_UNPLACED` (`"unplaced"`), `PLACEMENT_OTHER_KIND` (`"other_kind"`),
+  `PLACEMENT_NAMED` (`"named"`) and `PLACEMENT_IMPORTED` (`"imported"`, both BDL-078) — where
+  the placement values are defined. `read_unbound_test_files(conn)` lists the test files
+  bound to no node, by path and placement, for `init`.
 - `KIND_ACCEPTANCE` (`"acceptance"`), `KIND_SELF_CHECK` (`"self_check"`),
   `KIND_UNRECORDED` (`"unrecorded"`, stated for an `other_kind` row that recorded no kind)
   and `label_test_kind(kind) -> str` (`acceptance step`, `self-check`, otherwise the kind as

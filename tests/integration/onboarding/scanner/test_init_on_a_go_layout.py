@@ -130,4 +130,7 @@ def test_only_the_standard_library_stays_unresolved(project: Path) -> None:
             ).fetchall()
         }
 
-    assert unresolved == {"net/http", "encoding/json"}
+    # Every standard-library import of the fixture's code, read from the fixture. Before
+    # ``beadloom-jcng`` the extractor dropped a path with no '/', which also dropped a
+    # module named so; which path names the standard library is now the resolver's answer.
+    assert unresolved == {"net/http", "encoding/json", "log", "strconv", "testing"}

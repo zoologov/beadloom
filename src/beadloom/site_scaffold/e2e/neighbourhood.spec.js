@@ -16,24 +16,28 @@ import { requireShape } from "./support/shape.js";
 
 const sorted = (ids) => [...ids].sort();
 
+/** The nodes that hold no other: a box's neighbourhood is everything it holds taken as one node (`counts.spec.js`). */
+function leavesOf(data) {
+  const boxes = new Set(Object.values(parentMap(data)).filter(Boolean));
+  return data.nodes.map((n) => n.id).filter((id) => !boxes.has(id)).sort();
+}
+
 /**
- * The node whose outgoing neighbourhood grows most from depth 1 to depth 2 (between
- * equals, the first by id), so the case sees a second level whatever graph it runs on.
+ * The node holding no other whose outgoing neighbourhood grows most from depth
+ * 1 to depth 2 (between equals, the first by id), so the case sees a second
+ * level whatever graph it runs on.
  */
 function subjectOf(data) {
   const growth = (id) =>
     neighbourhood(data, id, 2, "out").ids.length - neighbourhood(data, id, 1, "out").ids.length;
-  return data.nodes
-    .map((n) => n.id)
-    .sort()
-    .sort((a, b) => growth(b) - growth(a))[0];
+  return leavesOf(data).sort((a, b) => growth(b) - growth(a))[0];
 }
 
-/** `subjectOf` when `holds` of it; otherwise the first node, by id, of which it does. */
+/** `subjectOf` when `holds` of it; otherwise the first node holding no other, by id, of which it does. */
 function subjectWhere(data, holds) {
   const preferred = subjectOf(data);
   if (holds(preferred)) return preferred;
-  return data.nodes.map((n) => n.id).sort().find(holds);
+  return leavesOf(data).find(holds);
 }
 
 /** How many more nodes a walk of `depth` in `dir` reaches from `id` than a walk of one step. */

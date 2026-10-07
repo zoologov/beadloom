@@ -8,7 +8,17 @@
 // boxes that avoids every other box, as ELK computed it. Of those stretches the
 // one drawn is the medoid: the one lying closest, on average, to all the others,
 // so the line runs where most of its edges run. Nothing is routed again: an
-// edge's own route is not moved, and no box is.
+// edge's own route is not moved, and no box is. A line between two top-level
+// nodes is routed afresh instead, with the overview's others
+// (`overviewRoutes.js`); the medoid draws every other aggregated line, and one
+// the overview's router found no route for.
+//
+// A member's route runs on into the box to its node, and ELK turns it a few
+// units before the box's border to reach the place it crosses it: clipped at
+// the border, such a route ends in a short dogleg, a step across and a last run
+// too short for an arrowhead and the straight line behind it. At a closed box
+// the step serves a node that is not drawn, so the run before it is carried on
+// straight to the border instead, where it meets the same side of the box.
 //
 // Every function here is pure: polylines and boxes in, a polyline out.
 
@@ -24,6 +34,17 @@ const SAME_POINT = 0.01;
  * hair outside it (1e-13 units, measured).
  */
 const BORDER_SLACK = 0.01;
+
+/**
+ * A last run into a closed box shorter than this, in layout units, is
+ * straightened where it can be: an arrowhead and half of one more of straight
+ * line need about this much at the least zoom a line is drawn at.
+ */
+const SHORT_LAST_RUN = 20;
+/** How far from a corner of its box a straightened end stays, in layout units: half an arrowhead's width and more. */
+const CORNER_ROOM = 10;
+/** Two coordinates closer than this are one, in layout units. */
+const SAME_AXIS = 1e-6;
 
 /** `box` grown by the border slack on every side. */
 const reaching = (box) => ({
@@ -161,17 +182,46 @@ export function medoidOf(paths) {
 }
 
 /**
+ * `path`, which ends on a border of `box`, with its last dogleg straightened:
+ * where its last run is shorter than `SHORT_LAST_RUN`, the step before it runs
+ * across it, and the run before the step goes the last run's way, that run is
+ * carried on to the border, so long as it meets it on the same side of the box
+ * and clear of its corners. Done again while the last run stays short.
+ */
+export function straightenedInto(path, box) {
+  let out = path;
+  while (out.length >= 4) {
+    const [a, b, c, d] = out.slice(out.length - 4);
+    if (Math.hypot(d.x - c.x, d.y - c.y) >= SHORT_LAST_RUN) break;
+    const along = (p, q, axis) => Math.abs(p[axis] - q[axis]) < SAME_AXIS;
+    // The last run and the run before the step on one axis, the same way; the step across them.
+    const vertical = along(c, d, "x") && along(a, b, "x") && along(b, c, "y") && Math.sign(d.y - c.y) === Math.sign(b.y - a.y);
+    const horizontal = along(c, d, "y") && along(a, b, "y") && along(b, c, "x") && Math.sign(d.x - c.x) === Math.sign(b.x - a.x);
+    if (!vertical && !horizontal) break;
+    const end = vertical ? { x: b.x, y: d.y } : { x: d.x, y: b.y };
+    const onSide = vertical ? end.x >= box.x1 + CORNER_ROOM && end.x <= box.x2 - CORNER_ROOM : end.y >= box.y1 + CORNER_ROOM && end.y <= box.y2 - CORNER_ROOM;
+    if (!onSide) break;
+    out = [...out.slice(0, out.length - 3), end];
+  }
+  return out;
+}
+
+/**
  * The route of an aggregated edge from `fromBox` to `toBox`: the medoid of its
  * members' stretches between the two, each member `{ path, reversed }`, `reversed`
  * when the member runs from `toBox` to `fromBox`; null when no member runs between
- * them.
+ * them. An end at a box `closed` names (`{ from, to }`) has its last dogleg
+ * straightened (`straightenedInto`).
  */
-export function aggregateRouteOf(members, fromBox, toBox) {
+export function aggregateRouteOf(members, fromBox, toBox, closed = { from: false, to: false }) {
   const stretches = [];
   for (const { path, reversed } of members) {
     if (!path || path.length < 2) continue;
     const stretch = reversed ? stretchBetween(path, toBox, fromBox) : stretchBetween(path, fromBox, toBox);
     if (stretch) stretches.push(reversed ? [...stretch].reverse() : stretch);
   }
-  return medoidOf(stretches);
+  let route = medoidOf(stretches);
+  if (route && closed.to) route = straightenedInto(route, toBox);
+  if (route && closed.from) route = straightenedInto([...route].reverse(), fromBox).reverse();
+  return route;
 }

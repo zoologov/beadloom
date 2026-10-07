@@ -77,3 +77,12 @@ Feature: docs site --pages-workflow writes a Pages workflow for the project's po
     When the site is generated with the Pages workflow, expecting a refusal
     Then the generation is refused, naming site.base
     And no Pages workflow was written
+
+  # beadloom-btkd.9 (T's finding F1): the portal's activity is measured on the history
+  # the build checks out. actions/checkout fetches one commit unless told otherwise, and
+  # one commit shows every file as added: every node's change is the size of its files.
+  @bead:beadloom-btkd.9
+  Scenario: the workflow checks out the full history before it indexes the project
+    Given a project that declares the site base "/orders/"
+    When the site is generated with the Pages workflow
+    Then the Pages workflow checks out the full history before it indexes the project

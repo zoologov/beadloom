@@ -30,30 +30,42 @@ _E2E = "src/beadloom/site_scaffold/e2e"
 
 #: Each spec and the slice whose behaviour it drives.
 SPEC_SLICE = {
-    # Bridges on highlighted edges where they cross other drawn edges (BDL-077 E5).
-    "bridges.spec.js": "site-graph-viewer",
-    # Trunks, buses and junction dots drawn over ELK's routes (BDL-077 E3).
+    # Trunks and buses drawn over ELK's routes (BDL-077 E3).
     "bundles.spec.js": "site-graph-viewer",
     "card.spec.js": "site-node-card",
     "colours.spec.js": "site-graph-viewer",
+    # One count per node and per line, and a click on a box (BDL-078, beadloom-btkd.7).
+    "counts.spec.js": "site-graph-viewer",
     "data-version.spec.js": "site-architecture-data",
+    # Nodes named `__proto__`, `constructor` and the like drawn like any other (BDL-078 F-ytcg).
+    "data-ids.spec.js": "site-graph-viewer",
     "diagram-links.spec.js": "site-diagram-viewer",
     "edges.spec.js": "site-graph-edge",
     "filters.spec.js": "site-filter-graph",
     "fullscreen.spec.js": "site-fullscreen",
     "graph-viewer-instances.spec.js": "site-graph-viewer",
+    # How a line enters its arrowhead, at every zoom it is drawn at (BDL-078, beadloom-btkd.2).
+    "heads.spec.js": "site-graph-viewer",
     "impact.spec.js": "site-impact-view",
     "landscape-impact.spec.js": "site-impact-view",
     "landscape.spec.js": "site-landscape-page",
     "layers.spec.js": "site-layer",
+    # When a box opens, what an open box draws, "+N", a selection framed readably (BDL-078 V3).
+    "levels.spec.js": "site-graph-viewer",
+    # The base look: one line weight, whole arrowheads, followed lines on top (BDL-078 V1).
+    "look.spec.js": "site-graph-viewer",
     # ELK in a worker, its geometry and its cache are `shared/elk` (BDL-077 E1).
     "layout.spec.js": "site-shared",
     # The map-like overview: levels, aggregated edges, the budget (BDL-077 E4).
     "map.spec.js": "site-graph-viewer",
+    # The design's readings measured a second time, by geometry of their own (BDL-078 T).
+    "metrics.spec.js": "site-graph-viewer",
     "navigation.spec.js": "site-navigate-graph",
     "neighbourhood.spec.js": "site-select-neighbourhood",
     "node-page.spec.js": "site-architecture-page",
     "node-status.spec.js": "site-graph-node",
+    # The overview's own routes, pills, titles and calm hover (BDL-078 V2).
+    "overview.spec.js": "site-graph-viewer",
     # Frame time and the first drawing, timed per environment (BDL-077 review M1).
     "performance.spec.js": "site-graph-viewer",
     # ELK's routes and box sizes drawn by the canvas (BDL-077 E2).

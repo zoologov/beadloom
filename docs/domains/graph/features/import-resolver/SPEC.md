@@ -21,7 +21,7 @@ Extract import statements from source files using tree-sitter grammars, resolve 
 | Python                | `.py`                      | `import X`, `from X import Y`              | Relative imports (`from . import`, `from ..`)   |
 | TypeScript/JavaScript | `.ts`, `.tsx`, `.js`, `.jsx`| `import ... from 'path'`, `export ... from 'path'`, `import('literal')` | None at extraction; npm packages resolve to no node |
 | Vue component         | `.vue`                     | The TS/JS forms, inside each `<script>` / `<script setup>` block | As TypeScript/JavaScript                        |
-| Go                    | `.go`                      | `import "path"`, `import (...)` blocks     | Standard library (no `/` in path); resolved through `go.mod` (see below) |
+| Go                    | `.go`                      | `import "path"`, `import (...)` blocks     | Nothing skipped: every import is recorded, the standard library's resolved to none (BDL-078 `beadloom-jcng`); resolved through `go.mod` (see below) |
 | Rust                  | `.rs`                      | `use path::to::module`                     | Built-in crates (`std`, `core`, `alloc`), `self`, `super` |
 
 The table details four languages. The resolver also extracts Kotlin, Java, Swift, Objective-C
@@ -119,7 +119,13 @@ walk cannot double-count a single statement.
 - Walks `import_declaration` nodes.
 - Handles both single `import_spec` and grouped `import_spec_list`.
 - Extracts `interpreted_string_literal_content` from each spec.
-- Skips standard library packages (heuristic: no `/` in the path).
+- Records every import, the standard library's too (BDL-078 `beadloom-jcng`). The shortcut that
+  skipped a path with no `/` is gone: it also dropped a project whose module path has no `/`
+  (`module tidewater` imported as `"tidewater"`). Whether an import is the standard library is
+  decided in one place, `resolve_go_import`, which resolves it to `None`. Visible effects: a
+  `code_imports` row per standard-library import, lint's `files scanned` counts a Go file that
+  imports only the standard library, and a `forbid_import` rule sees Go standard-library paths
+  as it already saw Python's.
 
 **Rust** (`_extract_rust_imports`):
 - Walks `use_declaration` nodes.
@@ -137,6 +143,7 @@ def resolve_import_to_node(
     conn: sqlite3.Connection,
     scan_paths: list[str] | None = None,
     *,
+    source_files: Collection[str],
     is_ts: bool = False,
 ) -> str | None
 ```
@@ -147,6 +154,7 @@ def resolve_import_to_node(
 | `file_path`   | `Path`             | required                   | Path of the file containing the import.              |
 | `conn`        | `sqlite3.Connection` | required                 | Database connection.                                 |
 | `scan_paths`  | `list[str] \| None`| `None` (defaults to `["src", "lib", "app"]`) | Source directories to search. |
+| `source_files` | `Collection[str]` | required (keyword-only)    | Project-relative POSIX paths of the tree's source files; a candidate exists only if it is one of them (BDL-078 `beadloom-nh7h`). Required, not defaulted: a default falling back to the index would be the order-dependent read the bead removed. |
 | `is_ts`       | `bool`             | `False`                    | Whether the import is from a TS/JS file.             |
 
 **Resolution strategies (tried in order):**
@@ -155,10 +163,14 @@ Candidate files come from `_import_path_to_file_paths` (replaces `.` with `/`, p
 scan_path prefix, generates both `.py` and `__init__.py` variants).
 
 **Strategy 1 -- Ownership of the imported file:**
-1. For each candidate present in `code_symbols` or `file_index`, return its owner
+1. For each candidate present in `source_files`, return its owner
    (`infrastructure/repository.get_owning_ref_id`, most specific `source` wins) when it has one.
    This is the rule the importing side is attributed by, so an edge connects the two nodes that
-   own the two files.
+   own the two files. Existence is read from the tree, not from an index table (BDL-078
+   `beadloom-nh7h`): it used to be read from `code_symbols` or `file_index`, a module of
+   re-exports holds no symbol, and a full reindex filled `file_index` only after it resolved
+   the imports, so a fresh index resolved `tui`'s import of `graph_reads` to `application` and
+   a second reindex of the same tree to `graph-reads`.
 
 **Strategy 2 -- Code-symbols annotation lookup:**
 1. For each candidate, query `code_symbols` for `annotations` JSON.
@@ -239,8 +251,9 @@ prefixed with a scan path that holds no Python. An importer whose language no sc
 file outside every scan path) keeps the full list.
 
 Limits: a scan path holding both languages is read for both, because the grouping is by
-extension. The onboarding scan and the test index still call `resolve_import_to_node` with every
-scan path: they get the walk-up floor, not the per-language filter.
+extension. The test index still calls `resolve_import_to_node` with every scan path, memoised
+per import path and given the code files the run indexed as `source_files`: it gets the walk-up
+floor, not the per-language filter. The onboarding scan no longer calls it.
 
 ### Imports resolved through a manifest
 
@@ -250,7 +263,7 @@ node. Each is resolved through what the project declares (BDL-076 B5, B7 and R2 
 | Language | Function | Read from | Unresolved |
 |----------|----------|-----------|------------|
 | Go | `resolve_go_import(import_path, importer, project_root, conn, modules)` | `GoModules` (`go_modules.py`): the nearest `go.mod` at or above the importer; the longest module path among the project's modules, the importer's local `replace` directives and those of the `go.work` that uses it; the rest of the path is a directory under that module | The standard library and every module the project does not hold |
-| Java, Kotlin | `resolve_jvm_import(import_path, file_path, conn, scan_paths, packages)` | `JvmPackages` (`jvm_packages.py`): the longest dotted prefix of the import that some file declares as its `package`, mapped to the folders of the files declaring it; where several folders declare the package, the import reaches those holding a file named after the imported class (`B.kt`, `B.java`), else all of them | A package no file declares (the JDK, a library), whose dotted folder reading stays the fallback; an import whose folders different nodes own (a wildcard or a top-level Kotlin function of a package split across nodes) |
+| Java, Kotlin | `resolve_jvm_import(import_path, file_path, conn, scan_paths, packages, *, source_files)` | `JvmPackages` (`jvm_packages.py`): the longest dotted prefix of the import that some file declares as its `package`, mapped to the folders of the files declaring it; where several folders declare the package, the import reaches those holding a file named after the imported class (`B.kt`, `B.java`), else all of them | A package no file declares (the JDK, a library), whose dotted folder reading stays the fallback; an import whose folders different nodes own (a wildcard or a top-level Kotlin function of a package split across nodes) |
 | Swift | `resolve_swift_import(import_path, importer, project_root, conn, packages)` | `SwiftPackages` (`swift_packages.py`): the target of that name in the nearest `Package.swift`, else the one other package declaring it | An Apple framework, a product of a package the project does not hold, a test, plugin, binary or system-library target |
 
 The owner of the folder found is decided by the one ownership rule (`get_owning_ref_id`). A Go
@@ -329,10 +342,14 @@ def reindex_file_imports(
 ) -> int
 ```
 
-Deletes `code_imports` rows for the touched and removed paths, re-extracts the
-touched ones, then calls `refresh_import_edges`. The JVM package declarations are read again only
-when a touched file is `.java` or `.kt`. A change to `go.mod`, `go.work` or `Package.swift` alone
-re-resolves no import of the files it governs (`beadloom-jcng`); `beadloom reindex --full` does. This is what an incremental
+Deletes `code_imports` rows for the touched and removed paths, re-extracts the touched ones,
+then resolves every other stored import again against the same tree, without parsing it
+(`_reresolve_stored_imports`), records the manifest fingerprint and calls
+`refresh_import_edges`. A touched or removed file can change what an untouched file's import
+names (BDL-078 `beadloom-nh7h`), and so can a manifest: the incremental reindex asks
+`import_manifests.manifests_changed()` and, when only a `go.mod`, `go.work` or `Package.swift`
+changed, calls this with both lists empty (`beadloom-jcng`). The JVM package declarations are
+read on every run. The result equals a fresh index of the same tree. This is what an incremental
 reindex calls; without it every import rule read an index frozen at the last
 FULL rebuild, so `reindex && lint` passed a real boundary break (BDL-UX #142).
 
@@ -352,11 +369,13 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int
       `resolve_relative_import`; a Go import to `resolve_go_import`; a Java or Kotlin import to
       `resolve_jvm_import`; a Swift import whose module a manifest declares to
       `resolve_swift_import`; every other import goes to `resolve_import_to_node` with the
-      scan paths of the file's import language. The Go modules, the declared JVM packages and
-      the Swift packages are read once per run.
+      scan paths of the file's import language. One dispatch (`_resolve_import`) serves the
+      full and the incremental path. The Go modules, the declared JVM packages, the Swift
+      packages and the source files are read once per run, as one `_ImportTree`.
    e. Upsert into `code_imports` with `ON CONFLICT(file_path, line_number, import_path) DO UPDATE SET resolved_ref_id, file_hash`.
 4. Commit.
-5. Call `refresh_import_edges(conn)` to regenerate `depends_on` edges.
+5. Record the manifest fingerprint (`import_manifests.record_manifests`) and call
+   `refresh_import_edges(conn)` to regenerate `depends_on` edges.
 6. Return the total count of imports indexed.
 
 ### Configuration
@@ -397,6 +416,7 @@ def resolve_import_to_node(
     conn: sqlite3.Connection,
     scan_paths: list[str] | None = None,
     *,
+    source_files: Collection[str],
     is_ts: bool = False,
 ) -> str | None: ...
 def resolve_go_import(
@@ -405,7 +425,7 @@ def resolve_go_import(
 ) -> str | None: ...
 def resolve_jvm_import(
     import_path: str, file_path: Path, conn: sqlite3.Connection, scan_paths: list[str],
-    packages: JvmPackages,
+    packages: JvmPackages, *, source_files: Collection[str],
 ) -> str | None: ...
 def resolve_swift_import(
     import_path: str, importer: str, project_root: Path, conn: sqlite3.Connection,
@@ -424,8 +444,10 @@ def reindex_file_imports(
 ) -> int: ...
 ```
 
-The manifest readers' public API is listed in the
-[graph domain README](../../README.md), under each module.
+The manifest readers' public API, and that of `import_manifests.py` (BDL-078 `beadloom-jcng`:
+`manifests_fingerprint`, `resolves_through_manifests`, `record_manifests`, `manifests_changed`,
+`MANIFESTS_META_KEY`), is listed in the [graph domain README](../../README.md), under each
+module.
 
 ### Public Classes
 
@@ -451,6 +473,9 @@ class ImportInfo:
 - A relative JS/TS specifier is never dropped: it resolves to the owner of an existing file or is stored with `resolved_ref_id` NULL.
 - A `.vue` import's `line_number` is a line of the `.vue` file.
 - `_import_path_to_file_paths` always includes the bare (no-prefix) variant as the last set of candidates.
+- An import resolves to the same node however the index was built: fresh, a second full
+  reindex, or incrementally after a file or a manifest changed (BDL-078 `beadloom-nh7h`,
+  `beadloom-jcng`).
 
 ---
 
@@ -460,12 +485,11 @@ class ImportInfo:
 - Only processes files located under directories listed in `scan_paths`.
 - Relative and standard-library imports are skipped (language-specific detection):
   - Python: `relative_import` AST node presence.
-  - Go: no `/` in path (stdlib heuristic).
   - Rust: root identifier is `self` or `super`.
 - TypeScript/JavaScript relative imports are NOT skipped since BDL-076 J1; see Relative JS/TS Imports.
 - npm packages (non-aliased, non-relative TypeScript/JavaScript imports) are skipped by `_normalize_ts_import` returning `None`.
-- The `code_symbols` table must be populated for annotation-based resolution to work (Strategy 1).
-- The `nodes` table must be populated for source-prefix resolution to work (Strategy 2).
+- The `code_symbols` table must be populated for annotation-based resolution to work (Strategy 2).
+- The `nodes` table must be populated for source-prefix resolution to work (Strategy 3).
 - File content is read as UTF-8; files that raise `UnicodeDecodeError` are silently skipped.
 
 ---
@@ -476,7 +500,7 @@ class ImportInfo:
 
 - **Python imports.** Parse a file with `import foo`, `from bar import baz`, and `from . import relative`. Assert the first two yield `ImportInfo` entries; the relative import is skipped.
 - **TypeScript imports.** Relative specifiers are kept as written (`tests/test_import_resolver.py`, `tests/unit/graph/test_import_resolver.py`): candidate order, specifier classification, re-exports, six dynamic `import()` cases, two `.vue` cases.
-- **Go imports.** Parse `import ("fmt"; "github.com/org/pkg")`. Assert only the non-stdlib import is extracted.
+- **Go imports.** Parse `import ("fmt"; "github.com/org/pkg")`. Assert both imports are extracted (the standard library's too, since BDL-078 `beadloom-jcng`).
 - **Rust imports.** Parse `use std::io; use my_crate::module; use super::sibling;`. Assert only `my_crate::module` is extracted.
 - **Unsupported extension.** Pass a `.txt` file. Assert empty list returned.
 - **Empty file.** Assert empty list returned.
@@ -500,6 +524,12 @@ class ImportInfo:
 - `a_foreign_scan_path_adds_no_false_edges.feature` (3 scenarios): a Python service beside a JS theme scan path owned by a node above it gets no false edge.
 - `vue_and_dynamic_imports.feature` (2 scenarios): `why` on a composable lists the component, the import is on its `.vue` line, a lazy `import('../charts/bar')` is an edge.
 - `go_module_imports.feature`: Go imports resolve through `go.mod`, and a deny rule fires on a Go import.
+- `an_import_resolves_the_same_however_the_index_was_built.feature` (3 scenarios, BDL-078
+  `beadloom-nh7h`): a fresh index, a second full reindex and an incremental one resolve every
+  import identically, a removed target included.
+- `a_manifest_is_an_input_of_the_files_it_governs.feature` (4 scenarios, BDL-078
+  `beadloom-jcng`): a `go.mod` rename, a `go.work` replace, a `Package.swift` target path and a
+  Go root package re-resolve on an incremental reindex.
 - `one_jvm_package_in_two_folders.feature` (2 scenarios, `beadloom-ujzb.24`): an import of a class
   of a package declared in two folders draws its edge to the node holding the class's file, from
   `init` and from `reindex`, and a wildcard import of that package resolves to no folder.
