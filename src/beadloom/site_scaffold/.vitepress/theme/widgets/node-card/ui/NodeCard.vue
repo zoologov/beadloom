@@ -58,11 +58,14 @@ const sumOf = (entries) => entries.reduce((sum, entry) => sum + entry.count, 0);
 // The activity line: changed lines in 30 days and the level, which is relative
 // to the project. A node with no change in
 // its window says so in words, not as a low count. A data file written before
-// lines were counted carries commits only, and is said in commits.
+// lines were counted carries commits only, and is said in commits. One line or
+// one commit is said in the singular.
 const NO_CHANGE = new Map([
   ["quiet", "no change in 30 days"],
   ["dormant", "no change in 90 days"],
 ]);
+/** `count` followed by `one` when it is 1, and by `many` otherwise. */
+const countOf = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 const activityLine = computed(() => {
   const activity = props.node.activity;
   if (!activity) return NOT_RECORDED;
@@ -70,8 +73,8 @@ const activityLine = computed(() => {
   let said = NO_CHANGE.get(level);
   if (said === undefined) {
     said = activity.lines_30d === undefined
-      ? `${activity.commits_30d ?? 0} commits in 30 days`
-      : `${activity.lines_30d} lines changed in 30 days`;
+      ? `${countOf(activity.commits_30d ?? 0, "commit", "commits")} in 30 days`
+      : `${countOf(activity.lines_30d, "line", "lines")} changed in 30 days`;
   }
   return level ? `${said}, ${level}` : said;
 });

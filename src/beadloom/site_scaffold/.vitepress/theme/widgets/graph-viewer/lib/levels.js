@@ -133,6 +133,11 @@ export function holdersOf(tree, id) {
   return chain;
 }
 
+/** Whether `id` is one of `ids` or inside one: a box's edges are those of everything in it. */
+export function isWithinAny(tree, id, ids) {
+  return ids.has(id) || holdersOf(tree, id).some((box) => ids.has(box));
+}
+
 /** Every box that holds a node of `ids`: what has to be open for each of them to be drawn as itself. */
 export function boxesHolding(tree, ids) {
   const out = new Set();

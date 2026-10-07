@@ -36,6 +36,7 @@
 // the canvas and whether it was faded, the lines whose pill found no place, each
 // closed box's tally and each node's "+N", and where they were drawn.
 
+import { idRecord } from "../../../shared/ids/index.js";
 import { headEndsOf } from "../lib/heads.js";
 import { AGGREGATE, COLLAPSED } from "../lib/levels.js";
 import { headLengthOf, routePointsOf } from "../lib/lineMarks.js";
@@ -84,7 +85,7 @@ export function pillOverlay(cy, container, { tokens, map }) {
   const layer = overlayCanvas(container, "pills");
   const measurer = document.createElement("canvas").getContext("2d");
   let places = { key: null, placed: [], dropped: [] };
-  let shown = { pills: [], dropped: [], tallies: {}, outward: {} };
+  let shown = { pills: [], dropped: [], tallies: idRecord(), outward: idRecord() };
 
   const pillFont = (look) => `600 ${PILL_MARKS.font}px ${look.font}`;
   const tallyFont = (look) => `${TALLY_MARKS.weight} ${TALLY_MARKS.size}px ${look.font}`;
@@ -216,8 +217,9 @@ export function pillOverlay(cy, container, { tokens, map }) {
     return mark && overlaps(rect, mark) ? null : rect;
   }
 
+  /** Draw each closed box's tally; what each says, by the box's id, in a record any id is a key of (`shared/ids`). */
   function drawTallies(context, look) {
-    const out = {};
+    const out = idRecord();
     context.font = tallyFont(look);
     context.textAlign = "right";
     context.textBaseline = "bottom";
@@ -236,9 +238,13 @@ export function pillOverlay(cy, container, { tokens, map }) {
     return out;
   }
 
-  /** Draw each "+N" badge of a drawn node, across the middle of its right side; one on a node too small to read is not drawn. */
+  /**
+   * Draw each "+N" badge of a drawn node, across the middle of its right side;
+   * one on a node too small to read is not drawn. What each says, by the node's
+   * id, in a record any id is a key of (`shared/ids`).
+   */
   function drawOutward(context, look) {
-    const out = {};
+    const out = idRecord();
     context.font = `${OUTWARD_MARKS.weight} ${OUTWARD_MARKS.size}px ${look.font}`;
     context.textAlign = "center";
     context.textBaseline = "middle";
@@ -274,7 +280,7 @@ export function pillOverlay(cy, container, { tokens, map }) {
     const context = layer.begin();
     const look = tokens();
     if (!look || !map()) {
-      shown = { pills: [], dropped: [], tallies: {}, outward: {} };
+      shown = { pills: [], dropped: [], tallies: idRecord(), outward: idRecord() };
       return;
     }
     const ratio = window.devicePixelRatio || 1;

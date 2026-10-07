@@ -121,13 +121,16 @@ for (const [name, empty] of Object.entries(EMPTIED)) {
 // The activity line: changed lines in 30 days with the level, which is relative
 // to the project; a node with no change
 // says so in words rather than as a low count. A data file written before lines
-// were counted is said in the commits it carries.
+// were counted is said in the commits it carries. One line or one commit is said
+// in the singular.
 const ACTIVITY_LINES = [
   { activity: { lines_30d: 1234, commits_30d: 3, level: "hot" }, says: "1234 lines changed in 30 days, hot" },
   { activity: { lines_30d: 0, commits_30d: 1, level: "cool" }, says: "0 lines changed in 30 days, cool" },
+  { activity: { lines_30d: 1, commits_30d: 1, level: "cool" }, says: "1 line changed in 30 days, cool" },
   { activity: { lines_30d: 0, commits_30d: 0, level: "quiet" }, says: "no change in 30 days, quiet" },
   { activity: { lines_30d: 0, commits_30d: 0, level: "dormant" }, says: "no change in 90 days, dormant" },
   { activity: { commits_30d: 2, level: "cold" }, says: "2 commits in 30 days, cold" },
+  { activity: { commits_30d: 1, level: "cold" }, says: "1 commit in 30 days, cold" },
 ];
 
 for (const { activity, says } of ACTIVITY_LINES) {

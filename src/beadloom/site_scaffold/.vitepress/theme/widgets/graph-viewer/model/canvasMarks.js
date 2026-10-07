@@ -1,5 +1,9 @@
 // beadloom:component=site-graph-viewer
-// The names a selection and a hover mark the canvas with: the classes and the data, named once, and how a class is set.
+// The names a selection and a hover mark the canvas with: the classes and the data, named once, and how a class or data is set.
+//
+// A class or data is set on an element only where that changes it, since
+// Cytoscape restyles an element for every one it is given (`setClass`,
+// `giveData`); the map draws its levels with them (`canvasMap.js`).
 //
 // The canvas sets them (`useGraphCanvas.js`), the layers over the canvas read
 // which edges they mark as followed (`followedOverlay.js`) and which fall back
@@ -45,4 +49,32 @@ export const DISTANCE_DATA = "impactDistance";
  */
 export function setClass(element, name, on) {
   if (element.hasClass(name) !== on) element.toggleClass(name, on);
+}
+
+/** Whether two values of an element's data are the same: one value, or plain data equal field by field. */
+function sameData(a, b) {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Give `element` the data in `values`, a key whose value is undefined taken
+ * away, and have it restyled only when one of them differs from what it holds:
+ * Cytoscape restyles an element for every value it is given, the same or not,
+ * and a box with everything it holds, so giving the box that holds everything
+ * its unchanged scale on every drawing restyled every node of the map.
+ */
+export function giveData(element, values) {
+  const changed = {};
+  const gone = [];
+  for (const [key, value] of Object.entries(values)) {
+    const now = element.data(key);
+    if (value === undefined) {
+      if (now !== undefined) gone.push(key);
+    } else if (!sameData(now, value)) changed[key] = value;
+  }
+  if (gone.length) element.removeData(gone.join(" "));
+  if (Object.keys(changed).length) element.data(changed);
+  else if (gone.length) element.updateStyle();
 }
