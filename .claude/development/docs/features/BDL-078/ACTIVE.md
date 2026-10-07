@@ -58,9 +58,13 @@
 | `beadloom-btkd.20` | fix | ✓ done | the re-review's four minors |
 | `beadloom-1hle` | W | ✓ done | docs: 34 files, sync-check stale 276 → 0, `beadloom ci` rc 0 |
 | `beadloom-btkd.21` | chore | ✓ done | three stale facts in code comments: issue_numbers docstring counts, GraphViewer's hub exception, the unreproduced 3,912 figure attributed; `beadloom ci` rc 0 |
+| `beadloom-btkd.22` | fix | ✓ done | landed 278888e7: the task after an adopter-sized layout 603-626 -> 299-301 ms here (2,478-2,495 -> 1,244-1,265 at CPU 4x); a never-started case is not a skip. Runner NOT measured: the pre-push Gate blocks on the 5 doc pairs it staled (W first) |
+| `beadloom-btkd.23` | tech-writer | ✓ done | vitepress-site.md (longest-task bound local 1,000 -> 500 ms, the runner's 2,427 ms and the ~4x factor) and graph-viewer.md (Layout: no frame while ELK runs, a turn between layout and map, the fit's scale only without a plan); stale 5 -> 0, `beadloom ci` rc 0 |
 | `beadloom-hpat` | P | in progress | owner's look, PR |
 
 ## Notes
+
+- **PR #94 (2026-10-08):** pushed at `4ca675d9`; CI 18 of 19 green; site-adopters (python) advisory red: a 2,427 ms main-thread task while an adopter-sized graph is laid out (bound 2,000 on the runner) and ten performance cases unstarted after it. `beadloom-btkd.22` `278888e7` — the fit's scale measured only when no plan provides one, a turn of the event loop between drawing the layout and making the map, Cytoscape batched while ELK runs: 610 -> 300 ms here, 2,490 -> 1,250 at 4x CPU slow-down; local bound 1,000 -> 500 ms (ci 2,000 kept); an unstarted case is told from a skip. The dev did not push: the pre-push Gate refused on 5 stale pairs and the dev neither bypassed it nor re-attested a false bound. `beadloom-btkd.23` `4554ce1d` — the two docs follow; `beadloom ci` rc 0. Second push follows.
 
 - **W and the tails closed (2026-10-07):** `beadloom-1hle` `b00d7d80` — 34 documents, stale pairs 276 -> 0, unverified 83 -> 0, 22 refs attested one at a time, README pair untouched (no false claim found), `beadloom ci` rc 0. `beadloom-btkd.20` `dd9777df` — the re-review's four minors plus a JSON.parse copy in pillOverlay. `beadloom-btkd.21` `6e6eebc9` — three stale code comments; `beadloom ci` rc 0. Coordinator: doc-sync README's '235 of 241' -> '68 of 113, measured 2026-10-07'; CONTEXT's 3,912 row qualified; the declared surface re-recorded (710 -> 743 pairs). Eight reference docs carry a surface-drift WARNING (README pair, architecture.md, guides) — not re-baselined blind, except docs/services/cli.md which the coordinator re-baselined before reading (recorded here as such); the release work item reviews them. Next: P — push, PR, CI, merge on green.
 
