@@ -103,11 +103,18 @@ def test_every_case_skipped_on_the_fixtures_portal_names_the_shape_it_lacks(
     browser_runs: Callable[[str], BrowserRun], stack: str
 ) -> None:
     run = browser_runs(stack)
+    cases = run.cases()
+    # A case Playwright never started, because a case it depends on failed, skipped
+    # nothing: that failure is the first test's to report, not this one's. Without a
+    # failure to explain it, a case never started is held to naming a shape too.
+    failed = any(case.status == "unexpected" for case in cases)
 
     unnamed = [
         f"{case.file}: {case.title} ({case.skip_reason!r})"
-        for case in run.cases()
-        if case.status == "skipped" and not _names_a_shape(case.skip_reason)
+        for case in cases
+        if case.status == "skipped"
+        and (case.ran or not failed)
+        and not _names_a_shape(case.skip_reason)
     ]
 
     assert unnamed == []

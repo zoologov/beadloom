@@ -63,13 +63,19 @@ def adopter_sized_tag() -> str:
 
 @dataclass(frozen=True)
 class BrowserCase:
-    """One case of a run: its spec file, its title, its outcome, why it skipped and its tags."""
+    """One case of a run: its spec file, its title, its outcome, why it skipped and its tags.
+
+    ``ran`` is whether Playwright started the case. One it never started, as a
+    case of a project whose dependency failed, is reported as skipped with no
+    result and no reason (``beadloom-btkd.22``).
+    """
 
     file: str
     title: str
     status: str
     skip_reason: str | None
     tags: tuple[str, ...] = ()
+    ran: bool = True
 
 
 @dataclass(frozen=True)
@@ -92,8 +98,9 @@ class BrowserRun:
                     skips = [a for a in case.get("annotations", []) if a.get("type") == "skip"]
                     reason = skips[0].get("description") if skips else None
                     tags = tuple(f"@{tag}" for tag in spec.get("tags", []))
+                    ran = bool(case.get("results"))
                     found.append(
-                        BrowserCase(spec["file"], spec["title"], case["status"], reason, tags)
+                        BrowserCase(spec["file"], spec["title"], case["status"], reason, tags, ran)
                     )
 
         for suite in self.report.get("suites", []):

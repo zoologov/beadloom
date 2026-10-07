@@ -49,6 +49,39 @@ const NO_MARKS = Object.freeze({ classes: Object.freeze([]) });
 const UNPLACED = Object.freeze({ name: "null" });
 
 /**
+ * A turn of the page's event loop: what is waiting — a press of the toolbar, a
+ * frame — is done before the caller goes on. `scheduler.yield()` where the
+ * browser has it, which lets the caller go on before other work queued later;
+ * else a message to the page itself, which a background tab does not slow down
+ * as it does a timer.
+ */
+function nextTurn() {
+  if (typeof globalThis.scheduler?.yield === "function") return globalThis.scheduler.yield();
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => resolve();
+    channel.port2.postMessage(null);
+  });
+}
+
+/**
+ * What `promise` resolves to, waited for with nothing of `instance` drawn:
+ * Cytoscape skips its frames while a batch is open, the styles it would work out
+ * for them as well as the drawing. The canvas is hidden until the graph is
+ * placed, and a frame of an adopter-sized graph drawn there anyway, every node
+ * at one point before ELK answers or placed but not yet a level of the map
+ * after, took 245 ms.
+ */
+async function undrawnUntil(instance, promise) {
+  instance.startBatch();
+  try {
+    return await promise;
+  } finally {
+    if (!instance.destroyed()) instance.endBatch();
+  }
+}
+
+/**
  * `{ cy, ready, layingOut, layout, bundles, hoveredEdges, layoutError, followed,
  * labelled, frames, droppedHeads, pills, tallies, outward, map, mount, setStyle, reveal,
  * showOnly, markSelection, resize }` over the container in `containerRef`.
@@ -239,9 +272,13 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     layoutError.value = null;
     try {
       // Each box keeps the room its title is drawn in above its children.
-      const run = await layOut(elkGraphOf({ ...layoutInputOf(instance), boxTop: GEOMETRY.boxTitleRoom }));
+      const run = await undrawnUntil(instance, layOut(elkGraphOf({ ...layoutInputOf(instance), boxTop: GEOMETRY.boxTitleRoom })));
       if (mine !== generation) return false;
       const drawn = await applyGeometry(instance, run.geometry);
+      // Drawing the layout and making the map, which plans the overview at the
+      // first drawing, take a task each: one task for both held the page for
+      // 2.4 s on a build server over an adopter-sized graph.
+      await undrawnUntil(instance, nextTurn());
       if (mine !== generation) return false;
       shared = sharedLines(instance, drawn.paths, { scale: () => map?.scale() ?? 1 });
       followed = followedOverlay(instance, containerRef.value, { tokens });

@@ -107,9 +107,10 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   let drawnElsewhere = new Set();
   // The lines that end as a stub at an open box, and the box (`mapExtras.js`).
   let stubs = new Map();
-  // The scale of the whole-graph fit until the view is fitted, so the first fit measures the map as the
-  // overview draws it: the overview plan's, read from ELK's boxes, once there is one (`apply`).
-  let scale = scaleAt(fitZoom());
+  // The scale the map is drawn at: the overview plan's, read from ELK's boxes, from the first drawing on
+  // (`apply`), so the first fit measures the map as the overview draws it. Without a plan, the scale of the
+  // whole-graph fit, measured when it is first read (`scaleNow`).
+  let scale = null;
   let planned = false;
   let queued = false;
   let destroyed = false;
@@ -122,8 +123,19 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   // The nodes an edge of the file is drawn as itself into at rest, and the box each node drawn larger than its layout is drawn as now.
   let ownEnds = new Set();
   let grownNow = new Map();
+  /**
+   * The scale the map is drawn at now. The whole-graph fit is measured only when
+   * no plan has given the scale: measuring it reads the shape and the route of
+   * every element still in the graph, all of them before the first drawing,
+   * which took 220 ms over an adopter-sized graph that the plan's scale replaces
+   * at once.
+   */
+  function scaleNow() {
+    if (scale === null) scale = scaleAt(fitZoom());
+    return scale;
+  }
   /** The map's drawing now, as the titles read it (`mapTitles.js`). */
-  const drawnNow = () => ({ scale, hiddenAt, grownNow, ownEnds });
+  const drawnNow = () => ({ scale: scaleNow(), hiddenAt, grownNow, ownEnds });
   const corners = nodeCorners(cy);
   /** The route an edge of the file is drawn along, bundled, or null. */
   const drawnRouteOf = (id) => (edges.get(id)?.data("route") ? routePointsOf(edges.get(id)) : null);
@@ -215,6 +227,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     planner.current(kept);
     // The first drawing is at the fit's scale as the plan measured it, not at the scale of the graph before any level.
     if (!planned && planner.titleScale()) [scale, planned] = [planner.titleScale(), true];
+    scaleNow();
     const full = extras.fullDetailOf(level, nextOpen);
     ownEnds = new Set([...level.originals, ...full].flatMap((id) => [edgeById.get(id).source, edgeById.get(id).target]));
     grownNow = titles.grownBoxesNow(level.nodes, nextOpen, drawnNow());
@@ -299,7 +312,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
    */
   function rescale() {
     const next = scaleAt(cy.zoom());
-    if (next === scale) return false;
+    if (next === scaleNow()) return false;
     scale = next;
     cy.batch(() => {
       cy.elements(`.${COLLAPSED}, .${PROJECT_BOX}, edge[${AGGREGATE}], node[${HIDDEN_EDGES}]`).data(MAP_SCALE, scale);
@@ -324,7 +337,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   function evaluate() {
     if (destroyed) return;
     placed = true;
-    const before = scale;
+    const before = scaleNow();
     const resized = rescale();
     if (sameSet(wanted(), open) && !resized) {
       if (scale !== before) onRescale();
@@ -421,7 +434,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
       const keyOf = (id) => edges.get(id).data("key");
       return { forward: pair.forward.map(keyOf), backward: pair.backward.map(keyOf) };
     },
-    scale: () => scale,
+    scale: scaleNow,
     /** A number that changes whenever what the map draws or the scale it draws at changes. */
     version: () => version,
     /** What the overview's last plan was (`overviewPlan.js`): `{ ms, unit, routed, failed, grown, plates }`. */
