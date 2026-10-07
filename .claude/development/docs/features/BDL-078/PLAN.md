@@ -1,6 +1,6 @@
 # PLAN: BDL-078 — The viewer looks finished, and five defects are fixed
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-10-05
 > **Approval:** delegated by the owner on 2026-10-05.
 

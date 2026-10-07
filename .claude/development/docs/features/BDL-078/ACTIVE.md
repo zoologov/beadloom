@@ -25,7 +25,7 @@
 
 | Bead | Role | Status | Details |
 |---|---|---|---|
-| `beadloom-btkd` | epic | ready | BDL-078 parent |
+| `beadloom-btkd` | epic | ✓ done | BDL-078 parent |
 | `beadloom-ytcg` | F-ytcg | ✓ done | a node named `__proto__` is drawn |
 | `beadloom-xv87` | V1 | ✓ done | the base look: `584b9677`, `e152a493`, `562551ed` |
 | `beadloom-0gyz` | V2 | ✓ done | the overview: own routes, pills, titles, calm hover: `18e447cf`, `6a9f9620`, `8b87b4f1`, `a710da95`, `86fa44ae`, `82af814a`; head overlaps 12 -> 0, narrowest gap 8.24 px; readings for the owner in the bead |
@@ -60,9 +60,11 @@
 | `beadloom-btkd.21` | chore | ✓ done | three stale facts in code comments: issue_numbers docstring counts, GraphViewer's hub exception, the unreproduced 3,912 figure attributed; `beadloom ci` rc 0 |
 | `beadloom-btkd.22` | fix | ✓ done | landed 278888e7: the task after an adopter-sized layout 603-626 -> 299-301 ms here (2,478-2,495 -> 1,244-1,265 at CPU 4x); a never-started case is not a skip. Runner NOT measured: the pre-push Gate blocks on the 5 doc pairs it staled (W first) |
 | `beadloom-btkd.23` | tech-writer | ✓ done | vitepress-site.md (longest-task bound local 1,000 -> 500 ms, the runner's 2,427 ms and the ~4x factor) and graph-viewer.md (Layout: no frame while ELK runs, a turn between layout and map, the fit's scale only without a plan); stale 5 -> 0, `beadloom ci` rc 0 |
-| `beadloom-hpat` | P | in progress | owner's look, PR |
+| `beadloom-hpat` | P | ✓ done | owner's look, PR |
 
 ## Notes
+
+- **Shipped (2026-10-08):** PR #94 squash-merged into `main` as `539ed4a3` after CI 19 of 19 green on `038305af`. Epic `beadloom-btkd` closed. The release work item follows.
 
 - **PR #94 (2026-10-08):** pushed at `4ca675d9`; CI 18 of 19 green; site-adopters (python) advisory red: a 2,427 ms main-thread task while an adopter-sized graph is laid out (bound 2,000 on the runner) and ten performance cases unstarted after it. `beadloom-btkd.22` `278888e7` — the fit's scale measured only when no plan provides one, a turn of the event loop between drawing the layout and making the map, Cytoscape batched while ELK runs: 610 -> 300 ms here, 2,490 -> 1,250 at 4x CPU slow-down; local bound 1,000 -> 500 ms (ci 2,000 kept); an unstarted case is told from a skip. The dev did not push: the pre-push Gate refused on 5 stale pairs and the dev neither bypassed it nor re-attested a false bound. `beadloom-btkd.23` `4554ce1d` — the two docs follow; `beadloom ci` rc 0. Second push follows.
 

@@ -2,7 +2,7 @@
 
 > **Current version: 7.0.0** (PyPI, published 2026-09-29).
 >
-> Rewritten 2026-10-05 against the tracker, brought up to date 2026-10-07. This file answers one question: what to do next,
+> Rewritten 2026-10-05 against the tracker, brought up to date 2026-10-08. This file answers one question: what to do next,
 > and why that and not something else. It holds open work only. What shipped is in the GitHub
 > releases and in `CHANGELOG.md`; the previous revision of this file, with its records of why,
 > is `archive/ROADMAP-until-2026-10-05.md`. Open defects are in `BDL-UX-Issues.md`.
@@ -37,19 +37,11 @@ then a team on their own services. Its state is the owner's to record.
 
 ## In progress
 
-### BDL-078 — the viewer looks finished, and five defects are fixed
+### The release of the viewer (BDL-079, starting)
 
-Epic `beadloom-btkd`, branch `features/BDL-078`, work item
-`.claude/development/docs/features/BDL-078/`. Done on the branch: the five defects, the activity
-metric (changed lines, relative levels, boxes among boxes, a shallow history named), and the
-viewer — one line weight, the overview's own routing inside the project frame, whole arrowheads
-at every zoom, small nodes as boxes with their titles, levels that open by readability, one count
-per node and per line, a click on a box framing it whole, layer colours, gesture cost back to
-BDL-077's. The owner looked twice (2026-10-06, 2026-10-07: «все круто!»). Left: rounded corners on
-boxes, then the test, review and docs beads, the PR, merge on green CI, and a release.
-
-BDL-076 and BDL-077 (the viewer and its edges) are on `main` and in no release yet. They ship
-with BDL-078 in the next one.
+BDL-076, BDL-077 and BDL-078 are on `main` and in no release. The next work item is the
+release, by the BDL-075 scheme: `/task-init`, version and CHANGELOG, publish, verify on the
+downloaded wheel. BDL-078 shipped in PR #94 (`539ed4a3`, 2026-10-08).
 
 ---
 
