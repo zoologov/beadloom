@@ -91,6 +91,6 @@ Discover with `beadloom ctx site-graph-viewer`, `beadloom ctx vitepress-site`,
 
 ## Current Phase
 
-- **Phase:** Development
+- **Phase:** Review findings being fixed (btkd.17, btkd.18), then re-review, docs, Gate, PR (2026-10-07)
 - **Current bead:** see ACTIVE.md
 - **Blockers:** none

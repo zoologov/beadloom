@@ -51,11 +51,16 @@
 | `beadloom-btkd.14` | fix | ✓ done | heads on the Java fixture's perturbed graph: the head-run pass moved model's incoming channel from 10 to 2 units behind the tip of the opposite edge's head (it ignored lines sharing an end); a moved segment now keeps off another line's last run (`headRuns.freeOf`); Java's 3 perturbed cases green, pure case red -> green; found: the adopter-sized heads case on 0 layer ranks red since btkd.13 (3 pairs unrouted inside the frame) |
 | `beadloom-btkd.15` | fix | ✓ done | whole heads on the clamped adopter-sized graph (python stack red): a pair with no route is routed before the lines in its way (its cheapest route through their room names them; they are relaid around it, or the plan is put back), and a box none of whose ports leads out gets a track through the stretch of a side no box stands across; pairs on their medoid, adopter-sized at 0 / 3 / 4 ranks: 3 / 0 / 0 -> 0 / 0 / 0, routes on every other graph unchanged; a medoid line that remains gets its last runs lengthened among the planned lines; planning 0 ranks 162 -> ~202 ms in the browser (bound 250) |
 | `beadloom-btkd.16` | dev | ✓ done | rounded corners on boxes (owner, after the look): every node and box has a card's radius, 8 px on screen at every zoom (a quarter of the shorter side where less); this portal's boxes at the fit 0.47 -> 5.2-8.5 px; the router keeps ports off the arcs (21 of 34 overview lines here take another route) and a line's end holds a corner where ELK put it near one (4 nodes here at full detail); the pill search passes a too-dear stretch at once, so the gestures cost what they did (adopter zoom step 45.6 / 46.0-46.3 ms, HEAD / mine); readings for the owner in the bead |
-| `beadloom-ak1i` | R | in progress | review |
+| `beadloom-ak1i` | R | ✓ done | review |
+| `beadloom-btkd.17` | dev | in progress | canvasMap split; pillOverlay ids (review M2, m1) |
+| `beadloom-btkd.18` | fix | in progress | three Python minors (review m2-m4) |
+| `beadloom-btkd.19` | review | blocked | re-review of the fixes |
 | `beadloom-1hle` | W | blocked | docs |
 | `beadloom-hpat` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **R closed (2026-10-07):** `beadloom-ak1i` = ISSUES, 0 critical, 2 major. M1: the Gate fails at HEAD on 149 stale pairs (~20 docs; W's scope, list on the bead). M2: canvasMap.js 301 -> 883 lines, four jobs -> `beadloom-btkd.17` (with m1: pillOverlay keys plain objects by node id — the __proto__ class). Minors m2-m4 (git read twice per reindex; 'no change' wording defined twice, '1 lines changed'; setup.py opens the db by hand) -> `beadloom-btkd.18`. m5: GESTURE_MS CI bounds never measured on a runner (noted for T's follow-up). m6, m7: CONTEXT.md's phase and the unreproduced '3,912 lines' claim — corrected by the coordinator. Withholding held; `--release` exits 1 because every role writes under one tracker identity. Re-review `beadloom-btkd.19` after the fixes, then W.
 
 - **Wave 17 closed (2026-10-07):** `beadloom-btkd.16` `bb20a5ca` — every node and box has the card's 8 px corners on screen at every zoom (or a quarter of its shorter side); the router keeps ports off the corners, 0 line ends inside a rounded corner over 9 views on 3 graphs; gestures unchanged (zoom step 46 ms, planning 129, bundling 41). Narrowed suites: chromium 302 of 302, performance 10, fixtures 0 failed, site pytest 1,155. Surfaced: 21 of 34 overview lines re-routed; `markFixed` uses the smallest track spacing, not a pitch (left). **All development done.** R `beadloom-ak1i` launched with the bead id only.
 
