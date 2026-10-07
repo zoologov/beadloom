@@ -33,6 +33,7 @@
 // routes in, routes out.
 
 import { BOX_INSET, near, sharesAnEnd, simplify } from "./bundleDrawing.js";
+import { gridIndex } from "./spatialIndex.js";
 
 const distance = (p, q) => Math.hypot(q.x - p.x, q.y - p.y);
 
@@ -109,7 +110,7 @@ function movedBack(members, way, by) {
  * member's segment as it stands, a source's bus or a trunk: moving the segment
  * would part the channel they share.
  */
-function freeOf(drawing, members, way, furthest, clearance, headRun) {
+function freeOf(drawing, lastRuns, members, way, furthest, clearance, headRun) {
   // Refused distances: open intervals, and everything from `below` up.
   const refused = [];
   let below = Infinity;
@@ -147,13 +148,11 @@ function freeOf(drawing, members, way, furthest, clearance, headRun) {
       const [e1, e2] = [byAt(c[fixed]), byAt(d[fixed])];
       if (Math.max(e1, e2) > 0) below = Math.min(below, Math.max(0, Math.min(e1, e2)) + 1 + 1e-9);
     });
-    // Another line's last run across the moved segment's way: its head's room, kept.
-    drawing.segmentsAlong(along, (lo + hi) / 2, (hi - lo) / 2, reach.lo, reach.hi, (other, c, d) => {
-      if (ids.has(other.id) || c[moving] <= lo + 1 || c[moving] >= hi - 1) return;
-      const route = drawing.routes.get(other.id);
-      const tip = route[route.length - 1];
-      const [end, start] = near(d[fixed], tip[fixed]) && near(d[moving], tip[moving]) ? [d, c] : [c, d];
-      if (!near(end[fixed], tip[fixed]) || !near(end[moving], tip[moving])) return;
+    // Another line's last run across the moved segment's way, its tip within a head's run of it: its head's room, kept.
+    const [tipLo, tipHi] = [bend[fixed] - back * headRun, bend[fixed] + back * (furthest + headRun)].sort((p, q) => p - q);
+    const tips = across === "horizontal" ? { x1: lo + 1, x2: hi - 1, y1: tipLo, y2: tipHi } : { x1: tipLo, x2: tipHi, y1: lo + 1, y2: hi - 1 };
+    lastRuns.query(tips, ({ edge: other, start, end }) => {
+      if (ids.has(other.id) || !near(start[moving], end[moving]) || !isLastRun(drawing, other.id, start, end)) return;
       const [atTip, atStart] = [byAt(end[fixed]), byAt(start[fixed])];
       // Crossed now, the run keeps the room it has up to `headRun`; crossed only once moved, `headRun`.
       const crossedNow = Math.min(atTip, atStart) < 0 && Math.max(atTip, atStart) > 0;
@@ -184,6 +183,27 @@ function freeOf(drawing, members, way, furthest, clearance, headRun) {
   };
 }
 
+/** Whether `start` to `end` is the last run of edge `id`'s route as it stands: an index of last runs keeps the ones a move replaced. */
+function isLastRun(drawing, id, start, end) {
+  const route = drawing.routes.get(id);
+  const n = route.length;
+  return route[n - 1] === end && route[n - 2] === start;
+}
+
+/** An index of the last run of every route in `drawing`, by its tip: `insert(edge, points)` files another as a route changes. */
+function lastRunsOf(drawing, cellSize) {
+  const index = gridIndex(cellSize);
+  const insert = (edge, points) => {
+    const [start, end] = points.slice(-2);
+    index.insert({ edge, start, end }, { x1: end.x, y1: end.y, x2: end.x, y2: end.y });
+  };
+  for (const [id, points] of drawing.routes) {
+    const edge = points.length >= 2 && drawing.edgeOf(id);
+    if (edge) insert(edge, points);
+  }
+  return { query: index.query, insert };
+}
+
 /**
  * Lengthen the last run of every group of arrivals in `drawing` towards
  * `options.headRun`, in steps of `options.headRunStep`, rewriting the routes it
@@ -192,6 +212,8 @@ function freeOf(drawing, members, way, furthest, clearance, headRun) {
  */
 export function lengthenHeadRuns(drawing, options) {
   const moved = [];
+  // Tips are points: filed in cells the size the boxes are filed in.
+  const lastRuns = lastRunsOf(drawing, options.cellSize);
   for (const { way, members } of arrivalGroups(drawing)) {
     const runs = members.map(({ points }) => distance(points[points.length - 2], points[points.length - 1]));
     const shortest = Math.min(...runs);
@@ -205,11 +227,14 @@ export function lengthenHeadRuns(drawing, options) {
     const wanted = Math.min(options.headRun - shortest, limit);
     const steps = stepsFor(wanted, Math.min(wanted + options.headRun, limit), options.headRunStep);
     if (!steps.length) continue;
-    const free = freeOf(drawing, nearest, way, Math.max(...steps), options.headRunClearance, options.headRun);
+    const free = freeOf(drawing, lastRuns, nearest, way, Math.max(...steps), options.headRunClearance, options.headRun);
     for (const by of steps.filter(free)) {
       const candidate = movedBack(nearest, way, by);
       if (!candidate) continue;
-      for (const { edge, points } of candidate) drawing.setRoute(edge, points);
+      for (const { edge, points } of candidate) {
+        drawing.setRoute(edge, points);
+        lastRuns.insert(edge, points);
+      }
       moved.push({ members: candidate.map(({ edge }) => edge.id), by });
       break;
     }
