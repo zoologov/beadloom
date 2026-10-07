@@ -37,7 +37,7 @@
 
 ## Open Issues
 
-> Last checked against the tracker on 2026-10-05. Two entries are about to close: 290 is fixed
+> Last checked against the tracker on 2026-10-07. Two entries are about to close: 290 is fixed
 > on `features/BDL-078` (`beadloom-nh7h`) and closes when it merges; the cause of 293 was removed
 > by BDL-074, and the entry holds itself open until about 2026-10-29.
 
@@ -45,6 +45,9 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 307 | 2026-10-07 | medium | the portal's Source link is a permalink to the built commit, so a local build from an unpushed commit links to a 404 on every node |
+| 306 | 2026-10-07 | medium | a box's card says `Debt 0` from the box's own score while its activity rolls up from its parts — two populations on one card, unnamed |
+| 305 | 2026-10-07 | medium | `Rule findings: none` on a node card is indistinguishable from "lint never ran", and the 36 findings bound to no node are shown nowhere on the portal |
 | 302 | 2026-09-14 | medium | `review-brief` and `waves` take their subject from the checkout |
 | 301 | 2026-09-14 | medium | a release's own "verified on the published wheel" sentences fail the Gate on the next version bump, and the suppression that excuses them is file-wide |
 | 300 | 2026-09-13 | high | `scope-check` never runs in CI: Actions checks a pull request out on a detached HEAD, so no branch names a work item and the step skips on every pu... |
@@ -126,6 +129,30 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+307. [2026-10-07] [MEDIUM] the portal's Source link is a permalink to the built commit, so a local build from an unpushed commit links to a 404 on every node
+
+    **Severity:** medium (no wrong data; every link of a locally built portal is dead until the commit is pushed)
+    **Command:** `beadloom docs site`, then the viewer's card
+    **Context:** the owner looked at a portal built from `5bcb6881` on `features/BDL-078`, not pushed, and clicked Source on `vitepress-site`.
+    **Issue:** GitHub answers `404 - Cannot find a valid ref in 5bcb6881…/src/beadloom/site_scaffold/…` for every node: the link names the built commit, which exists on no remote branch.
+    **Expected:** when the built commit is on no remote branch (`git branch -r --contains`), the link names the branch or the remote's default branch, and the card says the portal was built from an unpublished commit. Tracked on `beadloom-be6e`.
+
+306. [2026-10-07] [MEDIUM] a box's card says `Debt 0` from the box's own score while its activity rolls up from its parts — two populations on one card, unnamed
+
+    **Severity:** medium (the number is right for the node and wrong for the question a box's card answers)
+    **Command:** the viewer's card on a box (`beadloom` at the overview)
+    **Context:** the owner selected the project box and read `Debt 0` beside `activity: hot, 59 commits`.
+    **Issue:** debt is the node's OWN reasons (stale_doc, oversized, high_fan_out, dormant), so a box with a fresh document and little own code reads 0 while `application` (3), `graph` (3), `tui` (2) sit inside it; activity on the same card is rolled up from the parts (BDL-078 ruling 6). Nothing names the two populations.
+    **Expected:** a box's card shows debt in two lines — own, and inside: N nodes with debt, the sum, by reason — and the box's `Inside` section carries the same numbers. Tracked on `beadloom-pre3`.
+
+305. [2026-10-07] [MEDIUM] `Rule findings: none` on a node card is indistinguishable from "lint never ran", and the 36 findings bound to no node are shown nowhere on the portal
+
+    **Severity:** medium (the class this project keeps meeting: a check silent about its own reach)
+    **Command:** the viewer's card; `beadloom lint`
+    **Context:** the owner saw `Rule findings: none` on most nodes and asked whether that was right. Measured: `lint` gives 0 errors and 70 warnings; 28 of 130 nodes carry 34 of them; 36 are bound to no node (`scenario-coverage` pointing at PRD lines, the population warnings of `site-fsd-layers`, `test-files-bind-to-a-node`, `scenarios-live-in-their-node-folder`).
+    **Issue:** `none` is correct for 102 nodes and says nothing about whether lint ran or over what; the 36 project-level findings are invisible on the portal.
+    **Expected:** the card names the population (`none — this project: 0 errors, 70 warnings on 28 nodes`) and project-level findings have a home on the project box's card and the dashboard. Tracked on `beadloom-pre3`.
 
 302. [2026-09-14] [MEDIUM] `review-brief` and `waves` take their subject from the checkout — the change from HEAD, the work item from the branch name — and neither accepts it as an option
 
