@@ -27,6 +27,12 @@
 // the stretch of cells straight out of it that a line of that box does not bend
 // on, long enough for an arrowhead and a rounded corner.
 //
+// The box that holds everything, where there is one, is drawn with a frame, and
+// its inside is the only room the lines have: a line that left it to reach a
+// sibling box and came back would read as leaving the project. Its frame is an
+// outer wall, kept half a pitch from as a box is, so the tracks run inside it.
+// Without one, the tracks reach a few pitches past the outermost boxes.
+//
 // Everything here is pure, in pixels at the scale the overview is planned at.
 
 /** Two numbers closer than this are one. */
@@ -68,17 +74,23 @@ export function lowerBound(tracks, value) {
   return low;
 }
 
-/** Tracks between `min` and `max` at least `pitch` apart, one through the middle of each of `extents` that has room. */
+/**
+ * Tracks between `min` and `max` at least `pitch` apart, one through the middle
+ * of each of `extents` that has room. A middle at or past `min` or `max` takes no
+ * track: a box that close to a frame has no ports on that axis, rather than a
+ * line on the frame.
+ */
 export function tracksOf(min, max, extents, pitch) {
   const middles = [];
+  const within = (middle) => middle > min + EPS && middle < max - EPS;
   for (const [a, b] of extents) {
     const middle = (a + b) / 2;
-    if (middles.every((other) => Math.abs(other - middle) >= MIDDLE_SHARE * pitch)) middles.push(middle);
+    if (within(middle) && middles.every((other) => Math.abs(other - middle) >= MIDDLE_SHARE * pitch)) middles.push(middle);
   }
   // A box none of those passes through gets one through its middle, however near the next.
   for (const [a, b] of extents) {
     const inset = Math.min(CORNER_INSET, (b - a) / 4);
-    if (!middles.some((track) => track >= a + inset && track <= b - inset)) middles.push((a + b) / 2);
+    if (within((a + b) / 2) && !middles.some((track) => track >= a + inset && track <= b - inset)) middles.push((a + b) / 2);
   }
   middles.sort((a, b) => a - b);
   const anchors = [min, ...middles, max];
@@ -107,6 +119,21 @@ function haloOf(box, obstacles, depth) {
   return room.map((gap) => clamp(gap * HALO_SHARE, 0, depth));
 }
 
+/**
+ * The extent the tracks span, `{ minX, minY, maxX, maxY }`: inside `frame`, half
+ * a pitch in from it, where there is one; else every obstacle's extent and
+ * `MARGIN_PITCHES` more on each side.
+ */
+function trackExtentOf(obstacles, frame, pitch) {
+  if (frame) {
+    const half = pitch / 2;
+    return { minX: frame.x1 + half, minY: frame.y1 + half, maxX: frame.x2 - half, maxY: frame.y2 - half };
+  }
+  const pad = MARGIN_PITCHES * pitch;
+  const { minX, minY, maxX, maxY } = extentOf(obstacles);
+  return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad };
+}
+
 /** The extent every obstacle spans, `{ minX, minY, maxX, maxY }`. */
 function extentOf(obstacles) {
   let [minX, minY, maxX, maxY] = [Infinity, Infinity, -Infinity, -Infinity];
@@ -124,7 +151,8 @@ function extentOf(obstacles) {
  * `marks` (`{ pitch, halo, run, corner }`); `degree(b)` is how many lines box
  * `b` takes, so the busiest boxes get the first tracks through their middles;
  * `cores[b]`, where there is one, is the laid-out box inside box `b`, drawn
- * larger, whose sides its ports and its tracks are taken from.
+ * larger, whose sides its ports and its tracks are taken from; `frame`, where
+ * there is one, the box that holds them all, whose inside the tracks keep to.
  *
  * `{ xs, ys, nx, ny, interior, inside, covered, band, bandAxis, band2, band2Axis,
  * crowded, near, ports, lead, stem, cellAt }`: the tracks; per cell, the box whose
@@ -137,14 +165,13 @@ function extentOf(obstacles) {
  * whose way in it lies on (-1 for none), where an arriving line's arrowhead is;
  * per cell, the box whose stem it is on; and the cell nearest a point.
  */
-export function gridOf(boxes, plates, marks, degree, cores = []) {
+export function gridOf(boxes, plates, marks, degree, cores = [], frame = null) {
   const { pitch } = marks;
   const obstacles = [...boxes, ...plates];
-  const { minX, minY, maxX, maxY } = extentOf(obstacles);
-  const pad = MARGIN_PITCHES * pitch;
+  const { minX, minY, maxX, maxY } = trackExtentOf(obstacles, frame, pitch);
   const busiestFirst = boxes.map((box, b) => ({ box: cores[b] || box, b })).sort((p, q) => degree(q.b) - degree(p.b) || p.b - q.b);
-  const xs = tracksOf(minX - pad, maxX + pad, busiestFirst.map(({ box }) => [box.x1, box.x2]), pitch);
-  const ys = tracksOf(minY - pad, maxY + pad, busiestFirst.map(({ box }) => [box.y1, box.y2]), pitch);
+  const xs = tracksOf(minX, maxX, busiestFirst.map(({ box }) => [box.x1, box.x2]), pitch);
+  const ys = tracksOf(minY, maxY, busiestFirst.map(({ box }) => [box.y1, box.y2]), pitch);
   const nx = xs.length;
   const ny = ys.length;
   const cells = nx * ny;

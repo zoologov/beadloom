@@ -12,6 +12,7 @@ import { test, expect } from "@playwright/test";
 import { architectureData, openArchitecture, openEveryBox, viewer } from "./support/viewer.js";
 import { LACKING, requireShape } from "./support/shape.js";
 import { canvasBackground, channelDistance, drawnColours, legendSamples, over } from "./support/look.js";
+import { treeOf } from "./support/map.js";
 
 const CARD = "[data-testid='node-card']";
 
@@ -191,5 +192,69 @@ for (const colorScheme of ["light", "dark"]) {
       requireShape(overview.kinds.leaf + detail.kinds.leaf > 0, "no node with nothing inside it is drawn in a declared layer");
       expect([...overview.off, ...detail.off]).toEqual([]);
     });
+  });
+}
+
+// A node in no layer is drawn in a neutral tone of its own (`UNLAYERED_TONE`),
+// and before, the legend said nothing about it: on this portal the node of the
+// documentation site, in no layer, was the one grey box with no key. The legend
+// now names it, and only where the graph has such a node; the served file is read
+// once as it is and once turned the other way, so both answers are asked on
+// every portal, whether it declares layers or not. The box that holds everything
+// is drawn as the project's frame whatever its layer, so it is no such node.
+
+/** Whether `node` is in a layer of `data`'s: the declared ranks, or, where none is declared, any rank. */
+function inALayer(node, data) {
+  const declared = (data.layers || []).filter((layer) => typeof layer?.rank === "number").map((layer) => layer.rank);
+  return typeof node.layer_rank === "number" && (!declared.length || declared.includes(node.layer_rank));
+}
+
+/** The ids of `data`'s nodes drawn in no layer's tone: those in no layer but the box that holds everything. */
+function unlayeredOf(data) {
+  const { wrapper } = treeOf(data);
+  return data.nodes.filter((node) => node.id !== wrapper && !inALayer(node, data)).map((node) => node.id);
+}
+
+/**
+ * `data` turned the other way: with a node drawn in no layer's tone, every such
+ * node put in the first declared layer, or in one declared here where none is;
+ * without one, the first node by id but the box that holds everything taken out
+ * of its layer.
+ */
+function withTheOtherAnswer(data) {
+  const unlayered = new Set(unlayeredOf(data));
+  if (unlayered.size) {
+    const layers = data.layers?.length ? data.layers : [{ name: "the one layer", rank: 0, tag: "the-one-layer", token: "the-one-layer" }];
+    const rank = Math.min(...layers.map((layer) => layer.rank));
+    return { ...data, layers, nodes: data.nodes.map((node) => (unlayered.has(node.id) ? { ...node, layer_rank: rank } : node)) };
+  }
+  const { wrapper } = treeOf(data);
+  const [first, ...rest] = [...data.nodes].sort((a, b) => (a.id === wrapper) - (b.id === wrapper) || a.id.localeCompare(b.id));
+  const { layer_rank: _rank, layer: _token, ...unlayeredFirst } = first;
+  return { ...data, nodes: [unlayeredFirst, ...rest] };
+}
+
+for (const turned of [false, true]) {
+  test(`the legend names 'no layer' exactly when a node is in no layer, in the colour such a node is drawn in${turned ? ", on the file turned the other way" : ""}`, async ({
+    page,
+    request,
+  }) => {
+    const served = await architectureData(request);
+    const data = turned ? withTheOtherAnswer(served) : served;
+    if (turned) await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+    const unlayered = unlayeredOf(data);
+
+    await openArchitecture(page);
+
+    const entry = page.locator("[data-legend-unlayered]");
+    await expect(entry).toHaveCount(unlayered.length ? 1 : 0);
+    if (!unlayered.length) return;
+    await expect(entry).toHaveText("no layer");
+    // Its sample is drawn as such a node is: its border in the node's border colour.
+    await openEveryBox(page, { edges: false });
+    const sample = await entry.locator(".bl-legend-swatch").evaluate((swatch) => getComputedStyle(swatch).borderTopColor);
+    const borders = (await viewer(page, "nodeLooks")).filter((look) => unlayered.includes(look.id)).map((look) => look.borderColour);
+    expect(borders.length).toBeGreaterThan(0);
+    expect(borders.filter((border) => channelDistance(border, sample) > 0)).toEqual([]);
   });
 }

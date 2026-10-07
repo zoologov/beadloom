@@ -129,6 +129,26 @@ export function segmentInRect(a, b, r, shrink = 0) {
   return t1 - t0 > 1e-9;
 }
 
+/**
+ * The segments of the lines `looks` whose stroke reaches the frame of `frame`,
+ * the box that holds everything, or runs past it, at `view`: each named
+ * "id#k", k counted from 1. The frame is drawn `frameWidth` pixels wide inside
+ * the box, so a line keeps inside it when its stroke, half its width either side
+ * of its route, keeps off that border. A segment is straight and the frame's
+ * inside convex, so a segment is inside when both its ends are.
+ */
+export function segmentsOutside(looks, frame, view, frameWidth) {
+  const box = boxOnScreen(frame, view);
+  const out = [];
+  for (const look of looks) {
+    const room = frameWidth + (look.width * view.zoom) / 2;
+    const inside = (p) => p.x > box.x1 + room && p.x < box.x2 - room && p.y > box.y1 + room && p.y < box.y2 - room;
+    const points = look.points.map((p) => onScreen(p, view));
+    for (let k = 1; k < points.length; k += 1) if (!inside(points[k - 1]) || !inside(points[k])) out.push(`${look.id}#${k}`);
+  }
+  return out;
+}
+
 /** The segments of every line in `looks`, on screen: `[{ id, a, b }]`. */
 export function segmentsOf(looks, view) {
   return looks.flatMap((look) => {

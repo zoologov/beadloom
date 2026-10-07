@@ -192,9 +192,10 @@ def test_violation_edges_have_their_own_style() -> None:
 
 
 def test_the_viewer_renders_a_legend_derived_from_the_data() -> None:
-    """The legend lists the layers and the drawn edge kinds, both read off the data."""
+    """The legend lists the layers, a node in no layer and the drawn edge kinds, off the data."""
     viewer = _read("widgets/graph-viewer/ui/GraphViewer.vue")
-    assert '<LayerLegend :layers="layers" />' in viewer
+    assert '<LayerLegend :layers="layers" :unlayered="unlayered" />' in viewer
+    assert "hasUnlayeredNode(" in viewer
     assert '<EdgeLegend :keys="legendKeys"' in viewer
     assert "legendKeysOf(" in viewer
 

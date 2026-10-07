@@ -35,8 +35,10 @@ import {
   rectsOverlap,
   segmentInRect,
   segmentsOf,
+  segmentsOutside,
   sharedArrivals,
 } from "./support/overview.js";
+import { withTwoMoreEdges } from "./support/perturbedGraph.js";
 import { edgesThroughBoxes } from "./support/routeMetrics.js";
 import { requireShape } from "./support/shape.js";
 import { openThemeModules } from "./support/themeModules.js";
@@ -387,6 +389,48 @@ for (const graph of GRAPHS) {
       requireShape(Object.keys(others).length > 0, "every line between top-level ends touches the busiest box");
       expect(await moved(others)).toEqual([]);
     });
+  });
+}
+
+/** This portal's graph with two edges more: the same graph, laid out another way (`support/perturbedGraph.js`). */
+const PERTURBED = {
+  name: "this portal's architecture graph with two edges more",
+  tag: [],
+  open: async (page, request) => {
+    const more = withTwoMoreEdges(await architectureData(request));
+    requireShape(Boolean(more), "no two leaves in two other top-level boxes than a third leaf's");
+    await page.route("**/architecture.data.json", (route) => route.fulfill({ json: more.data }));
+    await openArchitecture(page);
+    return more.data;
+  },
+};
+
+// The box that holds everything is drawn with a visible frame, so a line that
+// leaves it to reach a sibling box and comes back in reads as leaving the
+// project. Before, the router's tracks reached six pitches past the outermost
+// boxes, and on this portal a line ran round the outside of the frame on its
+// right. A pair the router cannot route inside the frame is named, with a count,
+// by the case on unrouted lines above; it is never routed outside.
+for (const graph of [...GRAPHS, PERTURBED]) {
+  test(`at the whole-graph fit every line runs inside the frame of the box that holds everything, on ${graph.name}`, { tag: graph.tag }, async ({
+    page,
+    request,
+  }) => {
+    const tree = treeOf(await graph.open(page, request));
+    requireShape(Boolean(tree.wrapper), "no box that holds every node");
+    const view = await viewOf(page);
+    const frame = (await viewer(page, "nodeBoxes"))[tree.wrapper];
+    const frameWidth = (await viewer(page, "nodeLooks")).find((look) => look.id === tree.wrapper).borderWidth * view.zoom;
+    const looks = await viewer(page, "lineLooks");
+    requireShape(looks.length > 0, "no line drawn at the whole-graph fit");
+    const { failed } = await viewer(page, "overviewPlan");
+
+    const outside = segmentsOutside(looks, frame, view, frameWidth);
+    test.info().annotations.push({
+      type: "measured",
+      description: `${outside.length} of ${looks.reduce((sum, look) => sum + look.points.length - 1, 0)} segments of ${looks.length} lines outside the frame; ${failed.length} pair(s) with no route inside it`,
+    });
+    expect(outside).toEqual([]);
   });
 }
 
@@ -778,6 +822,26 @@ test("a box drawn larger than its laid-out box is routed around, and a line into
     const straightOut = (Math.abs(next.x - end.x) < 1e-6 && (end.y === core.y1 ? next.y <= drawnB.y1 : next.y >= drawnB.y2)) || (Math.abs(next.y - end.y) < 1e-6 && (end.x === core.x1 ? next.x <= drawnB.x1 : next.x >= drawnB.x2));
     if (!straightOut) wrong.push(`${name}'s last run into b does not run straight across the drawn box`);
     if (fromB.slice(2).some((p, k) => segmentInRect(fromB[k + 1], p, drawnB, 0.01))) wrong.push(`${name} runs through the drawn box`);
+  }
+  expect(wrong).toEqual([]);
+});
+
+test("a frame is an outer wall: every line runs inside it, clear of it, and a pair with no way inside is named, not routed outside", async ({ page }) => {
+  await openThemeModules(page);
+  // a and b stand against the frame's left and right walls; c stands between them, from the top wall down.
+  const frame = { x1: 0, y1: 0, x2: 300, y2: 200 };
+  const sides = [box("a", 2, 80, 40, 120), box("b", 260, 80, 298, 120)];
+  const pairs = [{ name: "a\nb", a: "a", b: "b", forward: 1, backward: 0 }];
+  const wrong = [];
+  for (const bottom of [150, 198]) {
+    const input = { unit: 1, frame, boxes: [...sides, box("c", 60, 2, 240, bottom)], pairs };
+    const { paths, failed } = await plan(page, input);
+    // Half a pitch, the room every box keeps from a line, is kept from the frame too.
+    const room = 4;
+    const outside = Object.values(paths).flatMap((path) => path.filter((p) => p.x < frame.x1 + room || p.x > frame.x2 - room || p.y < frame.y1 + room || p.y > frame.y2 - room));
+    if (outside.length) wrong.push(`c down to ${bottom}: ${outside.length} point(s) within ${room} px of the frame or past it`);
+    const expected = bottom < frame.y2 - 2 * room ? [] : ["a\nb"];
+    if (JSON.stringify(failed) !== JSON.stringify(expected)) wrong.push(`c down to ${bottom}: failed ${JSON.stringify(failed)}, wanted ${JSON.stringify(expected)}`);
   }
   expect(wrong).toEqual([]);
 });

@@ -47,6 +47,8 @@ export const DEFAULT_MODE = "architecture";
 export const MODES = Object.freeze({
   architecture: Object.freeze({
     label: "Architecture graph",
+    // Its nodes are drawn in their layers' tones, so the legend names a node in none.
+    layered: true,
     useData: useArchitectureData,
     graphOf: (data) => ({
       nodes: list(data?.nodes),
@@ -70,6 +72,8 @@ export const MODES = Object.freeze({
   }),
   landscape: Object.freeze({
     label: "Landscape of contracts",
+    // Its nodes are drawn in their health's colours, not in layers.
+    layered: false,
     useData: useLandscapeData,
     graphOf: (data) => landscapeGraphOf(data),
     filterDefaults: CONTRACT_FILTER_DEFAULTS,

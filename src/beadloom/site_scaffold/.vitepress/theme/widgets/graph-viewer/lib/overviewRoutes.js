@@ -37,6 +37,11 @@
 // towards the laid-out one as the view is zoomed in, and the line, cut where it
 // enters the drawn box, then only grows longer along its last run.
 //
+// The box that holds everything, where there is one, is a frame the lines keep
+// inside (`overviewGrid.js`): no route leaves it to reach a sibling box. A pair
+// with no way between its boxes inside the frame is named among those with no
+// route, never routed round the outside.
+//
 // Everything here is pure and deterministic for its input: boxes, plates, pairs
 // and lines in, routes out.
 
@@ -469,13 +474,14 @@ function polylineOf(grid, routed) {
 /**
  * The routes of the overview for `input`, every length in layout units:
  * `{ unit, boxes: [{ id, x1, y1, x2, y2, core }], plates: [{ x1, y1, x2, y2 }],
- * pairs: [{ name, a, b, forward, backward }], fixed: [[{ x, y }]] }`. `unit` is
- * how many layout units a pixel is where the overview is planned; a box is the
- * box drawn, and `core`, where it has one, the laid-out box inside it that a
- * box drawn larger to hold its title was laid out as; `a` and `b` are box ids,
- * `forward` and `backward` how many edges the pair carries each way; `fixed` the
- * routes of lines drawn as themselves, which no planned line runs along. `marks`
- * are the sizes on screen (`OVERVIEW_MARKS`).
+ * pairs: [{ name, a, b, forward, backward }], fixed: [[{ x, y }]], frame: { x1,
+ * y1, x2, y2 } }`. `unit` is how many layout units a pixel is where the overview
+ * is planned; a box is the box drawn, and `core`, where it has one, the laid-out
+ * box inside it that a box drawn larger to hold its title was laid out as; `a`
+ * and `b` are box ids, `forward` and `backward` how many edges the pair carries
+ * each way; `fixed` the routes of lines drawn as themselves, which no planned
+ * line runs along; and `frame`, or none, the box that holds every box, whose
+ * inside every route keeps to. `marks` are the sizes on screen (`OVERVIEW_MARKS`).
  *
  * `{ paths, failed }`: each routed pair's polyline by its name, from a border of
  * box `a` to a border of box `b`, of its core where it has one; and the names of
@@ -487,6 +493,7 @@ export function planOverview(input, marks = OVERVIEW_MARKS) {
   const boxes = input.boxes.map(inPixels);
   const cores = input.boxes.map((box) => (box.core ? inPixels(box.core) : null));
   const plates = (input.plates || []).map(inPixels);
+  const frame = input.frame ? inPixels(input.frame) : null;
   const indexOf = new Map(input.boxes.map((box, b) => [box.id, b]));
   const known = input.pairs.filter((pair) => indexOf.has(pair.a) && indexOf.has(pair.b) && pair.a !== pair.b);
   const pairs = known.map((pair) => ({ ...pair, a: indexOf.get(pair.a), b: indexOf.get(pair.b) }));
@@ -496,7 +503,7 @@ export function planOverview(input, marks = OVERVIEW_MARKS) {
 
   const degree = new Map();
   for (const pair of pairs) for (const b of [pair.a, pair.b]) degree.set(b, (degree.get(b) || 0) + 1);
-  const grid = { ...gridOf(boxes, plates, marks, (b) => degree.get(b) || 0, cores), boxes };
+  const grid = { ...gridOf(boxes, plates, marks, (b) => degree.get(b) || 0, cores, frame), boxes };
   const fixed = (input.fixed || []).map((path) => path.map((p) => ({ x: p.x / unit, y: p.y / unit })));
   const router = routerOn(grid, pairs, fixed, marks);
   const byName = (p, q) => (pairs[p].name < pairs[q].name ? -1 : pairs[p].name > pairs[q].name ? 1 : 0);

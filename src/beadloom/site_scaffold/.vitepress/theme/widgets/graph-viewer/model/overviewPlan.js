@@ -32,6 +32,10 @@
 // over every height the box is drawn at: it grows around the nodes drawn larger
 // than their layout (`lib/routes.js`, `compoundSizeOf`).
 //
+// The lines keep inside the frame of the box that holds everything as it is
+// laid out: the box is drawn no smaller at any height, so they keep inside it
+// as drawn too.
+//
 // A line between two top-level nodes that the plan left out — the budget hid it,
 // and the pointer or the selection draws it now — is routed around the plan's
 // lines and kept the same way. A line the router finds no route for, and any
@@ -243,6 +247,7 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
       plates: project ? [...plates, project] : plates,
       pairs: drawn.map(inputPairOf),
       fixed: overview.originals.map(routePointsOf).filter(Boolean),
+      frame: tree.wrapper ? geometry.boxes[tree.wrapper] : null,
     };
     const { paths, failed } = planOverview(input);
     return { paths, failed, input, sides, grown, broken, plated, project };

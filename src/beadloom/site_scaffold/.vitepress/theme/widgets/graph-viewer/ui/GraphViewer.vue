@@ -62,7 +62,7 @@ import {
   dependentsOf,
   legendKeysOf,
 } from "../../../entities/graph-edge/index.js";
-import { LayerLegend, layerOfNode, layersOf } from "../../../entities/layer/index.js";
+import { LayerLegend, hasUnlayeredNode, layerOfNode, layersOf } from "../../../entities/layer/index.js";
 import {
   NAVIGATION_OPTIONS,
   NavigationControls,
@@ -88,7 +88,7 @@ import { useThemeTokens } from "../../../shared/theme-tokens/index.js";
 import { buildElements } from "../lib/elements.js";
 import { buildStylesheet } from "../lib/stylesheet.js";
 import { edgePaletteOf } from "../lib/edgePalette.js";
-import { AGGREGATE, endsOfLine, selectionReveals } from "../lib/levels.js";
+import { AGGREGATE, boxTreeOf, endsOfLine, selectionReveals } from "../lib/levels.js";
 import { useGraphCanvas } from "../model/useGraphCanvas.js";
 import { SAID } from "../model/canvasMap.js";
 import { keyHandler } from "../model/viewerKeys.js";
@@ -130,6 +130,13 @@ const edges = computed(() => graph.value.edges);
 const nodeById = computed(() => new Map(nodes.value.map((node) => [node.id, node])));
 const parents = computed(() => parentMapOf(nodes.value));
 const layers = computed(() => layersOf(nodes.value, graph.value.layers));
+// Whether the legend names a node in no layer: one is drawn in that tone. The
+// box that holds everything is not, whatever its layer: it is the project's frame.
+const unlayered = computed(() => {
+  if (!mode.layered) return false;
+  const { wrapper } = boxTreeOf(nodes.value.map((node) => ({ id: node.id, parent: parents.value[node.id] })));
+  return hasUnlayeredNode(nodes.value.filter((node) => node.id !== wrapper), layers.value);
+});
 const options = computed(() => mode.filterOptions(graph.value, layers.value));
 const statuses = computed(() => statusesOf(nodes.value));
 const legendKeys = computed(() =>
@@ -585,7 +592,7 @@ onBeforeUnmount(() => disposeHandle());
     </div>
 
     <div class="bl-viewer-legend" aria-label="Legend">
-      <LayerLegend :layers="layers" />
+      <LayerLegend :layers="layers" :unlayered="unlayered" />
       <NodeStatusLegend :statuses="statuses" />
       <EdgeLegend :keys="legendKeys" :colours="legendColours" />
     </div>
