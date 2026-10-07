@@ -55,11 +55,14 @@
 | `beadloom-btkd.17` | dev | ✓ done | canvasMap split by job (review M2): 883 -> 455 lines, titles and scale -> `mapTitles.js` (185), the map's own line elements -> `aggregateElements.js` (178), what the pointer, a selection and the handle draw besides -> `mapExtras.js` (170), `giveData` beside `setClass`; the handle's readers over 9 views byte-identical before and after; pillOverlay's tally and "+N" records keyed by id have no prototype (m1, data-ids case red first); the card says "1 line changed" and "1 commit" (coordinator) |
 | `beadloom-btkd.18` | fix | ✓ done | three Python minors (review m2-m4): one history read per full reindex; one 'no change' wording, '1 line' singular; setup reads through `readonly_connection` |
 | `beadloom-btkd.19` | review | ✓ done | re-review of the fixes |
-| `beadloom-btkd.20` | fix | in progress | the re-review's four minors |
-| `beadloom-1hle` | W | in progress | docs |
-| `beadloom-hpat` | P | blocked | owner's look, PR |
+| `beadloom-btkd.20` | fix | ✓ done | the re-review's four minors |
+| `beadloom-1hle` | W | ✓ done | docs: 34 files, sync-check stale 276 → 0, `beadloom ci` rc 0 |
+| `beadloom-btkd.21` | chore | ✓ done | three stale facts in code comments: issue_numbers docstring counts, GraphViewer's hub exception, the unreproduced 3,912 figure attributed; `beadloom ci` rc 0 |
+| `beadloom-hpat` | P | in progress | owner's look, PR |
 
 ## Notes
+
+- **W and the tails closed (2026-10-07):** `beadloom-1hle` `b00d7d80` — 34 documents, stale pairs 276 -> 0, unverified 83 -> 0, 22 refs attested one at a time, README pair untouched (no false claim found), `beadloom ci` rc 0. `beadloom-btkd.20` `dd9777df` — the re-review's four minors plus a JSON.parse copy in pillOverlay. `beadloom-btkd.21` `6e6eebc9` — three stale code comments; `beadloom ci` rc 0. Coordinator: doc-sync README's '235 of 241' -> '68 of 113, measured 2026-10-07'; CONTEXT's 3,912 row qualified; the declared surface re-recorded (710 -> 743 pairs). Eight reference docs carry a surface-drift WARNING (README pair, architecture.md, guides) — not re-baselined blind, except docs/services/cli.md which the coordinator re-baselined before reading (recorded here as such); the release work item reviews them. Next: P — push, PR, CI, merge on green.
 
 - **Re-review closed (2026-10-07):** `beadloom-btkd.19` = OK, 0 critical, 0 major, 4 minor (a test that cannot fail; dead re-exports in canvasMap; a plain-object fallback in useGraphCanvas; `_Unread` in a public signature) -> `beadloom-btkd.20`, beside W. The reviewer reports the withholding broken by `bd show` printing the authors' comments (known, BDL-UX #297), and `--release` recording the verdict under the shared tracker identity. W `beadloom-1hle` launched with 25 inputs on its comments.
 
