@@ -1,8 +1,9 @@
 # BDL-078 `beadloom-btkd.1`. The owner, after F-activity (`beadloom-lw56`): a box rolls up
 # its parts, so in one population with the leaves it outranks them -- 7 of this
-# repository's 10 hot nodes were boxes. And a lock file counts as work: package-lock.json
-# was 3,912 of vitepress-site's 17,714 changed lines in 30 days. A box is ranked among
-# boxes and a leaf among leaves; a file a machine wrote is not change.
+# repository's 10 hot nodes were boxes. And a lock file counts as work. The owner put
+# package-lock.json at 3,912 of vitepress-site's 17,714 changed lines in 30 days. That
+# figure was not reproduced, and measured on 2026-10-05 it was 59 of 18,005. A box is
+# ranked among boxes and a leaf among leaves. A file a machine wrote is not change.
 
 @bead:beadloom-btkd.1 @node:git-activity
 Feature: activity ranks a box among boxes and does not count what a machine wrote

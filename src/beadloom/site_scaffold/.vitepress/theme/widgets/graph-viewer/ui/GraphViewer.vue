@@ -32,13 +32,14 @@
 // them. Selecting a node — by a tap, the URL, the card or the impact list —
 // frames its neighbourhood, never below the zoom at which the node is drawn as
 // itself and readable, in an animated move unless the reader asks for reduced
-// motion. A selection opens the boxes that hold its node, and those of every
-// node its walk reaches unless the node is a hub selected with nothing more
-// asked; a search frames what it finds, readably, and opens the boxes that hold
-// it. The pointer on an aggregated edge names how many edges it carries each
-// way. At the overview the lines between top-level nodes are routed together,
-// thin and light, with their counts on pills; the pointer on a node draws its
-// lines in front of the rest.
+// motion. A selection with nothing more asked opens the boxes that hold its
+// node, and only those. A walk the reader asked for (deeper, one way, the rest
+// hidden, or the impact) also opens those of every node it reaches
+// (`selectionReveals`). A search frames what it finds, readably, and opens the
+// boxes that hold it. The pointer on an aggregated edge names how many edges
+// it carries each way. At the overview the lines between top-level nodes are
+// routed together, thin and light, with their counts on pills; the pointer on a
+// node draws its lines in front of the rest.
 //
 // The toolbar, the canvas, the panel and the legend are all inside one root
 // element, and that element is what goes full screen, so full screen and the
