@@ -54,11 +54,14 @@
 | `beadloom-ak1i` | R | ✓ done | review |
 | `beadloom-btkd.17` | dev | ✓ done | canvasMap split by job (review M2): 883 -> 455 lines, titles and scale -> `mapTitles.js` (185), the map's own line elements -> `aggregateElements.js` (178), what the pointer, a selection and the handle draw besides -> `mapExtras.js` (170), `giveData` beside `setClass`; the handle's readers over 9 views byte-identical before and after; pillOverlay's tally and "+N" records keyed by id have no prototype (m1, data-ids case red first); the card says "1 line changed" and "1 commit" (coordinator) |
 | `beadloom-btkd.18` | fix | ✓ done | three Python minors (review m2-m4): one history read per full reindex; one 'no change' wording, '1 line' singular; setup reads through `readonly_connection` |
-| `beadloom-btkd.19` | review | in progress | re-review of the fixes |
-| `beadloom-1hle` | W | blocked | docs |
+| `beadloom-btkd.19` | review | ✓ done | re-review of the fixes |
+| `beadloom-btkd.20` | fix | in progress | the re-review's four minors |
+| `beadloom-1hle` | W | in progress | docs |
 | `beadloom-hpat` | P | blocked | owner's look, PR |
 
 ## Notes
+
+- **Re-review closed (2026-10-07):** `beadloom-btkd.19` = OK, 0 critical, 0 major, 4 minor (a test that cannot fail; dead re-exports in canvasMap; a plain-object fallback in useGraphCanvas; `_Unread` in a public signature) -> `beadloom-btkd.20`, beside W. The reviewer reports the withholding broken by `bd show` printing the authors' comments (known, BDL-UX #297), and `--release` recording the verdict under the shared tracker identity. W `beadloom-1hle` launched with 25 inputs on its comments.
 
 - **Wave 18 closed (2026-10-07):** `beadloom-btkd.17` `5edcce6f` — canvasMap.js 883 -> 455 lines; mapTitles.js (185), aggregateElements.js (178), mapExtras.js (170) new; 22 test-handle readers over 9 views byte-identical before and after; pillOverlay records through idRecord (the `__proto__` case red first); NodeCard says '1 line changed'. `beadloom-btkd.18` `eb2e24ea`, `933fe103` — one git read per reindex, one 'no change' wording, open_db_readonly in setup; 14 tests. Narrowed suites green (Playwright 184, performance 10, site pytest 1,158; touched packages 926). Re-review `beadloom-btkd.19` launched with the bead id only.
 
