@@ -17,6 +17,7 @@ from click.testing import CliRunner
 from beadloom.services.cli import main
 
 if TYPE_CHECKING:
+    import sqlite3
     from pathlib import Path
 
 
@@ -107,8 +108,6 @@ class TestTheIndexIsReadThroughTheReadOnlyFactory:
     """
 
     def test_the_test_binding_is_read_on_a_query_only_connection(self, tmp_path: Path) -> None:
-        import sqlite3
-
         from beadloom.application.reindex import test_index
 
         query_only: list[int] = []
