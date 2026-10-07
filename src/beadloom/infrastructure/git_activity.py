@@ -70,6 +70,7 @@ import subprocess
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from fnmatch import fnmatchcase
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
@@ -87,6 +88,18 @@ ACTIVITY_LEVELS = ("hot", "warm", "cool", "quiet", "dormant")
 #: The recent window and the history window, in days.
 RECENT_DAYS = 30
 HISTORY_DAYS = 90
+
+#: How a level with no change in its window is said: in words, not as a low count.
+#: Every reader that words a level takes these (BDL-078 ``beadloom-btkd.18``).
+NO_CHANGE_WORDS: dict[str, str] = {
+    "quiet": f"no change in {RECENT_DAYS} days",
+    "dormant": f"no change in {HISTORY_DAYS} days",
+}
+
+
+def count_in_words(count: int, noun: str) -> str:
+    """*count* and *noun*, the noun singular for one only: ``1 line``, ``0 lines``."""
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
 #: The cumulative shares of the changed nodes that are ``hot`` and ``hot`` or ``warm``,
 #: in tenths: the top tenth, then the next three tenths.
@@ -442,6 +455,12 @@ def _boundary_dates(project_root: Path) -> list[datetime]:
     return [landed for line in dates.splitlines() if (landed := _parse_date(line.strip()))]
 
 
+class _Unread(Enum):
+    """The caller did not read the history: ``None`` is an answer of its own."""
+
+    UNREAD = "unread"
+
+
 def read_git_history(project_root: Path, *, now: datetime | None = None) -> GitHistory | None:
     """How much history the clone at *project_root* holds; ``None`` when git cannot say.
 
@@ -623,6 +642,7 @@ def analyze_git_activity(
     *,
     now: datetime | None = None,
     excluded: Collection[str] = (),
+    history: GitHistory | _Unread | None = _Unread.UNREAD,
 ) -> dict[str, GitActivity]:
     """Analyze git history for each node's source directory.
 
@@ -642,6 +662,10 @@ def analyze_git_activity(
     excluded:
         The project's own patterns of machine-written files, beside the lock
         files and the files git's attributes mark; see the module docstring.
+    history:
+        What :func:`read_git_history` answered for the same *now*, ``None``
+        included, when the caller has read it already (the full reindex reports
+        it); read here when omitted, so the clone is asked once.
 
     Returns
     -------
@@ -658,16 +682,16 @@ def analyze_git_activity(
     recent_since = now - timedelta(days=RECENT_DAYS)
     history_since = now - timedelta(days=HISTORY_DAYS)
 
-    clone = read_git_history(project_root, now=now)
+    clone = read_git_history(project_root, now=now) if history is _Unread.UNREAD else history
     if clone is not None and not clone.measurable:
         return {}
-    history = _read_history(project_root, history_since)
-    if history is None:
+    log = _read_history(project_root, history_since)
+    if log is None:
         return {}
     # ``--since`` already filters; the instant is applied here too, so the window
     # is the one stated rather than whatever git's date parsing made of it.
     commits = _authored_only(
-        project_root, [commit for commit in history if commit.landed >= history_since], excluded
+        project_root, [commit for commit in log if commit.landed >= history_since], excluded
     )
 
     containers = containers or {}

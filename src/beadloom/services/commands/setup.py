@@ -1518,26 +1518,21 @@ def _echo_test_binding(project_root: Path, *, prefix: str) -> None:
     bound tests" and nothing init printed said why). Silent for a project with no
     test file, and for an index without the test tables.
     """
-    import sqlite3
-
     from beadloom.application.reindex.test_index import (
         describe_placements,
         kind_counts,
         placement_counts,
         unbound_test_files,
     )
+    from beadloom.infrastructure.db import readonly_connection
 
-    db_path = project_root / ".beadloom" / "beadloom.db"
-    if not db_path.exists():
-        return
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
     try:
-        counts = placement_counts(conn)
-        kinds = kind_counts(conn)
-        unbound = unbound_test_files(conn)
-    finally:
-        conn.close()
+        with readonly_connection(project_root / ".beadloom" / "beadloom.db") as conn:
+            counts = placement_counts(conn)
+            kinds = kind_counts(conn)
+            unbound = unbound_test_files(conn)
+    except FileNotFoundError:
+        return
     if not counts:
         return
     click.echo(f"{prefix}Tests: {describe_placements(counts, kinds)}")

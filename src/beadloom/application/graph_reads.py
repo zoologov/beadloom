@@ -23,7 +23,12 @@ forwards to the matching infrastructure call.
 
 from __future__ import annotations
 
-from beadloom.infrastructure.git_activity import GitActivity, analyze_git_activity
+from beadloom.infrastructure.git_activity import (
+    NO_CHANGE_WORDS,
+    GitActivity,
+    analyze_git_activity,
+    count_in_words,
+)
 from beadloom.infrastructure.repository import (
     EdgeRow,
     NodeRow,
@@ -53,6 +58,7 @@ from beadloom.infrastructure.repository import (
 )
 
 __all__ = [
+    "NO_CHANGE_WORDS",
     "EdgeRow",
     "GitActivity",
     "NodeRow",
@@ -62,6 +68,7 @@ __all__ = [
     "count_docs",
     "count_docs_for_ref",
     "count_edges_touching",
+    "count_in_words",
     "count_stale_pairs",
     "get_all_edges",
     "get_all_nodes",

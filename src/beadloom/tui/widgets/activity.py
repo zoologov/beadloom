@@ -8,6 +8,8 @@ from typing import Any
 from rich.text import Text
 from textual.widgets import Static
 
+from beadloom.application.graph_reads import NO_CHANGE_WORDS, count_in_words
+
 # Bar rendering constants
 _BAR_MAX_WIDTH = 20
 _BAR_CHAR_FILLED = "\u2588"  # full block
@@ -23,9 +25,6 @@ LEVEL_STYLES: dict[str, str] = {
     "quiet": "dim",
     "dormant": "dim",
 }
-
-#: How a level with no change in its window is said: in words, not as a low count.
-_NO_CHANGE = {"quiet": "no change in 30 days", "dormant": "no change in 90 days"}
 
 
 def _field(activity: Any, name: str, attribute: str) -> object:
@@ -55,9 +54,9 @@ def _style_of(level: str) -> str:
 def _describe(activity: Any) -> str:
     """The activity in words, as the node card words it."""
     level = _level_of(activity)
-    if level in _NO_CHANGE:
-        return f"{_NO_CHANGE[level]}, {level}"
-    lines = f"{_lines_30d(activity)} lines"
+    if level in NO_CHANGE_WORDS:
+        return f"{NO_CHANGE_WORDS[level]}, {level}"
+    lines = count_in_words(_lines_30d(activity), "line")
     return f"{lines}, {level}" if level else lines
 
 

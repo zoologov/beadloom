@@ -13,6 +13,11 @@ import click
 if TYPE_CHECKING:
     from typing import Any
 
+from beadloom.infrastructure.git_activity import (
+    NO_CHANGE_WORDS,
+    RECENT_DAYS,
+    count_in_words,
+)
 from beadloom.infrastructure.repository import StaleCount
 from beadloom.services.commands._root import main
 
@@ -25,9 +30,6 @@ ACTIVITY_MARKS: dict[str, str] = {
     "dormant": "\U0001f9ca",
 }
 
-#: How a level with no change in its window is said: in words, not as a low count.
-_NO_CHANGE = {"quiet": "no change in 30 days", "dormant": "no change in 90 days"}
-
 
 def _describe_activity(activity: dict[str, Any]) -> str:
     """The recorded activity in the node card's words (BDL-078 F-activity).
@@ -37,12 +39,14 @@ def _describe_activity(activity: dict[str, Any]) -> str:
     """
     level = str(activity.get("level", "dormant"))
     mark = ACTIVITY_MARKS.get(level, "")
-    if level in _NO_CHANGE:
-        detail = _NO_CHANGE[level]
+    if level in NO_CHANGE_WORDS:
+        detail = NO_CHANGE_WORDS[level]
     elif "lines_30d" in activity:
-        detail = f"{activity['lines_30d']} lines changed in 30 days"
+        lines = count_in_words(activity["lines_30d"], "line")
+        detail = f"{lines} changed in {RECENT_DAYS} days"
     else:
-        detail = f"{activity.get('commits_30d', 0)} commits in 30 days"
+        commits = count_in_words(activity.get("commits_30d", 0), "commit")
+        detail = f"{commits} in {RECENT_DAYS} days"
     return f"{mark} {level} ({detail})" if mark else f"{level} ({detail})"
 
 

@@ -95,3 +95,32 @@ class TestTheWizard:
         ):
             output = _init(root)
         assert _unbound_lines(output) == [f"{_UNBOUND_TEST} (unplaced)"]
+
+
+class TestTheIndexIsReadThroughTheReadOnlyFactory:
+    """BDL-078 ``beadloom-btkd.18`` (review m4): no connection opened by hand.
+
+    ``open_db_readonly`` is the one place that opens an index for reading: the
+    ``mode=ro`` URI, ``query_only`` on, and an absent file refused rather than
+    created. The echo of the test binding opened its own connection beside it,
+    with the URI and without ``query_only``.
+    """
+
+    def test_the_test_binding_is_read_on_a_query_only_connection(self, tmp_path: Path) -> None:
+        import sqlite3
+
+        from beadloom.application.reindex import test_index
+
+        query_only: list[int] = []
+        counts = test_index.placement_counts
+
+        def recording(conn: sqlite3.Connection) -> dict[str, int]:
+            query_only.append(conn.execute("PRAGMA query_only").fetchone()[0])
+            return counts(conn)
+
+        root = _project(tmp_path, {**_CODE, **_TESTS})
+        with patch.object(test_index, "placement_counts", recording):
+            output = _init(root, "--yes")
+
+        assert _unbound_lines(output) == [f"{_UNBOUND_TEST} (unplaced)"]
+        assert query_only == [1]

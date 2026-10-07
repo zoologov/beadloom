@@ -16,6 +16,7 @@ test binding by :mod:`.test_index`, and the heuristic mapper no longer writes it
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from beadloom.application.activity_settings import activity_exclusions
@@ -153,7 +154,9 @@ def _store_git_activity(
 
     Returns the history the activity was measured on, so the reindex can say
     so when it is shallow (BDL-078 ``beadloom-btkd.9``); ``None`` when no node
-    has a source or git cannot say.
+    has a source or git cannot say. The history is read once, at the instant the
+    activity is measured at, and handed to the analysis rather than read twice
+    (BDL-078 ``beadloom-btkd.18``).
     """
     from beadloom.application import reindex as _pkg
 
@@ -161,11 +164,15 @@ def _store_git_activity(
     if not source_dirs:
         return None
 
+    now = datetime.now(tz=timezone.utc)
+    history = read_git_history(project_root, now=now)
     activities = _pkg.analyze_git_activity(
         project_root,
         source_dirs,
         get_part_of_containers(conn),
+        now=now,
         excluded=activity_exclusions(project_root),
+        history=history,
     )
 
     for ref_id, activity in activities.items():
@@ -194,4 +201,4 @@ def _store_git_activity(
         )
 
     conn.commit()
-    return read_git_history(project_root)
+    return history

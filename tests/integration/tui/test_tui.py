@@ -935,6 +935,13 @@ class TestActivityWidget:
         widget = ActivityWidget(activities={"graph": {"lines_30d": 15, "level": "warm"}})
         assert "15 lines, warm" in widget.render().plain
 
+    def test_one_changed_line_is_singular(self) -> None:
+        """BDL-078 ``beadloom-btkd.18`` (review m3): not "1 lines"."""
+        from beadloom.tui.widgets.activity import ActivityWidget
+
+        widget = ActivityWidget(activities={"graph": {"lines_30d": 1, "level": "hot"}})
+        assert "1 line, hot" in widget.render().plain
+
     def test_no_change_is_said_in_words(self) -> None:
         """Quiet and dormant name the absence of change, not a low count."""
         from beadloom.tui.widgets.activity import ActivityWidget

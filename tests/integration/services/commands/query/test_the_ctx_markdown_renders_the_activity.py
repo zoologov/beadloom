@@ -133,6 +133,11 @@ class TestCtxMarkdownSaysChangedLines:
         md = _markdown_with(project, db_path, "warm", 340)
         assert "warm (340 lines changed in 30 days)" in md
 
+    def test_one_changed_line_is_singular(self, project: Path, db_path: Path) -> None:
+        """BDL-078 ``beadloom-btkd.18`` (review m3): not "1 lines changed"."""
+        md = _markdown_with(project, db_path, "hot", 1)
+        assert "hot (1 line changed in 30 days)" in md
+
     @pytest.mark.parametrize(
         ("level", "words"),
         [("quiet", "no change in 30 days"), ("dormant", "no change in 90 days")],
@@ -148,3 +153,12 @@ class TestCtxMarkdownSaysChangedLines:
         from beadloom.services.commands.query import ACTIVITY_MARKS
 
         assert set(ACTIVITY_MARKS) == set(ACTIVITY_LEVELS)
+
+
+def test_an_older_activity_counts_one_commit_in_the_singular() -> None:
+    """An activity recorded before lines were counted is said in commits, 1 singular."""
+    from beadloom.services.commands.query import _describe_activity
+
+    assert _describe_activity({"level": "warm", "commits_30d": 1}).endswith(
+        "warm (1 commit in 30 days)"
+    )
