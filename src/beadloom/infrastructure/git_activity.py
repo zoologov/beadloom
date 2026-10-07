@@ -455,8 +455,12 @@ def _boundary_dates(project_root: Path) -> list[datetime]:
     return [landed for line in dates.splitlines() if (landed := _parse_date(line.strip()))]
 
 
-class _Unread(Enum):
-    """The caller did not read the history: ``None`` is an answer of its own."""
+class Unread(Enum):
+    """What a caller passes when it did not read the history.
+
+    ``None`` cannot say so: it is :func:`read_git_history`'s own answer when git
+    cannot say, and a caller that has that answer passes it on.
+    """
 
     UNREAD = "unread"
 
@@ -642,7 +646,7 @@ def analyze_git_activity(
     *,
     now: datetime | None = None,
     excluded: Collection[str] = (),
-    history: GitHistory | _Unread | None = _Unread.UNREAD,
+    history: GitHistory | Unread | None = Unread.UNREAD,
 ) -> dict[str, GitActivity]:
     """Analyze git history for each node's source directory.
 
@@ -665,7 +669,8 @@ def analyze_git_activity(
     history:
         What :func:`read_git_history` answered for the same *now*, ``None``
         included, when the caller has read it already (the full reindex reports
-        it); read here when omitted, so the clone is asked once.
+        it); read here when omitted or :attr:`Unread.UNREAD`, so the clone is
+        asked once.
 
     Returns
     -------
@@ -682,7 +687,7 @@ def analyze_git_activity(
     recent_since = now - timedelta(days=RECENT_DAYS)
     history_since = now - timedelta(days=HISTORY_DAYS)
 
-    clone = read_git_history(project_root, now=now) if history is _Unread.UNREAD else history
+    clone = read_git_history(project_root, now=now) if history is Unread.UNREAD else history
     if clone is not None and not clone.measurable:
         return {}
     log = _read_history(project_root, history_since)

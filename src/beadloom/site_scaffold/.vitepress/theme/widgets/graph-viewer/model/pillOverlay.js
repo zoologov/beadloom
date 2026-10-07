@@ -44,7 +44,7 @@ import { MAP_MARKS, MAP_TITLE, OUTWARD, TALLY } from "../lib/mapMarks.js";
 import { GEOMETRY } from "../lib/stylesheet.js";
 import { PILL_MARKS, pillStagesOf } from "../lib/pillPlaces.js";
 import { BEHIND, IN_FRONT } from "./canvasMarks.js";
-import { OWN_LINE } from "./canvasMap.js";
+import { OWN_LINE } from "./aggregateElements.js";
 import { overlayCanvas } from "./overlayCanvas.js";
 
 /** How opaque a faded pill is drawn. */
@@ -59,6 +59,9 @@ const TALLY_JOIN = " · ";
 const SHAPE = Object.freeze({ includeLabels: false, includeOverlays: false });
 /** A node's title alone. */
 const TITLE = Object.freeze({ includeNodes: false, includeEdges: false, includeLabels: true, includeMainLabels: true, includeOverlays: false });
+
+/** A copy of `marks`, a record of flat marks by node id, in a record any id is a key of (`shared/ids`). */
+const copyOf = (marks) => idRecord(Object.entries(marks).map(([id, mark]) => [id, { ...mark }]));
 
 const overlaps = (a, b) => a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
 
@@ -297,9 +300,9 @@ export function pillOverlay(cy, container, { tokens, map }) {
     /** The pills drawn last, `{ pills: [{ id, text, x1, y1, x2, y2, fontSize, faded, crowded }], dropped }`, on the canvas in pixels. */
     pills: () => ({ pills: shown.pills.map((pill) => ({ ...pill })), dropped: [...shown.dropped] }),
     /** Each closed box's tally, `{ id: { incoming, outgoing, text, shown, x1, y1, x2, y2 } }`, on the canvas in pixels. */
-    tallies: () => JSON.parse(JSON.stringify(shown.tallies)),
+    tallies: () => copyOf(shown.tallies),
     /** Each drawn node's "+N", `{ id: { count, text, shown, x1, y1, x2, y2 } }`, on the canvas in pixels. */
-    outward: () => JSON.parse(JSON.stringify(shown.outward)),
+    outward: () => copyOf(shown.outward),
     destroy() {
       cy.removeListener("render", draw);
       layer.remove();

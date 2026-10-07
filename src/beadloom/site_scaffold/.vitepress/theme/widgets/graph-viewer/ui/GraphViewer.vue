@@ -90,7 +90,7 @@ import { buildStylesheet } from "../lib/stylesheet.js";
 import { edgePaletteOf } from "../lib/edgePalette.js";
 import { AGGREGATE, boxTreeOf, endsOfLine, selectionReveals } from "../lib/levels.js";
 import { useGraphCanvas } from "../model/useGraphCanvas.js";
-import { SAID } from "../model/canvasMap.js";
+import { SAID } from "../model/aggregateElements.js";
 import { keyHandler } from "../model/viewerKeys.js";
 import { exposeTestHandle } from "../model/testHandle.js";
 import { usePanelId } from "../model/usePanelId.js";

@@ -26,6 +26,12 @@ const CARD = "[data-testid='node-card']";
 /** The name that sets a plain object's prototype when it is assigned as a key. */
 const PROTOTYPE_KEY = "__proto__";
 
+/** The names a plain object answers for without being given them, `__proto__` first. */
+const INHERITED_NAMES = [PROTOTYPE_KEY, "constructor", "toString", "valueOf", "hasOwnProperty"];
+
+/** The handle's readers of the counts the map draws last, each a record keyed by node id. */
+const COUNT_READERS = ["outwardMarks", "boxTallies"];
+
 /** How many nodes the busy one depends on: more than the edges a node needs to be bundled. */
 const BUSY_DEGREE = 22;
 
@@ -145,6 +151,21 @@ async function zoomOutUntil(page, done, steps = 20) {
   return done();
 }
 
+/**
+ * The answers among `COUNT_READERS` that hold something for a name they were never
+ * given, each as `reader: name`; read in the page, where an inherited name answers.
+ */
+function inheritedAnswers(page) {
+  return page.evaluate(
+    ([readers, names]) =>
+      readers.flatMap((reader) => {
+        const answer = window.__beadloomViewer[reader]();
+        return names.filter((name) => !Object.hasOwn(answer, name) && answer[name] !== undefined).map((name) => `${reader}: ${name}`);
+      }),
+    [COUNT_READERS, INHERITED_NAMES]
+  );
+}
+
 const drawnKeys = (data) => data.edges.filter((e) => e.kind === "depends_on").map(edgeKey).sort();
 
 for (const { name, roles } of NAMINGS) {
@@ -224,3 +245,16 @@ for (const { name, roles } of NAMINGS) {
     }
   });
 }
+
+test("the counts the map drew answer nothing for a name they were not given", async ({ page }) => {
+  await openArchitecture(page);
+  expect(await inheritedAnswers(page)).toEqual([]);
+});
+
+test("before the map draws any count, the counts answer nothing for any name", async ({ page }) => {
+  // The layout's worker cannot load, so the map and its counts are never drawn.
+  await page.route("**/elk.worker*.js", (route) => route.abort());
+  await page.goto("architecture.html");
+  await expect(page.getByRole("alert")).toContainText("could not be laid out", { timeout: 45_000 });
+  expect(await inheritedAnswers(page)).toEqual([]);
+});

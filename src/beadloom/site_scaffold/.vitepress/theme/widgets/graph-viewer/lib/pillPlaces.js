@@ -18,7 +18,7 @@
 // point (`crowded`): the count of the lines a reader is shown for a node is never missing.
 //
 // A pill keeps one size on screen. It is placed once per step of the map's scale
-// (`model/canvasMap.js`, `scaleAt`) and drawn at that place at any zoom within
+// (`model/mapTitles.js`, `scaleAt`) and drawn at that place at any zoom within
 // the step, so it is given the room it takes at the step's largest. Nodes,
 // titles, arrowheads and pills are filed in a grid of buckets, and the lines'
 // segments, horizontal and vertical, in bands across their axis

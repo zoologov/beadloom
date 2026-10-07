@@ -31,6 +31,7 @@
 
 import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { loadCytoscape } from "../../../shared/cytoscape/index.js";
+import { idRecord } from "../../../shared/ids/index.js";
 import { elkGraphOf, layOut, warmUpLayout } from "../../../shared/elk/index.js";
 import { ALONG_HOVER, BEHIND, DISTANCE_DATA, HOVERED, IN_FRONT, SELECTION_CLASSES, setClass } from "./canvasMarks.js";
 import { applyGeometry, fitCompounds, layoutInputOf } from "./canvasLayout.js";
@@ -452,8 +453,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     frames: () => followed?.frames() || { frames: [] },
     droppedHeads: () => shared?.droppedHeads() || [],
     pills: () => pills?.pills() || { pills: [], dropped: [] },
-    tallies: () => pills?.tallies() || {},
-    outward: () => pills?.outward() || {},
+    tallies: () => pills?.tallies() || idRecord(),
+    outward: () => pills?.outward() || idRecord(),
     map: () => map,
     mount,
     setStyle,

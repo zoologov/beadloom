@@ -62,11 +62,6 @@ import { scaleAt, titleDresser, titleLooks } from "./mapTitles.js";
 import { nodeCorners } from "./nodeCorners.js";
 import { overviewPlanner } from "./overviewPlan.js";
 
-// The names the map's parts own, where the rest of the viewer has always found them.
-export { FORCED } from "./mapExtras.js";
-export { OWN_LINE, SAID } from "./aggregateElements.js";
-export { SCALE_STEP, scaleAt } from "./mapTitles.js";
-
 const sameSet = (a, b) => a.size === b.size && [...a].every((id) => b.has(id));
 
 /**
