@@ -32,8 +32,10 @@ Typed rows:
 Node reads: `get_all_nodes`, `get_node`, `get_node_with_source`,
 `get_nodes_by_kind`, `get_source_paths`, `get_node_sources`.
 
-Edge reads: `get_all_edges`, `get_part_of_children`, `get_outgoing_edges`,
-`get_incoming_edges`, `count_edges_touching`.
+Edge reads: `get_all_edges`, `get_part_of_children`, `get_part_of_containers`,
+`get_outgoing_edges`, `get_incoming_edges`, `count_edges_touching`.
+`get_part_of_containers(conn)` -> `dict[str, list[str]]` maps every node with a container to the
+nodes it is `part_of`; git activity rolls a box's descendants up through it (BDL-078).
 
 Doc reads: `get_doc_ref_ids`, `count_docs`, `count_docs_for_ref`,
 `get_docs_for_ref`.
@@ -129,8 +131,15 @@ path under a mirrored kind folder or a build tool's test tree), `PLACEMENT_BESID
 node covering it — `foo_test.go` beside `foo.go`), `PLACEMENT_OVERRIDE` (`"override"`, bound by
 a node's `tests:` declaration), `PLACEMENT_UNOWNED` (`"unowned"`, under a mirrored kind folder
 or a test tree and no node owns the code its path names), `PLACEMENT_UNPLACED` (`"unplaced"`,
-reached by no mirror, no place beside the code and no declaration) and `PLACEMENT_OTHER_KIND`
-(`"other_kind"`, under a kind folder whose binding is not the mirror).
+reached by no mirror, no place beside the code and no declaration), `PLACEMENT_NAMED`
+(`"named"`, BDL-078 `beadloom-76mk`: a flat Python test in a root, bound to the one node owning
+the module its name names, when the layout declares `flat_tests`), `PLACEMENT_IMPORTED`
+(`"imported"`, the same flat test bound to the one node its imports reach when no module is
+named) and `PLACEMENT_OTHER_KIND` (`"other_kind"`, under a kind folder whose binding is not the
+mirror).
+`read_unbound_test_files(conn)` -> `list[tuple[str, str]]` lists every indexed test file bound
+to no node, by path, with its placement, leaving out the `other_kind` files a kind folder
+places; `init` prints them (BDL-078). `[]` for an index without the test tables.
 They are the values `test_files.placement` holds. Defined here since BDL-074 C3, because two
 peer domains share them: `context_oracle.test_binding` assigns a placement and re-exports the
 names under its old import path, and `graph.rules.test_binding` judges it.
@@ -158,7 +167,9 @@ defaults), `beside_code`, `roots` (the roots in force that exist on disk, since
 `patterns` (each group's patterns in the order they are matched, `beadloom-2mj3.15`; `()` in a
 record written before it, which named the groups alone) and `absent_roots` (the roots in force
 the project does not have, so a reader names the roots that exist and can say which were
-looked for, `beadloom-2mj3.17`; `()` in an older record). `encode()` gives the JSON the `meta`
+looked for, `beadloom-2mj3.17`; `()` in an older record) and `flat_tests` (whether a flat
+Python test binds by the module it names, then by its imports, BDL-078 `beadloom-76mk`; `false`
+in an older record). `encode()` gives the JSON the `meta`
 table holds, `patterns` as `[[name, [pattern, ...]], ...]` and `absent_roots` as a list, and a
 changed record forces one test re-index. `read_test_layout(conn)` ->
 `RecordedTestLayout | None` reads it back, `None` for an index written before G2 or a record

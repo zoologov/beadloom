@@ -14,8 +14,9 @@ change to it runs, and its container. The node card itself is the `site-node-car
 
 - **Status.** One status per node, in this order: `violation` for a lint finding of severity
   `error`, `stale` for stale docs, `warned` for findings of any other severity. `NODE_STATUSES`
-  gives each its theme tone, its border style and its legend text: a violation and stale docs
-  draw a solid danger or warning border, a warning a double warning border. A version 1 file
+  gives each its theme tone, its mark and its legend text (BDL-078, owner's ruling 5): a status is
+  a mark in the node's top right corner, `filled` for a violation (danger) and stale docs
+  (warning), a `ring` for a warning, and never changes the border, which stays the layer's. A version 1 file
   carries only `lint_clean` and cannot tell an error from a warning, so a node it marks not clean
   is a violation.
 - **Risks.** `risksOf(node)` names why a change to the node is risky, as the impact list shows it:
@@ -32,9 +33,14 @@ change to it runs, and its container. The node card itself is the `site-node-car
 - `NODE_STATUSES`, `statusOf(node)` returns `violation`, `stale`, `warned` or `null`;
   `statusesOf(nodes)`, `isFlagged(node)`.
 - `RISKS`, `risksOf(node)` returns the risk phrases.
-- `parentMapOf(nodes)` returns `{ id: parentId | null }`; `containerOfKind(id, kind, nodeById,
-  parents)`.
-- `NodeStatusLegend` (Vue component): prop `statuses`, one border sample per status drawn.
+- `parentMapOf(nodes)` returns `{ id: parentId | null }`, a record without a prototype
+  (`idRecord`, `site-shared`), so a node named `__proto__` or `constructor` is a key like any other
+  (BDL-078 `beadloom-ytcg`); `containerOfKind(id, kind, nodeById, parents)`.
+- `NodeStatusLegend` (Vue component): prop `statuses`, one sample per status drawn: a small card
+  with a layer's border and the status's mark in its corner, filled or a ring.
+
+How the canvas draws a node — a card in its layer's tone, corners at one radius on screen — is
+the viewer's (`site-graph-viewer`, `lib/corners.js`, `lib/stylesheet.js`).
 
 ## Depends on
 

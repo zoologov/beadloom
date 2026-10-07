@@ -112,7 +112,7 @@ code symbols, module coverage or code ownership.
 
 | Table | Key columns | Description |
 |-------|-------------|-------------|
-| `test_files` | path (PK), kind, ref_id, placement, test_count, file_hash | Every test file the recorded layout reads, the node it binds to and how: `placement` is `mirror`, `override` or `beside_code` when bound, and `unowned`, `unplaced` or `other_kind` when not |
+| `test_files` | path (PK), kind, ref_id, placement, test_count, file_hash | Every test file the recorded layout reads, the node it binds to and how: `placement` is `mirror`, `override`, `beside_code`, `named` or `imported` (a flat Python test, when the layout declares `flat_tests`, BDL-078) when bound, and `unowned`, `unplaced` or `other_kind` when not |
 | `test_imports` | id (PK), file_path, line_number, import_path, resolved_ref_id | A test file's imports, in the shape of `code_imports`, read by `test_import_boundary` |
 | `test_overrides` | ref_id, prefix (composite PK) | The `tests:` path prefixes a node declares in its graph YAML |
 

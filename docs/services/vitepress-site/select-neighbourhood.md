@@ -24,11 +24,19 @@ The default is one step in both directions, with the rest dimmed. The walk follo
 viewer draws as a line, `depends_on`, `uses`, `consumes` and `produces`, and each node carries its
 fewest steps from the selection.
 
+**A selected box** (BDL-078 `beadloom-btkd.7`) is walked as one node: everything it holds, itself
+included, is the start, and its edges are every edge that crosses its border to a node that does
+not hold it (`boxNeighbourhoodOf`). An edge onto a box that holds the selected box is no
+neighbour's, and a walk that comes back to a node inside stops there. The nodes inside are not on
+the walk: they are what was selected, so the viewer keeps them at full strength.
+
 ## Public API
 
 - `neighbourhoodOf(focus, adjacency, { depth, dir })` returns `{ distances, edges }`: each node's
   distance from `focus`, and the keys of the edges walked. `adjacency` is `adjacencyOf`'s
   `{ out, in }`.
+- `boxNeighbourhoodOf(box, inside, holders, adjacency, options)` returns the same shape for a box
+  that holds `inside` (itself included) and is held by `holders`.
 - `NEIGHBOURHOOD_DEFAULTS`, `DEPTH_CHOICES`, `DIRECTION_CHOICES`, `MAX_DEPTH`, `ALL_DEPTHS`,
   `depthLimit(value)`.
 - `NeighbourhoodControls` (Vue component): props `depth`, `dir` and `hide`; event
@@ -43,4 +51,5 @@ fewest steps from the selection.
 `src/beadloom/site_scaffold/e2e/neighbourhood.spec.js`: depth 2 outgoing shows the node, what
 it reaches in two steps and those edges, with the rest dimmed; incoming shows what reaches it;
 `all` walks without a limit; "Hide the rest" hides what is left out and keeps its containers;
-clearing the selection shows the whole graph again.
+clearing the selection shows the whole graph again. Its subjects are nodes that hold nothing; a
+selected box is held by `counts.spec.js` on the viewer.

@@ -87,8 +87,8 @@ that take no verdict, and the one graph file shape that still ends `init` in a t
 
 - `.beadloom/_graph/services.yml` — the architecture graph (nodes + edges)
 - `.beadloom/_graph/rules.yml` — auto-generated architecture lint rules
-- `.beadloom/config.yml` — project configuration: `languages`, `scan_paths`, and on a JVM or
-  Swift project `tests.mirrors`
+- `.beadloom/config.yml` — project configuration: `languages`, `scan_paths`, on a JVM or
+  Swift project `tests.mirrors`, and on a Python project `tests.flat_tests: true`
 - `.beadloom/AGENTS.md` and `.beadloom/README.md`
 - `docs/` — documentation skeletons for each graph node (an existing file is never overwritten)
 - `.mcp.json` (or equivalent) — MCP config for the detected editor
@@ -125,7 +125,15 @@ With your own `site/`, write the portal elsewhere, for example `beadloom docs si
 and ignore that directory yourself.
 
 `init` also runs a full reindex: code symbols are extracted, imports resolved, and
-`depends_on` edges inferred from code.
+`depends_on` edges inferred from code. It then prints the reindex's `Tests:` line and, when
+any test file is bound to no node, names each one with its placement (BDL-078). Measured on a
+two-module Python project with `tests/test_invoice.py` and `tests/test_helpers.py`:
+
+```text
+  Tests: 2 files (1 bound to a node (1 flat, by the module named or imported), 1 unplaced)
+  1 test file(s) bound to no node - lay each out under the mirror of the code it tests, or name it in that node's `tests:` list:
+    tests/test_helpers.py (unplaced)
+```
 
 ### What `init` reads in each stack
 
@@ -192,6 +200,7 @@ Everything lives under `.beadloom/` in your repo.
 | `sync.hook_mode` | `warn` | Pre-commit hook mode: `warn` or `block` |
 | `tests` | see below | Where your tests are and which files are tests |
 | `site` | the directory name, base `/`, no repository | The portal's identity: `title`, `description`, `base`, `repo_url`, `forges`; see the [`site:` reference](guides/vitepress-site.md#configuration-reference-site) |
+| `activity` | no block | `exclude:`, the project's own machine-written files, left out of activity; see below |
 
 #### `tests:` — where your tests are
 
@@ -209,11 +218,18 @@ test binds in one of three ways:
   `billing_test.go` beside `billing.go`, `invoice.test.ts` beside `invoice.ts` — binds to that
   node. It must lie under `scan_paths` in a language listed in `languages`.
 - **Through `tests:` in the graph.** A node may list path prefixes under `tests:` in its graph
-  YAML to claim tests its path does not mirror. A declaration wins over the other two, and a
+  YAML to claim tests its path does not mirror. A declaration wins over the others, and a
   prefix that covers no test file is a reindex warning.
+- **Flat, when the project declares it.** With `tests.flat_tests: true`, a Python test
+  directly in a root, in no kind folder (`tests/test_invoice.py`), binds to the node owning the
+  module its name names (`invoice.py` or `invoice/__init__.py`) when exactly one node owns a
+  module of that name (placement `named`), else to the one node its imports reach (`imported`),
+  else to nothing. `init` writes the key for a project whose languages include `.py`
+  (BDL-078). It is not a default: an adopter who ran `init` before this version adds
+  `flat_tests: true` under `tests:` in `.beadloom/config.yml`, or re-runs `init`.
 
-No test binds by a guess: not by its file name, not by what it imports, and not by a folder
-named after a node. A file under a root that none of the three reaches is `unplaced`: it binds
+No test binds by a guess the project did not declare: not by its file name or by what it
+imports unless `flat_tests` is set, and never by a folder named after a node. A file under a root that none of the three reaches is `unplaced`: it binds
 to no node, and `beadloom reindex`, `ctx` and the debt report say how many there are. A file
 outside every root, every test tree and every node's source is not read at all, so `ctx` and
 the debt report always state the patterns and the roots a test file is read under. A file's
@@ -226,6 +242,7 @@ path decides only WHETHER it is a test, by the patterns below. Every key is opti
 | `tests.patterns` | the five groups below | replaces all five groups |
 | `tests.mirrors` | `src/test/java: src/main/java`, `src/test/kotlin: src/main/kotlin`, `Tests: Sources` | replaces all three trees; `init` writes one entry per JVM test tree and per Swift test target, so on such a project the defaults no longer apply |
 | `tests.beside_code` | `true` | `true` or `false` |
+| `tests.flat_tests` | `false` (`init` writes `true` for a Python project) | `true` or `false`; a value that is not a boolean is a reindex warning and `false` stands |
 
 | Language | Framework group | Default patterns |
 |----------|-----------------|------------------|
@@ -273,8 +290,8 @@ What is deliberately not bound, and the declaration that binds it:
   ```
 
   Declared `mirrors` replace the three default trees, which an Xcode project does not use.
-- **A test named by what it imports, or kept in a folder named after a node**
-  (`tests/billing/test_flows.py`), is read and counted `unplaced`, and the debt report then withholds
+- **A test kept in a folder named after a node** (`tests/billing/test_flows.py`), or a flat
+  test without `flat_tests`, is read and counted `unplaced`, and the debt report then withholds
   its untested count. List the folder under the node's `tests:` in the graph to bind it.
 - **A marker file without a test file** (`conftest.py`, `jest.config.js`, an empty `src/test/`
   or `ShopTests/`) names no framework: a project with no test file reads `none` and scores that.
@@ -284,6 +301,34 @@ What is deliberately not bound, and the declaration that binds it:
   folder under the node's `tests:` in the graph to bind it.
 
 The full rule is in the [Test Mapping SPEC](domains/context-oracle/features/test-mapping/SPEC.md).
+
+#### `activity:` — files a machine wrote
+
+The activity a node card, `ctx` and the TUI show counts changed lines (added + deleted) over 30
+and 90 days, with levels relative to the project (`hot`, `warm`, `cool`, `quiet`, `dormant`;
+see the [Git Activity component](domains/infrastructure/components/git-activity/DOC.md)). A file
+a machine wrote is not work, so it counts neither its lines nor its commit. Dependency lock files
+(`package-lock.json`, `uv.lock`, `go.sum` and 17 more, by file name) and files git's attributes
+mark `linguist-generated` or `binary` are left out without a declaration. A project adds its
+own:
+
+```yaml
+# .beadloom/config.yml
+activity:
+  exclude:
+    - "*.pb.go"          # no '/': a file name, in any folder
+    - "web/dist/*"       # with '/': the whole path from the project root
+```
+
+**The grammar is not `.gitignore`'s.** A pattern without a `/` matches a file name anywhere. A
+pattern with a `/` matches the whole path from the project root, and `*` crosses directories:
+`src/*.py` matches `src/a/b.py` too, where in `.gitignore` `*` stops at `/`. Matching is
+case-sensitive.
+
+A key the block does not read (`activity.exlude`), an `exclude:` that is not a list and an entry
+that is not a non-empty string are each refused by name. `beadloom config-check` and the Gate's
+`config-check` step block on them, under ``The `activity:` block of .beadloom/config.yml (N):``;
+the usable entries are kept.
 
 ### `.beadloom/flow.yml` — the agentic dev flow
 

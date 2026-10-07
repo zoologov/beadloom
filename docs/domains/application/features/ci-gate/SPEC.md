@@ -19,7 +19,13 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
 
 `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex)` runs, in order:
 
-1. **reindex** (unless `--no-reindex`) — rebuild the index.
+1. **reindex** (unless `--no-reindex`) — rebuild the index, incrementally (`up to date` or
+   `reindexed`). When the incremental run falls back to a full rebuild, as on a fresh checkout
+   with no index, activity is measured, and on a shallow clone the summary gains
+   `; activity <note>`, the sentence
+   `git_activity.activity_history_note` gives (BDL-078 `beadloom-btkd.9`), and when the clone
+   does not reach back over the 90-day window, so no activity was measured, the step reports
+   `WARN` (`not_verified`) rather than `PASS`.
 2. **lint** — `lint --strict`, architecture boundaries. Its summary carries what a `forbid_import` exemption excused — the `10 crossings suppressed by an exemption` clause of the verbatim line quoted below — taken from the linter's own formatter so the Gate line cannot drift from the command it summarises (BDL-061.49). The clause is absent when nothing was suppressed. A SECOND clause names the population — `lint PASS: 0 error(s), 55 warning(s), 10 crossings suppressed by an exemption, architecture-layers judged 357 of 365 live depends_on edge(s)`, the Gate's lint line verbatim as `beadloom ci` printed it on this repository on 2026-09-13 — taken from the same formatter (`_population_note`) for the same reason, and present at FULL reach as well as partial: a suppressed crossing is an anomaly, so its absence means there is nothing to qualify, while a population is the denominator of the counts beside it and `357 of 365` reads exactly like `365 of 365` when neither is printed (BDL-070 A4). A project that declares no layer rule gets no clause. There is deliberately no matching clause for `rules_inert`: an inert rule always emits a finding, so a non-zero count already flips this summary to the `0 error(s), N warning(s)` branch. This step is also the only one exported under a public name (`lint_step`): `beadloom init` runs it over the graph it has just written and exits 1 when it does not pass, so a divergence between what `init` writes and what `init` requires surfaces at init time rather than at the adopter's first `ci` run (BDL-067, closing BDL-UX #192). Its `LintError` branch — `rules.yml` present and unloadable — is the one place a finding's `rule` is this step's own name rather than a rule's, with the loader's complaint in `why`, so the summary it carries is exported too, as `RULES_CONFIG_ERROR`: a caller that renders findings has to branch on it, and `init` did not, telling an adopter with a hand-edited rules file that a rule called `lint` had failed (BDL-067 `.6`).
 3. **sync-check** — symbol-pair doc freshness; fails on stale **and missing**
    pairs, reports `unverified` ones as `WARN` rather than fresh, and states how
@@ -307,7 +313,12 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    block that `beadloom docs site` cannot use (`_site_config_findings`, rule
    `site-config`, severity `error`, located at `.beadloom/config.yml`), read by the
    same `read_site_config` that stops `docs site` before it writes: a mistyped
-   base deploys the portal under the wrong path and says nothing.
+   base deploys the portal under the wrong path and says nothing. Since BDL-078
+   `beadloom-btkd.1` it carries every refused value of the `activity:` block the same way
+   (`_activity_setting_findings`, rule `activity-settings`, severity `error`, read by
+   `application.activity_settings.read_activity_exclusions`): a mistyped `exlude:` would count
+   every generated line as work without a word. With either block refused the summary is
+   ``N unusable `site:` value(s)`` and/or ``N unusable `activity:` value(s)``, joined by `+`.
 11. **doctor** — graph integrity.
 12. **federate** — `federate --fail-on` when hub exports are supplied.
 

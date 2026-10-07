@@ -229,7 +229,8 @@ directory unless a stack's layout says otherwise:
 
 A test source set (`test`, `integrationTest`, `testFixtures`, `androidTest`, `it`) and a Swift
 test target are never nodes and never scan paths: each is written into `tests.mirrors`, to the
-production root or target it tests, and a written `mirrors` replaces the default trees. Each
+production root or target it tests, and a written `mirrors` replaces the default trees. A
+project whose languages include `.py` gets `tests.flat_tests: true` beside them (BDL-078). Each
 layout reports the folders it `claimed`; `project_scan.unclaimed_code()` keeps every other
 folder with code, so a Python or TypeScript service beside a JVM module or a Swift package keeps
 its node, and `_cluster_with_children(claimed=...)` leaves claimed folders to their layout.
@@ -264,8 +265,12 @@ Not read, and said or known:
   names it on its `Not read:` line.
 - **A portal written below a top-level folder** (`docs site --out a/b`) is not recognised as
   the portal, so it is scanned like the project's code.
-- **A flat Python `tests/test_*.py`** binds to no node after `init`, because the written mirrors
-  bind `tests/unit/**` and `tests/integration/**` only (`beadloom-76mk`).
+- **A flat Python `tests/test_*.py`** binds after `init` since BDL-078 (`beadloom-76mk`):
+  `bootstrap_project` writes `tests: {flat_tests: true}` for a project whose languages include
+  `.py`, and such a test binds to the node owning the module its name names, else to the one
+  node its imports reach. A flat test that names no single module and imports into no single
+  node stays unplaced, and `init` names it below its `Tests:` line. An adopter who ran `init`
+  before this version adds the key or re-runs `init`.
 
 ## API
 

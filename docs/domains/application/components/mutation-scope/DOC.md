@@ -180,7 +180,7 @@ files the runner falls back to. Each kind of test file is selected by what it is
 
 | Kind | Where the plan carries it | Selected when |
 |------|---------------------------|---------------|
-| bound | `NodeSelection.bound_tests` | the binding recorded the node for the file, whatever placement bound it (`mirror`, `beside_code`, `override`) |
+| bound | `NodeSelection.bound_tests` | the binding recorded the node for the file, whatever placement bound it (`mirror`, `beside_code`, `override`, and since BDL-078 `named` and `imported`) |
 | acceptance step | `NodeSelection.acceptance_tests` (default `()`) | a scenario the step file loads carries the node's `@node:` tag |
 | unplaced | `ChangePlan.unplaced_tests` | always: the binding placed the file nowhere (placement `unplaced`), so it may exercise the node and the binding cannot say. This is the runner's fallback |
 | self-check, unowned | nowhere | never: a self-check tests the repository's own files rather than the changed code, and an unowned file names code no node owns |

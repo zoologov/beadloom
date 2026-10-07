@@ -184,7 +184,10 @@ One feature node covers the cooperating modules below (all annotated
   a branch and the repository's default branch. A step fails the build when `site.base` differs
   from the path `configure-pages` reports. Every action is pinned by commit SHA with its release
   in a comment. `site_dir_of` refuses an `--out` outside the project; any value holding a GitHub Actions
-  expression opener is refused (`PagesWorkflowError`).
+  expression opener is refused (`PagesWorkflowError`). Since BDL-078 `beadloom-btkd.9` the
+  checkout step takes `fetch-depth: 0`: the reindex measures each node's activity on the history
+  the clone holds, and a checkout one commit deep shows every file as added. An adopter's
+  workflow gets it on the next `--pages-workflow` run while the file is as beadloom wrote it.
 - **pages_base.py** — the local base warning (BDL-076 `beadloom-ujzb.13`).
   `project_pages_base(remote)` is `/<repo>/` for a `github.com` project repository and `None`
   for anything else (another host, a `<owner>.github.io` repository, no remote);
@@ -388,7 +391,7 @@ One feature node covers the cooperating modules below (all annotated
   node's `source`, `source_url`, `lifecycle`, `tags`, `docs`, `tests`,
   `public_symbols` and `activity`, plus `findings` and `debt` when those were
   computed. `architecture_view` merges the result into each node. `activity` is
-  narrowed to `CARD_ACTIVITY_KEYS` (`commits_30d`, `level`) by `card_activity`: the
+  narrowed to `CARD_ACTIVITY_KEYS` (`commits_30d`, `lines_30d`, `level`) by `card_activity`: the
   reindex also records the names of a node's most frequent committers, and the data
   file is published, so a key reaches it only by being listed there (BDL-076 R1
   finding M2). The fields and their shapes are listed under the data file below.
@@ -643,17 +646,19 @@ node links to its page, `other/` included. Version 2 adds the card:
 | `docs` | `[{path, status}]` — the worst status of the doc's sync pairs (`missing`, `stale`, `unverified`, `ok`), `unpaired` for a doc with no pair | `[]` |
 | `tests` | `{files, file_count, count, placement}` | `null` when the test binding does not cover the node |
 | `public_symbols` | `{names, omitted}` — the first 50 public names and how many more | — |
-| `activity` | `{commits_30d, level}`, the keys of the activity the reindex recorded that the card shows | `null` when none was recorded |
+| `activity` | `{commits_30d, lines_30d, level}`, the keys of the activity the reindex recorded that the card shows | `null` when none was recorded, as on a shallow clone that does not reach back 90 days |
 | `findings` | `[{rule, severity, message}]` from `beadloom lint` | omitted when lint did not run |
 | `debt` | `{score, reasons}` from the debt report | `{score: 0.0, reasons: []}` for a node the report does not score; omitted when not computed |
 
 `lint_clean` is now the version-1 reading of `findings`: true when the list is empty. The viewer
 draws a node as a violation only for a finding of severity `error`.
 
-**`activity` is an allow-list.** The reindex records the level, commits in 30 and 90 days, the
-last commit date and the names of the node's most frequent committers. The data file is
-published, and the card shows two of those, so `CARD_ACTIVITY_KEYS` names the two and nothing
-else reaches the file (BDL-076 R1 finding M2). The contract test pins the allow-list, and the
+**`activity` is an allow-list.** The reindex records the level, commits and changed lines in 30
+and 90 days, the last commit date and the names of the node's most frequent committers. The data
+file is published, and the card shows three of those, so `CARD_ACTIVITY_KEYS` names the three
+(`commits_30d`, `lines_30d`, `level`; `lines_30d` added by BDL-078 F-activity, schema still 2)
+and nothing else reaches the file (BDL-076 R1 finding M2). `level` is one of `hot`, `warm`,
+`cool`, `quiet`, `dormant`, relative to the project; the card shows an unknown level as text. The contract test pins the allow-list, and the
 `node_card_data` scenarios check that no generated file names the project's commit author and
 that a credential written into the remote reaches none.
 
@@ -941,7 +946,7 @@ Module `src/beadloom/application/site/architecture_view.py`:
 
 Module `src/beadloom/application/site/architecture_card.py`:
 - `PUBLIC_SYMBOL_CAP` — `50`; `DOC_UNPAIRED` — `"unpaired"`; `CARD_ACTIVITY_KEYS` —
-  `("commits_30d", "level")`
+  `("commits_30d", "lines_30d", "level")`
 - `NodeFinding` — frozen dataclass `rule`, `severity`, `message`; `as_dict()`
 - `NodeVerdicts` — frozen dataclass `findings`, `debt`; `None` means not computed
 - `CardSources` — frozen dataclass `tags`, `placements`, `test_owners`, `verdicts`,

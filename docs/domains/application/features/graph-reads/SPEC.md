@@ -25,8 +25,9 @@ behavior identical.
 
 - Nodes: `get_all_nodes`, `get_node`, `get_node_with_source`,
   `get_nodes_by_kind`, `get_source_paths`, `get_node_sources`.
-- Edges: `get_all_edges`, `get_part_of_children`, `get_outgoing_edges`,
-  `get_incoming_edges`, `count_edges_touching`.
+- Edges: `get_all_edges`, `get_part_of_children`, `get_part_of_containers`,
+  `get_outgoing_edges`, `get_incoming_edges`, `count_edges_touching`.
+  `get_part_of_containers` (BDL-078) lets the TUI roll a box's activity up as the reindex does.
 - Docs: `get_doc_ref_ids`, `count_docs`, `count_docs_for_ref`,
   `get_docs_for_ref`.
 - Sync: `get_stale_pairs_for_ref`, `count_stale_pairs`, `stale_node_refs`, and
@@ -36,6 +37,10 @@ behavior identical.
   dashboard print (BDL-069 `beadloom-rqma.5`).
 - Symbols: `get_symbols_for_source`.
 - Search fallback: `search_nodes_like`.
+- Activity: `analyze_git_activity`, `GitActivity` (since BDL-UX #172), and since BDL-078
+  `beadloom-btkd.18` `NO_CHANGE_WORDS` and `count_in_words`, from
+  `infrastructure/git_activity.py`, so the TUI words a level (`no change in 30 days`, `1 line`)
+  as `ctx` and the node card do.
 
 ### Behavior
 

@@ -47,7 +47,7 @@ it holds `ui`, `model`, `lib` or `api` segments as it needs them. Each slice is 
 | `app` | [`site-app`](vitepress-site/app.md) | The theme: registers the pages and widgets the generated Markdown mounts. |
 | `pages` | [`site-architecture-page`](vitepress-site/architecture-page.md) | `ArchitectureMap`: the viewer in architecture mode with the node card, on the architecture page and every node page. |
 | `pages` | [`site-landscape-page`](vitepress-site/landscape-page.md) | `LandscapeMap`: the viewer in landscape mode with the service card. |
-| `widgets` | [`site-graph-viewer`](vitepress-site/graph-viewer.md) | The viewer core: toolbar, canvas, panel and legend, in two data modes; ELK's routes, trunks and buses, the map and bridges. |
+| `widgets` | [`site-graph-viewer`](vitepress-site/graph-viewer.md) | The viewer core: toolbar, canvas, panel and legend, in two data modes; ELK's routes, trunks and buses, the map, the overview's own routing, counts on pills, and followed lines drawn on top. |
 | `widgets` | [`site-node-card`](vitepress-site/node-card.md) | The architecture card: everything the data file says about one node. |
 | `widgets` | [`site-dashboard`](vitepress-site/dashboard.md) | The dashboard's panels. |
 | `widgets` | [`site-diagram-viewer`](vitepress-site/diagram-viewer.md) | Pan, zoom and full screen over Mermaid diagrams. |
@@ -70,7 +70,12 @@ re-exports the `app` layer; `.vitepress/config.mjs`, which reads the identity an
 `docs site` generates (`site.generated.mjs`, `config.generated.mjs`); `.vitepress/generated.mjs`,
 whose `importGenerated(url)` loads a generated module as `{}` with a warning when it is not there
 yet and throws any other load error; `package.json` (`engines.node: >=22`, every dependency
-pinned exactly) with its lockfile; and `scripts/`. The viewer's dependencies are Cytoscape and
+pinned exactly) with its lockfile; and `scripts/`. The shipped config pre-bundles `mermaid` and
+the ELK worker engine for the dev server (`vite.optimizeDeps.include`, BDL-078 `beadloom-stcx`),
+because under `vitepress dev` mermaid's `fastdom` default export broke every page with a diagram.
+`npm run dev-check` (`scripts/dev-optimize-check.mjs`) starts the dev server, loads a page with a
+Mermaid diagram and the architecture page in Chromium, and fails on a page error, so it needs
+Playwright's Chromium; a slow test runs it on the six adopter fixtures. The viewer's dependencies are Cytoscape and
 elkjs 0.12, which the viewer calls directly in a Web Worker. BDL-077 removed `cytoscape-elk`,
 which carried a nested elkjs 0.9 of its own, and `web-worker`, the one ranged pin, whose only
 user was elkjs's entry point under `cytoscape-elk`.
@@ -102,7 +107,8 @@ portal written by `docs site` carries them in its `e2e/`. `.beadloom/config.yml`
 `src/beadloom/site_scaffold/e2e` as a test root and names the `playwright` pattern group. This
 node declares the whole directory, and each spec is also declared in the `tests:` list of the one
 slice it drives, which is where it binds: a test file binds to one node, and a node does not
-inherit its ancestors' tests. The twenty-four specs bind to sixteen slices. No spec drives
+inherit its ancestors' tests. The thirty specs bind to sixteen slices, thirteen of them to
+`site-graph-viewer`. No spec drives
 `site-app`, `site-dashboard`, `site-dashboard-data` or `site-landscape-data`, so those four report
 no bound tests.
 
@@ -128,12 +134,20 @@ does not ask the viewer to grade itself:
   every project (`playwright.config.js` sets the filter, because a `--grep-invert` on the
   command line filters nothing in `chromium`, which `performance` depends on).
 - `routeMetrics.js`: deviation from a computed route, edges through boxes and through their own
-  ends, the A2 sharing metric, channels, excess steps, lanes at a distance, branch points and
-  collinear pairs. Values a unit apart or closer count as one channel or lane.
+  ends, the A2 sharing metric, channels, excess steps, lanes at a distance, collinear pairs, and
+  `lastBendMovedBack` (a route whose last bend the head-run pass moved back still counts as
+  ELK's). Values a unit apart or closer count as one channel or lane.
 - `map.js`: what each level draws, derived from the data file (`treeOf`, `drawnAs`, `levelOf`,
   `budgetLeftOut`, `degreesOf`).
-- `bridges.js`: a brute-force crossing finder over the drawn routes, the oracle of the bridge
-  cases.
+- `look.js`, `heads.js`, `overview.js`, `levels.js`, `counts.js`, `metrics.js` (BDL-078): the
+  oracles of the look (drawn colours, legend samples, rounded corners, contrast), of whole
+  arrowheads (straight runs, overlap as triangles), of the overview (gaps, segments outside the
+  frame, titles and plates), of the levels (sibling rule, outward edges), of the counts a node
+  and its box say, and of every PRD criterion measured together.
+- `perturbedGraph.js`: `withTwoMoreEdges(data)`, the served graph with two edges more, a third
+  graph for the arrowhead and title cases.
+
+`support/bridges.js` and `bridges.spec.js` were removed with the bridges (BDL-078).
 - `pointer.js`: drags and long presses on a reachable leaf, and every toolbar button pressed.
 - `environment.js`: the environment a timed case runs in, and its bound there (below).
 
@@ -152,7 +166,9 @@ the case, naming the ones it states.
 | Mean interval between canvas drawings while panning, at the fit and at zoom 1, on both graphs | `performance.spec.js` | 25 ms | 33.4 ms |
 | First drawing of the adopter-sized graph, median of three openings | `performance.spec.js` | 7,200 ms | 15,000 ms |
 | Longest main-thread task from the data file's arrival until the graph is placed | `layout.spec.js` | 1,000 ms | 2,000 ms |
-| Rewriting the adopter-sized graph's routes into trunks and buses | `bundles.spec.js` | 50 ms | 400 ms |
+| Rewriting the adopter-sized graph's routes into trunks and buses, alone, median of three | `performance.spec.js` | 50 ms | 400 ms |
+| Planning the overview's routes: this portal / the adopter-sized graph | `performance.spec.js` | 50 / 250 ms | 200 / 1,000 ms |
+| A zoom step and a hover, on both graphs (`GESTURE_MS`) | `performance.spec.js` | 60 / 50 ms | 560 / 470 ms |
 
 The `local` bounds were calibrated on an Apple M1 Max in headless Chromium without a GPU, where
 the viewer measured 16.7 ms per frame, a first drawing of 5,707 to 5,781 ms and a longest task of
@@ -161,6 +177,13 @@ measured them when they were written, and they catch ELK on the main thread or t
 drawn at the fit, not a 15% slowdown. Two structural guards hold the same regressions on any
 machine: the whole-graph fit draws only the top-level boxes and at most 100 edges, and the pointer
 resting anywhere at the overview lifts the budget for one box at most (`map.spec.js`).
+
+The overview's planning, zoom-step and hover bounds came with BDL-078. Measured at `6b77893c`
+on Darwin arm64 (`beadloom-btkd.15`): planning 15.1 ms here and 133.1 ms at adopter size, a zoom
+step 45.0 / 45.8 ms, a hover 29.3 / 32.1 ms. The `ci` gesture bounds (560 and 470 ms, about nine
+times local) were not measured on a runner when they were set; the bundling's `ci` bound is the
+one taken from a runner's measurement. The bundling case moved from `bundles.spec.js` to
+`performance.spec.js`, where it runs alone.
 
 The bundling's bound is the one `ci` bound set from a runner's measurement (`beadloom-m6k7.7`).
 The bundling took 36 to 39 ms on the M1 Max and 186.8 ms on a GitHub-hosted Ubuntu runner with
@@ -181,14 +204,15 @@ shape: python 75 passed and 26 skipped, go 88 and 13, typescript 94 and 7, java 
 74 and 27, swift 74 and 27.
 
 **In CI.** The advisory `site-e2e` job runs the suite on this repository's portal after
-`site-build`, with `BEADLOOM_E2E_NO_SKIP=1`, so every case runs here: 184 cases in 24 files, 181
-in the `chromium` project and 3 in `performance`, under the `ci` bounds. It is not a required
+`site-build`, with `BEADLOOM_E2E_NO_SKIP=1`, so every case runs here, under the `ci` bounds. At
+`6b77893c` the suite held 294 cases in the `chromium` project and 10 in `performance`, measured
+locally on Darwin arm64 (`beadloom-btkd.15`). <!-- TODO: verify the case count on the PR's site-e2e run. --> It is not a required
 check. The `site-adopters` workflow builds the six fixtures and runs the suite on each,
 on pull requests that change what it tests, weekly on `main` and on demand. It runs in seven
 legs, one per claimed stack and one for the slow tests that build a project of their own, and
 `BEADLOOM_SLOW_PART` names a leg's part (`beadloom-m6k7.7`). One after another, the six suites
 took about 14 minutes each on the runner, and the job was cancelled at its 60-minute timeout
-during the third. The 28 cases tagged `@adopter-sized` run on the first stack of each count of
+during the third. The cases tagged `@adopter-sized` run on the first stack of each count of
 declared layers (python, go and typescript) and are left out on java, kotlin and swift, which
 declare none, like python, and would draw the same graph. What it tests is its
 `paths:` filter, and a self-check holds that filter to every file the slow tests read and every

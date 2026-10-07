@@ -79,9 +79,11 @@ this repository on 2026-09-09, the verdict read `240 entr(ies), 5 claim(s), floo
 words and the partial one had none, and the partial case is the one every adopter is in from
 their first allocation onwards.
 
-`IssueNumberReport.entries_below_floor` is that population. The command prints
-`235 of 241 entr(ies) are below floor 262: unclaimed-number did not enter them, and no claim
-holds their numbers`; the Gate line carries the same fact as `PARTLY CHECKED`. Neither is a
+`IssueNumberReport.entries_below_floor` is that population. The command prints it as a clause
+of the verdict; measured on this repository on 2026-10-07, after the log was trimmed to its open
+entries, it read ``68 of 113 entr(ies) are below floor 262: `unclaimed-number` did not enter
+them, and no claim holds their numbers``. The Gate line carries the same fact as
+`PARTLY CHECKED`. Neither is a
 finding — an unreached population is coverage, and reporting it as a finding would redden every
 project that adopts the allocator with a log already written. The clause is emitted only when
 there is something to qualify, because a summary that qualifies every log is one a reader stops

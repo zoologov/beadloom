@@ -53,6 +53,16 @@ beadloom init [--project DIR]
 
 `--bootstrap` scans source directories (src, lib, app, services, packages), classifies subdirectories using architecture-aware preset rules, infers edges from directory nesting, and generates `.beadloom/_graph/services.yml` + `.beadloom/config.yml`. Three stacks are read through their build layout rather than as folders (BDL-076): Go imports through `go.mod`/`go.work`, a Maven or Gradle tree as packages under `src/<set>/<java|kotlin>/`, and a Swift Package Manager project as the targets its `Package.swift` declares; an Xcode project is reported (`Not read: N .swift files outside any Package.swift target`) and not read. What each stack gets is in [Getting Started](../getting-started.md#what-init-reads-in-each-stack).
 
+Since BDL-078 `beadloom-76mk` a bootstrapping mode writes `tests: {flat_tests: true}` into `.beadloom/config.yml` for a project whose languages include `.py`, so a flat `tests/test_<module>.py` binds to the node owning the module it names, else to the one node its imports reach. Every entry point that indexes (`--yes`, `--bootstrap`, the wizard) then prints the reindex's `Tests:` line and, when any test file is bound to no node, names each with its placement:
+
+```text
+  Tests: 2 files (1 bound to a node (1 flat, by the module named or imported), 1 unplaced)
+  1 test file(s) bound to no node - lay each out under the mirror of the code it tests, or name it in that node's `tests:` list:
+    tests/test_helpers.py (unplaced)
+```
+
+That output was measured on a two-module Python project with `tests/test_invoice.py` and `tests/test_helpers.py`. The list is silent for a project with no test file.
+
 Every bootstrapping mode also writes `/site/` into `.gitignore`, for the portal `beadloom docs site` writes, unless a line already names `site/`, `site/` already holds files, or the project is not in a git working tree; `init` prints which (`Ignored: /site/ ...` or `Not ignored: /site/ - <reason>`).
 
 `--preset` selects an architecture preset:
@@ -153,11 +163,13 @@ Order: drop tables -> create schema -> load graph YAML -> index docs -> index co
 
 When no changes are detected, displays current DB totals (nodes, edges, docs, symbols) instead of reindex counts. Warns about missing tree-sitter parsers when symbols == 0.
 
-On both branches the output ends its totals with a `Tests:` line (BDL-074 C1), read from the `test_files` table: how many test files are indexed, how many bind to a node — with `(B beside the code)` after the count when any test inside a node's source is bound (BDL-074 G2) — and how many are `unplaced`, reached by none of the ways a test binds, plus the `unowned` count when non-zero and, since BDL-074 F1, each recorded kind of the files a kind folder places, by its own count (`acceptance step`, `self-check`), where the line used to fold both into "bound by other means". On this repository, measured by `beadloom reindex` on 2026-09-28 at `909a0098`: `Tests:   620 files (275 bound to a node, 167 unplaced, 75 acceptance step, 103 self-check)`. Which files are tests, and where they are looked for, is the test layout of the `tests:` block in `.beadloom/config.yml`; see [Configuration](../getting-started.md#configuration). A key of that block that cannot be used, and a node's `tests:` prefix that covers no indexed test file, are printed as warnings: ``Node 'billing': `tests:` prefix 'tests/e2e' covers no indexed test file, so it binds nothing (a folder is declared with a trailing '/')``. An index built before the test tables prints no such line. A change to a test file alone is no longer reported as "no changes". See the [Test Mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md).
+On both branches the output ends its totals with a `Tests:` line (BDL-074 C1), read from the `test_files` table: how many test files are indexed, how many bind to a node — with `(B beside the code)` after the count when any test inside a node's source is bound (BDL-074 G2), and `K flat, by the module named or imported` when the layout declares `flat_tests` (BDL-078) — and how many are `unplaced`, reached by none of the ways a test binds, plus the `unowned` count when non-zero and, since BDL-074 F1, each recorded kind of the files a kind folder places, by its own count (`acceptance step`, `self-check`), where the line used to fold both into "bound by other means". On this repository, measured by `beadloom reindex` on 2026-09-28 at `909a0098`: `Tests:   620 files (275 bound to a node, 167 unplaced, 75 acceptance step, 103 self-check)`. Which files are tests, and where they are looked for, is the test layout of the `tests:` block in `.beadloom/config.yml`; see [Configuration](../getting-started.md#configuration). A key of that block that cannot be used, and a node's `tests:` prefix that covers no indexed test file, are printed as warnings: ``Node 'billing': `tests:` prefix 'tests/e2e' covers no indexed test file, so it binds nothing (a folder is declared with a trailing '/')``. An index built before the test tables prints no such line. A change to a test file alone is no longer reported as "no changes". See the [Test Mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md).
 
 The incremental path re-extracts imports for the code files it touched, deletes the imports of files that disappeared, and rebuilds the derived `depends_on` edge set (marked `extra.derived='imports'`, so a graph-declared edge is never collateral damage). A boundary violation introduced between two incremental runs is therefore caught by `lint` without a full rebuild. Two counters in the summary do not describe that work: `Imports:` and `Rules:` are only populated on the `--full` path and print `0` on an incremental run that did refresh them.
 
 **Reindex sets the freshness baseline.** `sync_state` is (re-)established from the tree being indexed, so a reindex into a fresh or deleted database makes every declared pair fresh by construction. That is why doc freshness must be checked after an *incremental* reindex on an existing index — see `beadloom sync-check`.
+
+On a shallow clone a full reindex prints one more line, `Activity: <note>` (BDL-078 `beadloom-btkd.9`): `measured on history: shallow (N commits), which reaches back 90 days`, or `not measured on history: shallow (N commits), which does not reach back 90 days; check out the full history (actions/checkout fetch-depth: 0)`, in which case no activity is stored. A full history prints no `Activity:` line.
 
 ### beadloom ctx
 
@@ -187,6 +199,16 @@ Tests: pytest, 100 tests in 10 files (high coverage)
   167 of 620 test file(s) are unplaced (not under tests/integration/ or tests/unit/) and bind to no node, so the count above can be short
   A test file is read when its path matches a pattern of pytest (test_*.py, *_test.py) under the root tests
 ```
+
+The Markdown `Activity:` line states the node's level and its changed lines in 30 days, in the
+node card's words (BDL-078 F-activity): `Activity: 🔥 hot (412 lines changed in 30 days)`,
+`1 line changed in 30 days` for one, and for the two levels with no change in the window
+`🌙 quiet (no change in 30 days)` and `🧊 dormant (no change in 90 days)`. The levels are
+`hot`, `warm`, `cool`, `quiet` and `dormant`, relative to the project (see the
+[Git Activity component](../domains/infrastructure/components/git-activity/DOC.md)). An
+activity recorded before changed lines were counted is said in commits (`3 commits in 30
+days`). `--json` carries the recorded activity under `focus.activity`, `lines_30d` and
+`lines_90d` included.
 
 `--json` carries the same counts as `test_placements`, test files by placement, the
 sentence itself as `test_unplaced` (`null` when no file is unplaced) and the last line's
@@ -1369,6 +1391,13 @@ It also prints every value of the `site:` block that `beadloom docs site` cannot
 B1), under ``The `site:` block of .beadloom/config.yml (N):``, each as `site.<key>: <why>` with
 its remedy, and exits 1 on them: a mistyped base deploys the portal under the wrong path. The
 Gate's `config-check` step reports the same refusals as the rule `site-config`.
+
+Since BDL-078 `beadloom-btkd.1` it does the same for the `activity:` block, under ``The
+`activity:` block of .beadloom/config.yml (N):``: a key the block does not read
+(`activity.<key>`), an `exclude:` that is not a list (`activity.exclude`) and an entry that is
+not a pattern (`activity.exclude[i]`), each with its remedy, and exits 1 on them. The Gate's
+step reports them as the rule `activity-settings`. The patterns and their grammar, which is not
+`.gitignore`'s, are in [Getting Started](../getting-started.md#configuration).
 
 Re-runs the same `setup-rules --refresh` generator in memory and diffs its output against on-disk content for `.beadloom/AGENTS.md`, the auto-managed sections of `.claude/CLAUDE.md`, and present IDE adapter files. For those three, only the auto-managed regions are compared — editing user-authored prose (the AGENTS.md `custom` block, CLAUDE.md content outside the `auto-start`/`auto-end` markers) never trips them. The composed artifacts are a separate check with its own rules, described below. Prints which file drifted, why, and the remediation; an absent target file is skipped unless the project adopted the flow, in which case it is `missing`. `--fix` regenerates via the refresh path (`config_sync.apply_config_fixes`), names every file it changed, declines any body Beadloom cannot prove it wrote, and re-checks. Delegates to `onboarding/config_sync.py:check_config_drift()`.
 
@@ -2852,7 +2881,7 @@ beadloom ci [--hub EXPORT.json ...] [--fail-on CSV] [--format {rich,json,github}
 
 Composes the existing checkers, in order, into ONE verdict with a single exit code (0 = all steps passed, 1 = any step failed):
 
-1. `reindex` (incremental) — unless `--no-reindex`.
+1. `reindex` (incremental) — unless `--no-reindex`. When the run falls back to a full rebuild, as on a fresh checkout with no index, and the clone is shallow, its summary gains `; activity <note>`, and it reports `WARN` when the clone does not reach back 90 days, so no activity was measured (BDL-078 `beadloom-btkd.9`). An incremental run measures no activity and adds nothing.
 2. `lint --strict` — architecture boundary rules at error severity.
 3. `sync-check` — doc↔code freshness (stale pairs fail).
 4. `docs audit` — stale numeric facts in documentation (`stale>0` fails). The step line also states its coverage — `M/N declared fact(s) verified` plus the names of the facts it checked nothing for — because a count of findings says nothing about the facts nobody stated.

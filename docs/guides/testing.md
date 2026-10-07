@@ -114,6 +114,14 @@ names fixtures, helpers and collaborators as well as the subject. A folder named
 a name. So a file under a root that none of the three ways reaches is **unplaced**: it is read,
 counted, and bound to nothing, and every surface says how many there are.
 
+**One more way is declared, not defaulted** (BDL-078 `beadloom-76mk`). With
+`tests.flat_tests: true` in `.beadloom/config.yml`, a Python test directly in a root, in no
+kind folder (`tests/test_invoice.py`), binds to the one node owning the module its name names
+(placement `named`), else to the one node its imports reach (`imported`). `beadloom init` writes
+the key for a Python project and prints every test file it could not bind. This repository does
+not declare it: as a default it would have bound the hundred and sixty-four flat test files its rules exempt, and turned
+those exemptions into findings.
+
 `beadloom ctx <ref-id>` prints the tests bound to the node and states the rest:
 
 ```
