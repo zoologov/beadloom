@@ -50,6 +50,7 @@
 | `beadloom-btkd.13` | dev | ✓ done | overview lines inside the project frame; legend 'no layer': the router's tracks keep inside the frame of the box that holds everything, half a pitch from it, and a box middle that close takes no track; segments outside the frame at the fit: this portal 3 of 102 -> 0, with two edges more 3 -> 0, adopter-sized 143 -> 0 (python-ranked 147 -> 0, typescript-ranked 165 -> 0), six fixtures 0 -> 0; every pair routed here; planning 14.9 / 127.7 ms (bounds 50 / 250); the legend names 'no layer' where a node other than the project box is in no layer; readings for the owner in the bead |
 | `beadloom-btkd.14` | fix | ✓ done | heads on the Java fixture's perturbed graph: the head-run pass moved model's incoming channel from 10 to 2 units behind the tip of the opposite edge's head (it ignored lines sharing an end); a moved segment now keeps off another line's last run (`headRuns.freeOf`); Java's 3 perturbed cases green, pure case red -> green; found: the adopter-sized heads case on 0 layer ranks red since btkd.13 (3 pairs unrouted inside the frame) |
 | `beadloom-btkd.15` | fix | in progress | whole heads on the clamped adopter-sized graph (python stack red) |
+| `beadloom-btkd.16` | dev | blocked | rounded corners on boxes (owner, after the look) |
 | `beadloom-ak1i` | R | blocked | review |
 | `beadloom-1hle` | W | blocked | docs |
 | `beadloom-hpat` | P | blocked | owner's look, PR |
