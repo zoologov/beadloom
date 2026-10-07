@@ -38,19 +38,25 @@
 //
 // A line between two top-level nodes that the plan left out — the budget hid it,
 // and the pointer or the selection draws it now — is routed around the plan's
-// lines and kept the same way. A line the router finds no route for, and any
-// line with an end inside an open box, is drawn along its medoid as before
-// (`lib/aggregateRoutes.js`).
+// lines and kept the same way. A line the router finds no route for is drawn
+// along its medoid (`lib/aggregateRoutes.js`), its last run into each end it
+// carries a head to lengthened for the head as a routed line's is, clear of the
+// plan's lines (`lib/headRuns.js`, `lengthenLineEnds`), and kept the same way.
+// Any line with an end inside an open box is drawn along its medoid as before.
 
 import { FIT_MAX_ZOOM, FIT_PADDING } from "../../../features/navigate-graph/index.js";
 import { drawnBoxOf, grownBoxesOf } from "../lib/grownBoxes.js";
 import { budgetOf, levelOf } from "../lib/levels.js";
 import { MAP_MARKS, PLATE_SIDES, plateOf } from "../lib/mapMarks.js";
+import { lengthenLineEnds } from "../lib/headRuns.js";
 import { OVERVIEW_MARKS, planOverview } from "../lib/overviewRoutes.js";
 import { centreOf, compoundSizeOf } from "../lib/routes.js";
 
 /** The room a box drawn larger keeps from every other box, in pixels on screen, tried in turn: a lane, else a plate's gap. */
 const GROWN_GAPS = Object.freeze([OVERVIEW_MARKS.pitch, MAP_MARKS.plateGap]);
+
+/** The size of the cells a medoid line's neighbours are filed in, in pitches. */
+const FILED_PITCHES = 4;
 
 /** Whether rectangles `a` and `b` come closer than `gap`. */
 const overlaps = (a, b, gap) => a.x1 - gap < b.x2 && a.x2 + gap > b.x1 && a.y1 - gap < b.y2 && a.y2 + gap > b.y1;
@@ -89,16 +95,18 @@ const inputPairOf = (pair) => ({ name: pair.name, a: pair.ends[0], b: pair.ends[
  * laid-out box at a scale when `hidden` of its lines are left out
  * (`lib/mapMarks.js`, `mapTitleOf`), and `leastBoxOf(id, px, scale, hidden)` the
  * least box, in layout units, that holds that title inside at `px`
- * (`titleBoxOf`); `measure(text, px)` a title's width in pixels; `scaleAt(zoom)`
- * the map's scale at a zoom; `budget` how many lines a level draws.
+ * (`titleBoxOf`); `medoidOf(pair)` the medoid of a pair's edges' routes as the
+ * overview draws it, or null; `measure(text, px)` a title's width in pixels;
+ * `scaleAt(zoom)` the map's scale at a zoom; `budget` how many lines a level draws.
  */
-export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf, titleOf, projectTitleOf, leastBoxOf, breakable, measure, scaleAt, budget }) {
+export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf, titleOf, projectTitleOf, leastBoxOf, breakable, medoidOf, measure, scaleAt, budget }) {
   const top = new Set([...tree.parent.keys()].filter((id) => id !== tree.wrapper && tree.parent.get(id) === tree.wrapper && geometry.boxes[id]));
   const overview = levelOf(tree, new Set(tree.wrapper ? [tree.wrapper] : []), plainEdges);
   const edgeById = new Map(plainEdges.map((edge) => [edge.id, edge]));
   let plan = {
     signature: null,
     paths: new Map(),
+    fallbacks: new Map(),
     failed: [],
     ms: 0,
     unit: null,
@@ -250,14 +258,47 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
       frame: tree.wrapper ? geometry.boxes[tree.wrapper] : null,
     };
     const { paths, failed } = planOverview(input);
-    return { paths, failed, input, sides, grown, broken, plated, project };
+    const fallbacks = failed.length ? fallbacksOf(drawn.filter((pair) => failed.includes(pair.name)), drawn, paths, input) : new Map();
+    return { paths, fallbacks, failed, input, sides, grown, broken, plated, project };
+  }
+
+  /**
+   * The lines of `unrouted`, pairs of `drawn` the router found no route for,
+   * each along its medoid with its last run into each end it carries a head to
+   * lengthened for the head, among the plan's `paths` and the lines drawn as
+   * themselves, clear of `input`'s boxes and plates: `Map(name => points)`, in
+   * layout units, a line with no medoid left out.
+   */
+  function fallbacksOf(unrouted, drawn, paths, input) {
+    const lines = unrouted
+      .map((pair) => ({ id: pair.name, source: pair.ends[0], target: pair.ends[1], points: medoidOf(pair), heads: { source: pair.backward.length > 0, target: pair.forward.length > 0 } }))
+      .filter((line) => line.points?.length >= 2);
+    if (!lines.length) return new Map();
+    const endsOf = new Map(drawn.map((pair) => [pair.name, pair.ends]));
+    const planned = [...paths].map(([name, points]) => ({ id: name, source: endsOf.get(name)[0], target: endsOf.get(name)[1], points }));
+    const asThemselves = overview.originals
+      .map((id) => ({ id, source: edgeById.get(id).source, target: edgeById.get(id).target, points: routePointsOf(id) }))
+      .filter((line) => line.points);
+    const boxes = Object.fromEntries([
+      ...input.boxes.map(({ id, x1, y1, x2, y2 }) => [id, { x1, y1, x2, y2 }]),
+      ...input.plates.map((plate, k) => [`plate\n${k}`, plate]),
+    ]);
+    const { unit } = input;
+    const options = {
+      headRun: OVERVIEW_MARKS.run * unit,
+      headRunStep: unit,
+      headRunClearance: (OVERVIEW_MARKS.pitch / 2) * unit,
+      cellSize: FILED_PITCHES * OVERVIEW_MARKS.pitch * unit,
+      bandWidth: OVERVIEW_MARKS.pitch * unit,
+    };
+    return lengthenLineEnds({ lines, others: [...planned, ...asThemselves], boxes }, options);
   }
 
   /** The route of a pair between two top-level nodes the plan left out, around the plan's lines. */
   function extraRouteOf(pair) {
     const signature = signatureOf([pair]);
     if (!extras.has(signature) && plan.input) {
-      const input = { ...plan.input, pairs: [inputPairOf(pair)], fixed: [...plan.input.fixed, ...plan.paths.values()] };
+      const input = { ...plan.input, pairs: [inputPairOf(pair)], fixed: [...plan.input.fixed, ...plan.paths.values(), ...plan.fallbacks.values()] };
       extras.set(signature, planOverview(input).paths.get(pair.name) || null);
     }
     return extras.get(signature) ?? null;
@@ -271,10 +312,14 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
     hasProjectPlate: () => Boolean(plan.project),
     /** Whether `id` is a node at the top: under the box that holds everything, or a root when none does. */
     isTop: (id) => top.has(id),
-    /** The planned route of `pair`, a polyline from a border of its first end to one of its second; null when it has none. */
+    /**
+     * The planned route of `pair`, a polyline from a border of its first end to
+     * one of its second: routed, or its medoid with room for its heads where the
+     * router found it none; null when it has neither.
+     */
     routeOf(pair) {
       if (!pair.ends.every((id) => top.has(id))) return null;
-      return plan.paths.get(pair.name) || (plan.failed.includes(pair.name) ? null : extraRouteOf(pair));
+      return plan.paths.get(pair.name) || plan.fallbacks.get(pair.name) || (plan.failed.includes(pair.name) ? null : extraRouteOf(pair));
     },
     /** The scale the plan decided its titles and plates at, or null before the first plan. */
     titleScale: () => plan.unit,

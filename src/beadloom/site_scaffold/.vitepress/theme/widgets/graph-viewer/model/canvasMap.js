@@ -263,6 +263,8 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     leastBoxOf: (id, px, at, hidden, broken = false) =>
       titleBoxOf(linesOf(id, hidden, broken), px, at, measure, (height) => reservedOf(id, at, Math.max(height, geometry.boxes[id].y2 - geometry.boxes[id].y1))),
     breakable: (id) => Boolean(brokenLabelFor(id)),
+    // A line the plan finds no route for is drawn along its medoid as the overview draws it, every top-level box closed.
+    medoidOf: (pair) => routeOf(pair, new Set(tree.wrapper ? [tree.wrapper] : [])),
     measure,
     scaleAt,
     budget: options.budget,

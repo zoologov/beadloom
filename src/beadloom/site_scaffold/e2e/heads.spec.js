@@ -138,6 +138,31 @@ const GRAPHS = [
   },
 ];
 
+const OVERVIEW_ZOOMED_INTO = "as the overview is zoomed into, every drawn arrowhead is entered straight, whole and clear";
+
+/**
+ * Open the architecture page on `data`, served in place of the portal's file
+ * (the portal's own where null), and expect every drawn head whole at each zoom
+ * step from the fit up to 2: the lines the overview's router found no route for,
+ * drawn along their medoid, included.
+ */
+async function expectWholeHeadsZoomingIn(page, data) {
+  if (data) await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  await openArchitecture(page);
+  const found = [];
+  const fit = await viewer(page, "zoom");
+  for (let step = 0; step < 24; step += 1) {
+    const zoom = await viewer(page, "zoom");
+    if (zoom > 2 * Math.sqrt(STEP)) break;
+    const wrong = await wrongNow(page);
+    if (wrong.length) found.push({ zoom: Number(zoom.toFixed(3)), wrong });
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await twoFrames(page);
+  }
+  expect(fit).toBeGreaterThan(0);
+  expect(found).toEqual([]);
+}
+
 for (const graph of GRAPHS) {
   test.describe(graph.name, { tag: graph.tag }, () => {
     test("with every box open, every arrowhead is entered straight, is whole and keeps clear of other lines, at every zoom from the lowest a box stays open at to 2", async ({
@@ -158,22 +183,8 @@ for (const graph of GRAPHS) {
       expect(found).toEqual(Object.fromEntries(zooms.map((zoom) => [zoom, { zoom: found[zoom].zoom, wrong: [] }])));
     });
 
-    test("as the overview is zoomed into, every drawn arrowhead is entered straight, whole and clear", async ({ page, request }) => {
-      const data = await graph.data(request);
-      if (!graph.served) await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
-      await openArchitecture(page);
-      const found = [];
-      const fit = await viewer(page, "zoom");
-      for (let step = 0; step < 24; step += 1) {
-        const zoom = await viewer(page, "zoom");
-        if (zoom > 2 * Math.sqrt(STEP)) break;
-        const wrong = await wrongNow(page);
-        if (wrong.length) found.push({ zoom: Number(zoom.toFixed(3)), wrong });
-        await page.getByRole("button", { name: "Zoom in", exact: true }).click();
-        await twoFrames(page);
-      }
-      expect(fit).toBeGreaterThan(0);
-      expect(found).toEqual([]);
+    test(OVERVIEW_ZOOMED_INTO, async ({ page, request }) => {
+      await expectWholeHeadsZoomingIn(page, graph.served ? null : await graph.data(request));
     });
 
     test("with a node selected, every drawn arrowhead is entered straight, whole and clear, at the fit and up close", async ({
@@ -198,3 +209,15 @@ for (const graph of GRAPHS) {
     });
   });
 }
+
+// The adopter-sized graph's shape depends on how many layer ranks the served file
+// declares; the cases above draw it in this portal's. In no ranks, its clamped
+// overview once left three pairs with no route inside the project's frame, drawn
+// along their medoids into heads with no room, while every other count of ranks
+// routed them all: so its overview is also read here in no ranks, whatever this
+// portal declares.
+test.describe("an adopter-sized architecture graph in no layer ranks", { tag: [ADOPTER_SIZED] }, () => {
+  test(OVERVIEW_ZOOMED_INTO, async ({ page, request }) => {
+    await expectWholeHeadsZoomingIn(page, adopterSizedGraph(await architectureData(request), { layerRanks: 0 }));
+  });
+});

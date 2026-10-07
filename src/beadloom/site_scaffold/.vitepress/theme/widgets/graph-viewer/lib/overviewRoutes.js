@@ -27,8 +27,13 @@
 // routed once more with each refusal priced instead (`COST.forced`): it may run
 // along another line, through a halo or through another box's margin, but it
 // still enters no box, runs straight into its own, keeps a lane from every other
-// line and keeps off every arrowhead. No box moves; a line nothing can route
-// even so keeps no route here, and its caller draws its medoid instead.
+// line and keeps off every arrowhead. A line that finds no route even so, where
+// the lines laid before it closed its ways in, is routed before them: its
+// cheapest route through their room names the lines in its way, they are taken
+// up, it is laid, and they are laid again around it, each kept where it still
+// fits; where one of them then finds no route, the plan is put back as it was.
+// No box moves; a line nothing can route even so keeps no route here, and its
+// caller draws its medoid instead.
 //
 // A box can be drawn larger than its layout, to hold its title
 // (`grownBoxes.js`): the drawn box is the obstacle, its ports lie only where a
@@ -58,10 +63,18 @@ export const OVERVIEW_MARKS = Object.freeze({ pitch: 8, halo: 14, run: 15, corne
 /**
  * What a line costs, in pixels of its length: a bend, a crossing, a run beside
  * another line, a shared run, a port shared or crowded, a port off its side's
- * middle, a cell under a plate, and each refusal a line routed a second time
- * passes over.
+ * middle, a cell under a plate, each refusal a line routed a second time passes
+ * over, and each line whose room a line routed through them takes.
  */
-const COST = Object.freeze({ bend: 30, cross: 10, beside: 0.3, share: 2, shareOnce: 60, portBeside: 35, offCentre: 0.12, underPlate: 1000, forced: 400 });
+const COST = Object.freeze({ bend: 30, cross: 10, beside: 0.3, share: 2, shareOnce: 60, portBeside: 35, offCentre: 0.12, underPlate: 1000, forced: 400, inTheWay: 2000 });
+/**
+ * How a line is routed: by every rule; with what the rules refuse priced
+ * instead; or through the room other lines keep too, at a price for each line
+ * whose room it takes, to find which lines are in its way.
+ */
+const STRICT = 0;
+const RELAXED = 1;
+const THROUGH = 2;
 /**
  * How far the search leans towards its target: above 1 a route is no longer
  * sure to be the cheapest, and is found among far fewer cells. At 1.5, measured
@@ -163,8 +176,9 @@ function spanOf(a, b) {
 
 /**
  * The router over `grid` for `pairs` (`{ a, b, forward, backward }`, box indices
- * and counts): `{ route, mark }`, with the cells each line occupies kept between
- * calls. `fixed` are the polylines of lines drawn as themselves, in pixels.
+ * and counts): `{ route, mark, sharing, keepLedger }`, with the cells each line
+ * occupies kept between calls. `fixed` are the polylines of lines drawn as
+ * themselves, in pixels.
  */
 function routerOn(grid, pairs, fixed, marks) {
   const { xs, ys, nx, ny, interior, inside, covered, band, bandAxis, band2, band2Axis, crowded, near, ports, lead, stem } = grid;
@@ -197,18 +211,48 @@ function routerOn(grid, pairs, fixed, marks) {
   /** The line along `axis` through `cell`, 1-based, or 0: a used port's way in counts as its line's. */
   const occupied = (axis, cell) => owner[axis][cell] || (lead[cell] >= 0 ? owner[axis][lead[cell]] : 0);
 
-  /** The route of line `e`, or null; `relaxed` prices what the rules refuse instead of refusing it. */
-  function route(e, relaxed = false) {
+  /**
+   * The route of line `e`, or null, routed `how` (`STRICT`, `RELAXED` or
+   * `THROUGH`); routed `THROUGH`, the lines whose room it takes are added to
+   * `inTheWay`. With `kept`, a route the line had, that route where the line
+   * may still run along it, else null, and no search.
+   */
+  function route(e, how = STRICT, inTheWay = null, kept = null) {
+    const relaxed = how >= RELAXED;
     const [a, b] = ends[e];
     const target = grid.boxes[b];
     stamp += 1;
     /** Whether line `o` (1-based) may share a cell with line `e` by box `x`: both end at `x`, alike. */
     const sibling = (o, x) => o !== FIXED && x >= 0 && (x === a || x === b) && (ends[o - 1][0] === x || ends[o - 1][1] === x) && headAt(o - 1, x) === headAt(e, x);
+    // Routed `THROUGH`: how many lines' room the cell being entered takes, and where to name them.
+    let through = 0;
+    let blamed = null;
+    /**
+     * Whether a line routed `THROUGH` may take the room line `o` (1-based) keeps
+     * along `axis` at `cell`: not where `o` is a fixed line. Where it may, every
+     * line on the cell, or on the way into the port the cell is, is counted and
+     * named: one taken up leaves the others there.
+     */
+    const takes = (o, cell, axis) => {
+      if (o === FIXED) return false;
+      let lines = 0;
+      for (const at of [cell, lead[cell]]) {
+        const here = at >= 0 && ledger ? ledger.get(at * 2 + axis) : null;
+        if (!here) continue;
+        lines += here.length;
+        if (blamed) for (const line of here) blamed.add(line);
+      }
+      if (blamed) blamed.add(o - 1);
+      through += Math.max(1, lines);
+      return true;
+    };
     /** What entering cell `c` along `axis` adds, or -1 when the line may not enter it. */
     const entering = (c, axis) => {
       if (inside[c] || (interior[c] >= 0 && !relaxed)) return -1;
+      through = 0;
       // Never, even priced, over the way into a port a line uses: its arrowhead is there.
-      if (lead[c] >= 0 && (owner[0][lead[c]] || owner[1][lead[c]])) return -1;
+      const into = lead[c] >= 0 ? owner[0][lead[c]] || owner[1][lead[c]] : 0;
+      if (into && !(how === THROUGH && takes(into, lead[c], 0) && takes(into, lead[c], 1))) return -1;
       // A box's margin, priced on a second routing: a small box wedged between others has no other way out.
       let forced = interior[c] >= 0 ? 1 : 0;
       if (crowded[c]) {
@@ -232,19 +276,29 @@ function routerOn(grid, pairs, fixed, marks) {
       const across0 = nearLow[0][i] < nearHigh[0][i];
       const across1 = nearLow[1][j] < nearHigh[1][j];
       if (axis === 0) {
-        if (across0) for (let k = nearLow[0][i]; k <= nearHigh[0][i]; k += 1) if (k !== i && occupied(0, c - i + k)) return -1;
+        if (across0) {
+          for (let k = nearLow[0][i]; k <= nearHigh[0][i]; k += 1) {
+            const other = k !== i ? occupied(0, c - i + k) : 0;
+            if (other && !(how === THROUGH && takes(other, c - i + k, 0))) return -1;
+          }
+        }
         if (across1) {
           for (let k = nearLow[1][j]; k <= nearHigh[1][j]; k += 1) {
             const other = k !== j ? occupied(0, c + (k - j) * nx) : 0;
-            if (other && other !== owner[0][c]) return -1;
+            if (other && other !== owner[0][c] && !(how === THROUGH && takes(other, c + (k - j) * nx, 0))) return -1;
           }
         }
       } else {
-        if (across1) for (let k = nearLow[1][j]; k <= nearHigh[1][j]; k += 1) if (k !== j && occupied(1, c + (k - j) * nx)) return -1;
+        if (across1) {
+          for (let k = nearLow[1][j]; k <= nearHigh[1][j]; k += 1) {
+            const other = k !== j ? occupied(1, c + (k - j) * nx) : 0;
+            if (other && !(how === THROUGH && takes(other, c + (k - j) * nx, 1))) return -1;
+          }
+        }
         if (across0) {
           for (let k = nearLow[0][i]; k <= nearHigh[0][i]; k += 1) {
             const other = k !== i ? occupied(1, c - i + k) : 0;
-            if (other && other !== owner[1][c]) return -1;
+            if (other && other !== owner[1][c] && !(how === THROUGH && takes(other, c - i + k, 1))) return -1;
           }
         }
       }
@@ -254,8 +308,10 @@ function routerOn(grid, pairs, fixed, marks) {
         if (!sibling(same, b1 >= 0 ? b1 : trunk[axis][c])) {
           // Never, even priced, along another line into the line's own box (a shared last run is one
           // arrowhead), nor along one on any box's stem, where its arrowhead is.
-          if (!relaxed || b1 === a || b1 === b || stem[c] >= 0) return -1;
-          forced += 1;
+          if (!relaxed) return -1;
+          if (b1 === a || b1 === b || stem[c] >= 0) {
+            if (!(how === THROUGH && takes(same, c, axis))) return -1;
+          } else forced += 1;
         }
         cost += COST.share;
       }
@@ -263,15 +319,27 @@ function routerOn(grid, pairs, fixed, marks) {
       if (across && !sibling(across, trunk[1 - axis][c])) {
         // Never across a line on the stem of a box it ends at, where its arrowhead is: a halo guards
         // a stem only where the box has room for one.
-        if (across !== FIXED && stem[c] >= 0 && (ends[across - 1][0] === stem[c] || ends[across - 1][1] === stem[c])) return -1;
+        const onItsStem = across !== FIXED && stem[c] >= 0 && (ends[across - 1][0] === stem[c] || ends[across - 1][1] === stem[c]);
+        if (onItsStem && !(how === THROUGH && takes(across, c, 1 - axis))) return -1;
         if (corner[c] || b1 >= 0) {
           if (!relaxed) return -1;
           forced += 1;
         }
         cost += COST.cross;
       }
-      return cost + forced * COST.forced;
+      return cost + forced * COST.forced + through * COST.inTheWay;
     };
+    /** What a bend in cell `c` adds, or -1 where the line may not bend. */
+    const turning = (c) => {
+      // No bend on a stem of the line's own box, nor, but at a price on a second routing, in a
+      // halo or where another line runs, but a sibling's.
+      if (stem[c] >= 0 && (stem[c] === a || stem[c] === b)) return -1;
+      const o0 = owner[0][c];
+      const o1 = owner[1][c];
+      if (band[c] >= 0 || (o0 && !sibling(o0, trunk[0][c])) || (o1 && !sibling(o1, trunk[1][c]))) return relaxed ? COST.forced + COST.bend : -1;
+      return COST.bend;
+    };
+    if (kept) return fitsAlong(kept.states, entering, turning) ? kept : null;
     const beside = (c, axis) => {
       if (axis === 0) {
         const i = c % nx;
@@ -348,16 +416,8 @@ function routerOn(grid, pairs, fixed, marks) {
         const d2 = (dir + turn + 4) % 4;
         let cost = 0;
         if (turn !== 0) {
-          // No bend on a stem of the line's own box, nor, but at a price on a second routing, in a
-          // halo or where another line runs, but a sibling's.
-          if (stem[c] >= 0 && (stem[c] === a || stem[c] === b)) continue;
-          const o0 = owner[0][c];
-          const o1 = owner[1][c];
-          if (band[c] >= 0 || (o0 && !sibling(o0, trunk[0][c])) || (o1 && !sibling(o1, trunk[1][c]))) {
-            if (!relaxed) continue;
-            cost += COST.forced;
-          }
-          cost += COST.bend;
+          cost = turning(c);
+          if (cost < 0) continue;
         } else {
           // Straight over a line of the same box: a crossing, where joining it would have been a bend.
           const o = owner[1 - (dir % 2)][c];
@@ -389,7 +449,12 @@ function routerOn(grid, pairs, fixed, marks) {
     const path = [];
     for (let s = found; s >= 0; s = from[s]) path.push(s);
     path.reverse();
-    return { states: path, start: starts.get(path[0]), goal: goals.get(found) };
+    if (inTheWay) {
+      // The route found, entered once more to name the lines whose room it takes.
+      blamed = inTheWay;
+      for (const s of path) entering((s / 4) | 0, s & 1);
+    }
+    return { states: path, start: starts.get(path[0]), goal: goals.get(found), how };
   }
 
   /** Lay line `e` along `routed` (`sign` 1), or take it up again (`sign` -1). */
@@ -411,11 +476,16 @@ function routerOn(grid, pairs, fixed, marks) {
       }
       const touch = (ax) => {
         count[ax][c] += sign;
+        const here = ledger ? listed(c * 2 + ax) : null;
+        if (here && sign > 0) here.push(e);
+        else if (here) here.splice(here.indexOf(e), 1);
         if (sign > 0) {
           if (count[ax][c] > 1) sharing[e] = true;
           if (count[ax][c] > 1 && owner[ax][c] && owner[ax][c] !== FIXED) sharing[owner[ax][c] - 1] = true;
           if (!owner[ax][c]) owner[ax][c] = e + 1;
-        } else if (count[ax][c] === 0 && owner[ax][c] === e + 1) owner[ax][c] = 0;
+        } else if (count[ax][c] === 0) {
+          if (owner[ax][c] !== FIXED) owner[ax][c] = 0;
+        } else if (here && owner[ax][c] === e + 1) owner[ax][c] = here[0] + 1;
       };
       touch(axis);
       if (bends) {
@@ -425,7 +495,78 @@ function routerOn(grid, pairs, fixed, marks) {
     }
   }
 
-  return { route, mark, sharing };
+  // Per cell and axis, the lines laid along it, once `keepLedger` is called: a line that shares its
+  // run may then be taken up, its cells passing to a line still on them.
+  let ledger = null;
+  const listed = (key) => {
+    let here = ledger.get(key);
+    if (!here) ledger.set(key, (here = []));
+    return here;
+  };
+  /** Keep the ledger from now on, from `routes`, each line's route as laid (null for none). */
+  function keepLedger(routes) {
+    ledger = new Map();
+    routes.forEach((routed, e) => {
+      const list = routed ? routed.states : [];
+      for (let k = 0; k < list.length; k += 1) {
+        const [c, axis] = [(list[k] / 4) | 0, list[k] & 1];
+        listed(c * 2 + axis).push(e);
+        if (k + 1 < list.length && (list[k + 1] & 1) !== axis) listed(c * 2 + 1 - axis).push(e);
+      }
+    });
+  }
+
+  return { route, mark, sharing, keepLedger };
+}
+
+/**
+ * Whether a route along `states` enters every cell and bends in every cell it
+ * bends in, by the rules `entering(cell, axis)` and `turning(cell)` apply now.
+ */
+function fitsAlong(states, entering, turning) {
+  if (entering((states[0] / 4) | 0, states[0] & 1) < 0) return false;
+  for (let k = 1; k < states.length; k += 1) {
+    if ((states[k] & 3) !== (states[k - 1] & 3) && turning((states[k - 1] / 4) | 0) < 0) return false;
+    if (entering((states[k] / 4) | 0, states[k] & 1) < 0) return false;
+  }
+  return true;
+}
+
+/**
+ * Line `e`, which found no route among the others, routed before the lines in
+ * its way: those whose room its cheapest route through them takes are taken up,
+ * `e` is laid, and they are laid again in the order they were first routed in,
+ * each along its old route where it still fits, else routed as it was first.
+ * Kept where every one of them is laid again; else the plan is put back as it
+ * was. Whether `e` was laid; rewrites `routes`.
+ */
+function routedFirst(e, router, routes, order) {
+  const blamed = new Set();
+  if (!router.route(e, THROUGH, blamed)) return false;
+  const rank = new Map(order.map((line, k) => [line, k]));
+  const inTheWay = [...blamed].filter((line) => line !== e && routes[line]).sort((p, q) => rank.get(p) - rank.get(q));
+  for (const line of inTheWay) router.mark(line, routes[line], -1);
+  const mine = router.route(e, RELAXED);
+  const again = new Map();
+  if (mine) {
+    router.mark(e, mine, 1);
+    for (const line of inTheWay) {
+      const was = routes[line];
+      const routed = router.route(line, STRICT, null, was) || router.route(line, was.how) || (was.how === STRICT ? router.route(line, RELAXED) : null);
+      if (!routed) break;
+      router.mark(line, routed, 1);
+      again.set(line, routed);
+    }
+  }
+  if (mine && again.size === inTheWay.length) {
+    routes[e] = mine;
+    for (const [line, routed] of again) routes[line] = routed;
+    return true;
+  }
+  for (const [line, routed] of again) router.mark(line, routed, -1);
+  if (mine) router.mark(e, mine, -1);
+  for (const line of inTheWay) router.mark(line, routes[line], 1);
+  return false;
 }
 
 /** Mark the cells along every line of `fixed` (pixels) as taken along its axis. */
@@ -525,8 +666,16 @@ export function planOverview(input, marks = OVERVIEW_MARKS) {
   // A line no route reached, routed with what the rules refuse priced instead.
   for (const e of order) {
     if (routes[e]) continue;
-    routes[e] = router.route(e, true);
+    routes[e] = router.route(e, RELAXED);
     if (routes[e]) router.mark(e, routes[e], 1);
+  }
+  // A line still without one, routed before the lines in its way; lines moved for one may open a way for the next.
+  if (routes.some((routed) => !routed)) router.keepLedger(routes);
+  let moved = false;
+  for (const e of order) {
+    if (routes[e]) continue;
+    if (moved && (routes[e] = router.route(e, RELAXED))) router.mark(e, routes[e], 1);
+    else moved = routedFirst(e, router, routes, order) || moved;
   }
   pairs.forEach((pair, e) => {
     if (!routes[e]) {

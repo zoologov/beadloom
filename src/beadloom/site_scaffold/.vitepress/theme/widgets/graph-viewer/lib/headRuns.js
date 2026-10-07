@@ -29,10 +29,15 @@
 // node moves, and a line whose run is long enough keeps its route. Where the run
 // cannot be made long enough, the head is drawn smaller (`lineMarks.js`).
 //
+// The same pass gives room to the heads of a line the overview's router found no
+// route for (`overviewRoutes.js`), drawn along the medoid of its edges' routes:
+// its last run into each end it carries a head to is lengthened among the lines
+// the router planned, which do not move (`lengthenLineEnds`).
+//
 // Everything here is pure over the bundling's drawing (`bundleDrawing.js`):
 // routes in, routes out.
 
-import { BOX_INSET, near, sharesAnEnd, simplify } from "./bundleDrawing.js";
+import { BOX_INSET, drawingOf, near, sharesAnEnd, simplify } from "./bundleDrawing.js";
 import { gridIndex } from "./spatialIndex.js";
 
 const distance = (p, q) => Math.hypot(q.x - p.x, q.y - p.y);
@@ -49,13 +54,13 @@ const shifted = (p, way, by) => ({ x: p.x - way.x * by, y: p.y - way.y * by });
 /**
  * The arrivals of `drawing` at their targets, grouped by the point they end at
  * and the way their last run arrives: each group a list of `{ edge, points }`,
- * `points` the route as it stands.
+ * `points` the route as it stands. Only the edges `movable` names, where given.
  */
-function arrivalGroups(drawing) {
+function arrivalGroups(drawing, movable) {
   const groups = new Map();
   for (const [id, points] of drawing.routes) {
     const n = points.length;
-    if (n < 2) continue;
+    if (n < 2 || (movable && !movable.has(id))) continue;
     const way = axisWay(points[n - 2], points[n - 1]);
     const edge = way && drawing.edgeOf(id);
     if (!edge) continue;
@@ -208,13 +213,14 @@ function lastRunsOf(drawing, cellSize) {
  * Lengthen the last run of every group of arrivals in `drawing` towards
  * `options.headRun`, in steps of `options.headRunStep`, rewriting the routes it
  * moves; answer the groups moved, each `{ members, by }`: the ids of the edges
- * whose last bend moved, and how far back.
+ * whose last bend moved, and how far back. With `options.movable`, a set of
+ * edge ids, only those edges move; the others are kept clear of all the same.
  */
 export function lengthenHeadRuns(drawing, options) {
   const moved = [];
   // Tips are points: filed in cells the size the boxes are filed in.
   const lastRuns = lastRunsOf(drawing, options.cellSize);
-  for (const { way, members } of arrivalGroups(drawing)) {
+  for (const { way, members } of arrivalGroups(drawing, options.movable)) {
     const runs = members.map(({ points }) => distance(points[points.length - 2], points[points.length - 1]));
     const shortest = Math.min(...runs);
     // A run a step short of the length asked for gains too little to move a route for.
@@ -240,6 +246,36 @@ export function lengthenHeadRuns(drawing, options) {
     }
   }
   return moved;
+}
+
+/**
+ * The polylines of `lines` with the last run into each end that carries a head
+ * lengthened as `lengthenHeadRuns` lengthens a route's, the run into the target
+ * first, then the run into the source: `Map(id => points)`. Each line is `{ id,
+ * source, target, points, heads: { source, target } }`, from a border of box
+ * `boxes[source]` to one of `boxes[target]`; `others`, `{ id, source, target,
+ * points }` alike, are kept clear of and never moved, their heads at either end
+ * kept their room. `options` are `lengthenHeadRuns`'s and the drawing's
+ * (`drawingOf`): `headRun`, `headRunStep`, `headRunClearance`, `cellSize`,
+ * `bandWidth`.
+ */
+export function lengthenLineEnds({ lines, others, boxes }, options) {
+  const reversed = (points) => [...points].reverse();
+  const routes = new Map(lines.map((line) => [line.id, line.points]));
+  // The others' runs into their sources, filed as lines of their own, so their heads keep their room there too.
+  const kept = [...others, ...others.map((other) => ({ id: `${other.id}\nback`, source: other.target, target: other.source, points: reversed(other.points) }))];
+  for (const end of ["target", "source"]) {
+    const movable = new Set(lines.filter((line) => line.heads[end]).map((line) => line.id));
+    if (!movable.size) continue;
+    const forward = end === "target";
+    const edges = [...lines.map((line) => ({ id: line.id, source: forward ? line.source : line.target, target: forward ? line.target : line.source })), ...kept];
+    const paths = Object.fromEntries([...lines.map((line) => [line.id, forward ? routes.get(line.id) : reversed(routes.get(line.id))]), ...kept.map((other) => [other.id, other.points])]);
+    const nodes = Object.keys(boxes).map((id) => ({ id }));
+    const drawing = drawingOf({ nodes, edges, boxes, paths }, options);
+    lengthenHeadRuns(drawing, { ...options, movable });
+    for (const id of movable) routes.set(id, forward ? drawing.routes.get(id) : reversed(drawing.routes.get(id)));
+  }
+  return routes;
 }
 
 /**

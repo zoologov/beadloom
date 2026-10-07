@@ -846,6 +846,99 @@ test("a frame is an outer wall: every line runs inside it, clear of it, and a pa
   expect(wrong).toEqual([]);
 });
 
+test("a box whose every port runs on into a box standing across it keeps a way out where nothing stands across its side, half a pitch clear of that box", async ({
+  page,
+}) => {
+  await openThemeModules(page);
+  // low stands against the frame's bottom wall, too near it for a track along it, so it has no ports
+  // on its sides; over stands 8 px above most of its top; post pins a track just short of low's top,
+  // so every track through low's top runs on into over. The adopter-sized graph in no layer ranks
+  // drew such a box's only line along its medoid.
+  const frame = { x1: 0, y1: 0, x2: 160, y2: 103.7 };
+  const low = box("low", 47.3, 101, 73.7, 103.1);
+  const over = box("over", 56.3, 83.2, 81.9, 93.1);
+  const input = {
+    unit: 1,
+    frame,
+    boxes: [box("far", 20, 10, 40, 30), low, over, box("post", 46.6, 40, 50.6, 50)],
+    pairs: [{ name: "far\nlow", a: "far", b: "low", forward: 1, backward: 0 }],
+  };
+  const { paths, failed } = await plan(page, input);
+  expect(failed).toEqual([]);
+  const path = paths["far\nlow"];
+  // Half a pitch, the room every box keeps from a line.
+  const room = 4;
+  const kept = { x1: over.x1 - room, y1: over.y1 - room, x2: over.x2 + room, y2: over.y2 + room };
+  expect(path.slice(1).filter((p, k) => segmentInRect(path[k], p, kept)).length, "segments within half a pitch of over").toBe(0);
+  const end = path[path.length - 1];
+  expect({ y: end.y, onTop: end.x >= low.x1 && end.x <= over.x1 - room }).toEqual({ y: low.y1, onTop: true });
+});
+
+/**
+ * Seeds whose layouts (`smallBoxesLayout`), their lines routed shortest first,
+ * once left two pairs each with no route, though each has one alone: the lines
+ * laid before them had closed the ways into their boxes.
+ */
+const LINES_IN_THE_WAY_SEEDS = [6, 31];
+
+test(`a line the lines laid before it leave no way for is routed before them, and they again around it, keeping ${GAP_PX} px apart`, async ({
+  page,
+}) => {
+  await openThemeModules(page);
+  const found = {};
+  for (const seed of LINES_IN_THE_WAY_SEEDS) {
+    const { paths, failed } = await plan(page, smallBoxesLayout(seed));
+    const gap = narrowestGap(Object.entries(paths).map(([id, points]) => ({ id, points })), { zoom: 1, pan: { x: 0, y: 0 } });
+    found[seed] = { failed, apart: gap.minimum >= GAP_PX || gap.closest };
+  }
+  expect(found).toEqual(Object.fromEntries(LINES_IN_THE_WAY_SEEDS.map((seed) => [seed, { failed: [], apart: true }])));
+});
+
+test("a line drawn along its medoid, where the router found it no route, has its last run into each end it carries a head to lengthened for the head, clear of every other line", async ({
+  page,
+}) => {
+  await openThemeModules(page);
+  // a's line to b steps across 3 px after a and 3 px before b; c's line to d runs across b's way in, 9 px above it.
+  const boxes = { a: box("a", 0, 0, 40, 20), b: box("b", 100, 100, 140, 120), c: box("c", 160, 60, 200, 80), d: box("d", 80, 140, 100, 160) };
+  const medoid = [{ x: 20, y: 20 }, { x: 20, y: 23 }, { x: 60, y: 23 }, { x: 60, y: 97 }, { x: 120, y: 97 }, { x: 120, y: 100 }];
+  const across = 91;
+  const other = [{ x: 160, y: 70 }, { x: 150, y: 70 }, { x: 150, y: across }, { x: 90, y: across }, { x: 90, y: 140 }];
+  const options = { headRun: 15, headRunStep: 1, headRunClearance: 4, cellSize: 50, bandWidth: 8 };
+  const routes = await page.evaluate(
+    async (given) => {
+      const { lengthenLineEnds } = await import("/widgets/graph-viewer/lib/headRuns.js");
+      return Object.fromEntries(lengthenLineEnds(given.input, given.options));
+    },
+    {
+      input: {
+        lines: [{ id: "a-b", source: "a", target: "b", points: medoid, heads: { source: true, target: true } }],
+        others: [{ id: "c-d", source: "c", target: "d", points: other }],
+        boxes,
+      },
+      options,
+    }
+  );
+  const path = routes["a-b"];
+  const n = path.length;
+  const runs = { atA: lengthOf(path[0], path[1]), atB: lengthOf(path[n - 2], path[n - 1]) };
+  expect(runs.atA).toBeGreaterThanOrEqual(options.headRun);
+  // c's line across b's way in leaves the run into b short of the full length, never across it.
+  expect(runs.atB).toBeGreaterThan(3);
+  expect(path[n - 2].y).toBeGreaterThanOrEqual(across + options.headRunClearance);
+  const near = path.slice(1).flatMap((p, k) => other.slice(1).map((q, m) => segmentsApart(path[k], p, other[m], q))).filter((gap) => gap < options.headRunClearance);
+  expect(near).toEqual([]);
+  expect({ first: path[0], last: path[n - 1] }).toEqual({ first: medoid[0], last: medoid[medoid.length - 1] });
+});
+
+/** How far apart two axis-aligned segments run, along the stretch where they lie side by side; Infinity where they do not, or cross. */
+function segmentsApart(a, b, c, d) {
+  const vertical = (p, q) => Math.abs(p.x - q.x) < 1e-9;
+  if (vertical(a, b) !== vertical(c, d)) return Infinity;
+  const [along, across] = vertical(a, b) ? ["y", "x"] : ["x", "y"];
+  const overlap = Math.min(Math.max(a[along], b[along]), Math.max(c[along], d[along])) - Math.max(Math.min(a[along], b[along]), Math.min(c[along], d[along]));
+  return overlap > 1e-9 ? Math.abs(a[across] - c[across]) : Infinity;
+}
+
 test("a straight line with an arrowhead at each end is at least two arrowheads long, however near its two boxes stand", async ({ page }) => {
   await openThemeModules(page);
   const short = [];

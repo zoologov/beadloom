@@ -33,6 +33,13 @@
 // outer wall, kept half a pitch from as a box is, so the tracks run inside it.
 // Without one, the tracks reach a few pitches past the outermost boxes.
 //
+// A box nearer the frame than half a pitch has no track through its middle on
+// that axis, so no ports on the two sides facing along it; where every track
+// through its other sides runs on into a box standing across them, it would have
+// no way out at all. Such a box gets a track through the stretch of a side that
+// nothing standing across it covers, half a pitch clear of what does where there
+// is room: the frame costs a box its ports only where a neighbour blocks them.
+//
 // Everything here is pure, in pixels at the scale the overview is planned at.
 
 /** Two numbers closer than this are one. */
@@ -153,6 +160,7 @@ function extentOf(obstacles) {
  * `cores[b]`, where there is one, is the laid-out box inside box `b`, drawn
  * larger, whose sides its ports and its tracks are taken from; `frame`, where
  * there is one, the box that holds them all, whose inside the tracks keep to.
+ * A box with no way out on these tracks gets one more (`freedTracksOf`).
  *
  * `{ xs, ys, nx, ny, interior, inside, covered, band, bandAxis, band2, band2Axis,
  * crowded, near, ports, lead, stem, cellAt }`: the tracks; per cell, the box whose
@@ -167,11 +175,84 @@ function extentOf(obstacles) {
  */
 export function gridOf(boxes, plates, marks, degree, cores = [], frame = null) {
   const { pitch } = marks;
-  const obstacles = [...boxes, ...plates];
-  const { minX, minY, maxX, maxY } = trackExtentOf(obstacles, frame, pitch);
+  const extent = trackExtentOf([...boxes, ...plates], frame, pitch);
   const busiestFirst = boxes.map((box, b) => ({ box: cores[b] || box, b })).sort((p, q) => degree(q.b) - degree(p.b) || p.b - q.b);
-  const xs = tracksOf(minX, maxX, busiestFirst.map(({ box }) => [box.x1, box.x2]), pitch);
-  const ys = tracksOf(minY, maxY, busiestFirst.map(({ box }) => [box.y1, box.y2]), pitch);
+  const xs = tracksOf(extent.minX, extent.maxX, busiestFirst.map(({ box }) => [box.x1, box.x2]), pitch);
+  const ys = tracksOf(extent.minY, extent.maxY, busiestFirst.map(({ box }) => [box.y1, box.y2]), pitch);
+  const grid = gridOn(xs, ys, boxes, plates, marks, cores);
+  const freed = freedTracksOf(grid, boxes, cores, extent, marks);
+  if (!freed.xs.length && !freed.ys.length) return grid;
+  return gridOn(withTracks(xs, freed.xs), withTracks(ys, freed.ys), boxes, plates, marks, cores);
+}
+
+/** The sorted `tracks` with `more` among them. */
+function withTracks(tracks, more) {
+  return Float64Array.from([...tracks, ...more].sort((a, b) => a - b));
+}
+
+/** How far out of a side a box standing across it is looked for, in pitches past the half pitch every box keeps: a little past a line's straight run into it. */
+const ACROSS_PITCHES = 2;
+
+/**
+ * Tracks that give a way out to each box of `grid` none of whose ports has one,
+ * every port's first cell lying inside another box: on each side something
+ * stands across within `reach`, one through the middle of the widest stretch of
+ * the side's port range, inside the `extent` the tracks span, that none of
+ * those boxes covers, nor their half pitch where that leaves a stretch.
+ * `{ xs, ys }`, the tracks to add on each axis.
+ */
+function freedTracksOf(grid, boxes, cores, extent, marks) {
+  const freed = { xs: [], ys: [] };
+  const half = marks.pitch / 2;
+  const reach = half + ACROSS_PITCHES * marks.pitch;
+  boxes.forEach((box, b) => {
+    if (grid.ports[b].some((port) => !grid.inside[port.cell])) return;
+    const core = cores[b] || box;
+    for (let side = 0; side < 4; side += 1) {
+      const vertical = side % 2 === 0;
+      const [low, high] = sideRange(core, side);
+      const range = vertical ? [Math.max(low, extent.minX), Math.min(high, extent.maxX)] : [Math.max(low, extent.minY), Math.min(high, extent.maxY)];
+      if (range[1] < range[0]) continue;
+      const across = boxes.filter((other, k) => k !== b && standsAcross(other, box, side, range, reach));
+      if (!across.length) continue;
+      const spans = (margin) => across.map((other) => (vertical ? [other.x1 - margin, other.x2 + margin] : [other.y1 - margin, other.y2 + margin]));
+      const stretch = widestOutside(range, spans(half)) || widestOutside(range, spans(0));
+      if (!stretch) continue;
+      const middle = (stretch[0] + stretch[1]) / 2;
+      const [tracks, list] = vertical ? [grid.xs, freed.xs] : [grid.ys, freed.ys];
+      if (![...tracks, ...list].some((track) => Math.abs(track - middle) < EPS)) list.push(middle);
+    }
+  });
+  return freed;
+}
+
+/** Whether `other` stands across `side` of `box`, beyond it within `reach`, over the stretch `range` of the side. */
+function standsAcross(other, box, side, range, reach) {
+  const [low, high] = range;
+  if (side % 2 === 0 ? other.x2 <= low || other.x1 >= high : other.y2 <= low || other.y1 >= high) return false;
+  if (side === 0) return other.y2 <= box.y1 + EPS && other.y2 >= box.y1 - reach;
+  if (side === 2) return other.y1 >= box.y2 - EPS && other.y1 <= box.y2 + reach;
+  if (side === 1) return other.x1 >= box.x2 - EPS && other.x1 <= box.x2 + reach;
+  return other.x2 <= box.x1 + EPS && other.x2 >= box.x1 - reach;
+}
+
+/** The widest stretch of `range` outside every one of `spans`, `[low, high]`, or null where they cover it all. */
+function widestOutside(range, spans) {
+  let best = null;
+  let from = range[0];
+  for (const [a, b] of [...spans].sort((p, q) => p[0] - q[0])) {
+    if (a > from && (!best || a - from > best[1] - best[0])) best = [from, Math.min(a, range[1])];
+    from = Math.max(from, b);
+    if (from >= range[1]) break;
+  }
+  if (from < range[1] && (!best || range[1] - from > best[1] - best[0])) best = [from, range[1]];
+  return best && best[1] > best[0] - EPS ? best : null;
+}
+
+/** The grid on tracks `xs` and `ys` (`gridOf`). */
+function gridOn(xs, ys, boxes, plates, marks, cores) {
+  const { pitch } = marks;
+  const obstacles = [...boxes, ...plates];
   const nx = xs.length;
   const ny = ys.length;
   const cells = nx * ny;
