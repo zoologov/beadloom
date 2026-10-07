@@ -26,15 +26,18 @@ import {
   NON_TEXT,
   canvasBackground,
   contrastRatio,
+  cornerRooms,
   drawnColours,
+  endsInCorners,
   finalRunGroups,
   hasTargetHead,
   headLength,
   over,
+  roundedAt,
   straightFinalRun,
   withinAStep,
 } from "./support/look.js";
-import { architectureData, openArchitecture, openEveryBox, serveEveryEdgeKind, viewer } from "./support/viewer.js";
+import { architectureData, openArchitecture, openEveryBox, serveEveryEdgeKind, viewer, waitForViewer } from "./support/viewer.js";
 import { requireShape } from "./support/shape.js";
 import { treeOf } from "./support/map.js";
 
@@ -56,6 +59,17 @@ const PROJECT_TINT_CONTRAST = 1.08;
 /** The radius every rounded corner is drawn at, in pixels on screen, where its runs leave room for it. */
 const CORNER_PX = 6;
 /**
+ * The radius every node's and every box's corners are drawn at, in pixels on
+ * screen: a card's at zoom 1, Cytoscape's own for a rounded rectangle, the look
+ * the owner asked the boxes to share (2026-10-07). A shape smaller than four
+ * times that takes a quarter of its shorter side, Cytoscape's own clamp.
+ */
+const NODE_CORNER_PX = 8;
+/** How much less round a box's corners may be drawn at the overview, in pixels, where a line's end holds them (`overview.spec.js`). */
+const CORNER_SLACK_PX = 1;
+/** How many zoom steps the corner cases take out from the fit. */
+const OUT_STEPS = 2;
+/**
  * How far a measured length may lie below the one it is compared with and be the
  * same, in layout units: a route's numbers are handed to Cytoscape at six
  * decimals and its corners come back recomputed.
@@ -76,6 +90,35 @@ async function zoomToOne(page) {
     await page.getByRole("button", { name: "Zoom in", exact: true }).click();
   }
   await twoFrames(page);
+}
+
+/** Press "Zoom out" `steps` times. */
+async function zoomOut(page, steps) {
+  for (let step = 0; step < steps; step += 1) await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+  await twoFrames(page);
+}
+
+/**
+ * The drawn nodes and boxes whose corners are not the nodes' radius on screen
+ * (`roundedAt`), named with what they measure; `held` takes the ids of those held
+ * smaller by a line's end near a corner.
+ */
+async function offCorners(page, state, held = new Set()) {
+  const zoom = await viewer(page, "zoom");
+  const looks = await viewer(page, "nodeLooks");
+  requireShape(looks.length > 0, `no node drawn ${state}`);
+  const rooms = cornerRooms(await viewer(page, "lineLooks"), looks, await viewer(page, "nodeBoxes"), zoom);
+  for (const look of looks) if (look.cornerRadius * zoom < NODE_CORNER_PX / Math.sqrt(1.25) - 0.01 && (rooms.get(look.id) ?? Infinity) < NODE_CORNER_PX) held.add(look.id);
+  return looks
+    .filter((look) => !roundedAt(look, zoom, NODE_CORNER_PX, rooms.get(look.id)))
+    .map((look) => `${state} ${look.id}: ${look.shape}, ${(look.cornerRadius * zoom).toFixed(2)} px (a quarter of its shorter side ${((Math.min(look.width, look.height) / 4) * zoom).toFixed(2)} px, a line's end leaves ${(rooms.get(look.id) ?? Infinity).toFixed(2)} px)`);
+}
+
+/** The ends of the drawn lines that meet a node's border inside a rounded corner (`endsInCorners`), named with the state. */
+async function endsInCornersNow(page, state) {
+  const zoom = await viewer(page, "zoom");
+  const found = endsInCorners(await viewer(page, "lineLooks"), await viewer(page, "nodeLooks"), await viewer(page, "nodeBoxes"), zoom);
+  return found.map((finding) => `${state}: ${finding}`);
 }
 
 /** The drawn lines whose width on screen is not the one weight, named with what they measure. */
@@ -224,6 +267,23 @@ test("every routed line turns its corners at one radius on screen, so a branch l
   const radii = await radiusPx();
   requireShape(radii.length > 0, "no routed line turns more than once");
   expect(radii.filter(({ px }) => !withinAStep(px, CORNER_PX)).map(({ id }) => id)).toEqual([]);
+});
+
+// The owner, after the look at 5bcb6881: the overview's boxes were drawn square
+// while every node had rounded corners. A box's corners were Cytoscape's own,
+// 8 layout units, which at this portal's whole-graph fit is half a pixel.
+test("at full detail every line meets a node or a box on the straight part of a side, clear of its rounded corners", async ({ page }) => {
+  await openArchitecture(page);
+  await openEveryBox(page);
+  await waitForViewer(page);
+  const found = await endsInCornersNow(page, "every box open at the fit");
+  await zoomToOne(page);
+  await waitForViewer(page);
+  found.push(...(await endsInCornersNow(page, "every box open at zoom 1")));
+  await zoomIn(page, 2);
+  await waitForViewer(page);
+  found.push(...(await endsInCornersNow(page, "every box open, two steps past zoom 1")));
+  expect(found).toEqual([]);
 });
 
 test("no bridge and no junction dot is drawn: the layers over the canvas draw the followed lines and the map's counts, above Cytoscape's", async ({
@@ -396,6 +456,46 @@ for (const colorScheme of ["light", "dark"]) {
       const overview = await faint("overview");
       await openEveryBox(page, { edges: false });
       expect([...overview, ...(await faint("every box open"))]).toEqual([]);
+    });
+
+    // Before, every box's corners were Cytoscape's own 8 layout units, so they
+    // shrank with the zoom: at this portal's whole-graph fit half a pixel, and
+    // the overview's boxes read square beside the cards' rounded corners.
+    test("every node and box is drawn with the nodes' rounded corners: one radius on screen at every zoom from zoomed out past the overview to full detail, a quarter of its shorter side where that is less, and never over a line's end", async ({
+      page,
+    }) => {
+      await openArchitecture(page);
+      const held = new Set();
+      const off = await offCorners(page, "at the fit", held);
+      // At the overview no box is held visibly smaller: the router keeps every line's end on the straight part of
+      // a side, but where a small box's radius reaches under a pixel past the ports it always had (`overview.spec.js`).
+      const fitZoom = await viewer(page, "zoom");
+      const heldMuch = (await viewer(page, "nodeLooks"))
+        .filter((look) => look.cornerRadius * fitZoom < Math.min(NODE_CORNER_PX / Math.sqrt(1.25), (Math.min(look.width, look.height) / 4) * fitZoom) - CORNER_SLACK_PX - 0.01)
+        .map((look) => `${look.id}: ${(look.cornerRadius * fitZoom).toFixed(2)} px`);
+      expect(heldMuch, "boxes held more than a pixel smaller by a line's end at the fit").toEqual([]);
+      const half = Math.sqrt(1.25);
+      for (let step = 1; step < 40 && (await viewer(page, "zoom")) < 1.5; step += 1) {
+        await zoomIn(page, 1);
+        await waitForViewer(page);
+        off.push(...(await offCorners(page, `${step} step(s) in`, held)));
+      }
+      expect(await viewer(page, "zoom")).toBeGreaterThan(1.5 / half);
+      // Zoomed out past the fit the routes stay where the fit planned them, so a line's end may hold a box's
+      // corners smaller there (`overview.spec.js`).
+      await openArchitecture(page);
+      for (let step = 1; step <= OUT_STEPS; step += 1) {
+        await zoomOut(page, 1);
+        await waitForViewer(page);
+        off.push(...(await offCorners(page, `${step} step(s) out`, held)));
+      }
+      await openEveryBox(page, { edges: false });
+      await waitForViewer(page);
+      await zoomToOne(page);
+      await waitForViewer(page);
+      off.push(...(await offCorners(page, "every box open at zoom 1", held)));
+      test.info().annotations.push({ type: "measured", description: `held smaller by a line's end near a corner: ${[...held].sort().join(", ") || "none"}` });
+      expect(off).toEqual([]);
     });
 
     test("the box that holds everything is a frame of its own: a border a pixel wide on screen at every zoom, a tint apart from the canvas and fainter than any node's", async ({

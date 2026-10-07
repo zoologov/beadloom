@@ -20,10 +20,13 @@
 // at a plate.
 //
 // A port is where a line leaves or reaches a box: the first cell outside the box
-// on a track through one of its sides, a little in from its corners. A box drawn
+// on a track through the straight part of one of its sides, clear of its rounded
+// corners (`corners.js`), so a line never ends in the air beside a corner's arc,
+// and a little in from a corner however small the box. A box drawn
 // larger than its layout to hold its title has ports only on the tracks through
 // its laid-out box, its core, so a line into it runs straight on to the core
-// however much of the drawn box is left around it (`grownBoxes.js`). Its stem is
+// however much of the drawn box is left around it (`grownBoxes.js`), and only
+// where that track meets the drawn box on the straight part of its side. Its stem is
 // the stretch of cells straight out of it that a line of that box does not bend
 // on, long enough for an arrowhead and a rounded corner.
 //
@@ -42,6 +45,8 @@
 //
 // Everything here is pure, in pixels at the scale the overview is planned at.
 
+import { cornerRadiusOf } from "./corners.js";
+
 /** Two numbers closer than this are one. */
 export const EPS = 1e-6;
 
@@ -59,14 +64,26 @@ const MIDDLE_SHARE = 1;
 const HALO_SHARE = 0.45;
 /** How many pitches the grid reaches past the outermost boxes. */
 const MARGIN_PITCHES = 6;
-/** The most a port's range is inset from a side's corners, in pixels. */
+/** The least a port's range is inset from a side's corners, in pixels, where the side is long enough: a small box's corners are rounded less. */
 const CORNER_INSET = 3;
+/** How far a corner's radius may reach past the inset, in pixels, with the inset's ports kept. */
+const CORNER_SLACK = 1;
 
-/** The range ports may take along `side` (0 top, 1 right, 2 bottom, 3 left) of `box`, a little in from its corners. */
-export function sideRange(box, side) {
+/**
+ * The range ports may take along `side` (0 top, 1 right, 2 bottom, 3 left) of
+ * `box`, a little in from its corners, and on the straight part of that side of
+ * `drawn`, the box drawn around it: past each corner's radius at the plan's
+ * scale (`corners.js`). A box is drawn as itself unless the plan draws it larger.
+ */
+export function sideRange(box, side, drawn = box) {
   const [low, high] = side % 2 === 0 ? [box.x1, box.x2] : [box.y1, box.y2];
+  const [drawnLow, drawnHigh] = side % 2 === 0 ? [drawn.x1, drawn.x2] : [drawn.y1, drawn.y2];
   const inset = Math.min(CORNER_INSET, (high - low) / 4);
-  return [low + inset, high - inset];
+  const radius = cornerRadiusOf(drawn.x2 - drawn.x1, drawn.y2 - drawn.y1, 1);
+  // A corner the inset already all but clears keeps the inset's ports: a port in the last of its arc holds
+  // the box's corners that little rounder instead (`corners.js`), unseen, and no line moves for it.
+  const corner = radius > inset + CORNER_SLACK ? radius : 0;
+  return [Math.max(low + inset, drawnLow + corner), Math.min(high - inset, drawnHigh - corner)];
 }
 
 /** The first index of the sorted `tracks` at or past `value`. */
@@ -83,9 +100,11 @@ export function lowerBound(tracks, value) {
 
 /**
  * Tracks between `min` and `max` at least `pitch` apart, one through the middle
- * of each of `extents` that has room. A middle at or past `min` or `max` takes no
- * track: a box that close to a frame has no ports on that axis, rather than a
- * line on the frame.
+ * of each of `extents` that has room. An extent `[a, b, low, high]` is a box's
+ * span and the range its ports take along it (`sideRange`): a box none of the
+ * tracks crosses that range at gets one through its middle. A middle at or past
+ * `min` or `max` takes no track: a box that close to a frame has no ports on that
+ * axis, rather than a line on the frame.
  */
 export function tracksOf(min, max, extents, pitch) {
   const middles = [];
@@ -95,9 +114,8 @@ export function tracksOf(min, max, extents, pitch) {
     if (within(middle) && middles.every((other) => Math.abs(other - middle) >= MIDDLE_SHARE * pitch)) middles.push(middle);
   }
   // A box none of those passes through gets one through its middle, however near the next.
-  for (const [a, b] of extents) {
-    const inset = Math.min(CORNER_INSET, (b - a) / 4);
-    if (within((a + b) / 2) && !middles.some((track) => track >= a + inset && track <= b - inset)) middles.push((a + b) / 2);
+  for (const [a, b, low = a + Math.min(CORNER_INSET, (b - a) / 4), high = b - Math.min(CORNER_INSET, (b - a) / 4)] of extents) {
+    if (within((a + b) / 2) && !middles.some((track) => track >= low && track <= high)) middles.push((a + b) / 2);
   }
   middles.sort((a, b) => a - b);
   const anchors = [min, ...middles, max];
@@ -177,8 +195,8 @@ export function gridOf(boxes, plates, marks, degree, cores = [], frame = null) {
   const { pitch } = marks;
   const extent = trackExtentOf([...boxes, ...plates], frame, pitch);
   const busiestFirst = boxes.map((box, b) => ({ box: cores[b] || box, b })).sort((p, q) => degree(q.b) - degree(p.b) || p.b - q.b);
-  const xs = tracksOf(extent.minX, extent.maxX, busiestFirst.map(({ box }) => [box.x1, box.x2]), pitch);
-  const ys = tracksOf(extent.minY, extent.maxY, busiestFirst.map(({ box }) => [box.y1, box.y2]), pitch);
+  const xs = tracksOf(extent.minX, extent.maxX, busiestFirst.map(({ box, b }) => [box.x1, box.x2, ...sideRange(box, 0, boxes[b])]), pitch);
+  const ys = tracksOf(extent.minY, extent.maxY, busiestFirst.map(({ box, b }) => [box.y1, box.y2, ...sideRange(box, 1, boxes[b])]), pitch);
   const grid = gridOn(xs, ys, boxes, plates, marks, cores);
   const freed = freedTracksOf(grid, boxes, cores, extent, marks);
   if (!freed.xs.length && !freed.ys.length) return grid;
@@ -210,7 +228,7 @@ function freedTracksOf(grid, boxes, cores, extent, marks) {
     const core = cores[b] || box;
     for (let side = 0; side < 4; side += 1) {
       const vertical = side % 2 === 0;
-      const [low, high] = sideRange(core, side);
+      const [low, high] = sideRange(core, side, box);
       const range = vertical ? [Math.max(low, extent.minX), Math.min(high, extent.maxX)] : [Math.max(low, extent.minY), Math.min(high, extent.maxY)];
       if (range[1] < range[0]) continue;
       const across = boxes.filter((other, k) => k !== b && standsAcross(other, box, side, range, reach));
@@ -281,8 +299,8 @@ function gridOn(xs, ys, boxes, plates, marks, cores) {
     const isPlate = b >= boxes.length;
     const [hTop, hRight, hBottom, hLeft] = isPlate ? [0, 0, 0, 0] : haloOf(box, obstacles, marks.halo);
     const portBox = (!isPlate && cores[b]) || box;
-    const [portX1, portX2] = sideRange(portBox, 0);
-    const [portY1, portY2] = sideRange(portBox, 1);
+    const [portX1, portX2] = sideRange(portBox, 0, box);
+    const [portY1, portY2] = sideRange(portBox, 1, box);
     const i0 = lowerBound(xs, box.x1 - Math.max(hLeft, half) - EPS);
     const j0 = lowerBound(ys, box.y1 - Math.max(hTop, half) - EPS);
     for (let i = i0; i < nx && xs[i] <= box.x2 + Math.max(hRight, half) + EPS; i += 1) {
@@ -336,13 +354,14 @@ function gridOn(xs, ys, boxes, plates, marks, cores) {
 
 /**
  * The ports of `box`, obstacle `b` of `grid`: on each track through a side of
- * `core`, the box it was laid out as, the first cell outside `box`. Each margin
+ * `core`, the box it was laid out as, clear of `box`'s rounded corners
+ * (`sideRange`), the first cell outside `box`. Each margin
  * cell between the side and a port is noted in `lead` with the port's cell.
  */
 function portsOf(box, b, { xs, ys, nx, ny, interior }, lead, core) {
   const ports = [];
-  const [portX1, portX2] = sideRange(core, 0);
-  const [portY1, portY2] = sideRange(core, 1);
+  const [portX1, portX2] = sideRange(core, 0, box);
+  const [portY1, portY2] = sideRange(core, 1, box);
   const centre = { x: (box.x1 + box.x2) / 2, y: (box.y1 + box.y2) / 2 };
   for (let i = lowerBound(xs, portX1 - EPS); i < nx && xs[i] <= portX2 + EPS; i += 1) {
     for (const dir of [0, 2]) {

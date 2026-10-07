@@ -194,8 +194,26 @@ function titleLookOf(node, zoom) {
   };
 }
 
+/** Cytoscape's own radius for a rounded rectangle whose radius is `auto`, in layout units, before its clamp to the sides. */
+const AUTO_CORNER = 8;
+
+/**
+ * The radius `node`'s corners are drawn at, in layout units, by Cytoscape's own
+ * rule: `auto` is a quarter of the shorter side, at most 8; a number is held to
+ * half of either side. Zero for a shape with square corners.
+ */
+function cornerRadiusOf(node, width, height) {
+  if (!["round-rectangle", "roundrectangle"].includes(node.style("shape"))) return 0;
+  const radius = node.pstyle("corner-radius");
+  if (radius.value === "auto") return Math.min(width / 4, height / 4, AUTO_CORNER);
+  return Math.min(radius.pfValue, width / 2, height / 2);
+}
+
 /** A node's look as the handle reports it (`nodeLooks`). */
 function nodeLookOf(node) {
+  const padding = node.pstyle("padding").pfValue;
+  const width = node.width() + 2 * padding;
+  const height = node.height() + 2 * padding;
   return {
     id: node.id(),
     parent: node.isChild() ? node.parent().id() : null,
@@ -205,6 +223,7 @@ function nodeLookOf(node) {
     borderWidth: parseFloat(node.style("border-width")),
     borderColour: node.style("border-color"),
     borderStyle: node.style("border-style"),
+    borderPosition: node.style("border-position"),
     fill: node.style("background-color"),
     fillOpacity: parseFloat(node.style("background-opacity")),
     labelColour: node.style("color"),
@@ -212,6 +231,10 @@ function nodeLookOf(node) {
     labelMarginY: parseFloat(node.style("text-margin-y")),
     fontSize: parseFloat(node.style("font-size")),
     mark: String(node.style("background-image")),
+    shape: node.style("shape"),
+    width,
+    height,
+    cornerRadius: cornerRadiusOf(node, width, height),
   };
 }
 
@@ -483,9 +506,12 @@ function readers(source) {
     // route as drawn (`edgeRoutes`).
     lineLooks: () => cy().edges().filter((edge) => edge.visible()).map(lineLookOf),
     // Every node drawn now and its look: `{ id, parent, isParent, collapsed,
-    // status, borderWidth, borderColour, borderStyle, fill, fillOpacity,
-    // labelColour, labelValign, labelMarginY, fontSize, mark }`, `mark` the
-    // corner image a status is drawn with, or "none".
+    // status, borderWidth, borderColour, borderStyle, borderPosition, fill, fillOpacity,
+    // labelColour, labelValign, labelMarginY, fontSize, mark, shape, width,
+    // height, cornerRadius }`, `mark` the corner image a status is drawn with, or
+    // "none"; `width` and `height` the size its shape is drawn at, its border
+    // around it, and `cornerRadius` the radius its corners are drawn at, in
+    // layout units.
     nodeLooks: () => fileNodes().filter((node) => node.visible()).map(nodeLookOf),
     // The canvases the viewer draws over Cytoscape's, by name, in the order they lie on the page.
     overlayLayers: () => [...source.container().querySelectorAll("canvas[data-layer]")].map((canvas) => canvas.dataset.layer),

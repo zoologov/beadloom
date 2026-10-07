@@ -170,7 +170,7 @@ function bestPointOf(line, size, { placed, blocked, segments }) {
       const [atPrice, bestPrice] = [price, best.price];
       const tooDear = (cx, cy) => atPrice + count(cx, cy) * PRICE.covers >= bestPrice;
       if (count && tooDear(x, y)) {
-        passed = { run, past: tooDear };
+        passed = { run, past: tooDear, along: count.along, nextChange: count.nextChange };
         continue;
       }
     }
@@ -245,12 +245,21 @@ function coveredAlong(line, a, b, size, segments) {
     }
     return joined;
   });
-  return (x, y) => {
+  const count = (x, y) => {
     const at = horizontal ? x : y;
-    let count = 0;
-    for (const [lo, hi] of spans) if (lo < at && at < hi) count += 1;
-    return count;
+    let covered = 0;
+    for (const [lo, hi] of spans) if (lo < at && at < hi) covered += 1;
+    return covered;
   };
+  // Where the count may change next from `at` on, going `way` (1 or -1) along the run: the nearest end of
+  // an interval past it. Between two such ends the count, and so whether a point is too dear, holds.
+  count.along = along;
+  count.nextChange = (at, way) => {
+    let next = way * Infinity;
+    for (const [lo, hi] of spans) for (const end of [lo, hi]) if ((end - at) * way > 0 && (end - next) * way < 0) next = end;
+    return next;
+  };
+  return count;
 }
 
 /** The middle of the polyline `points` along its length, and the rectangle a pill `size` there covers. */

@@ -8,12 +8,15 @@
 // such points, and the search mostly stops near the middle, or turns down a
 // whole stretch of points at once: the points are made one at a time, walking
 // out from the middle both ways, and a stretch the search turns down is passed
-// over without being made.
+// over without being made, and without asking at each of its points where the
+// search says where its answer may change.
 //
 // Every function here is pure: a line and a size in, points out.
 
 /** How far apart the points tried along a line are, in pixels. */
 const STEP_PX = 6;
+/** How near two places along a run are taken to be one, in pixels: far below a step, far above rounding. */
+const SAME_PX = 1e-6;
 /** The room an end keeps free of a pill, in pixels: an arrowhead (6 px) and a pixel more, or a little where it has none. */
 const END_ROOM_PX = Object.freeze({ head: 7, bare: 2 });
 
@@ -26,7 +29,10 @@ const END_ROOM_PX = Object.freeze({ head: 7, bare: 2 });
  * search that stops near the middle of a long line makes the few it reads, not
  * every one along it. The search may answer a point with `{ run, past(x, y) }`:
  * the points after it on its side of the middle and on that run that `past`
- * holds for are then passed over without being made.
+ * holds for are then passed over without being made. Where it adds `along`, the
+ * axis the run lies on ("x" or "y"), and `nextChange(at, way)`, the nearest
+ * place past `at` going `way` (1 or -1) along that axis where `past` may change,
+ * the points before that place are passed over at once, without asking `past`.
  */
 export function* candidatesOf(line, size) {
   const points = line.points;
@@ -85,8 +91,28 @@ export function* candidatesOf(line, size) {
     const s = stepOf(k);
     return [points[i].x + ((points[i + 1].x - points[i].x) * s) / lengths[i], points[i].y + ((points[i + 1].y - points[i].y) * s) / lengths[i]];
   };
+  // The last point of `at`'s run going `step`'s way whose centre lies before `passed.nextChange`'s next place:
+  // `past` holds for it as it holds for `at`.
+  const lastBeforeChange = (at, step, passed) => {
+    if (!passed.nextChange) return at;
+    const { i, k } = at;
+    const [from, to] = [points[i][passed.along], points[i + 1][passed.along]];
+    if (from === to) return at;
+    const onwards = step === onward;
+    const way = Math.sign(to - from) * (onwards ? 1 : -1);
+    const here = centreOf(at)[passed.along === "x" ? 0 : 1];
+    // A point on a place where `past` may change says nothing of the points after it.
+    if (Math.abs(passed.nextChange(here - way * SAME_PX, way) - here) <= SAME_PX) return at;
+    const change = passed.nextChange(here, way);
+    if (!Number.isFinite(change)) return { i, k: onwards ? lastStepOf(i) : 0 };
+    // How far along the segment the change lies, and the last step strictly before it, by more than rounding.
+    const s = ((change - from) / (to - from)) * lengths[i];
+    const far = onwards ? Math.ceil((s - SAME_PX - STEP_PX / 2) / STEP_PX) - 1 : Math.floor((s + SAME_PX - STEP_PX / 2) / STEP_PX) + 1;
+    const clamped = Math.min(Math.max(far, 0), lastStepOf(i));
+    return (clamped - k) * (onwards ? 1 : -1) > 0 ? { i, k: clamped } : at;
+  };
   const passOver = (at, step, passed) => {
-    while (at && passed && at.i === passed.run && passed.past(...centreOf(at))) at = settle(step(at), step);
+    while (at && passed && at.i === passed.run && passed.past(...centreOf(at))) at = settle(step(lastBeforeChange(at, step, passed)), step);
     return at;
   };
   // The distance from the middle falls up to it and rises after it: taking the nearer of the two walks each

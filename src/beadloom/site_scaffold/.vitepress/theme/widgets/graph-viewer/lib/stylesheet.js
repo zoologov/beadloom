@@ -8,7 +8,8 @@
 //
 // A node is drawn as the legend draws its layer, whether it holds other nodes or
 // not: a thin border in its layer's tone over a tint of it, its title in the
-// middle. Its status is a mark in its top right corner (`NODE_STATUSES`),
+// middle, its corners rounded at one radius on screen whatever its size and the
+// zoom, a box's as a card's (`lib/corners.js`). Its status is a mark in its top right corner (`NODE_STATUSES`),
 // filled for an error finding or stale docs and a ring for warn findings only,
 // and never changes its border, which stays its layer's. A box that is open is a
 // fainter tint of its layer's tone inside a thin solid border, its title inside
@@ -53,6 +54,7 @@ import { LAYER_FILL_SHARE, LAYER_TONES, UNLAYERED_TONE } from "../../../entities
 import { RING_TONES } from "../../../features/impact-view/index.js";
 import { DIMMED_SHARE, edgePaletteOf } from "./edgePalette.js";
 import { NO_SOURCE_HEAD, NO_TARGET_HEAD, STUB_AT, headEndsOf } from "./heads.js";
+import { CORNER } from "./corners.js";
 import { AGGREGATE, COLLAPSED, HIDDEN_EDGES, LOOP_END, PROJECT_BOX } from "./levels.js";
 import { arrowScaleOf, dashOffsetOf, dashOnScreen, edgeCornerRadiiOf, endHeadLength, lineWidthOf } from "./lineMarks.js";
 import { MAP_BOX, MAP_MARKS, MAP_TITLE, boxMarkInsetOf, boxMarkOf, plateLiftOf, scaleOf, titleOf } from "./mapMarks.js";
@@ -171,6 +173,8 @@ function nodeRules(tokens) {
         "text-max-width": GEOMETRY.outerWidth - 20,
       },
     },
+    // The radius the map gives a drawn node's corners, in layout units (`lib/corners.js`); a node it gives none keeps Cytoscape's own.
+    { selector: `node[${CORNER}]`, style: { "corner-radius": (node) => node.data(CORNER) } },
     ...tones.map((tone) => ({
       selector: `node[tone = "${tone}"]`,
       style: { "border-color": tokens[tone] },
@@ -427,6 +431,26 @@ function mapTitleRule(tokens) {
 /** The border a node of the map is drawn with at rest: a closed box's, or a card's. */
 const borderOf = (node) => (node.hasClass(COLLAPSED) ? GEOMETRY.boxBorder : GEOMETRY.cardBorder);
 
+/**
+ * The size `node`'s shape is drawn at, in layout units, `{ width, height }`, read
+ * from its data as the rules here size it: the box the map draws it as, its
+ * border taken off; ELK's box; or a card's. Read from the data rather than from
+ * Cytoscape, whose sizes trail a change of the data made in the same batch.
+ */
+export function drawnSizeOf(node) {
+  const grown = node.data(MAP_BOX);
+  if (grown) return { width: grown.width - borderOf(node), height: grown.height - borderOf(node) };
+  const box = node.data("box");
+  if (box) return { width: box.width, height: box.height };
+  return { width: GEOMETRY.outerWidth - GEOMETRY.cardBorder, height: GEOMETRY.outerHeight - GEOMETRY.cardBorder };
+}
+
+/** How far `node`'s border reaches outside its shape at rest, in layout units: half of it, drawn on its edge; none of the project's frame, drawn inside. */
+export function rimOf(node) {
+  if (node.hasClass(PROJECT_BOX)) return 0;
+  return (node.isParent() || node.hasClass(COLLAPSED) ? GEOMETRY.boxBorder : GEOMETRY.cardBorder) / 2;
+}
+
 /** The map's looks: a closed box and its title, a top-level node's title and size, an aggregated edge, a count of hidden edges. */
 function mapRules(tokens) {
   const tones = [...LAYER_TONES, UNLAYERED_TONE];
@@ -444,8 +468,8 @@ function mapRules(tokens) {
       // A node drawn larger than its layout: the size its data names, its border included, around its centre.
       selector: `node[${MAP_BOX}]`,
       style: {
-        width: (node) => node.data(MAP_BOX).width - borderOf(node),
-        height: (node) => node.data(MAP_BOX).height - borderOf(node),
+        width: (node) => drawnSizeOf(node).width,
+        height: (node) => drawnSizeOf(node).height,
       },
     },
     mapTitleRule(tokens),

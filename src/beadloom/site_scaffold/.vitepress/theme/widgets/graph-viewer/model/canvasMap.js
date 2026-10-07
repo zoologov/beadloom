@@ -45,7 +45,8 @@
 // even when it is one (`OWN_LINE`, `pillOverlay.js`).
 //
 // What a box or a line says on screen — every line's weight, arrowheads and
-// corners, a closed box's title and a top-level node's — keeps one size on
+// corners, every node's corners (`nodeCorners.js`), a closed box's title and a
+// top-level node's — keeps one size on
 // screen whatever the zoom: each carries the map's scale in its data, a power of
 // 1.25 near 1 / zoom, and the stylesheet multiplies by it, so a zoom gesture
 // restyles these elements only when the zoom crosses a step. An edge out of the
@@ -105,6 +106,7 @@ import { GEOMETRY } from "../lib/stylesheet.js";
 import { isLoop } from "./canvasLayout.js";
 import { setClass } from "./canvasMarks.js";
 import { loopLines } from "./loopLines.js";
+import { nodeCorners } from "./nodeCorners.js";
 import { PROJECT_PLATE_SIDE, overviewPlanner } from "./overviewPlan.js";
 
 /** The source of a reveal that opens its boxes at any zoom: the test handle's. */
@@ -249,6 +251,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   let ownEnds = new Set();
   let grownNow = new Map();
   const measure = titleMeasurer(cy);
+  const corners = nodeCorners(cy);
   /** The route an edge of the file is drawn along, bundled, or null. */
   const drawnRouteOf = (id) => (edges.get(id)?.data("route") ? routePointsOf(edges.get(id)) : null);
   const planner = overviewPlanner(cy, {
@@ -658,6 +661,9 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
         dressBox(node);
         dressTitle(node);
       }
+      // Once every node has the size it is drawn at and every line its route: where the lines end decides the room.
+      corners.measure(scale);
+      for (const id of level.nodes) corners.dress(nodes.get(id), scale);
     });
     open = nextOpen;
     pairs = weighed;
@@ -708,7 +714,11 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     cy.batch(() => {
       cy.elements(`.${COLLAPSED}, .${PROJECT_BOX}, edge[${AGGREGATE}], node[${HIDDEN_EDGES}]`).data(MAP_SCALE, scale);
       for (const id of edges.keys()) if (lineOf(id).inside()) lineOf(id).data(MAP_SCALE, scale);
-      for (const node of nodes.values()) if (node.inside()) dressTitle(node);
+      for (const node of nodes.values()) {
+        if (!node.inside()) continue;
+        dressTitle(node);
+        corners.dress(node, scale);
+      }
     });
     version += 1;
     return !sameBoxes(grownNow, grownBoxesNow([...nodes.values()].filter((node) => node.inside()).map((node) => node.id()), open));

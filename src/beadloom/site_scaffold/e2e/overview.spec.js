@@ -24,7 +24,7 @@
 
 import { test, expect } from "@playwright/test";
 import { ADOPTER_SIZED, adopterSizedGraph } from "./support/adopterGraph.js";
-import { canvasBackground, contrastRatio } from "./support/look.js";
+import { canvasBackground, contrastRatio, endsInCorners } from "./support/look.js";
 import { drawnEdgesOf, levelOf, treeOf } from "./support/map.js";
 import {
   arrivalsOf,
@@ -42,7 +42,7 @@ import { withTwoMoreEdges } from "./support/perturbedGraph.js";
 import { edgesThroughBoxes } from "./support/routeMetrics.js";
 import { requireShape } from "./support/shape.js";
 import { openThemeModules } from "./support/themeModules.js";
-import { architectureData, openArchitecture, viewer, withAncestors } from "./support/viewer.js";
+import { architectureData, openArchitecture, viewer, waitForViewer, withAncestors } from "./support/viewer.js";
 
 /** The share of the lines that carry more than one edge that have a pill: a short or crowded line may have none. */
 const MOST_PILLS = 0.75;
@@ -431,6 +431,39 @@ for (const graph of [...GRAPHS, PERTURBED]) {
       description: `${outside.length} of ${looks.reduce((sum, look) => sum + look.points.length - 1, 0)} segments of ${looks.length} lines outside the frame; ${failed.length} pair(s) with no route inside it`,
     });
     expect(outside).toEqual([]);
+  });
+}
+
+// A box has the nodes' rounded corners on screen at every zoom (`look.spec.js`),
+// so a port near a corner would end its line in the air beside the arc. The
+// router keeps a side's ports to its straight part, and a box drawn larger than
+// its layout keeps its lines' ends to the straight part of the drawn box; where
+// a small box's radius reaches under a pixel past the ports it always had, the
+// ports stay and its corners are held to the line's end instead.
+for (const graph of [...GRAPHS, PERTURBED]) {
+  test(`every line of the overview meets its box on the straight part of a side, clear of its rounded corners, at the fit and zoomed in and out, on ${graph.name}`, { tag: graph.tag }, async ({
+    page,
+    request,
+  }) => {
+    await graph.open(page, request);
+    const found = [];
+    const read = async (state) => {
+      const zoom = await viewer(page, "zoom");
+      const looks = await viewer(page, "lineLooks");
+      found.push(...endsInCorners(looks, await viewer(page, "nodeLooks"), await viewer(page, "nodeBoxes"), zoom).map((f) => `${state}: ${f}`));
+      return looks.length;
+    };
+    const drawn = await read("at the fit");
+    requireShape(drawn > 0, "no line drawn at the whole-graph fit");
+    for (const [name, steps] of [["Zoom in", 3], ["Zoom out", 5]]) {
+      for (let step = 0; step < steps; step += 1) {
+        await page.getByRole("button", { name, exact: true }).click();
+        await waitForViewer(page);
+        await read(`${name} ${step + 1}`);
+      }
+    }
+    test.info().annotations.push({ type: "measured", description: `${found.length} line end(s) inside a rounded corner over 9 views, ${drawn} lines at the fit` });
+    expect(found).toEqual([]);
   });
 }
 
@@ -981,6 +1014,123 @@ function smallBoxesLayout(seed) {
   }
   return { unit: 1, boxes, pairs };
 }
+
+/** Cytoscape's radius for a rounded rectangle, which every box is drawn with on screen (`look.spec.js`), in pixels. */
+const BOX_CORNER_PX = 8;
+/**
+ * How far into a corner's arc a port may lie, in pixels: a corner that reaches
+ * this little past the ports a small box always kept keeps them, and the box's
+ * corners are drawn that little less round there (`look.spec.js`).
+ */
+const CORNER_SLACK_PX = 1;
+/** The seeds of the layouts the corner case plans. */
+const CORNER_SEEDS = Array.from({ length: 24 }, (_, k) => k + 1);
+
+/**
+ * A layout of 20 boxes 12 to 130 px wide and 10 to 70 px tall in a jittered grid,
+ * a third of them drawn larger than their laid-out box (`core`) the way a title
+ * grows a box: wider only, or wider and taller; and 40 lines between them.
+ */
+function roundedBoxesLayout(seed) {
+  let state = seed >>> 0;
+  const random = () => (state = (Math.imul(state, 1664525) + 1013904223) >>> 0) / 4294967296;
+  const boxes = [];
+  for (let row = 0; row < 4; row += 1) {
+    for (let column = 0; column < 5; column += 1) {
+      const [w, h] = [12 + Math.floor(random() * 118), 10 + Math.floor(random() * 60)];
+      const [x, y] = [column * 240 + Math.floor(random() * 40), row * 150 + Math.floor(random() * 40)];
+      const laidOut = box(`b${row}${column}`, x, y, x + w, y + h);
+      if (random() < 1 / 3) {
+        const [gx, gy] = [4 + Math.floor(random() * 30), random() < 0.5 ? 0 : 2 + Math.floor(random() * 8)];
+        boxes.push({ ...box(laidOut.id, x - gx, y - gy, x + w + gx, y + h + gy), core: { x1: x, y1: y, x2: x + w, y2: y + h } });
+      } else boxes.push(laidOut);
+    }
+  }
+  const pairs = [];
+  const seen = new Set();
+  while (pairs.length < 40) {
+    const [a, b] = [boxes[Math.floor(random() * boxes.length)].id, boxes[Math.floor(random() * boxes.length)].id].sort();
+    if (a === b || seen.has(`${a}\n${b}`)) continue;
+    seen.add(`${a}\n${b}`);
+    pairs.push({ name: `${a}\n${b}`, a, b, forward: 1, backward: random() < 0.4 ? 1 : 0 });
+  }
+  return { unit: 1, boxes, pairs };
+}
+
+/**
+ * Where a planned path meets the border of the box `drawn` at its end `at` (0 or
+ * the last): its end itself, or, for a box drawn larger than its core, where its
+ * last run crosses the drawn border (the viewer cuts the line there).
+ */
+function meetingOf(path, at, drawn) {
+  const [end, before] = at === 0 ? [path[0], path[1]] : [path[path.length - 1], path[path.length - 2]];
+  if (Math.abs(before.x - end.x) < 1e-9) return { x: end.x, y: before.y < end.y ? drawn.y1 : drawn.y2 };
+  return { x: before.x < end.x ? drawn.x1 : drawn.x2, y: end.y };
+}
+
+test("every port of the overview lies on the straight part of a side: a line meets its box, or the box drawn larger around it, no nearer a corner than the corner's radius, but for a pixel", async ({
+  page,
+}) => {
+  await openThemeModules(page);
+  const wrong = [];
+  let ends = 0;
+  for (const seed of CORNER_SEEDS) {
+    const input = roundedBoxesLayout(seed);
+    const byId = new Map(input.boxes.map((b) => [b.id, b]));
+    const { paths } = await plan(page, input);
+    for (const [name, path] of Object.entries(paths)) {
+      const [a, b] = name.split("\n");
+      for (const [id, at] of [[a, 0], [b, path.length - 1]]) {
+        const drawn = byId.get(id);
+        const radius = Math.min(BOX_CORNER_PX, (drawn.x2 - drawn.x1) / 4, (drawn.y2 - drawn.y1) / 4);
+        const meeting = meetingOf(path, at, drawn);
+        const along = Math.max(Math.min(meeting.x - drawn.x1, drawn.x2 - meeting.x), Math.min(meeting.y - drawn.y1, drawn.y2 - meeting.y));
+        ends += 1;
+        if (along < radius - CORNER_SLACK_PX - 1e-6) wrong.push(`seed ${seed} ${name.replace("\n", "-")} meets ${id} ${along.toFixed(2)} px from a corner, its radius ${radius.toFixed(2)}`);
+      }
+    }
+  }
+  test.info().annotations.push({ type: "measured", description: `${wrong.length} of ${ends} ends inside a corner over ${CORNER_SEEDS.length} layouts` });
+  expect(wrong).toEqual([]);
+});
+
+// A pill's search walks a line out from its middle and turns down every point of
+// a run that would cover too many lines. It asked at every such point; a zoom
+// step on an adopter-sized graph spent most of its pill time there, which the
+// routes the rounded corners call for took over a frame.
+test("the pill search passes over a too-dear stretch of a run at once and tries the very points it tries asking at each", async ({ page }) => {
+  await openThemeModules(page);
+  const found = await page.evaluate(async () => {
+    const { candidatesOf } = await import("/widgets/graph-viewer/lib/pillPoints.js");
+    // Three runs, the middle one long and level; along it, stretches where a pill would cover other lines.
+    const line = { points: [{ x: 0, y: 0 }, { x: 0, y: 300 }, { x: 900, y: 300 }, { x: 900, y: 20 }], heads: [true, true] };
+    const spans = [[100, 260], [180, 400.5], [610, 700], [700, 702]];
+    const count = (x) => spans.filter(([lo, hi]) => lo < x && x < hi).length;
+    const nextChange = (at, way) => spans.flat().filter((end) => (end - at) * way > 0).reduce((next, end) => ((end - next) * way < 0 ? end : next), way * Infinity);
+    const walk = (hinted) => {
+      const tried = [];
+      let asked = 0;
+      const points = candidatesOf(line, { width: 30, height: 16 });
+      let passed;
+      for (let next = points.next(); !next.done; next = points.next(passed)) {
+        passed = undefined;
+        const { a, b, s, length, run } = next.value;
+        const [x, y] = [a.x + ((b.x - a.x) * s) / length, a.y + ((b.y - a.y) * s) / length];
+        tried.push([run, +x.toFixed(6), +y.toFixed(6)]);
+        if (run !== 1 || !count(x)) continue;
+        const past = (cx) => {
+          asked += 1;
+          return count(cx) > 0;
+        };
+        passed = { run, past, ...(hinted ? { along: "x", nextChange } : {}) };
+      }
+      return { tried, asked };
+    };
+    return { asking: walk(false), passing: walk(true) };
+  });
+  expect(found.passing.tried).toEqual(found.asking.tried);
+  expect(found.passing.asked, `asked at ${found.asking.asked} points one by one`).toBeLessThan(found.asking.asked / 4);
+});
 
 /** A seed whose layout has three tracks within a lane of each other, where a rule that looked only at the next track let two lines run 4 px apart. */
 const CROWDED_TRACKS_SEED = 3;

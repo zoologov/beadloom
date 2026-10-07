@@ -20,6 +20,87 @@ export function withinAStep(measured, wanted) {
   return measured >= wanted / half - 1e-6 && measured <= wanted * half + 1e-6;
 }
 
+/** How much of a border of each `border-position` lies outside a node's shape, as a share of its width. */
+const BORDER_OUTSIDE = Object.freeze({ inside: 0, center: 0.5, outside: 1 });
+
+/** How far node `look`'s border reaches outside its shape, in layout units. */
+const rimOf = (look) => look.borderWidth * (BORDER_OUTSIDE[look.borderPosition] ?? 0.5);
+
+/**
+ * Whether node `look` (`nodeLooks`) has rounded corners of `wantedPx` on screen at
+ * `zoom`, within half a scale step, or a quarter of its shorter side where that
+ * is less, Cytoscape's own clamp for a rounded rectangle, or less still where a
+ * line ends on its border nearer a corner: the room that end leaves, `roomPx`
+ * (`cornerRooms`).
+ */
+export function roundedAt(look, zoom, wantedPx, roomPx = Infinity) {
+  const half = Math.sqrt(SCALE_STEP);
+  const quarter = (Math.min(look.width, look.height) / 4) * zoom;
+  const px = look.cornerRadius * zoom;
+  const slack = 0.01 * Math.max(px, 1);
+  return px >= Math.min(wantedPx / half, quarter, roomPx) - slack && px <= Math.min(wantedPx * half, quarter) + slack;
+}
+
+/**
+ * How far from its nearer corner, in pixels on screen, a point on the border of
+ * `box` (`nodeBoxes`, its border included) lies along that border, or null when
+ * the point is not on it, within `tolerancePx`.
+ */
+function alongBorderFromCorner(point, box, zoom, tolerancePx) {
+  const dx = Math.min(Math.abs(point.x - box.x1), Math.abs(box.x2 - point.x)) * zoom;
+  const dy = Math.min(Math.abs(point.y - box.y1), Math.abs(box.y2 - point.y)) * zoom;
+  const inside = point.x >= box.x1 - tolerancePx / zoom && point.x <= box.x2 + tolerancePx / zoom && point.y >= box.y1 - tolerancePx / zoom && point.y <= box.y2 + tolerancePx / zoom;
+  if (!inside || Math.min(dx, dy) > tolerancePx) return null;
+  return Math.max(dx, dy);
+}
+
+/**
+ * The ends of `lines` (`lineLooks`) that meet a drawn node's border inside one of
+ * its rounded corners rather than on the straight part of a side, named with what
+ * they measure. A corner's arc on the border's outer edge has the shape's radius
+ * and half the border more; an end within `tolerancePx` of where the arc meets
+ * the side meets the side.
+ */
+export function endsInCorners(lines, looks, boxes, zoom, tolerancePx = 0.25) {
+  const found = [];
+  for (const { line, look, along } of endsOnBorders(lines, looks, boxes, zoom, tolerancePx)) {
+    const arcPx = (look.cornerRadius + rimOf(look)) * zoom;
+    if (look.cornerRadius && along < arcPx - tolerancePx) found.push(`${line.id} ends on ${look.id} ${along.toFixed(2)} px from its corner, inside its ${arcPx.toFixed(2)} px arc`);
+  }
+  return found;
+}
+
+/** Every end of `lines` on the border of a node of `looks`, and how far from that border's nearer corner, in pixels on screen. */
+function endsOnBorders(lines, looks, boxes, zoom, tolerancePx) {
+  const found = [];
+  for (const line of lines) {
+    const points = line.points;
+    if (points.length < 2) continue;
+    for (const end of [points[0], points[points.length - 1]]) {
+      for (const look of looks) {
+        const box = boxes[look.id];
+        const along = box ? alongBorderFromCorner(end, box, zoom, tolerancePx) : null;
+        if (along !== null) found.push({ line, look, along });
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * The room the line ends on each node's border leave its corners, in pixels on
+ * screen, by node id: the nearest end's distance from a corner along the border,
+ * less what of the border lies outside the shape. A node no line ends near has none.
+ */
+export function cornerRooms(lines, looks, boxes, zoom, tolerancePx = 0.25) {
+  const rooms = new Map();
+  for (const { look, along } of endsOnBorders(lines, looks, boxes, zoom, tolerancePx)) {
+    const room = along - rimOf(look) * zoom;
+    if (room < (rooms.get(look.id) ?? Infinity)) rooms.set(look.id, room);
+  }
+  return rooms;
+}
+
 /** How long an arrowhead of `look` (`lineLooks`) is, in layout units. */
 export function headLength(look) {
   return Math.max((look.width * 13.37) ** 0.9, 29) * look.arrowScale * ARROW_LENGTH_SHARE;
