@@ -108,28 +108,28 @@ Beadloom keeps rules in an **architecture graph**. The graph is a description of
 
 The rule lives in the graph. There is a command over the graph. The command returns an exit code. An exit code is not forgotten — not by an agent, not by a person, not in CI.
 
-Every check converges into a single Gate. Here is its output on this repository at the 7.0.0 release, on 29 September 2026. Long lines are wrapped, and omitted text is marked with "…":
+Every check converges into a single Gate. Here is its output on this repository at the 8.0.0 release, on 8 October 2026. Long lines are wrapped, and omitted text is marked with "…":
 
 ```
 Beadloom CI gate
 
   [PASS] reindex: up to date
-  [PASS] lint: 0 error(s), 73 warning(s), 10 crossings suppressed by an exemption,
-         architecture-layers judged 371 of 379 live depends_on edge(s)
-  [PASS] sync-check: 519 pair(s) fresh
+  [PASS] lint: 0 error(s), 70 warning(s), 10 crossings suppressed by an exemption,
+         architecture-layers judged 381 of 434 live depends_on edge(s), …
+  [PASS] sync-check: 743 pair(s) fresh
   [PASS] docs-audit: 20 mention(s) fresh; 4/9 declared fact(s) verified, NOT VERIFIED:
          cli_command_count, edge_count, language_count, nodes_with_framework, test_count
-  [WARN] docs-quality: 292 document(s) read; … NO CHECK READS: PLAN, SUMMARY; …
-  [PASS] issue-log: 277 entr(ies) uniquely numbered; … PARTLY CHECKED: 235 of 277 …
-  [PASS] readme-pair: 1 pair(s) held, 118 block(s) compared, 0 finding(s); …
-  [WARN] doc-spaces: to_be 229, as_is 124, working 65; …
-  [PASS] scope-check: 0 path(s) outside the axes BDL-075 declares (…); 3 judged, …
+  [WARN] docs-quality: 317 document(s) read; … NO CHECK READS: PLAN, RND, SUMMARY; …
+  [PASS] issue-log: 113 entr(ies) uniquely numbered; … PARTLY CHECKED: 68 of 113 …
+  [PASS] readme-pair: 1 pair(s) held, 125 block(s) compared, 0 finding(s); …
+  [WARN] doc-spaces: to_be 250, as_is 146, working 69; …
+  [PASS] scope-check: 0 path(s) outside the axes BDL-079 declares (…); 1 judged, …
   [PASS] config-check: no blocking drift; 1 artifact(s) reported (warn)
-  [PASS] doctor: 13 check(s): 0 error(s), 240 warning(s), 4 info
+  [PASS] doctor: 13 check(s): 0 error(s), 262 warning(s), 3 info
   …
 PASS — gate clean
 Room: Darwin arm64 · CPython 3.13.7 · 10 cores · extras … · locale utf-8
-  23 of 23 declared room(s) not entered by this run: …
+  31 of 31 declared room(s) not entered by this run: …
 Not run by this gate:
   the test suite — `uv run pytest --cov=beadloom …` (.github/workflows/ci.yml: tests)
   the style linter — `uv run ruff check src/ tests/` (.github/workflows/ci.yml: tests)
@@ -175,7 +175,7 @@ The graph on its own is just data. What makes it useful is what stands on top of
 - **[Tests on the graph](#tests-are-bound-to-the-graph).** Every node shows which tests belong to it. Rules watch over the suite itself, and mutation testing shows whether the tests would notice a fault.
 - **Spec-Driven: the spec first, the code after.** Three documentation spaces: **TO-BE** — what you intend to build, **AS-IS** — what is built, **WORKING** — working notes taken as a task proceeds. The last are exempt from the freshness check on purpose: a progress note describes the work, not the code. `beadloom docs spaces` shows all three and finds tasks whose work is finished while the promised document never appeared.
 - **[Federation across repositories](#federation-contracts-between-services).** One landscape assembled from the graphs of individual services, with every contract checked against both of its sides.
-- **Documentation portal.** `beadloom docs site` builds a VitePress site: [interactive graphs](https://zoologov.github.io/beadloom/architecture.html), a metrics dashboard, and documentation tagged with its freshness. The theme ships in the package, so your project's portal is built by `beadloom docs site`, just like ours. Building it needs `Node.js 22` or later. The steps are in [Getting Started](docs/getting-started.md#publish-the-portal).
+- **[Documentation portal](#the-portal-and-the-architecture-viewer).** `beadloom docs site` builds a VitePress site: [interactive graphs](https://zoologov.github.io/beadloom/architecture.html), a metrics dashboard, and documentation tagged with its freshness. The theme ships in the package, so your project's portal is built by `beadloom docs site`, just like ours. Building it needs `Node.js 22` or later. The steps are in [Getting Started](docs/getting-started.md#publish-the-portal).
 - **Terminal dashboard.** `beadloom tui` — three screens in the console: dashboard, graph explorer, documentation status. It works when Beadloom is installed with the `tui` extra.
 
 ## The first five minutes
@@ -325,6 +325,25 @@ Whether a test would notice a fault is what mutation testing shows: small faults
 
 Details are in the [testing guide](docs/guides/testing.md).
 
+## The portal and the architecture viewer
+
+`beadloom docs site` writes a VitePress portal into `site/`: a page for every graph node, a metrics dashboard, the contract landscape, your documentation tagged with its freshness, and the architecture viewer. The theme ships in the package, so your project's portal is built the same way as [ours](https://zoologov.github.io/beadloom/architecture.html). The viewer opens on the `/architecture` page and on every node's page. It draws only what the data file of the last build records, and it does not query the index.
+
+- **The overview.** With the whole graph fitted to the window, only the top-level boxes are drawn, closed. Between two boxes runs one line, and when it carries more than one edge, a number on it says how many.
+- **Boxes.** A box is a node that has parts (`part_of`), such as a domain with its features. As you zoom in, a box opens once its nodes become readable and shows its parts and the edges among them. Nothing on the canvas moves when it does.
+- **Activity.** It is counted in changed lines over 30 days, not in commits. The levels are relative to your project: among the nodes changed in 30 days, the busiest tenth is `hot`, the next three tenths `warm`, the rest `cool`. A node with no change in 30 days but some in 90 is `quiet`, and one with no change in 90 days is `dormant`. Boxes are ranked among boxes and include their parts' changes.
+- **The node card.** A click on a node opens its card: the summary, the layer, the source, the activity, the debt with its reasons, the documents with their sync status, the bound tests, the public symbols, the edges, the rule findings, and the `beadloom ctx` and `beadloom why` commands to copy.
+
+To publish the portal on GitHub Pages:
+
+```bash
+beadloom docs site --pages-workflow   # also writes .github/workflows/beadloom-portal.yml
+```
+
+In the repository's settings choose Settings → Pages → Source = GitHub Actions, commit the workflow and push it to the default branch. From then on every push to that branch regenerates the portal from the code with the same Beadloom version and publishes it.
+
+The workflow checks the repository out with its whole history (`fetch-depth: 0`), because activity is measured on the history the clone holds. On a shallow clone that does not reach back 90 days, activity is not recorded and the card says "not recorded". If you build the portal in your own CI, check out the whole history the same way. Details are in the [portal guide](docs/guides/vitepress-site.md).
+
 ---
 
 ## Commands
@@ -382,6 +401,7 @@ Beadloom complements [Beads](https://github.com/steveyegge/beads): worker agents
 | [Parallel waves](docs/guides/parallel-waves.md) | What a wave of parallel agents guarantees and what nothing here checks |
 | [Document kinds](docs/guides/document-kinds.md) | Mandatory sections and the five writing-standard checks |
 | [Testing](docs/guides/testing.md) | Where a test lives, how it binds to a graph node, what `lint` reports about the suite and how to read the mutation score |
+| [Public API](docs/guides/public-api.md) | What Beadloom promises not to break without a new major version, and how the version number is decided from it |
 | [CI Setup](docs/guides/ci-setup.md) | Integration with GitHub Actions / GitLab CI |
 | [VitePress Site](docs/guides/vitepress-site.md) | Publishing the knowledge base on VitePress |
 | **Domains** | [Context Oracle](docs/domains/context-oracle/README.md) · [Graph](docs/domains/graph/README.md) · [Doc Sync](docs/domains/doc-sync/README.md) · [Onboarding](docs/domains/onboarding/README.md) · [Infrastructure](docs/domains/infrastructure/README.md) |

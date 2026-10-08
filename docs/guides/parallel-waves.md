@@ -225,7 +225,8 @@ each with a plan-time precondition that is actually checked:
 
 | Medium | Precondition checked | Observed from | Evidence |
 |---|---|---|---|
-| `working-tree` | no path differs from `HEAD` that no bead in the plan owns | `git status` | BDL-UX #181 |
+| `graph-files` | the node population the graph files declare is the one the index resolved the scopes from | the graph files and the index | BDL-UX #261 |
+| `working-tree` | no path differs from `HEAD` that no bead in the plan owns | `git status` | BDL-UX #181, #235 |
 | `commit-gate` | the installed pre-commit hook judges the paths a commit stages | `.git/hooks/pre-commit` | BDL-UX #118 |
 | `landing-order` | every instruction of the landing lock names its holder and asks for no queue | the composed flow artifacts | BDL-UX #194, #237 |
 | `focus-document` | the document every route writes carries a row for each bead of the plan | the composed `/task-init` routing table and the work item's folder | BDL-UX #257 |
@@ -383,6 +384,7 @@ A human outranks the computation by declaring it, with a reason and an exit cond
 every other stand-down in this tool is recorded:
 
 ```yaml
+# .beadloom/flow.yml
 waves:
   overrides:
   - beads: [proj-1, proj-2]
@@ -399,6 +401,9 @@ gets switched off without anybody saying so.
 
 The tracker still outranks the override. A `parallel` entry cannot place a bead ahead of a bead
 that blocks it.
+
+This repository declares the block with no entry, `waves: overrides: []`, so every shape its
+plans print is the computed one.
 
 ---
 
@@ -560,9 +565,9 @@ Where it runs, and what it does there:
 | the pre-commit hook | the staged paths | warns, in both hook modes, and never blocks |
 | `beadloom ci` (`scope-check` step) | `<trunk>...HEAD`, what the pull request contains | reports; the step passes |
 
-Both are `warn`, and the reason was measured twice. One work item in 64 on this repository
-carries an `## Axes` section today, so a check that blocked would meet a repository that
-cannot satisfy it and be answered with `--no-verify`. And over the eleven commits of
+Both are `warn`, and the reason was measured twice. When the check shipped, one work item in 64
+on this repository carried an `## Axes` section (12 of 75 on 2026-10-08), so a check that
+blocked would meet a repository that cannot satisfy it and be answered with `--no-verify`. And over the eleven commits of
 `features/BDL-068` — 52 paths, of which 11 have an owner in the graph and 41 have none — the check produced 0
 findings, so its false-positive rate is zero; that is still not a reason to block, because
 only two of those commits touched a path a node owns at all.
@@ -612,10 +617,11 @@ files** — `.beads/*.jsonl` and `ACTIVE.md` are owned by no node's code. It err
 which is right, and a check that is always red is a check people learn to scroll past. Naming
 those paths as a stated exclusion is unfiled work.
 
-**Attestation is still per ref while the freshness fact is now per file.** `sync-update <ref>`
-re-baselines every pair of that node, so a document pass that revised one pair still attests its
-siblings. That is the residue of BDL-UX #133 rather than its return, it is correctly diagnosed,
-and a per-pair attestation has no CLI today.
+**Attestation is per pair when you name the pair.** `sync-update <ref> --yes` claims only the
+stale pairs of that node, and a pair whose own file did not move keeps its baseline. `--pair
+DOC_PATH` narrows the claim to a document you read, `--code CODE_PATH` to one code file, and
+`--all-pairs` is the deliberate whole-ref attestation. The residue of BDL-UX #133 this paragraph
+used to state, that a per-pair attestation had no CLI, no longer holds.
 
 ## See also
 

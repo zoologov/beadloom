@@ -222,10 +222,12 @@ shape: python 75 passed and 26 skipped, go 88 and 13, typescript 94 and 7, java 
 **In CI.** The advisory `site-e2e` job runs the suite on this repository's portal after
 `site-build`, with `BEADLOOM_E2E_NO_SKIP=1`, so every case runs here, under the `ci` bounds. At
 `6b77893c` the suite held 294 cases in the `chromium` project and 10 in `performance`, measured
-locally on Darwin arm64 (`beadloom-btkd.15`). <!-- TODO: verify the case count on the PR's site-e2e run. --> It is not a required
-check. The `site-adopters` workflow builds the six fixtures and runs the suite on each,
-on pull requests that change what it tests, weekly on `main` and on demand. It runs in seven
-legs, one per claimed stack and one for the slow tests that build a project of their own, and
+locally on Darwin arm64 (`beadloom-btkd.15`). On PR #94 (head `038305af`, job 113056037571,
+a GitHub-hosted Ubuntu runner, two workers) it ran 318 cases, 308 in `chromium` and 10 in
+`performance`: 318 passed and none skipped, in 25.4 minutes. It is not a required check. The
+`site-adopters` workflow builds the six fixtures and runs the suite on each, on pull requests
+that change what it tests, weekly on `main` and on demand. It runs in seven legs, one per
+claimed stack and one for the slow tests that build a project of their own, and
 `BEADLOOM_SLOW_PART` names a leg's part (`beadloom-m6k7.7`). One after another, the six suites
 took about 14 minutes each on the runner, and the job was cancelled at its 60-minute timeout
 during the third. The cases tagged `@adopter-sized` run on the first stack of each count of

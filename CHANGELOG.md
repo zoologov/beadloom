@@ -5,6 +5,201 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.0.0] - 2026-10-08
+
+**This release ships the architecture viewer and the portal an adopter generates with
+`beadloom docs site`, and it is the first release named against a declared public API.** The
+version is major because the activity level vocabulary changed incompatibly: `cold` is never
+emitted any more, so a reader that matches it stops matching.
+
+The public API is declared in [`docs/guides/public-api.md`](docs/guides/public-api.md) and in
+the *Public API* section of `CONTRIBUTING.md`: the commands, their options and exit codes; the
+keys of `.beadloom/config.yml`; the keys and the value vocabularies of the JSON outputs
+(`ctx`, `status`, `export`, the debt report); the MCP tools; the portal data file's schema; the
+files generated for an adopter. Python import paths are not public API. Every line below is
+classified against that list and names the pull request that carried it: #90 and #91 are
+BDL-076, #92 is BDL-077, #94 is BDL-078.
+
+### Upgrading — what to check
+
+1. **Reindex.** Activity is measured again, by changed lines, and every node gets a level from
+   the new set. Measured on this repository on 2026-10-08, 130 nodes: 11 `hot`, 28 `warm`,
+   56 `cool`, 21 `quiet`, 14 `dormant`.
+2. **Run `beadloom lint --strict` and `beadloom sync-check` once on the new version**, before
+   the Gate runs them for you. Imports 7.0.0 left unresolved or did not read now become
+   `depends_on` edges. A `deny` rule judges the imports that resolve to a node, a
+   `forbid_import` rule the imports read for the first time, and a `forbid` rule the edges
+   unless its `edge_kind` names another kind. A `forbid_cycles` or `layers` rule judges the
+   edges only when its `edge_kind` includes `depends_on`. A `layers` rule that sets none reads
+   `uses` edges and does not see them. A finding names where the crossing is, and
+   `beadloom ctx <ref-id>` lists a node's edges. A crossing you decide to keep is declared on
+   the rule that caught it: an `exempt:` entry with a `reason` and an `until` on
+   `forbid_import` and on `layers` (for a crossing between peers of one layer), `unless_edge`
+   on `deny`, `exclude:` on a node matcher. The
+   [rule reference](docs/domains/graph/features/rule-engine/SPEC.md#rulesyml-schema) lists the
+   keys of each rule. A crossing you do not mean to keep is what the rule is for. A document
+   `sync-check` reports stale after the upgrade can be held to a file 7.0.0 did not pair with
+   it: read the document against that file, then attest it with
+   `beadloom sync-update <ref-id> --yes --pair <document>`.
+3. **If you read an activity level** from `ctx --json`, the MCP `get_context` tool,
+   `docs polish --format json` or the portal data file, replace `cold` with `cool` (changed in
+   the last 30 days) or `quiet` (changed in 90 days but not in 30). The two are not the same
+   condition as `cold`, so the mapping is a decision, not a rename.
+4. **If a CI step runs `status --debt-report --fail-if score>N`**, read the report once on the
+   new version before you trust the verdict. The `dormant` and `high_fan_out` counts move on a
+   project nobody edited.
+5. **If `.beadloom/config.yml` holds a `site:` or `activity:` block**, run
+   `beadloom config-check`. A key either block does not read, or a value it cannot use, now
+   blocks `config-check` and the Gate, where it used to be ignored.
+6. **If your CI checks out a shallow history** and you want activity measured there, fetch the
+   full history (`fetch-depth: 0` on `actions/checkout`). A shallow clone that does not reach
+   back 90 days records no activity, and `reindex` and the Gate say so by name.
+7. **If your Python tests sit flat under `tests/`** (`tests/test_*.py`), add
+   `tests: {flat_tests: true}` to `.beadloom/config.yml`. `init` writes it when it creates the
+   config of a Python project, and does not edit a config that already exists.
+8. **If your code imports a module under `beadloom.application`**, the portal's modules moved
+   under `beadloom.application.site`. Import paths are not public API, and this release states
+   that for the first time.
+
+### Breaking
+
+- **The activity level vocabulary is `hot`, `warm`, `cool`, `quiet`, `dormant`, measured by
+  changed lines (#94).** 7.0.0 emitted `hot`, `warm`, `cold`, `dormant` by commit counts with
+  fixed thresholds: more than 20 commits in 30 days was `hot`, 5 to 20 `warm`, anything else
+  with a commit in 90 days `cold`. 8.0.0 counts added and deleted lines and ranks a node
+  against the project: among the nodes changed in the last 30 days the top tenth is `hot`, the
+  next three tenths `warm`, the rest `cool`; a node changed in 90 days but not in 30 is `quiet`;
+  a node unchanged in 90 days is `dormant`. A box is ranked among boxes and a leaf among
+  leaves, and a box's activity rolls up its parts. `cold` is never emitted. The key is
+  `activity.level` in `ctx --json`, the MCP `get_context` tool and `docs polish --format json`,
+  and `activity` on each node of the portal data file.
+- **`lint --strict`, and the Gate's lint step, can fail on a project nobody edited (#90,
+  #91).** 8.0.0 resolves imports that 7.0.0 left unresolved or did not read: relative JS/TS
+  paths and `.vue` script blocks (#90), and Go, Java, Kotlin and Swift imports through the
+  module and package layouts `init` now reads (#91). Each resolved import derives a
+  `depends_on` edge. Which rules see the change follows from what each one reads. A `deny`
+  rule judges every import that resolves to a node. A `forbid_import` rule judges every import
+  read, resolved or not, so it sees the relative JS/TS paths and `.vue` script blocks and not
+  the four languages, whose imports 7.0.0 already read. A `forbid` rule judges the new edges
+  unless its `edge_kind` names another kind. A `forbid_cycles` or `layers` rule judges them
+  only when its `edge_kind` includes `depends_on`, and a `layers` rule that sets none reads
+  `uses` edges and does not see them. An import that crosses a boundary one of those rules
+  declares is now a violation. Measured on 2026-10-08 on a two-module JavaScript project whose
+  one `forbid` rule says `ui` must not depend on `store`, with `ui` importing
+  `../store/store.js`: on the same files, 7.0.0 derives no edge and exits 0, and 8.0.0 derives
+  `ui` → `store` and exits 1. The exit code can also move the other way: `doc-area-coherence`
+  at severity `error` failed with "checked nothing" once a second source tree held two or more
+  nodes, and 8.0.0 judges each tree. Measured on a project with two such trees, 7.0.0 exits 1
+  and 8.0.0 exits 0.
+- **`sync-check` can report a document stale where 7.0.0 reported it fresh (#90).** A node
+  whose source holds annotated and unannotated files now keeps a sync pair for every file;
+  7.0.0 kept pairs only for the annotated ones, so an edit to an unannotated file went
+  unnoticed. Measured on a JavaScript node with one annotated and one unannotated file, after
+  an edit to the unannotated one: 7.0.0 exits 0 and 8.0.0 exits 2.
+- **The debt report's values move on a project nobody edited (#90, #91, #94).** Its keys are
+  unchanged. `dormant` counts the nodes the new rule calls `dormant`, with lock files and
+  generated files excluded from the measure. `high_fan_out` and the score move because more
+  imports resolve to graph nodes: `.vue` script blocks and relative JS/TS paths are read for
+  the first time, and Go, Java, Kotlin and Swift imports, which 7.0.0 already read, now resolve
+  through the module and package layouts. A node's out-degree can rise.
+  `status --debt-report --fail-if score>N` can change its verdict with no edit, which this
+  project lists as breaking since 7.0.0.
+- **An unusable `site:` or `activity:` block in `.beadloom/config.yml` is refused (#91, #94).**
+  `config-check` and the Gate's `config-check` step block on a key either block does not read
+  and on a value it cannot use, and `docs site` stops before it writes anything when the `site:`
+  block is unusable. 7.0.0 read neither block, so a configuration it accepted can now fail.
+
+### Added
+
+- **The architecture viewer (#90, #92, #94).** An interactive graph on the portal and on every
+  node page: the neighbourhood of a selection at depth 1 to 5 or all, in or out; impact mode
+  over `depends_on`, `uses` and `consumes` on the architecture and over contracts on the
+  service landscape, with the `beadloom` commands to copy; a node card with the source link,
+  documents and their freshness, tests, public symbols, edges and findings; view state in the
+  URL. Edges follow orthogonal routes around boxes, share trunks and buses instead of
+  staircases, and the zoomed-out view draws top-level boxes with one aggregated edge per pair
+  (#92). The look is finished in #94: one line weight, node status as a corner mark, whole
+  arrowheads at every zoom, layer colours on every node and a visible project frame.
+- **`docs site` writes the portal scaffold (#91).** The VitePress theme, the viewer, the
+  browser suite, `package.json`, the lockfile and the VitePress config are package data in the
+  wheel, and `docs site` writes them into `--out`: 467 files where 7.0.0 wrote 282, measured
+  on this repository. An unedited file follows the shipped version on the next run. A file
+  edited by hand or written by someone else is never overwritten and is reported, and
+  `.beadloom/site/` is copied last as the project's overrides. The scaffold requires Node 22.
+- **`docs site --pages-workflow` (#91, #94)** writes `.github/workflows/beadloom-portal.yml`,
+  which regenerates, builds and deploys the portal to GitHub Pages under the declared base, with
+  job-level permissions, actions pinned by SHA, a default-branch guard and `fetch-depth: 0`. A
+  workflow beadloom did not write, or one edited by hand, is kept.
+- **`site:` in `.beadloom/config.yml` (#91):** `title`, `description`, `base`, `repo_url` and
+  `forges`, which maps a self-hosted host to a forge kind (`github`, `gitlab`, `gitea`,
+  `bitbucket`, `azure`) or to URL templates. Nothing from the git remote is published except
+  each node's source link.
+- **`activity.exclude` in `.beadloom/config.yml` (#94):** file-name or path patterns left out of
+  the activity measure, beside the lock files and the files git attributes mark generated or
+  binary, which are left out without being declared.
+- **`tests.flat_tests` in `.beadloom/config.yml` (#94)** binds a flat Python test file by its
+  name, then by its imports, through two new placements, `named` and `imported`. It is read only
+  when declared, and `init` declares it for a Python project.
+- **`lines_30d` and `lines_90d` (#94)** beside the commit counts in `activity`, in `ctx --json`,
+  the MCP `get_context` tool, `docs polish --format json` and the portal data file.
+- **A shallow history is named (#94).** On a shallow clone `reindex` prints an `Activity:` line
+  and the Gate's `reindex` step adds the same note, saying whether the clone reaches back over
+  the 90-day window. A clone that does not records no activity, and the Gate's step marks it
+  as not verified. 7.0.0 measured such a clone anyway, and the portal deployed from one said
+  "1 commit in 30 days" on nearly every node.
+- **The portal data file is schema 2 (#90).** Every key of schema 1 is kept with its meaning; the
+  viewer reads both and refuses an unknown version with a visible message.
+- **`init` reads Go, Java, Kotlin and Swift (#91):** Go through `go.mod` and `go.work`, Java and
+  Kotlin through Maven and Gradle layouts and `package` declarations, Swift through
+  `Package.swift`. An Xcode project is reported, not guessed. A mixed-stack monorepo keeps every
+  sibling. Each JVM test tree and Swift test target is written under `tests.mirrors` beside the
+  code it tests.
+- **`init` keeps the portal out of git (#91).** It adds `/site/` to `.gitignore` when no line
+  covers the directory and it holds no files of the project's own, and `init --force` after
+  `docs site` no longer takes the generated portal for the project's own files.
+
+### Changed
+
+- **`status` and `prime` counts move on a project nobody edited (#90, #91).** Their keys are
+  unchanged. The import count rises where imports are read for the first time: `.vue` script
+  blocks and relative JS/TS paths. The edge count rises there and wherever an import now
+  resolves to a node: Go, Java, Kotlin and Swift imports, which 7.0.0 already read, resolve
+  through the module and package layouts in 8.0.0.
+- **Project text on the portal is read as VitePress reads it (#91).** README, published
+  documents and node summaries are parsed with markdown-it-py configured as VitePress configures
+  markdown-it. A link is rebased or shown as text, and `{{ }}`, raw HTML and attribute braces
+  are shown as written rather than compiled.
+- **Node pages mount the viewer focused on their node** in place of the static Mermaid diagram
+  (#90). The C4 page keeps Mermaid.
+- **A drag on a node pans the canvas (#92).** The Arrange gesture that moved a node is removed.
+- **New runtime dependency: `markdown-it-py>=4.0,<5` (#91).** It is the port of the markdown-it
+  version VitePress 1.6.4 bundles, and `rich` already depends on it.
+- **The portal's Python modules moved under `beadloom.application.site` (#90),** owned by the
+  `site-generation` node. Import paths are not public API.
+
+### Fixed
+
+- **A non-Python scan path no longer creates false edges (#90).** The imports this release
+  newly resolves, relative JS/TS paths and `.vue` script blocks among them, are listed under
+  *Breaking*, because they change what `lint --strict` returns.
+- **A partly annotated node keeps a sync pair for every one of its files**, and the coverage
+  backstop reads every indexed language rather than `*.py` only, so a JS or Vue file no longer
+  loses its freshness check without a word (#90, `beadloom-oo4m`). What it does to the exit
+  code of `sync-check` is under *Breaking*.
+- **`doc-area-coherence` judges each top-level source tree against its own documents.** It
+  checked nothing once a second source tree held two or more nodes (#90, `beadloom-5o48`). What
+  it does to the exit code of `lint --strict` is under *Breaking*.
+- **An import resolves to the same node however the index was built**: an incremental reindex
+  and a fresh one agree (#94, `beadloom-nh7h`).
+- **The portal loads under the VitePress dev server.** The shipped config pre-bundles mermaid
+  and the layout worker's engine (#94, `beadloom-stcx`).
+- **A node named `__proto__`, `constructor` or `toString` is drawn** like any other (#94,
+  `beadloom-ytcg`).
+- **A changed `go.mod`, `go.work` or `Package.swift` alone re-resolves every stored import** on
+  an incremental reindex (#94, `beadloom-jcng`).
+- **Flat Python tests bind to a node** through `tests.flat_tests`, which `init` writes for a
+  Python project (#94, `beadloom-76mk`).
+
 ## [7.0.0] - 2026-09-29
 
 **This release binds tests to graph nodes instead of guessing, and so it changes two answers on

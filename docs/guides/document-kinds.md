@@ -83,8 +83,8 @@ invariant, pinned by a test on this repository and on the TypeScript fixture in
 The finding is reported **once per kind** with a count, up to five example paths and the roots
 that failed to reach them: sixty directories following one convention are one decision to make,
 not sixty lines to read. A space that declares **no** root has said nothing about where its
-documents live and therefore contradicts nothing — which is why this repository's 56
-`ACTIVE.md` files are silent and `documents_outside_declared_root` reads empty here.
+documents live and therefore contradicts nothing — which is why this repository's `ACTIVE.md`
+files (69 on 2026-10-08) are silent and `documents_outside_declared_root` reads empty here.
 
 Roots have their own precedence for the case where two of them name one file, and it points the
 same way for a different reason: **WORKING is consulted first**, because its shipped root list
@@ -219,10 +219,10 @@ And the exemption covers freshness only: a pair whose document or code file is g
 `missing` before any exemption applies, so a WORKING declaration cannot make a deleted file
 quieter than a present one.
 
-Measured here: the shipped exemption reaches 56 documents and excuses **0** sync pairs, because
-`ACTIVE.md` lives outside the docs directory the indexer walks, so none of those documents is a
-sync pair at all. The gate prints both numbers apart — `56 WORKING document(s) in the exempt
-space, 0 sync pair(s) excused` — because one word for two populations is how a reader takes the
+Measured here on 2026-10-08: the shipped exemption reaches 69 documents and excuses **0** sync
+pairs, because `ACTIVE.md` lives outside the docs directory the indexer walks, so none of those
+documents is a sync pair at all. The gate prints both numbers apart — `69 WORKING document(s) in
+the exempt space, 0 sync pair(s) excused` — because one word for two populations is how a reader takes the
 first number as the number of excused pairs. `beadloom docs spaces` runs no freshness check and therefore
 reports `pairs_excused: null` rather than `0`: **unknown is not zero**, in the tool's own
 output.
@@ -366,9 +366,12 @@ templates (`Source`, `Dependencies` for every kind, plus `Features` for `domain`
 | feature | — | `Source (5/42)`, `Dependencies (3/42)`, `Parent (4/42)` |
 | service | — | `Source (0/4)`, `Dependencies (0/4)` |
 
+On 2026-10-08 the feature row reads `Source (4/51)`, `Dependencies (4/51)`, `Parent (5/51)`, and
+the domain and service rows are unchanged.
+
 One document is reported: `docs/domains/infrastructure/README.md` carries no heading naming
-`Features`, and six of its seven peers do. The honest reading is that `infrastructure` has eight
-components and no feature at all, so it announces its children under `## Components`. Renaming a
+`Features`, and six of its seven peers do. The honest reading is that `infrastructure` has
+components (twelve on 2026-10-08) and no feature at all, so it announces its children under `## Components`. Renaming a
 heading to satisfy a matcher would trade a true finding for a false green, so the row stands as
 reported. Section matching is case-insensitive, whole-word and depth-independent, which is why
 `## Features and components` counts and `## Featureset` does not.
@@ -532,13 +535,17 @@ checked green: each of `decision-reason`, `risk-mitigation` and `unfilled-placeh
 to fire on a real document of this repository under a single reverse-editable edit, so they are
 green because there is nothing to report and not because nothing was read.
 
-**Why the three kinds read zero is template construction, and the decision is open.** The shipped
-BRIEF template carries no Goal section, no Reason column, no Risks and no Open Questions — and
-BRIEF is the kind every `bug`, `task` and `chore` uses. PLAN's criteria live in a "Done when"
-list rather than in a Goal section. Whether to give those templates the rows, or to state that
-they are outside these four checks, is a product decision with a migration behind it and it has
-not been taken. What has changed is that the state is printed by `docs quality` and by the gate
-step rather than inferred by a reviewer.
+**Why the three kinds read zero was template construction, and the decision is open.** On
+2026-08-27 the shipped BRIEF template carried no Goal section, no Reason column, no Risks and no
+Open Questions — and BRIEF is the kind every `bug`, `task` and `chore` uses. It has since gained
+an `## Axes` table with a `Why` column and a `## Non-behavioural declaration` table with a
+`Reason` column, both reason columns `decision-reason` reads (`REASON_COLUMNS`). On 2026-10-08
+the 13 BRIEF documents carried 11 decision rows, and the gate named PLAN, RND and SUMMARY as the
+kinds no content check enters. PLAN's criteria live in a "Done when" list rather than in a Goal
+section. Whether to give those templates the rows, or to state that they are outside these four
+checks, is a product decision with a migration behind it and it has not been taken. What has
+changed is that the state is printed by `docs quality` and by the gate step rather than inferred
+by a reviewer.
 
 ### A document nobody could read is named
 
@@ -565,7 +572,8 @@ docs-quality WARN | 248 document(s) read; measurable-goal 4, pending-in-approved
                     NO CHECK READS: BRIEF, PLAN, SUMMARY
 ```
 
-`beadloom ci` runs `doc-spaces` as its sixth step, on the same terms: warn-only, and `WARN`
+`beadloom ci` runs `doc-spaces` as its eighth step, after `issue-log` and `readme-pair`, on the
+same terms: warn-only, and `WARN`
 rather than `PASS` whenever it could not decide.
 
 `sync-check` reports the architecture-document side as `incomplete` rows, which are printed by
