@@ -15,7 +15,9 @@
 | `beadloom-91iv` | R1 | ✓ done | 8.0.0 in every place; public API in CONTRIBUTING.md + docs/guides/public-api.md; CHANGELOG [8.0.0]; `beadloom ci` rc 0 |
 | `beadloom-ghu3` | D1 | ✓ done | README pair: a portal and viewer section (125 blocks, 0 findings); 8 surface-drift docs read, corrected and attested one by one; vitepress-site TODO filled (318 cases); `beadloom ci` rc 0 |
 | `beadloom-jxp4` | V1 | ✓ done | `tests/release/verify_the_release.py` on a wheel path or `beadloom==X.Y.Z`: the built wheel 12 of 12 (exit 0); `beadloom==7.0.0` red, first: `--version` (with `--release 7.0.0`: the activity levels); `beadloom ci` rc 0 |
-| `beadloom-urgi` | R | in progress | review, bead id only |
+| `beadloom-urgi` | R | ✓ done (ISSUES) | review, bead id only |
+| `beadloom-1l8d.1` | fix | in progress | the lint exit-code change named Breaking; harness partial report; CONTRIBUTING; export wording |
+| `beadloom-1l8d.2` | review | blocked | re-review of the fix |
 | `beadloom-fymn` | P | blocked | PR, merge, Release, downloaded wheel, portal |
 
 ## Results
@@ -23,6 +25,8 @@
 (filled per wave)
 
 ## Notes
+
+- **R closed (2026-10-08):** `beadloom-urgi` = ISSUES, 0 critical, 1 major: the CHANGELOG lists under Fixed what public-api.md classes MAJOR — on an unedited JS project with one forbid rule `lint --strict` exits 0 on 7.0.0 and 1 on 8.0.0 (relative JS imports now resolve into edges) -> `beadloom-1l8d.1` (Breaking line + Upgrading step; CONTRIBUTING names the harness; the harness keeps a partial report + a unit test; `export` has no `--json`). Coordinator: the PRD's two stale sentences corrected; the template sections the quality step missed added to PRD and CONTEXT (docs quality: 0 findings on BDL-079). The reviewer defeated the withholding through `.beads/issues.jsonl` in the brief's file list -> noted on `beadloom-6rfz`. Re-review `beadloom-1l8d.2` follows.
 
 - **V1 closed (2026-10-08):** `e766aca0` — `tests/release/verify_the_release.py <wheel|beadloom==X.Y.Z> --node-bin … --record-json …`; 12 of 12 checks on the wheel built from the branch (fresh venv, Python 3.12, Node 22); on 7.0.0 from PyPI exit 3, first failure the version, and with `--release 7.0.0` exit 4 on the activity check (`cold`, no `lines_30d`); exit codes 0 / 2 / 3 / 4. `beadloom ci` rc 0. R launched with the bead id only.
 

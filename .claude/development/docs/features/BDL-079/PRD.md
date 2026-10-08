@@ -21,8 +21,8 @@ values of `ctx` and the debt count as public without saying so anywhere else.
 Measured on 2026-10-08 (`v7.0.0` against `main`, two versions of the code over one tree; the
 table is in RFC.md): no command added, removed or renamed; options and `config.yml` keys only
 added; the activity level vocabulary changed incompatibly — `cold` is never emitted any more, the
-set is `hot / warm / cool / quiet / dormant` ranked by changed lines; `ctx --json`, `export` and
-`docs polish` gain `lines_30d` / `lines_90d`; the debt report's values move on an unedited tree;
+set is `hot / warm / cool / quiet / dormant` ranked by changed lines; `ctx --json`, `docs polish`
+and the portal data file gain `lines_30d` / `lines_90d` (`export` carries no activity); the debt report's values move on an unedited tree;
 the portal data file is schema 2, a superset of 1; 40 Python import paths moved, none documented
 as public.
 
@@ -32,12 +32,20 @@ reference documents (the README pair, `docs/architecture.md`, guides) carrying a
 warning that nobody has read since the viewer landed; the version places that no instrument
 checks (`ROADMAP.md:3`, `CHANGELOG.md`, `tests/test_integration_v1.py:17`, the docs-audit SPEC).
 
+## Impact
+
+Every adopter who installs or upgrades: they get the viewer and the portal, and a CHANGELOG that
+names what changed on each public surface. Contributors: a declared public API to decide the
+next version by. This repository: the published portal shows five activity levels on a full
+history.
+
 ## Goals
 
 1. **8.0.0 on PyPI, verified on the wheel downloaded from PyPI** — not on the local build — on a
    project that is not this repository: `beadloom --version`, `__version__` and the distribution
-   metadata read 8.0.0; `docs site` writes the scaffold and the portal builds; `reindex` prints the
-   activity line with the five levels; the same harness fails on 7.0.0.
+   metadata read 8.0.0; `docs site` writes the scaffold and the portal builds; `ctx --json`
+   carries the five activity levels and `lines_30d` (`reindex` names only a shallow history); the
+   same harness fails on 7.0.0.
 2. **The public API is declared** in `CONTRIBUTING.md` and one document under `docs/`, in the
    owner's composition (2026-10-08, «Утверждаю»): the commands, their options and exit codes; the
    keys of `.beadloom/config.yml`; the keys **and the value vocabularies** of the `--json` outputs
@@ -60,7 +68,7 @@ checks (`ROADMAP.md:3`, `CHANGELOG.md`, `tests/test_integration_v1.py:17`, the d
   template, the CHANGELOG check — is `beadloom-tvjp`, after this release.
 - The follow-ups of BDL-078 (`beadloom-be6e`, `beadloom-j4gi`, `beadloom-pre3`).
 
-## User stories
+## User Stories
 
 - **US-1** As an adopter, `pip install beadloom` gives me the viewer and the portal, and the
   CHANGELOG tells me in one place what changed and what I must regenerate.
@@ -69,7 +77,7 @@ checks (`ROADMAP.md:3`, `CHANGELOG.md`, `tests/test_integration_v1.py:17`, the d
 - **US-3** As a contributor, I can read what the public API is and decide a version number
   without a precedent hunt.
 
-## Success criteria
+## Acceptance Criteria (overall)
 
 - `pip download beadloom==8.0.0` from PyPI, installed in a fresh environment on another project:
   version 8.0.0 everywhere; `docs site` + `npm run docs:build` green; `reindex` names the activity

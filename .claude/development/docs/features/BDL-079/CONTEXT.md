@@ -5,12 +5,23 @@
 
 ---
 
+## Goal
+
+8.0.0 on PyPI, verified on the downloaded wheel, with the public API declared and the CHANGELOG
+naming every change by the declaration.
+
 ## State
 
 Branch `features/BDL-079` from `main` at `539ed4a3` (BDL-078 merged). PyPI latest 7.0.0. No
 `[Unreleased]` section. No declared public API.
 
-## Standards
+## Key Constraints
+
+- `__version__` is the single source; the checked places are listed in RFC.md.
+- `main` is protected; one PR; merge on green CI; the Release tag publishes.
+- Verify on the downloaded wheel with `UV_NO_CACHE=1`, never on the local build.
+
+## Code Standards
 
 Python >= 3.10; ruff, mypy --strict; pytest; the Gate (`beadloom ci`) rc 0 before every commit
 that touches docs; commits `[BDL-079] <type>: <description>`; one PR; merge on green CI; publish
@@ -27,8 +38,13 @@ Russian first.
 | 2026-10-08 | SemVer becomes a rule of the shipped flow in a later work item (`beadloom-tvjp`) | Owner: «можно в следующих задачах» |
 | 2026-10-08 | Reference documents with surface drift are read, not re-baselined blind | BDL-UX #163; the drift accumulated through BDL-078 |
 
+## Related Files
+
+- `src/beadloom/__init__.py`, `CHANGELOG.md`, `CONTRIBUTING.md`, `docs/guides/public-api.md`,
+  `tests/release/verify_the_release.py`, the README pair, `ROADMAP.md`.
+
 ## Current Phase
 
-- **Phase:** Planning
+- **Phase:** Review findings being fixed (1l8d.1), re-review, then P
 - **Current bead:** see ACTIVE.md
 - **Blockers:** none
