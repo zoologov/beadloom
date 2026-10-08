@@ -57,8 +57,8 @@ the Source link). Then a MINOR release.
 ## What to do next, in order
 
 Items 5 to 14 keep the owner's order of 2026-09-29. Items 1 to 4 were placed first by the owner
-on 2026-10-05, 2026-10-07 and 2026-10-08: the three projects, the rules, the card populations,
-the RN project's requirements.
+on 2026-10-05, 2026-10-07 and 2026-10-08: the three projects, debt to zero (right after
+BDL-080), the rules, the RN project's requirements.
 
 ### 1. Adoption on the Vue frontend, then on the React Native app (after BDL-080; owner's step)
 
@@ -69,7 +69,7 @@ Beadloom for more (item 4). Each adoption is a work item of its own: `init`, the
 the owner, `lint --strict` over the FSD rules, the portal published, the findings filed as
 BDL-UX issues. What those two find is what ranks the rest of this list.
 
-### 1a. `beadloom-ba9w` — Debt to zero (P1, not started; the owner ranks it)
+### 1a. `beadloom-ba9w` — Debt to zero (P1, not started; right after BDL-080, before the rules epic — owner, 2026-10-08)
 
 Owner, 2026-10-08, reading the 8.0.0 dashboard (Lint 70 warnings, Debt 42.5 high, Doctor 262
 warnings): a work item that clears the debt rather than excuses it. Measured: 167 of 786 test
