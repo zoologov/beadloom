@@ -33,9 +33,11 @@
 | `beadloom-af99.4` | S1R2 | ✓ done (ISSUES) | re-review of the fix |
 | `beadloom-af99.5` | S1R3 | ✓ done (OK) | the card-tags regression fix re-read |
 | `beadloom-we9t` | S1W | ✓ done | docs |
-| `beadloom-z30s` | S1P | ready | PR, merge on green |
+| `beadloom-z30s` | S1P | in progress | PR, merge on green |
 
 ## Notes
+
+- **S1W closed (2026-10-09):** `f46e37e6` — 24 documents + CHANGELOG `[Unreleased]` (S1 under Added, every line with its bead); stale pairs 113 -> 0, unverified 240 -> 0; `beadloom ci` rc 0; the coordinator re-recorded the declared surface (743 -> 749). OPEN FOR THE OWNER: a `kind: site` node is now matched by `kind: service` rules, so an adopter's `lint` exit code can change on an unedited project — W put it under Upgrading; by the declared API and the 8.0.0 precedent that is Breaking (MAJOR). S1P: PR after the owner's word on the version.
 
 - **S1R3 OK (2026-10-09):** `beadloom-af99.5` — the fix confined and correct; the new cases fail with the line reverted; one nitpick (two fields named `tags` with opposite meanings — `declared_tags` for the full map; left for S2's refactor or the debt epic). S1W launched.
 
