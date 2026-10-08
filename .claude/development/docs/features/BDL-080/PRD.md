@@ -82,8 +82,9 @@ hand-written rule; every number and colour on a card or legend names its populat
 4. **`init` serves an FSD project.** A preset detects the six-folder layout, writes one node per
    slice (`component`, tagged with its layer, `part_of` the frontend service), the FSD `layers`
    rule, the slice public-API rule (a `forbid_import` from outside a slice past its `index`, with
-   the owner's wording in `rules.yml` comments), and the cohesion rule; a seventh adopter fixture
-   (an FSD project with TypeScript) joins `tests/fixtures/site/` and the `site-adopters` matrix.
+   the owner's wording in `rules.yml` comments), and the cohesion rule; two adopter fixtures
+   (FSD on Vue 3 + TS and on React Native + TS) join `tests/fixtures/site/` and the
+   `site-adopters` matrix.
    *Done when* `init` on the fixture needs no hand edit for `lint --strict` to judge its layers,
    and the fixture's portal is green under the browser suite.
 5. **Every population is named.** The Source link resolves on a build from an unpushed commit
@@ -119,8 +120,9 @@ hand-written rule; every number and colour on a card or legend names its populat
 - `lint --strict` 0 errors on this repository with the new nodes and rules; `beadloom ci` rc 0.
 - The own portal: the site box coloured by the FSD rule; at least one FSD finding drawn red when
   one is introduced on purpose in a test; the legend lists both rules' layers.
-- The FSD fixture: `init` → `lint --strict` judges its layers without a hand edit; the browser
-  suite green; the `site-adopters` matrix has seven legs.
+- The two FSD fixtures: `init` → `lint --strict` judges their layers without a hand edit; the
+  browser suite green; the `site-adopters` matrix has eight legs; every import form the two
+  frameworks use resolves (measured list in the RFC).
 - `beadloom waves` over three re-declared BDL-078 viewer beads: at least one wave of two.
 - Metrics cases: every colour and dash on the canvas has a legend entry; `Rule findings` and
   `Debt` on a box name their population; the Source link of a local build from an unpushed
@@ -132,7 +134,7 @@ hand-written rule; every number and colour on a card or legend names its populat
 
 - **S1** the site is a service + every layer rule drawn (goals 1, 2).
 - **S2** the viewer decomposed + the cohesion rule + the roles (goal 3).
-- **S3** `init` for FSD + the seventh fixture (goal 4).
+- **S3** the resolver's gaps for Vue and React Native closed, `init` for FSD, the two fixtures (goal 4).
 - **S4** every population named (goal 5).
 
 ## Rulings
@@ -148,7 +150,14 @@ hand-written rule; every number and colour on a card or legend names its populat
    root: a rule stratifies the slices of the frontend service that holds them (derived from the
    service whose nodes carry its tags; an explicit `scope:` stays available and optional). Cross
    imports inside one layer are forbidden by the rule, as FSD prescribes.
-2. **The FSD fixture is JavaScript + TypeScript** — the mixed project FSD teams actually have.
+2. **Two FSD fixtures, not one** (owner, 2026-10-08, after the coordinator's question on the
+   frameworks in the owner's own projects): **Vue 3 + TypeScript** and **React Native +
+   TypeScript**, both in the FSD layout, JavaScript and TypeScript mixed as real projects are.
+   What the viewer shows is only what the import resolver resolves, and the two frameworks
+   import differently — `.vue` with `<script setup lang="ts">`, `.tsx`/`.jsx`, path aliases
+   (`@/`, `~/`, Babel `module-resolver`), directory imports through `index`, React Native
+   platform suffixes (`Button.ios.tsx`), re-exports — so the resolver's gaps are measured first
+   (RFC) and closed in S3 before the preset; two legs join the `site-adopters` matrix.
 3. **The cohesion limit — by FSD best practice.** FSD gives no file count; it gives the shape: a
    slice is one business entity or feature, with the standard segments (`ui`, `model`, `lib`,
    `api`, `config`) and a public API in `index`. The rule therefore judges shape first (a slice
