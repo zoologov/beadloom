@@ -76,7 +76,9 @@ hand-written rule; every number and colour on a card or legend names its populat
    in this repository's rules and shipped as a default of the FSD preset; the `fsd` role overlay
    and the explore/dev protocols state the cohesion rule as the DDD overlay states it for Python
    packages, and the overlay's layer → domain mapping is replaced by slice → component with the
-   layer as a tag. *Done when* no viewer node owns more than the limit, `beadloom waves` over
+   layer as a tag. Steiger (the official FSD linter) is added to the scaffold and is green after the cut; it
+   runs in CI with the style linters and in the completion checklist. *Done when* Steiger and
+   `lint --strict` are green, no viewer node owns more than the limit, `beadloom waves` over
    BDL-078's viewer beads (re-declared against the new nodes) places at least two in one wave,
    and the Playwright suite is unchanged in count and green.
 4. **`init` serves an FSD project.** A preset detects the six-folder layout, writes one node per

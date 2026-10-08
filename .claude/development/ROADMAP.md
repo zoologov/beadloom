@@ -30,48 +30,46 @@ intent-vs-reality is the moat, context bundles are commoditising · single-repo 
 prerequisite of federation · CI is the only true enforcement point · top-tier models, no tiering
 by role.
 
-**The owner's next step outside this list** is outside validation: Beadloom on another project,
-then a team on their own services. Its state is the owner's to record.
+**The target is three projects under Beadloom** (owner, 2026-10-08): this repository and the
+owner's two frontends — a **Vue 3 frontend** (Vite, Pinia, Quasar, TypeScript; already Feature-Sliced
+with Steiger, 81 slices and legacy directories beside them; self-hosted GitLab) and a **React
+Native app** (Expo Router, Expo Modules with Swift and Kotlin, gluestack with `.web.tsx`, Babel
+aliases; FSD planned in its refactoring). Measured 2026-10-08: on both, 44–49 % of imports go
+through path aliases the resolver does not read, so a graph built today lies by omission. Every
+item below is ranked by what it does for those three. Project names stay out of this repository.
 
 ---
 
 ## In progress
 
-Nothing. 8.0.0 shipped on 2026-10-08 (BDL-079, PR #95): the viewer, the portal, the activity metric,
-the declared public API. Next is item 1 below.
+### BDL-080 — the portal is a service, and the viewer serves a Feature-Sliced frontend
+
+Work item `.claude/development/docs/features/BDL-080/`, branch `features/BDL-080`. Folds
+`beadloom-be6e` and `beadloom-pre3`. Four slices, one PR each: S1 the site as a service and every
+layer rule drawn; S2 the viewer cut by cohesion and the cohesion rule in the roles; S3 the
+resolver's gaps for Vue and React Native (tsconfig paths, aliases, platform suffixes, `.mjs`,
+the Expo module bridge), the `init` FSD preset with Steiger's rules, two fixtures shaped like the
+owner's projects; S4 every population named (lint reach, debt inside, legend from the canvas,
+the Source link). Then a MINOR release.
 
 ---
 
 ## What to do next, in order
 
-Items 4 to 13 keep the owner's order of 2026-09-29. Items 1 to 3 were placed first by the owner
-on 2026-10-05 and 2026-10-07, in this order: FSD, then the rules and the card populations.
+Items 5 to 14 keep the owner's order of 2026-09-29. Items 1 to 4 were placed first by the owner
+on 2026-10-05, 2026-10-07 and 2026-10-08: the three projects, the rules, the card populations,
+the RN project's requirements.
 
-### 1. `beadloom-be6e` — the portal is a service, and it serves a Feature-Sliced frontend (P1, not started)
+### 1. Adoption on the Vue frontend, then on the React Native app (after BDL-080; owner's step)
 
-**Needs `/task-init`.** Owner rulings of 2026-10-05 and 2026-10-06, in the bead:
+The first outside adoptions, in this order: the Vue frontend first — it is already FSD, runs
+Steiger, and its GitLab remote exercises the Source link's second forge; the React Native app
+second — it needs S3's resolver work and the Expo module bridge, and its own process RFC asks
+Beadloom for more (item 4). Each adoption is a work item of its own: `init`, the graph read by
+the owner, `lint --strict` over the FSD rules, the portal published, the findings filed as
+BDL-UX issues. What those two find is what ranks the rest of this list.
 
-- `vitepress-site` is a **service** of the product, like `tui` — own runtime, build, dependencies,
-  tests and layer rule, one product version covering all of them; the data file is a declared
-  contract (`beadloom` produces, the portal consumes). What rests on `kind: site` is enumerated
-  first, and whether the kind survives is decided then.
-- The viewer draws exactly one layer rule, the first by name. This repository declares two, so
-  its twenty site slices are grey, unfiltered and never red, while `lint` still judges them. A
-  service carries its own layer rule, which is the natural form of "draw every layer rule".
-- **Decompose by cohesion.** Every BDL-078 viewer bead was serialised by `beadloom waves` because
-  all of them change one node, `site-graph-viewer`. Split the FSD side into slices that are nodes
-  (the overview router, the levels model, heads and bundles, the selection walk, the card), and
-  make the roles say so for an FSD project — the `fsd` overlay and the explore/dev protocols
-  state the cohesion rule as the DDD overlay states it for Python packages.
-- `init` has no FSD preset and writes no layer rule; the `fsd` agent overlay maps layers to
-  domains, the mapping this repository rejected; the public-API rule of a slice is checked
-  nowhere. No adopter fixture is FSD.
-- The portal's Source link is a permalink to the built commit; a local build from an unpushed
-  commit links to a 404 on every node (BDL-UX #307).
-
-**Why first:** without it the viewer is weak for a frontend team, and a team of solos has them.
-
-### 2. `beadloom-j4gi` — the rules leave the graph folder and are decomposed (P1, not started)
+### 2. `beadloom-j4gi` — the rules leave the graph folder and are decomposed (P1, not started; the second epic, with `beadloom-tvjp`)
 
 **Needs `/task-init`.** Owner, 2026-10-07: `.beadloom/_graph/rules.yml` is 860 lines in the
 graph's folder — 19 rules, ~330 lines of dated commentary, ~190 lines of baselines. The approved
@@ -82,21 +80,37 @@ layout, `config-check` reports a project with both; baselines (exempt file lists
 under `docs/`, where `sync-check` and the audit can judge it — the first instance of rationale
 bound to what it is about so that it can go stale. Explore enumerates every reader first.
 
-### 3. `beadloom-pre3` — a card names the population it reports over (P2, not started)
+### 3. `beadloom-tvjp` — SemVer as a rule of the shipped flow (P1, not started; with `j4gi`)
 
-`Rule findings: none` is indistinguishable from "lint never ran" (#305); a box's `Debt 0` is the
-box's own score while its activity rolls up from its parts (#306); the 36 findings bound to no
-node are shown nowhere. The card names the population, a box shows debt own and inside, and
-project-level findings get a home on the project box's card and the dashboard.
+Owner, 2026-10-08: SemVer and the declared public API go into the roles and the release rules
+that ship to adopters — a release checklist with the version decision as a step, duties for the
+review and tech-writer roles (an API CHANGE names its SemVer kind; a verdict states the version
+the change requires), a *Public API* template per project, a CHANGELOG check. `beadloom-pre3`
+(card populations) folded into BDL-080 S4.
 
-### 4. `beadloom-jwfc` — the pre-push Gate crashes on a full pipe and reports it as stale docs (P0, BDL-UX #226)
+### 4. What the React Native app's process RFC asks of Beadloom (not yet a bead)
+
+**Needs `/task-init`, after the two adoptions start.** The owner's RN project is planning its
+delivery process on Beadloom (its RFC §12, 2026-10-01) and lists what it needs that Beadloom
+does not have: a `design` role with `react-native` and `gluestack` overlays (design spec,
+render, gallery, the owner's feedback loop) and a `qa` role with `detox` and `playwright`
+overlays; a `ui-tokens-only` rule (no hex colours or `StyleSheet` in `features`, `entities`,
+`shared`); a `ui-accepted` guard on visual baselines; the screen gallery on the portal beside
+the landscape; more than one stack in one `flow.yml`; a hook that mirrors beads and documents
+into the team's tracker and wiki (Huly) and comments back; a multi-session guard (two
+coordinators on one station, never one bead or one branch twice); a `graphql-federation`
+overlay and a contracts hub over `export`/`federate` for its backend services — which is the
+need the federation deferral below was waiting for. Rank inside the item: the ones the first
+adoption blocks on first.
+
+### 5. `beadloom-jwfc` — the pre-push Gate crashes on a full pipe and reports it as stale docs (P0, BDL-UX #226)
 
 The only open P0. Under `git push` the Gate's stdout is a non-blocking pipe, one large write
 raises `BlockingIOError`, and the hook then says the docs are stale. Each occurrence teaches
 `--no-verify` for a reason that is false. **Done when** the report survives a full pipe and the
 hook tells a Gate that crashed from a Gate that failed.
 
-### 5. The adopter's first commands (five P1 bugs)
+### 6. The adopter's first commands (five P1 bugs)
 
 Each sits in a command an outside user runs first.
 
@@ -110,12 +124,12 @@ Each sits in a command an outside user runs first.
 - `beadloom-is2z` (#291): the debt report reads `rules.yml` from paths the product never writes,
   so its rule-violation count is zero on every standard project.
 
-### 6. `beadloom-tsqz` — `scope-check` never runs in CI (P1, #300)
+### 7. `beadloom-tsqz` — `scope-check` never runs in CI (P1, #300)
 
 A pull request is checked out on a detached HEAD, no branch names a work item, and the leg skips.
 **Done when** the leg judges a pull request whatever its branch is called.
 
-### 7. Three lessons of BDL-074 into the shipped flow (not yet a bead)
+### 8. Three lessons of BDL-074 into the shipped flow (not yet a bead)
 
 **Needs `/task-init`.** Today they live in one coordinator's memory and reach no adopter.
 
@@ -128,31 +142,31 @@ A pull request is checked out on a detached HEAD, no branch names a work item, a
 The same organ, open as bugs: `beadloom-tm76` (P1, #219, withholding does not cover commit
 messages), `beadloom-6rfz` (P2, #297), `beadloom-qhxr` (P2).
 
-### 8. `beadloom-r9t5` — four populations are called "stale docs" (P1, not started)
+### 9. `beadloom-r9t5` — four populations are called "stale docs" (P1, not started)
 
 **Needs `/task-init`.** Nineteen surfaces report a number under one name over four different
 populations, and one table row shows two of them. What each surface should count is a product
 decision per surface.
 
-### 9. The three class gaps (not yet a bead)
+### 10. The three class gaps (not yet a bead)
 
 **Needs `/task-init`.** Stated under *The class behind most defects* below. Order: a rule made
 impossible to break; allocation for `ACTIVE.md` (#257); an expiry on a recorded finding.
 
-### 10. BDL-066 — agent behaviour observability (drafted, no beads)
+### 11. BDL-066 — agent behaviour observability (drafted, no beads)
 
 Docs are `Draft` in `.claude/development/docs/features/BDL-066/`. The owner sees the conversation
 with the coordinator and nothing of what the coordinator tells its subagents. Two slices are
-re-derived before `/task-init`: scope drift overlaps item 6, and the brief delta is the inspection
-item 7 declares uninspected. Everything here raises detectability and prevents nothing.
+re-derived before `/task-init`: scope drift overlaps item 7, and the brief delta is the inspection
+item 8 declares uninspected. Everything here raises detectability and prevents nothing.
 
-### 11. `beadloom-uxqc` — `doctor` audits the produced graph, not only the code (P1, #162)
+### 12. `beadloom-uxqc` — `doctor` audits the produced graph, not only the code (P1, #162)
 
 Four graph defects shipped past every role and a green Gate, and each was found by a person
 clicking a node. The bead turns those hand audits into checks: an island, an unexplained leaf, a
 claim without evidence.
 
-### 12. Follow-ups filed by BDL-074 to BDL-077 (P2 and P3)
+### 13. Follow-ups filed by BDL-074 to BDL-077 (P2 and P3)
 
 - `beadloom-inmv`: mutation survivors outside the rule engine — kill them or record why each is
   equivalent.
@@ -172,7 +186,7 @@ claim without evidence.
 - `beadloom-gvdy`: grammar-cache fixtures leak a loader swap into the next test file.
 - P3: `beadloom-uvgy`, `beadloom-phjj`, `beadloom-m6eb`, `beadloom-xx30`.
 
-### 13. `beadloom-cxal` — the style guide, and Qwen as the writer of Russian documentation (P2)
+### 14. `beadloom-cxal` — the style guide, and Qwen as the writer of Russian documentation (P2)
 
 A speech style guide for all four roles, shipped as data so it reaches a Claude adapter, a Goose
 recipe and a machine check. With it, BDL-065: a **role runtime** in `flow.yml` that names which
@@ -196,7 +210,9 @@ it clearly better. BDL-065 has no bead. **Needs `/task-init`.**
 
 Owner decision 2026-09-29. Epic `beadloom-8qqp` and its eight beads are `deferred`. S5 is live
 cross-repo `ctx`; S6 is the `unverified` lifecycle, the undeclared sweep and review-gated
-bootstrap.
+bootstrap. **The need has a date now:** the RN project's RFC plans a contracts hub over
+`export`/`federate` for its backend services (item 4). The deferral stands until the owner
+lifts it.
 
 ---
 
@@ -233,7 +249,7 @@ What already answers it and should keep being built: populations that are derive
 authored · substitutable environments · instruments that name what they could not reach ·
 withholding review · recording the offer, not only the decision.
 
-**Three gaps are still open** (item 9):
+**Three gaps are still open** (item 10):
 
 1. **A rule made impossible to break, rather than written down.** Seven instances exist. The
    clean-room verdict wording, the landing-lock form and the commit-message rule are still text
