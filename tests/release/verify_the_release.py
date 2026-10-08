@@ -33,10 +33,16 @@ The checks, in the order they run and are reported:
 * **pages workflow** -- ``docs site --pages-workflow`` writes
   ``.github/workflows/beadloom-portal.yml`` with ``fetch-depth: 0``.
 
-Every check runs, and the report names the FIRST that failed. Exit codes: 0 every check
-holds; 2 the run could not start (an unpinned or unknown artifact, no ``uv``/``git``, a Node
-older than 22, an install that failed); 3 a version check failed, or the index serves no
-such pin; 4 a behaviour check failed and every version check held.
+Every check runs, and the report names the FIRST that failed. A step that cannot run once
+the checks have started -- a ``git`` command that fails while the project is written, or the
+shallow clone -- is recorded as ``CANNOT RUN`` beside the checks that ran, and the report is
+printed and recorded all the same; the checks that do not depend on that step still run.
+
+Exit codes: 0 every check holds; 2 the run could not start (an unpinned or unknown artifact,
+no ``uv``/``git``, a Node older than 22, an install that failed) or a step could not run, so
+the verdict is incomplete; 3 a version check failed, or the index serves no such pin; 4 a
+behaviour check failed and every version check held. A failed version check outranks an
+incomplete run, because it already settles that the artifact is not the release.
 
 It uses the standard library only, so any Python 3.10+ can run it, and it needs ``uv``,
 ``git`` and ``node``/``npm`` on ``PATH`` (``--node-bin`` puts a Node directory first).
@@ -99,6 +105,9 @@ _EXIT_CANNOT_RUN = 2
 _EXIT_VERSION = 3
 _EXIT_BEHAVIOUR = 4
 
+#: The status of a check whose own step failed for a reason outside the artifact.
+_CANNOT_RUN = "CANNOT RUN"
+
 
 class CannotRunError(Exception):
     """The run could not start, so there is no verdict about the artifact."""
@@ -119,7 +128,11 @@ class Artifact:
 
 @dataclass
 class Check:
-    """One assertion and its outcome: ``PASS``, ``FAIL`` or ``NOT RUN``."""
+    """One assertion and its outcome: ``PASS``, ``FAIL``, ``NOT RUN`` or ``CANNOT RUN``.
+
+    ``NOT RUN`` is a check skipped because an earlier check of the artifact failed;
+    ``CANNOT RUN`` is a check whose own step failed for a reason outside the artifact.
+    """
 
     name: str
     kind: str
@@ -143,6 +156,9 @@ class Report:
     def not_run(self, name: str, kind: str, why: str) -> None:
         self.checks.append(Check(name, kind, "NOT RUN", why))
 
+    def cannot_run(self, name: str, kind: str, why: str) -> None:
+        self.checks.append(Check(name, kind, _CANNOT_RUN, why))
+
     def first_failure(self) -> Check | None:
         return next((check for check in self.checks if check.status != "PASS"), None)
 
@@ -150,6 +166,8 @@ class Report:
         failed = [check for check in self.checks if check.status != "PASS"]
         if any(check.kind == "version" for check in failed):
             return _EXIT_VERSION
+        if any(check.status == _CANNOT_RUN for check in failed):
+            return _EXIT_CANNOT_RUN
         return _EXIT_BEHAVIOUR if failed else _EXIT_OK
 
 
@@ -483,7 +501,11 @@ def check_activity(room: Room, project: Path, report: Report) -> None:
 def check_shallow_history(room: Room, project: Path, report: Report) -> None:
     name = "shallow history: reindex on a --depth 1 clone prints the Activity line"
     clone = room.workdir / "shallow"
-    room.git(room.workdir, "clone", "-q", "--depth", "1", project.as_uri(), str(clone))
+    try:
+        room.git(room.workdir, "clone", "-q", "--depth", "1", project.as_uri(), str(clone))
+    except CannotRunError as exc:
+        report.cannot_run(name, "behaviour", str(exc))
+        return
     done = room.beadloom(clone, "reindex", "--project", str(clone))
     lines = [line for line in done.stdout.splitlines() if line.startswith("Activity:")]
     passed = done.returncode == 0 and any("history: shallow (1 commit)" in line for line in lines)
@@ -653,6 +675,10 @@ def prepare(room: Room, artifact: Artifact, python: str, report: Report) -> None
     }
 
 
+#: What a failure while the adopter project is written and committed is reported as.
+_PROJECT_STEP = "project: the adopter project is written and committed"
+
+
 def verify(
     artifact: Artifact, *, release: str, python: str, node_bin: Path | None, workdir: Path
 ) -> Report:
@@ -660,7 +686,10 @@ def verify(
     report = Report(artifact=artifact.install, release=release)
     prepare(room, artifact, python, report)
     check_versions(room, artifact, report)
-    check_project(room, report)
+    try:
+        check_project(room, report)
+    except CannotRunError as exc:
+        report.cannot_run(_PROJECT_STEP, "behaviour", str(exc))
     return report
 
 
@@ -680,9 +709,11 @@ def render(report: Report) -> str:
     if first is None:
         lines.append(f"VERDICT: {len(report.checks)} of {len(report.checks)} checks hold (exit 0)")
     else:
+        incomplete = any(check.status == _CANNOT_RUN for check in failed)
         lines.append(
             f"VERDICT: {len(failed)} of {len(report.checks)} checks fail "
             f"(exit {report.exit_code()}); the first: {first.name}"
+            + ("; a step could not run, so the verdict is incomplete" if incomplete else "")
         )
     return "\n".join(lines) + "\n"
 

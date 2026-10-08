@@ -51,6 +51,14 @@ IMPORTABLE_TEST_MODULES: dict[str, str] = {
         "import is the test, not a borrowed helper. Exit: the day that check runs "
         "them in a child pytest by path instead of importing them"
     ),
+    "tests/release/verify_the_release.py": (
+        "the release harness is a script a maintainer runs by path, stdlib-only so any "
+        "Python 3.10+ runs it without the dev environment, which rules out tests/support "
+        "(its __init__ imports pytest). Its unit test, "
+        "tests/self_check/process/test_the_release_harness_reports_what_ran.py, imports it "
+        "because the harness is the SUBJECT of that test, not a borrowed helper. Exit: the "
+        "harness moves into a package the suite may import"
+    ),
 }
 
 

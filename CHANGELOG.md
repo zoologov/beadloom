@@ -14,7 +14,7 @@ emitted any more, so a reader that matches it stops matching.
 
 The public API is declared in [`docs/guides/public-api.md`](docs/guides/public-api.md) and in
 the *Public API* section of `CONTRIBUTING.md`: the commands, their options and exit codes; the
-keys of `.beadloom/config.yml`; the keys and the value vocabularies of the `--json` outputs
+keys of `.beadloom/config.yml`; the keys and the value vocabularies of the JSON outputs
 (`ctx`, `status`, `export`, the debt report); the MCP tools; the portal data file's schema; the
 files generated for an adopter. Python import paths are not public API. Every line below is
 classified against that list and names the pull request that carried it: #90 and #91 are
@@ -25,23 +25,34 @@ BDL-076, #92 is BDL-077, #94 is BDL-078.
 1. **Reindex.** Activity is measured again, by changed lines, and every node gets a level from
    the new set. Measured on this repository on 2026-10-08, 130 nodes: 11 `hot`, 28 `warm`,
    56 `cool`, 21 `quiet`, 14 `dormant`.
-2. **If you read an activity level** from `ctx --json`, the MCP `get_context` tool,
+2. **Run `beadloom lint --strict` and `beadloom sync-check` once on the new version**, before
+   the Gate runs them for you. Imports 7.0.0 left unresolved now become `depends_on` edges, and
+   a `forbid`, `deny`, `forbid_cycles`, `forbid_import` or `layers` rule judges them. A finding
+   names where the crossing is, and `beadloom ctx <ref-id>` lists a node's edges. A crossing you
+   decide to keep is declared on the rule that caught it: an `exempt:` entry with a `reason`
+   and an `until` on `forbid_import` and on `layers` (for a crossing between peers of one
+   layer), `unless_edge` on `deny`, `exclude:` on a node matcher. The
+   [rule reference](docs/domains/graph/features/rule-engine/SPEC.md#rulesyml-schema) lists the
+   keys of each rule. A crossing you do not mean to keep is what the rule is for. A document
+   `sync-check` reports stale after the upgrade can be held to a file 7.0.0 did not pair with
+   it: read the document against that file, then attest it with `beadloom sync-update`.
+3. **If you read an activity level** from `ctx --json`, the MCP `get_context` tool,
    `docs polish --format json` or the portal data file, replace `cold` with `cool` (changed in
    the last 30 days) or `quiet` (changed in 90 days but not in 30). The two are not the same
    condition as `cold`, so the mapping is a decision, not a rename.
-3. **If a CI step runs `status --debt-report --fail-if score>N`**, read the report once on the
+4. **If a CI step runs `status --debt-report --fail-if score>N`**, read the report once on the
    new version before you trust the verdict. The `dormant` and `high_fan_out` counts move on a
    project nobody edited.
-4. **If `.beadloom/config.yml` holds a `site:` or `activity:` block**, run
+5. **If `.beadloom/config.yml` holds a `site:` or `activity:` block**, run
    `beadloom config-check`. A key either block does not read, or a value it cannot use, now
    blocks `config-check` and the Gate, where it used to be ignored.
-5. **If your CI checks out a shallow history** and you want activity measured there, fetch the
+6. **If your CI checks out a shallow history** and you want activity measured there, fetch the
    full history (`fetch-depth: 0` on `actions/checkout`). A shallow clone that does not reach
    back 90 days records no activity, and `reindex` and the Gate say so by name.
-6. **If your Python tests sit flat under `tests/`** (`tests/test_*.py`), add
+7. **If your Python tests sit flat under `tests/`** (`tests/test_*.py`), add
    `tests: {flat_tests: true}` to `.beadloom/config.yml`. `init` writes it when it creates the
    config of a Python project, and does not edit a config that already exists.
-7. **If your code imports a module under `beadloom.application`**, the portal's modules moved
+8. **If your code imports a module under `beadloom.application`**, the portal's modules moved
    under `beadloom.application.site`. Import paths are not public API, and this release states
    that for the first time.
 
@@ -57,6 +68,24 @@ BDL-076, #92 is BDL-077, #94 is BDL-078.
   leaves, and a box's activity rolls up its parts. `cold` is never emitted. The key is
   `activity.level` in `ctx --json`, the MCP `get_context` tool and `docs polish --format json`,
   and `activity` on each node of the portal data file.
+- **`lint --strict`, and the Gate's lint step, can fail on a project nobody edited (#90,
+  #91).** 8.0.0 resolves imports that 7.0.0 left unresolved or did not read: relative JS/TS
+  paths and `.vue` script blocks (#90), and Go, Java, Kotlin and Swift imports through the
+  module and package layouts `init` now reads (#91). Each resolved import derives a
+  `depends_on` edge, and `forbid`, `deny`, `forbid_cycles`, `forbid_import` and `layers` rules
+  judge those imports and edges, so an import that crosses a declared boundary is now a
+  violation. Measured on
+  2026-10-08 on a two-module JavaScript project whose one `forbid` rule says `ui` must not
+  depend on `store`, with `ui` importing `../store/store.js`: on the same files, 7.0.0 derives
+  no edge and exits 0, and 8.0.0 derives `ui` → `store` and exits 1. The exit code can also
+  move the other way: `doc-area-coherence` at severity `error` failed with "checked nothing"
+  once a second source tree held two or more nodes, and 8.0.0 judges each tree. Measured on a
+  project with two such trees, 7.0.0 exits 1 and 8.0.0 exits 0.
+- **`sync-check` can report a document stale where 7.0.0 reported it fresh (#90).** A node
+  whose source holds annotated and unannotated files now keeps a sync pair for every file;
+  7.0.0 kept pairs only for the annotated ones, so an edit to an unannotated file went
+  unnoticed. Measured on a JavaScript node with one annotated and one unannotated file, after
+  an edit to the unannotated one: 7.0.0 exits 0 and 8.0.0 exits 2.
 - **The debt report's values move on a project nobody edited (#90, #91, #94).** Its keys are
   unchanged. `dormant` counts the nodes the new rule calls `dormant`, with lock files and
   generated files excluded from the measure. `high_fan_out` and the score move because imports
@@ -136,13 +165,16 @@ BDL-076, #92 is BDL-077, #94 is BDL-078.
 
 ### Fixed
 
-- **A JS/TS import with a relative path resolves**, a `.vue` script block is parsed, and a
-  non-Python scan path no longer creates false edges (#90).
+- **A non-Python scan path no longer creates false edges (#90).** The imports this release
+  newly resolves, relative JS/TS paths and `.vue` script blocks among them, are listed under
+  *Breaking*, because they change what `lint --strict` returns.
 - **A partly annotated node keeps a sync pair for every one of its files**, and the coverage
   backstop reads every indexed language rather than `*.py` only, so a JS or Vue file no longer
-  loses its freshness check without a word (#90, `beadloom-oo4m`).
+  loses its freshness check without a word (#90, `beadloom-oo4m`). What it does to the exit
+  code of `sync-check` is under *Breaking*.
 - **`doc-area-coherence` judges each top-level source tree against its own documents.** It
-  checked nothing once a second source tree held two or more nodes (#90, `beadloom-5o48`).
+  checked nothing once a second source tree held two or more nodes (#90, `beadloom-5o48`). What
+  it does to the exit code of `lint --strict` is under *Breaking*.
 - **An import resolves to the same node however the index was built**: an incremental reindex
   and a fresh one agree (#94, `beadloom-nh7h`).
 - **The portal loads under the VitePress dev server.** The shipped config pre-bundles mermaid

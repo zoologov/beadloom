@@ -248,8 +248,9 @@ version number is a promise about this list and nothing else (owner's ruling, 20
 
 1. the commands, their options and their exit codes;
 2. the keys of `.beadloom/config.yml`;
-3. the keys and the value vocabularies of the `--json` outputs of `ctx`, `status`, `export` and
-   the debt report;
+3. the keys and the value vocabularies of the JSON outputs: `ctx --json`, `status --json`,
+   the debt report (`status --debt-report --json`) and `export`, whose artifact is JSON with
+   no option;
 4. the MCP tools;
 5. the portal data file's schema;
 6. the files generated for an adopter.
@@ -285,10 +286,33 @@ Releases are cut by a maintainer (trunk-based; `main` is always green):
    The CHANGELOG is where a release is NAMED. A domain document that says "until
    X.Y.Z ..." before X.Y.Z exists states a version nothing can hold it to, and
    `docs audit` reports it stale.
-4. **Open one PR to `main`** and merge when `beadloom ci` (the required check) is green.
-5. **Create a GitHub Release** tagged `vX.Y.Z` — this triggers `.github/workflows/pypi-publish.yml`
+4. **Verify the built wheel on a project that is not this repository.** Build the wheel from
+   a clean export of the branch (`git archive HEAD`, then `uv build --wheel`) and run
+
+   ```bash
+   python3 tests/release/verify_the_release.py dist/beadloom-X.Y.Z-py3-none-any.whl \
+       --release X.Y.Z --node-bin <a Node 22+ bin directory>
+   ```
+
+   The script installs the artifact into a fresh environment with `UV_NO_CACHE=1`, writes a
+   throwaway adopter project and runs the release's behaviour on it. Exit 0 means every check
+   holds; 2 means the run could not start or a step could not run; 3 means a version check
+   failed; 4 means a behaviour check failed. Pass `--release`: its default is the release the
+   script was last updated for.
+5. **Open one PR to `main`** and merge when `beadloom ci` (the required check) is green.
+6. **Create a GitHub Release** tagged `vX.Y.Z` — this triggers `.github/workflows/pypi-publish.yml`
    (build → TestPyPI → PyPI). The version is read from `__version__`.
-6. **The portal** redeploys from `main` via `deploy-site.yml` (`beadloom docs site` + VitePress).
+7. **Verify the downloaded release**, the same way, on the pin rather than the wheel:
+
+   ```bash
+   python3 tests/release/verify_the_release.py beadloom==X.Y.Z \
+       --release X.Y.Z --node-bin <a Node 22+ bin directory>
+   ```
+
+   This is the artifact adopters install, so a green step 4 does not stand in for it. Exit 3
+   with "the index holds no beadloom==X.Y.Z" right after the upload is the index not serving
+   the new version yet; run it again once it does.
+8. **The portal** redeploys from `main` via `deploy-site.yml` (`beadloom docs site` + VitePress).
 
 When removing a top-level directory, grep every `.github/workflows/*` and `.gitlab-ci.yml`
 for stale path references before releasing.

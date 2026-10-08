@@ -24,10 +24,11 @@ makes it.
    accepts. A key is documented in the reference of the node whose code reads it: `tests:` in the
    [test-mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md), `site:` in the
    [site-generation SPEC](../domains/application/features/site-generation/SPEC.md).
-3. **The keys and the value vocabularies of the `--json` outputs** of `ctx`, `status`, `export`
-   and the debt report (`status --debt-report --json`). A vocabulary is the set of values a key
-   can take. The activity level is one: `hot`, `warm`, `cool`, `quiet`, `dormant`. A script that
-   matches on a value depends on the vocabulary as much as on the key that carries it.
+3. **The keys and the value vocabularies of the JSON outputs**: `ctx --json`, `status --json`,
+   the debt report (`status --debt-report --json`) and `export`, whose artifact is JSON without
+   an option. A vocabulary is the set of values a key can take. The activity level is one:
+   `hot`, `warm`, `cool`, `quiet`, `dormant`. A script that matches on a value depends on the
+   vocabulary as much as on the key that carries it.
 4. **The MCP tools** the server lists, with their arguments and the keys of what they return. The
    reference is [`docs/services/mcp.md`](../services/mcp.md).
 5. **The portal data file's schema**: the `schema_version` the generator writes and the keys under
