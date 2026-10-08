@@ -166,7 +166,7 @@ Every node document also carries a **Dependencies** section: the `depends_on` an
 
 | Function | Role |
 |----------|------|
-| `_load_graph_from_yaml` | Load nodes/edges from `.beadloom/_graph/*.yml`, through `graph_files.each_graph_file`. `.21` made this the reader `init --bootstrap` reaches, and it had no unreadable-YAML guard: the adopter got a `yaml.parser.ParserError` traceback (the review of `.23`, major 3) |
+| `_load_graph_from_yaml` | Load nodes/edges from `.beadloom/_graph/*.yml`, through `graph_files.each_graph_file`. `.21` made this the reader `init --bootstrap` reaches, and it had no unreadable-YAML guard: the adopter got a `yaml.parser.ParserError` traceback (the review of `.23`, major 3) Since BDL-080 S1a each node's `kind` is read through `graph_files.canonical_kind` (`_with_canonical_kind`), on a copy, so a node declared `kind: site` gets a skeleton under `docs/services/` and an entry under Services, and `_patch_docs_field` never rewrites the declared kind |
 | `_find_root_node` | Identify root service (no `part_of` as src) |
 | `_doc_path_for_node` | Resolve doc path from `docs:` field or convention |
 | `_load_symbols_by_source` | Best-effort SQLite symbol loading, for `generate_polish_data`, which runs after a reindex |

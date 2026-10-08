@@ -5,6 +5,54 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+BDL-080 slice 1: the portal is a service, and every layer rule is drawn. Every change below adds
+to a public surface; nothing is removed or renamed, the data file stays schema 2, and
+`kind: site` stays accepted. Each line names its bead; the pull request is to be opened.
+
+### Upgrading — what to check
+
+1. **Reindex**, so the rules index carries a layer rule's `scope` and `title`. An index written
+   before them gives the portal the wider verdict and the rule's name until it is rebuilt.
+2. **A node declared `kind: site` is now judged as a `service`.** A rule whose matcher names
+   `kind: service` selects it, which it did not before, so such a rule can report on it. Run
+   `beadloom lint --strict` once on the new version. Measured on this repository, where the node
+   was moved to `kind: service` and tagged `layer-service`: 0 errors before and after, and
+   `architecture-layers` judges 425 of 434 live `depends_on` edges, up from 381.
+
+### Added
+
+- **`kind: site` is accepted as an alias of `service` (`beadloom-je0i`).** The graph loader
+  reads it as `service`, so the rules, the portal's pages, nav and views, `docs generate`,
+  `doctor` and the impact boundary treat a portal as the service it is. `beadloom reindex`
+  prints an `[info]` line for each node read through the alias.
+- **Every layer rule in the portal data file (`beadloom-kgh6`, `beadloom-af99.2`).**
+  `architecture.data.json` gains a top-level `layer_rules` (each rule's `name`, `title`, `scope`,
+  `edge_kind` and `layers`) and, per node, `layer_rule` and `layer_rule_rank`: the rule that
+  places the node and its rank there. A `depends_on` edge's `violation` is the union of every
+  rule's verdict. `layers`, `layer_order`, `layer` and `layer_rank` keep describing the first
+  rule by name, and the six adopter fixtures' files are otherwise byte-identical.
+- **`scope:` on a `layers` rule (`beadloom-kgh6`, `beadloom-af99.3`).** The rule judges only the
+  edges with both ends in that node's `part_of` subtree, counts only those in its population
+  line, and reads no tag outside it. A scope naming no node is a `validate_rules` warning and
+  makes the rule inert. Without `scope:` the portal derives the container the rule stratifies.
+  Where the first rule by name declares a scope, the original layer keys follow it.
+- **`title:` on a `layers` rule (`beadloom-af99.2`)**, the name the portal shows the rule by in
+  the legend, the Layer filter, the card and the impact summary. The rule's `name` stays its
+  identifier in lint, in exemptions and in the portal's URL. An empty or non-string title is
+  refused at load.
+- **The viewer draws every layer rule (`beadloom-i3zs`, `beadloom-af99.2`, `beadloom-af99.3`).**
+  The legend has one group per rule, headed by its title; the Layer filter offers each rule's
+  layers by title, while its value and the URL carry `<rule>: <layer>`, and a link naming a bare
+  layer still opens on it; the card names the rule that places a node; lanes are given per rule;
+  a sixth layer tone, cyan, gives the six Feature-Sliced layers a colour each. A rule scoped to a
+  box inside the project draws one box per layer inside it, stacked top to bottom, and that box
+  opens only where its layer boxes are readable.
+- **The rule-engine SPEC documents the new keys (`beadloom-we9t`):** `scope:` and `title:` on a
+  `layers` rule, with their refusals and what a scope narrows, in the
+  [rule reference](docs/domains/graph/features/rule-engine/SPEC.md#rulesyml-schema).
+
 ## [8.0.0] - 2026-10-08
 
 **This release ships the architecture viewer and the portal an adopter generates with

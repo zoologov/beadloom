@@ -19,7 +19,11 @@ in full screen it sits beside the canvas.
   `landscape.data.json`. A mode names only what differs: the data file and how it becomes nodes and
   edges, the filters in its slot of the toolbar and the set they show, what its search finds
   (`searched`), its impact walk, and whether it is layered (`layered`: the architecture is, the
-  landscape is not). The mode is the page's prop and the URL does not carry it, because the two
+  landscape is not). Since BDL-080 the architecture mode's graph also carries `layerRules`, the
+  data file's `layer_rules`, and the mode carries `layerChoiceOf` (`site-filter-graph`): once the
+  layers are read, the viewer settles the Layer filter's value through it, so a link naming a
+  bare layer (`?layer=domains`) filters on a portal that draws two rules and the URL is
+  rewritten to the value the filter offers. The mode is the page's prop and the URL does not carry it, because the two
   modes are two pages with two different cards.
 - **Layout.** ELK lays the graph out once, in a Web Worker (`site-shared`, `shared/elk`), and
   everything the canvas draws is read from that one layout: nodes, box sizes, routes, bundles,
@@ -47,7 +51,13 @@ in full screen it sits beside the canvas.
   which the node is drawn as itself and readable, in a 350 ms animation unless the reader asks for
   reduced motion (`site-navigate-graph`, `frame`). A selected box is a walk over everything it
   holds taken as one node (`boxNeighbourhoodOf`): it opens at any zoom, is framed whole, keeps its
-  contents at full strength and draws its outward edges as the pointer on it does.
+  contents at full strength and draws its outward edges as the pointer on it does. The one
+  exception is a box holding a layer rule's boxes (BDL-080 S1e): it opens only where those boxes
+  are readable, also when tapped, because at the zoom that frames it whole their titles would
+  stand on plates over each other. Measured on this repository: `vitepress-site` tapped at the fit
+  is framed whole at zoom 0.128 and drawn closed, its title inside and its card in the panel;
+  zoomed in, it opens at 0.313 with layer boxes 29.7 px tall, and zoomed out it stays open at 0.250
+  and closes at 0.200, with no title over another at any step (5 overlaps at 0.128 before).
 - **Panel.** It shows what the page puts in its `panel` slot for the selected node and, in impact
   mode, the impact summary above it. A widget does not import another, so the page composes the
   card; the slot passes `parents`, so the card can say what a box holds. Each viewer gets its own
@@ -60,6 +70,18 @@ in full screen it sits beside the canvas.
   toolbar zooms, fits and centres, and fitting and centring leave out the part of the canvas the
   open panel covers. Keys, while focus is in the viewer: `+` and `-` zoom, `0` fits, `f` toggles
   full screen, `Esc` clears the selection.
+- **Layer boxes** (BDL-080 S1c). A layer rule whose scope is a box other than the project's frame
+  draws one box per layer inside that box (`site-layer`, `layerBoxesOf`). The viewer draws from
+  that containment, `drawnParents`: the elements, the filters' ancestors, and the selection's
+  kept nodes, holders and selected box read it. The card and impact read the file's own
+  `parents`, because a layer box is no node of the graph. `buildElements` emits each layer box as
+  a node carrying `LAYER_BOX` (the rule's name) and marks the scope box `STACK_LANES`, both
+  exported from `lib/levels.js`. `canvasLayout` passes `stack` to ELK for such a box, so its layer
+  boxes stack top to bottom by rank (`site-shared`, `shared/elk`). A layer box is titled and toned
+  by its layer, opens by readability, is joined by lines and carries tallies and pills like any
+  box, and a tap on it selects nothing. On this repository `vitepress-site` opens onto six layer
+  boxes, app, pages, widgets, features, entities and shared. The panel slot's `layer-name` is the
+  layer's caption.
 - **URL state.** The filters, the selection, depth, direction, dim or hide, and the neighbourhood
   or impact view round-trip through the query string (`site-url-state`). The URL overrides the
   props.
@@ -260,7 +282,8 @@ open boxes and nothing is laid out again, so no box moves between levels.
   box. With nothing more asked a selection opens only that, which is what the pointer on the node
   needs, so a click and a hover draw the node's edges on the same lines. Impact, and a
   neighbourhood the reader changed (deeper, one way, the rest hidden), open what every node of the
-  walk needs. A selected box opens at any zoom (`forced`). The search box opens the boxes that
+  walk needs. A selected box opens at any zoom (`forced`), except a box holding a layer rule's
+  boxes, which opens where they are readable (`model/canvasMap.js`, BDL-080 S1e). The search box opens the boxes that
   hold its matches. Other filters open nothing, and an aggregated edge carries only the edges they
   show.
 - **"+N" and own lines** (the owner's rulings nine and fourteen). A node inside an open box whose outward edges a box
@@ -389,6 +412,9 @@ that leaves the page removes only its own. Records keyed by a node id have no pr
   projectPlate }`), `pills` (`{ pills, dropped }`, each pill `crowded` or not), `titles`,
   `boxTitles`, `boxTallies`.
 
+Since BDL-080 S1c `visibleIds`, `boxes`, `nodeLooks` and the handle's other node readers count
+the boxes a scoped layer rule draws among the drawn nodes, beside the file's own.
+
 It takes one action, `revealNodes(ids, { edges })`: with `edges` (the default) it draws every edge
 with an end at a revealed node as itself, opening every box that holds one at any zoom; with
 `{ edges: false }` it opens the boxes only, as a reader's zoom does; `[]` lets them close. A case
@@ -398,7 +424,8 @@ that reads the whole graph at full detail opens every box through it.
 
 ### Modules
 
-- `lib/elements.js` — `buildElements`: the data file as Cytoscape elements. An edge's id is
+- `lib/elements.js` — `buildElements`: the data file as Cytoscape elements, and the boxes a
+  scoped layer rule draws (`LAYER_BOX`); a scope box is marked `STACK_LANES`. An edge's id is
   `e<index>:<src>-><dst>` unless a node has that id, then primed (`freshId`).
 - `lib/stylesheet.js` — `buildStylesheet(tokens)`, `GEOMETRY`, `CURVE_STYLE`, `drawnSizeOf`,
   `rimOf`.
@@ -414,7 +441,7 @@ that reads the whole graph at full detail opens every box through it.
   runs and the indexes they read.
 - `lib/levels.js` — the levels: `levelOf`, `siblingsOf`, `outwardOf`, `outwardOfOpen`,
   `ownLinesOf`, `openInView`, `readableZoomOf`, `zoomDrawingOf`, `selectionReveals`, `budgetOf`,
-  `isWithinAny`, `LEVEL_OPTIONS`, `PROJECT_BOX`.
+  `isWithinAny`, `LEVEL_OPTIONS`, `PROJECT_BOX`, `STACK_LANES`, `LAYER_BOX`.
 - `lib/aggregateRoutes.js` — the medoid route of an aggregated edge.
 - `lib/mapMarks.js` — titles, plates, broken titles, status marks; `MAP_MARKS`.
 - `lib/overviewGrid.js`, `lib/overviewRoutes.js` — the overview's grid and router
@@ -424,7 +451,8 @@ that reads the whole graph at full detail opens every box through it.
 - `model/useGraphCanvas.js` — the Cytoscape instance: mount, layout, hover, `showOnly`,
   `markSelection`, `reveal`; returns `layingOut`, `layout`, `bundles`, `hoveredEdges`,
   `layoutError`, `pills()`, `tallies()` and `map()`.
-- `model/canvasLayout.js` — `layoutInputOf`, `applyGeometry`, `fitCompounds`, `isLoop`.
+- `model/canvasLayout.js` — `layoutInputOf`, `applyGeometry`, `fitCompounds`, `isLoop`; a node's
+  `stack` is read from `STACK_LANES`.
 - `model/canvasMap.js` — `canvasMap`, the level drawn on Cytoscape; `model/mapTitles.js`
   (`titleLooks`, `titleDresser`, `scaleAt`, `SCALE_STEP`), `model/aggregateElements.js` (the
   map's lines, `SAID`, `OWN_LINE`) and `model/mapExtras.js` (own lines, edges as themselves,
@@ -450,7 +478,7 @@ old junction index.
   `focus`, `depth`, `direction`, `height` (default `640px`). Slot `panel`, shown for the selected
   node, with `node`, `layerName`, `edges`, `layers`, `contracts`, `parents`, `select(id)` and
   `close()`.
-- `buildElements(nodes, edges, { parents, layers })`, `buildStylesheet(tokens)`, `CURVE_STYLE`
+- `buildElements(nodes, edges, { parents, layers, layerBoxes })`, `buildStylesheet(tokens)`, `CURVE_STYLE`
   (the fallback curve style of a line the layout did not route).
 
 ## Depends on
@@ -463,7 +491,7 @@ old junction index.
 
 ## Tests
 
-Thirteen specs are declared on this node. The other Playwright specs drive this widget too, and
+Fourteen specs are declared on this node. The other Playwright specs drive this widget too, and
 each is declared on the slice it tests. Measures that read the drawing are computed from the test
 handle by oracles in `e2e/support/`, which import nothing from the theme.
 
@@ -497,9 +525,19 @@ handle by oracles in `e2e/support/`, which import nothing from the theme.
   lines on hover, selection framing and reduced motion, loops square, open-box titles never
   covered.
 - `e2e/counts.spec.js` (support `counts.js`): for every node the "+N", the hover and the click name
-  the same edges on the same lines; a click on every top-level box frames it whole and its card
-  says what it holds.
+  the same edges on the same lines; a click on every top-level box frames it whole, open, except
+  a box holding a layer rule's boxes, which opens where they are readable, and its card says what
+  it holds.
+- `e2e/layer-boxes.spec.js` (support `layers.js`, BDL-080): a rule scoped to a box draws one box
+  per layer inside it, titled and toned by the layer; the scope opens onto its layer boxes closed,
+  titles inside, and a layer box opens once its parts are readable; lines between layers are
+  drawn between their boxes; an edge the scoped rule finds against is drawn red between the layer
+  boxes and as itself; a tap on the scope at the fit frames it whole and draws its layer boxes
+  only once they are readable, with no title over another on the way in and out; a data file
+  without every rule's keys draws no layer box.
 - `e2e/metrics.spec.js` (support `metrics.js`): every PRD criterion of BDL-078 measured on this
-  portal and the adopter-sized graph, including a box's activity reflecting its parts.
+  portal and the adopter-sized graph, including a box's activity reflecting its parts, and since
+  BDL-080 the layer boxes' titles at 10 px or more, inside their boxes, on a tap on the scope and
+  on a zoom into it.
 - `e2e/performance.spec.js`: overview planning, bundling, the adopter-sized first drawing, zoom
   step, hover and frame bounds for the environment (see [the site's page](../vitepress-site.md)).

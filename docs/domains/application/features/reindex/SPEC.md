@@ -28,6 +28,7 @@ The reindex module orchestrates the complete data pipeline that transforms YAML 
 | `nothing_changed` | `bool` | `False` | `True` when incremental reindex detects no file changes |
 | `errors` | `list[str]` | `[]` | Fatal errors encountered during reindex |
 | `warnings` | `list[str]` | `[]` | Non-fatal warnings (e.g., duplicate doc references) |
+| `infos` | `list[str]` | `[]` | What the graph load read differently from how a file wrote it, with nothing to fix: a kind read through its alias (BDL-080 S1a, from `GraphLoadResult.infos`; filled by the full path, which is the one that loads the graph) |
 | `activity_history` | `GitHistory \| None` | `None` | The history a full reindex measured activity on (BDL-078 `beadloom-btkd.9`); `None` on an incremental run, outside git, or when no node has a source |
 
 ### Constants
@@ -379,7 +380,7 @@ def _load_rules_into_db(
 ) -> None
 ```
 
-Load architecture rules from `rules.yml` into the `rules` table. `_serialize_rule` covers **every** rule type the loader produces — deny, require, cycle, import-boundary, forbid-edge, layer, cardinality, unregistered-feature-candidate, module-coverage, scenario-coverage, doc-area-coherence, summary-facts, and since BDL-074 C3 the three suite rules — and raises `TypeError` on a type it does not know, so a rule type added to the loader without a serializer fails loudly instead of vanishing from the `rules` table. Each rule is stored WHOLE: a `forbid_import` exemption, a `scenario_coverage.non_behavioural` declaration and a `doc_area_coherence` threshold are all part of what the rule currently means, and a reader of the table must not see a stricter rule than the one that runs. `summary_facts` stores an empty definition because it has no configuration to store. A layer rule's `exempt:` entries are stored for the same reason, and since BDL-070 B4 there is a reader that needs them: the architecture view reads its layer rule from this table and asks that rule which edges to draw red, so an index without the entries would make the site flag crossings the Gate excuses. The key is written only when the rule declares entries, so the row of a project that excuses none is unchanged. The suite rules are stored whole by `_serialize_suite_rule`, with their exemptions for the same reason: `test_binding` as `{files?, for?, exempt?}`, where each `exempt` entry carries `files` or `nodes` with its `reason` and `until`; `test_import_boundary` as `{from_glob, to_glob, of?, exempt?}`, with `forbid_import`'s `{from, to, reason, until}` entries; and `scenario_binding` as `{features, exempt?}`. A key marked `?` is written only when the rule declares it.
+Load architecture rules from `rules.yml` into the `rules` table. `_serialize_rule` covers **every** rule type the loader produces — deny, require, cycle, import-boundary, forbid-edge, layer, cardinality, unregistered-feature-candidate, module-coverage, scenario-coverage, doc-area-coherence, summary-facts, and since BDL-074 C3 the three suite rules — and raises `TypeError` on a type it does not know, so a rule type added to the loader without a serializer fails loudly instead of vanishing from the `rules` table. Each rule is stored WHOLE: a `forbid_import` exemption, a `scenario_coverage.non_behavioural` declaration and a `doc_area_coherence` threshold are all part of what the rule currently means, and a reader of the table must not see a stricter rule than the one that runs. `summary_facts` stores an empty definition because it has no configuration to store. A layer rule's `exempt:` entries are stored for the same reason, and since BDL-070 B4 there is a reader that needs them: the architecture view reads its layer rule from this table and asks that rule which edges to draw red, so an index without the entries would make the site flag crossings the Gate excuses. The key is written only when the rule declares entries, so the row of a project that excuses none is unchanged. Since BDL-080 a layer rule's `scope` (S1b) and `title` (S1e) are stored the same way, each only when declared: the architecture view reads both from this table, the scope to judge inside it and the title to show the rule by, and an index without them shows the wider verdict and the rule's name until the next reindex. The suite rules are stored whole by `_serialize_suite_rule`, with their exemptions for the same reason: `test_binding` as `{files?, for?, exempt?}`, where each `exempt` entry carries `files` or `nodes` with its `reason` and `until`; `test_import_boundary` as `{from_glob, to_glob, of?, exempt?}`, with `forbid_import`'s `{from, to, reason, until}` entries; and `scenario_binding` as `{features, exempt?}`. A key marked `?` is written only when the rule declares it.
 
 ### Activity Settings
 
@@ -556,7 +557,15 @@ class ReindexResult:
     nothing_changed: bool = False
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    infos: list[str] = field(default_factory=list)
     activity_history: GitHistory | None = None
+```
+
+`beadloom reindex` prints `infos` as an `[info]` block after the `[ERR]` and `[warn]` blocks,
+one line each. A graph node declared `kind: site` reads:
+
+```
+  [info] Node 'vitepress-site' declares kind 'site', read as 'service' (an accepted alias)
 ```
 
 ## Invariants

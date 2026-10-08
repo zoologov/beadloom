@@ -32,8 +32,8 @@
 | `beadloom-af99.3` | S1f | ✓ done | the first rule's `layer`/`layer_rank` read the tags inside its `scope:`, so a node outside has none and an edge no rule judged carries no `violation` (six fixtures' data files byte-identical; this portal's layer keys and edges identical); a bare `?layer=domains` on a portal of two rules opens on that layer (the first rule's by name where two share the name) and the URL takes the offered value; the evaluator walks a scoped rule's subtree once (`scoped_reach`) |
 | `beadloom-af99.4` | S1R2 | ✓ done (ISSUES) | re-review of the fix |
 | `beadloom-af99.5` | S1R3 | ✓ done (OK) | the card-tags regression fix re-read |
-| `beadloom-we9t` | S1W | in progress | docs |
-| `beadloom-z30s` | S1P | blocked | PR, merge on green |
+| `beadloom-we9t` | S1W | ✓ done | docs |
+| `beadloom-z30s` | S1P | ready | PR, merge on green |
 
 ## Notes
 

@@ -27,6 +27,11 @@ The graph viewer's keys:
 
 The data mode is not a key: it is the page's.
 
+Where more than one layer rule is drawn, `layer` carries the layer's label, the rule's name and
+the layer's (`site-fsd-layers: widgets`), never the rule's title, so a link stays good when a
+title is reworded. A link naming a bare layer is read by the graph viewer as that layer and
+rewritten to the label (BDL-080 S1f, `site-filter-graph`).
+
 ## Public API
 
 - `readQuery(search, defaults)` and `writeQuery(search, state, defaults)`.
@@ -35,3 +40,11 @@ The data mode is not a key: it is the page's.
 ## Depends on
 
 - `site-shared`.
+
+## Tests
+
+`src/beadloom/site_scaffold/e2e/url-state.spec.js`: a linked view opens in the state its query
+names; a query cannot switch the architecture page to another data mode; a change in the toolbar
+is written to the URL and survives a reload; and since BDL-080 a link naming a layer by its bare
+name opens on that layer where two or more rules are drawn, and a bare name two rules share opens
+on the first rule's layer by name.

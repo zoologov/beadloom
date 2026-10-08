@@ -34,6 +34,12 @@ its own for skipping it.
   every graph file under *graph_dir* that survives the policy. A missing directory is
   no graph files rather than an error, which is the virgin case and the common one.
 - `NOT_A_GRAPH_FILE` — the names the policy skips for every caller: `rules.yml`.
+- `canonical_kind(kind)` — re-exported from `graph/loader.py` (BDL-080 S1a): the kind a
+  node declaring *kind* is read as, `service` for `site`. A reader that parses the graph
+  files itself instead of reading `nodes.kind` applies it, as `doc_generator` does, so a
+  `kind: site` node is documented as a service. The re-export follows the existing
+  `onboarding` -> `graph` seam; a direct import from the rule engine would add a
+  same-layer crossing.
 
 `also_skip` is the one genuine difference between the callers, and it is a parameter
 so that the difference has to be stated at the call site rather than written into a
@@ -111,8 +117,8 @@ cycle were broken, and those are the reasons worth reading:
 
 Only `update_node_in_yaml` restates the guards for the boundary alone. Removing that
 duplication means moving this body into a layer every reader may import, which is filed
-as `beadloom-4axf`. The DATA half is already shared: `NOT_A_GRAPH_FILE` is declared in
-`graph/loader.py` and re-exported here, because the direction that allows one constant
+as `beadloom-4axf`. The DATA half is already shared: `NOT_A_GRAPH_FILE` and, since
+BDL-080, `canonical_kind` are declared in `graph/loader.py` and re-exported here, because the direction that allows one constant
 is `onboarding` -> `graph` and not the reverse.
 
 BDL-UX #220 is closed except for one shape, and that shape is not an unreadable file.

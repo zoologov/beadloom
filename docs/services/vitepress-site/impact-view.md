@@ -19,7 +19,11 @@ is the mode's table (`site-graph-edge`, `site-landscape-data`), so one walk serv
 - **Architecture** (`lib/impact.js`). The walk goes backwards along `depends_on`, `uses` and
   `consumes`. The summary gives the count, the rings, the domains and services that hold the
   reached nodes, each layer boundary the walked edges cross with a count, and the risky nodes:
-  no bound tests, stale docs, docs not checked, open findings. The commands to copy are
+  no bound tests, stale docs, docs not checked, open findings. Since BDL-080 a boundary is keyed
+  by layer, the pair (rule, rank), so two rules' ranks are never one boundary. Its `from` and
+  `to` are the layers' captions, which name the rule by its title where more than one rule is
+  drawn, and the boundaries are listed in the layers' order: every rule's top to bottom, the rules
+  in the file's order. The commands to copy are
   `beadloom why <ref>` and, when the node has a source, `beadloom impact <source>`.
 - **Landscape** (`lib/contractImpact.js`). The walk goes along each contract from its producer to
   its consumers, for every protocol, so a change reaches the consumers of what a service produces

@@ -228,7 +228,10 @@ class Check:
 
 Test files: `tests/integration/application/doctor/test_doctor.py`,
 `tests/integration/application/doctor/test_doctor_drift.py`,
-`tests/integration/application/doctor/test_doctor_instructions.py`
+`tests/integration/application/doctor/test_doctor_instructions.py`, and since BDL-080
+`tests/integration/application/doctor/test_doctor_reads_a_site_node_as_a_documented_service.py`:
+a node declared `kind: site` is read as `service` by the loader, so `docs generate` writes its
+page under `docs/services/` and doctor finds it documented, with 0 errors.
 
 Tests should cover the following scenarios:
 
