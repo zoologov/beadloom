@@ -366,7 +366,10 @@ jobs:
   site-e2e:
     needs: [site-build]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 318 cases took 26.5 min on PR #94 and hit 30 on PR #95 at case 313 of 318
+    # (runner variance, every case green). 45 leaves room; the per-case bounds
+    # in e2e/support/environment.js are what judge speed, not this limit.
+    timeout-minutes: 45
     steps:
       # The full history, for the same reason as the gate job: the portal this
       # job builds carries activity levels (BDL-078, `beadloom-btkd.9`).
