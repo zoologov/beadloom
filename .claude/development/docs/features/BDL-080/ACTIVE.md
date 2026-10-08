@@ -1,14 +1,24 @@
 # ACTIVE: BDL-080 — The portal is a service, and the viewer serves a Feature-Sliced frontend
 
-> **Created:** 2026-10-08
+> **Last updated:** 2026-10-08
+> **Phase:** Development
 
 ---
 
 ## Current Bead
 
-**Bead:** S1 — `beadloom-je0i` (S1a), `beadloom-kgh6` (S1b), then `beadloom-i3zs` (S1c); T, R, W, PR.
+**Bead:** S1 — `beadloom-lsev` (S1T); then R, W, PR.
+**Goal:** the site a service, every layer rule drawn (S1); then S2, S3, S4.
+**Done when:** every PRD goal's *Done when* holds; four PRs merged; a MINOR release.
 
 ## Progress
+
+- [x] PRD, RFC, CONTEXT, PLAN approved (2026-10-08)
+- [x] S1a, S1b, S1c, S1d landed
+- [ ] S1 test, review, docs, PR
+- [ ] S2, S3, S4
+
+## Results
 
 | Bead | Role | Status | Note |
 |---|---|---|---|
@@ -20,10 +30,6 @@
 | `beadloom-m7xq` | S1R | blocked | review, bead id only |
 | `beadloom-we9t` | S1W | blocked | docs |
 | `beadloom-z30s` | S1P | blocked | PR, merge on green |
-
-## Results
-
-(filled per wave)
 
 ## Notes
 

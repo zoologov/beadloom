@@ -1,7 +1,7 @@
 # ACTIVE: BDL-078 — The viewer looks finished, and five defects are fixed
 
 > **Last updated:** 2026-10-08
-> **Phase:** Shipped
+> **Phase:** Completed
 
 ---
 

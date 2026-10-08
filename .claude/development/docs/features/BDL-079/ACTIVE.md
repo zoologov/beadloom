@@ -1,14 +1,21 @@
 # ACTIVE: BDL-079 — Release 8.0.0
 
-> **Created:** 2026-10-08
+> **Last updated:** 2026-10-08
+> **Phase:** Completed
 
 ---
 
 ## Current Bead
 
 **Bead:** none — the work item shipped on 2026-10-08 (8.0.0 on PyPI, verified on the downloaded wheel); epic `beadloom-1l8d` closed.
+**Goal:** 8.0.0 on PyPI with the public API declared.
+**Done when:** verified on the downloaded wheel — done.
 
 ## Progress
+
+- [x] R1, D1, V1, review, fixes, re-review, PR #95, Release v8.0.0, PyPI, the downloaded wheel, the portal
+
+## Results
 
 | Bead | Role | Status | Note |
 |---|---|---|---|
@@ -21,7 +28,7 @@
 | `beadloom-1l8d.3` | fix | ✓ done | lint Breaking line names the rules by what each reads; harness: unreached project checks NOT RUN, exit order 3 > 4 > 2, non-JSON stdout a FAIL (22 tests); `--pair` in Upgrading; CONTRIBUTING step 4 `<export>/dist/` and the order; `beadloom ci` rc 0 |
 | `beadloom-fymn` | P | ✓ done | PR, merge, Release, downloaded wheel, portal |
 
-## Results
+## Notes
 
 - R1 `be97f6f5`, D1 `9d18e000`, V1 `e766aca0`, review ISSUES -> fixes `2eb17cb7`, `0809863c`, `de1d843e` -> OK; PR #95 -> `main` 7b9a9b65; Release `v8.0.0`; PyPI publish run 37771690138 success; the downloaded wheel 11 of 11; the published portal shows five activity levels on 130 nodes.
 
