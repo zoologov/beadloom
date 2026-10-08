@@ -17,3 +17,14 @@ Feature: a node declared with the kind site is a service on the portal
     And the nav links the portal node at "/services/atlas-portal"
     And the architecture data file groups the portal node with "services"
     And the landscape data file groups the portal node with "services"
+
+  # BDL-080 S1d (`beadloom-af99.1`). The diagram's click targets and the data
+  # file's links come from the same page map as the page tree, so a site node
+  # links where its page is written: under services/, never under other/.
+  @bead:beadloom-af99.1
+  Scenario: the landscape links a site node to its page under services
+    Given a project whose portal node is declared with the kind "site" and consumes the data the product produces
+    When the site is generated for the project
+    Then the landscape diagram links the portal node at "/services/atlas-portal"
+    And the landscape data file links the portal node at "/services/atlas-portal"
+    And every page the landscape diagram links to is a page of the site

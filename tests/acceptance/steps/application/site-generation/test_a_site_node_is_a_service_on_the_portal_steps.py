@@ -12,6 +12,7 @@ The module is named ``test_*`` so default pytest collection picks the scenarios 
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +35,10 @@ _NOW = "2026-10-08T00:00:00+00:00"
 
 #: The generated VitePress module the nav is written into.
 _NAV_MODULE = ".vitepress/config.generated.mjs"
+
+#: The landscape's Mermaid page, whose `click <id> "<url>"` lines are the diagram's links.
+_LANDSCAPE_DIAGRAM = "landscape-diagram.md"
+_CLICK = re.compile(r'^\s*click \S+ "([^"]+)"', re.MULTILINE)
 
 _CONTRACT = """\
     contract:
@@ -121,3 +126,30 @@ def _architecture_group(world: dict[str, Any], group: str) -> None:
 @then(parsers.parse('the landscape data file groups the portal node with "{group}"'))
 def _landscape_group(world: dict[str, Any], group: str) -> None:
     assert _group_in(world, "landscape.data.json") == group
+
+
+def _diagram_links(world: dict[str, Any]) -> list[str]:
+    diagram = (world["site"] / _LANDSCAPE_DIAGRAM).read_text(encoding="utf-8")
+    return _CLICK.findall(diagram)
+
+
+@then(parsers.parse('the landscape diagram links the portal node at "{link}"'))
+def _diagram_link(world: dict[str, Any], link: str) -> None:
+    diagram = (world["site"] / _LANDSCAPE_DIAGRAM).read_text(encoding="utf-8")
+    node_id = "n_" + PORTAL.replace("-", "_")
+    assert f'click {node_id} "{link}"' in diagram
+
+
+@then(parsers.parse('the landscape data file links the portal node at "{link}"'))
+def _landscape_link(world: dict[str, Any], link: str) -> None:
+    data = json.loads((world["site"] / "public" / "landscape.data.json").read_text("utf-8"))
+    nodes = {str(node["id"]): node for node in data["nodes"]}
+    assert nodes[PORTAL]["url"] == link
+
+
+@then("every page the landscape diagram links to is a page of the site")
+def _diagram_links_are_pages(world: dict[str, Any]) -> None:
+    links = _diagram_links(world)
+    assert links
+    missing = [url for url in links if not (world["site"] / f"{url.lstrip('/')}.md").is_file()]
+    assert missing == []

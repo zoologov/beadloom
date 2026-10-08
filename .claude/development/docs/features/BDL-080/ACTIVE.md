@@ -15,8 +15,8 @@
 | `beadloom-je0i` | S1a | ✓ done | site is an alias of service: `KIND_ALIASES` in `graph/loader.py` (not `rules/types.py`: a cycle, measured); the doc skeleton applies it too; lint 0 errors, `architecture-layers` judged 381 -> 425 of 434, no finding |
 | `beadloom-kgh6` | S1b | ✓ done | `layer_rules` + per node `layer_rule`/`layer_rule_rank` (new `application/site/layer_rules_view.py`); `scope:` parsed, validated, indexed, narrows evaluator/reach/liveness through `layers.within_scope`; site slices placed by `site-fsd-layers` (scope `vitepress-site`), `cli` by `architecture-layers` (scope `beadloom`); lint 0 errors / 69 warnings before and after; existing keys byte-identical |
 | `beadloom-i3zs` | S1c | ✓ done | a layer is (rule, rank); legend grouped per rule; filter offers `rule: layer` where two rules are drawn; card names the rule; sixth tone a portal cyan (`brand` is VitePress's indigo); a rule scoped to a box inside the frame draws one box per layer in it (this portal: six in `vitepress-site`), stacked by layout-only lane edges because ELK reads no partition inside a box; one FSD finding drawn red; fixtures drawn alike with and without the new keys; full chromium 317 of 318 (the 318th `diagram-links`, red on HEAD since S1a) |
-| `beadloom-af99.1` | S1d | in progress | diagram links to the site's page under services/ (red since S1a) |
-| `beadloom-lsev` | S1T | blocked | criteria; full tree once |
+| `beadloom-af99.1` | S1d | ✓ done | the link writer was right (`/services/vitepress-site`); the case needed a landscape node under `other/`, which this portal no longer holds. It now moves one drawn click target under `/other/` in the page's bundle; new site-generation scenario pins a site node's diagram link under `services/`; diagram-links + landscape + node-page 23 of 23, `BEADLOOM_E2E_NO_SKIP=1` |
+| `beadloom-lsev` | S1T | ready | criteria; full tree once |
 | `beadloom-m7xq` | S1R | blocked | review, bead id only |
 | `beadloom-we9t` | S1W | blocked | docs |
 | `beadloom-z30s` | S1P | blocked | PR, merge on green |
