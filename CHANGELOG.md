@@ -88,10 +88,12 @@ BDL-076, #92 is BDL-077, #94 is BDL-078.
   an edit to the unannotated one: 7.0.0 exits 0 and 8.0.0 exits 2.
 - **The debt report's values move on a project nobody edited (#90, #91, #94).** Its keys are
   unchanged. `dormant` counts the nodes the new rule calls `dormant`, with lock files and
-  generated files excluded from the measure. `high_fan_out` and the score move because imports
-  are now read from `.vue` script blocks, relative JS/TS paths, Go, Java, Kotlin and Swift, so
-  a node's out-degree can rise. `status --debt-report --fail-if score>N` can change its verdict
-  with no edit, which this project lists as breaking since 7.0.0.
+  generated files excluded from the measure. `high_fan_out` and the score move because more
+  imports resolve to graph nodes: `.vue` script blocks and relative JS/TS paths are read for
+  the first time, and Go, Java, Kotlin and Swift imports, which 7.0.0 already read, now resolve
+  through the module and package layouts. A node's out-degree can rise.
+  `status --debt-report --fail-if score>N` can change its verdict with no edit, which this
+  project lists as breaking since 7.0.0.
 - **An unusable `site:` or `activity:` block in `.beadloom/config.yml` is refused (#91, #94).**
   `config-check` and the Gate's `config-check` step block on a key either block does not read
   and on a value it cannot use, and `docs site` stops before it writes anything when the `site:`
@@ -149,8 +151,10 @@ BDL-076, #92 is BDL-077, #94 is BDL-078.
 ### Changed
 
 - **`status` and `prime` counts move on a project nobody edited (#90, #91).** Their keys are
-  unchanged. The edge and import counts rise where imports are now read: `.vue` script blocks,
-  relative JS/TS paths, Go, Java, Kotlin and Swift.
+  unchanged. The import count rises where imports are read for the first time: `.vue` script
+  blocks and relative JS/TS paths. The edge count rises there and wherever an import now
+  resolves to a node: Go, Java, Kotlin and Swift imports, which 7.0.0 already read, resolve
+  through the module and package layouts in 8.0.0.
 - **Project text on the portal is read as VitePress reads it (#91).** README, published
   documents and node summaries are parsed with markdown-it-py configured as VitePress configures
   markdown-it. A link is rebased or shown as text, and `{{ }}`, raw HTML and attribute braces
