@@ -19,13 +19,15 @@
 | `beadloom-1l8d.1` | fix | ✓ done | CHANGELOG Breaking: `lint --strict` (7.0.0 rc 0 -> 8.0.0 rc 1, measured) and `sync-check` (rc 0 -> 2); Upgrading step 2; harness: `CANNOT RUN` kept in the report, exit 2, 16-case test; CONTRIBUTING steps 4 and 7; `export` wording; `beadloom ci` rc 0 |
 | `beadloom-1l8d.2` | review | ✓ done | re-review of the fix |
 | `beadloom-1l8d.3` | fix | ✓ done | lint Breaking line names the rules by what each reads; harness: unreached project checks NOT RUN, exit order 3 > 4 > 2, non-JSON stdout a FAIL (22 tests); `--pair` in Upgrading; CONTRIBUTING step 4 `<export>/dist/` and the order; `beadloom ci` rc 0 |
-| `beadloom-fymn` | P | in progress | PR, merge, Release, downloaded wheel, portal |
+| `beadloom-fymn` | P | ✓ done | PR, merge, Release, downloaded wheel, portal |
 
 ## Results
 
 (filled per wave)
 
 ## Notes
+
+- **Shipped (2026-10-08):** PR #95 squash-merged into `main` as `7b9a9b65` (CI 13 of 13 after the site-e2e job limit went 30 -> 45 min; the first run was cut at case 313 of 318, all green). Release `v8.0.0` from `main`; pypi-publish run 37771690138: build, test-install, TestPyPI, PyPI all success. `tests/release/verify_the_release.py beadloom==8.0.0` on the wheel downloaded from PyPI (`UV_NO_CACHE=1`, fresh venv, Python 3.12, Node 22): 11 of 11 checks hold. Epic `beadloom-1l8d` closed.
 
 - **Re-review OK (2026-10-08):** `beadloom-1l8d.2` reproduced both Breaking claims on its own scratch projects (7.0.0 with the `languages` extra vs the tree); 4 minor + 2 nitpick -> `beadloom-1l8d.3` `de1d843e` (the lint line names exactly which rules see the new edges; exit-code order 3 > 4 > 2 > 0; NOT RUN for unreached checks; guarded JSON; `--pair` in the example; 22 harness tests). Both reviewers: the withholding is defeated by `.beads/issues.jsonl` in the brief's file list -> `beadloom-6rfz`. P: the harness re-run on a wheel built from HEAD, then push, PR, merge on green, Release v8.0.0.
 
