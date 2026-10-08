@@ -16,8 +16,8 @@
 | `beadloom-ghu3` | D1 | ✓ done | README pair: a portal and viewer section (125 blocks, 0 findings); 8 surface-drift docs read, corrected and attested one by one; vitepress-site TODO filled (318 cases); `beadloom ci` rc 0 |
 | `beadloom-jxp4` | V1 | ✓ done | `tests/release/verify_the_release.py` on a wheel path or `beadloom==X.Y.Z`: the built wheel 12 of 12 (exit 0); `beadloom==7.0.0` red, first: `--version` (with `--release 7.0.0`: the activity levels); `beadloom ci` rc 0 |
 | `beadloom-urgi` | R | ✓ done (ISSUES) | review, bead id only |
-| `beadloom-1l8d.1` | fix | in progress | CHANGELOG Breaking: `lint --strict` (7.0.0 rc 0 -> 8.0.0 rc 1, measured) and `sync-check` (rc 0 -> 2); Upgrading step 2; harness: `CANNOT RUN` kept in the report, exit 2, 16-case test; CONTRIBUTING steps 4 and 7; `export` wording; `beadloom ci` rc 0 |
-| `beadloom-1l8d.2` | review | blocked | re-review of the fix |
+| `beadloom-1l8d.1` | fix | ✓ done | CHANGELOG Breaking: `lint --strict` (7.0.0 rc 0 -> 8.0.0 rc 1, measured) and `sync-check` (rc 0 -> 2); Upgrading step 2; harness: `CANNOT RUN` kept in the report, exit 2, 16-case test; CONTRIBUTING steps 4 and 7; `export` wording; `beadloom ci` rc 0 |
+| `beadloom-1l8d.2` | review | in progress | re-review of the fix |
 | `beadloom-fymn` | P | blocked | PR, merge, Release, downloaded wheel, portal |
 
 ## Results
@@ -25,6 +25,8 @@
 (filled per wave)
 
 ## Notes
+
+- **Fix closed (2026-10-08):** `beadloom-1l8d.1` `2eb17cb7`, `0809863c` — Breaking: `lint --strict` and `sync-check` can change their exit code on an unedited project (JS imports resolved to edges); an Upgrading step; the harness keeps a partial report (16 tests); CONTRIBUTING names the harness; `export` wording; two CHANGELOG lines corrected (7.0.0 already read Go/JVM/Swift imports; 8.0.0 resolves them to nodes). `beadloom ci` rc 0. Re-review launched with the bead id only.
 
 - **R closed (2026-10-08):** `beadloom-urgi` = ISSUES, 0 critical, 1 major: the CHANGELOG lists under Fixed what public-api.md classes MAJOR — on an unedited JS project with one forbid rule `lint --strict` exits 0 on 7.0.0 and 1 on 8.0.0 (relative JS imports now resolve into edges) -> `beadloom-1l8d.1` (Breaking line + Upgrading step; CONTRIBUTING names the harness; the harness keeps a partial report + a unit test; `export` has no `--json`). Coordinator: the PRD's two stale sentences corrected; the template sections the quality step missed added to PRD and CONTEXT (docs quality: 0 findings on BDL-079). The reviewer defeated the withholding through `.beads/issues.jsonl` in the brief's file list -> noted on `beadloom-6rfz`. Re-review `beadloom-1l8d.2` follows.
 
