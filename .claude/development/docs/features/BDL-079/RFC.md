@@ -72,11 +72,11 @@ scratchpad and name only code callers of the readers, not places that state the 
 | CLI commands | none added, removed, renamed | — |
 | CLI options | `docs site --pages-workflow` | added |
 | Exit codes | `docs site`, `config-check`, `ci` refuse an unusable `site:` / `activity:` block (unread before) | Breaking, stated: a config that was ignored can now fail |
-| `reindex` output | the activity line; a shallow history named | added |
+| `reindex` output | an `Activity:` line only on a shallow history, naming it (never the level names) | added |
 | `docs site` | writes the scaffold into `--out` (282 → 467 files), keeps files it did not write | added |
 | `config.yml` | `site.*`, `activity.exclude`, `tests.flat_tests` added; none removed | added |
 | Activity level values | `hot/warm/cold/dormant` by commits → `hot/warm/cool/quiet/dormant` by changed lines, boxes among boxes; `cold` never emitted | **Breaking** |
-| `ctx --json`, MCP `get_context`, `export`, `docs polish` | `lines_30d`, `lines_90d` added; level values as above | added + Breaking (above) |
+| `ctx --json`, MCP `get_context`, `docs polish --format json`, the portal data file | `lines_30d`, `lines_90d` added; level values as above (`export` carries no activity — Explore's row was wrong, corrected by R1) | added + Breaking (above) |
 | Debt report | keys unchanged; `dormant` and `high_fan_out` counts move on an unedited tree | Breaking, stated (7.0.0's precedent) |
 | `status`, `prime` | keys unchanged; counts move (`.vue`, Go, Swift, JVM imports indexed) | Changed |
 | Test binding | `named`, `imported` placements, only under `flat_tests: true` (init declares it for Python) | added |

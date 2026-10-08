@@ -13,8 +13,8 @@
 | Bead | Role | Status | Note |
 |---|---|---|---|
 | `beadloom-91iv` | R1 | ✓ done | 8.0.0 in every place; public API in CONTRIBUTING.md + docs/guides/public-api.md; CHANGELOG [8.0.0]; `beadloom ci` rc 0 |
-| `beadloom-ghu3` | D1 | ready | README pair, drifted reference docs, TODO, version places |
-| `beadloom-jxp4` | V1 | ready | the built wheel on another project |
+| `beadloom-ghu3` | D1 | in progress | README pair, drifted reference docs, TODO, version places |
+| `beadloom-jxp4` | V1 | in progress | the built wheel on another project |
 | `beadloom-urgi` | R | blocked | review, bead id only |
 | `beadloom-fymn` | P | blocked | PR, merge, Release, downloaded wheel, portal |
 
@@ -23,5 +23,7 @@
 (filled per wave)
 
 ## Notes
+
+- **R1 closed (2026-10-08):** `be97f6f5` — 8.0.0 in the nine checked places and the unchecked ones (CLAUDE.md through `setup-agentic-flow`); `CONTRIBUTING.md` Public API section, `docs/guides/public-api.md`, CHANGELOG `[8.0.0]`; `beadloom ci` rc 0. The scaffold's package.json stays 1.0.0 (a private npm package). Two RFC rows corrected: `export` carries no activity; `reindex` names only a shallow history. For the owner: public-api.md says adding a value to a vocabulary is MINOR (R1's own rule). D1 ∥ V1 launched.
 
 - Epic `beadloom-1l8d`; branch `features/BDL-079` from `main` at `539ed4a3`; the close-out commit of BDL-078 is the branch's first.

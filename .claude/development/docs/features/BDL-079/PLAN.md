@@ -67,8 +67,8 @@ site-e2e case count (job 113056037571); `ROADMAP.md:3`, the docs-audit SPEC and 
 
 **What to do:** `uv build`; a fresh venv on a scratch copy of an adopter fixture
 (`tests/fixtures/site/python`) or a throwaway project; the script asserts: `beadloom --version`,
-`__version__`, the metadata read 8.0.0; `init` + `reindex` print the activity line with the five
-levels on a full history and name a shallow one; `docs site` writes the scaffold and the portal
+`__version__`, the metadata read 8.0.0; `init` + `reindex` on a full history give five activity levels read from `ctx --json`
+(or the data file; `reindex` names only a shallow history); `docs site` writes the scaffold and the portal
 builds under Node 22; `ctx --json` carries `lines_30d`; the script takes the wheel path or a PyPI
 version as its argument so P re-runs it on the downloaded wheel; the same script on the 7.0.0
 wheel from PyPI is red (the first assertion that fails, named).
