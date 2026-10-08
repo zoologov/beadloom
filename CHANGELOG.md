@@ -26,16 +26,21 @@ BDL-076, #92 is BDL-077, #94 is BDL-078.
    the new set. Measured on this repository on 2026-10-08, 130 nodes: 11 `hot`, 28 `warm`,
    56 `cool`, 21 `quiet`, 14 `dormant`.
 2. **Run `beadloom lint --strict` and `beadloom sync-check` once on the new version**, before
-   the Gate runs them for you. Imports 7.0.0 left unresolved now become `depends_on` edges, and
-   a `forbid`, `deny`, `forbid_cycles`, `forbid_import` or `layers` rule judges them. A finding
-   names where the crossing is, and `beadloom ctx <ref-id>` lists a node's edges. A crossing you
-   decide to keep is declared on the rule that caught it: an `exempt:` entry with a `reason`
-   and an `until` on `forbid_import` and on `layers` (for a crossing between peers of one
-   layer), `unless_edge` on `deny`, `exclude:` on a node matcher. The
+   the Gate runs them for you. Imports 7.0.0 left unresolved or did not read now become
+   `depends_on` edges. A `deny` rule judges the imports that resolve to a node, a
+   `forbid_import` rule the imports read for the first time, and a `forbid` rule the edges
+   unless its `edge_kind` names another kind. A `forbid_cycles` or `layers` rule judges the
+   edges only when its `edge_kind` includes `depends_on`. A `layers` rule that sets none reads
+   `uses` edges and does not see them. A finding names where the crossing is, and
+   `beadloom ctx <ref-id>` lists a node's edges. A crossing you decide to keep is declared on
+   the rule that caught it: an `exempt:` entry with a `reason` and an `until` on
+   `forbid_import` and on `layers` (for a crossing between peers of one layer), `unless_edge`
+   on `deny`, `exclude:` on a node matcher. The
    [rule reference](docs/domains/graph/features/rule-engine/SPEC.md#rulesyml-schema) lists the
    keys of each rule. A crossing you do not mean to keep is what the rule is for. A document
    `sync-check` reports stale after the upgrade can be held to a file 7.0.0 did not pair with
-   it: read the document against that file, then attest it with `beadloom sync-update`.
+   it: read the document against that file, then attest it with
+   `beadloom sync-update <ref-id> --yes --pair <document>`.
 3. **If you read an activity level** from `ctx --json`, the MCP `get_context` tool,
    `docs polish --format json` or the portal data file, replace `cold` with `cool` (changed in
    the last 30 days) or `quiet` (changed in 90 days but not in 30). The two are not the same
@@ -72,15 +77,20 @@ BDL-076, #92 is BDL-077, #94 is BDL-078.
   #91).** 8.0.0 resolves imports that 7.0.0 left unresolved or did not read: relative JS/TS
   paths and `.vue` script blocks (#90), and Go, Java, Kotlin and Swift imports through the
   module and package layouts `init` now reads (#91). Each resolved import derives a
-  `depends_on` edge, and `forbid`, `deny`, `forbid_cycles`, `forbid_import` and `layers` rules
-  judge those imports and edges, so an import that crosses a declared boundary is now a
-  violation. Measured on
-  2026-10-08 on a two-module JavaScript project whose one `forbid` rule says `ui` must not
-  depend on `store`, with `ui` importing `../store/store.js`: on the same files, 7.0.0 derives
-  no edge and exits 0, and 8.0.0 derives `ui` → `store` and exits 1. The exit code can also
-  move the other way: `doc-area-coherence` at severity `error` failed with "checked nothing"
-  once a second source tree held two or more nodes, and 8.0.0 judges each tree. Measured on a
-  project with two such trees, 7.0.0 exits 1 and 8.0.0 exits 0.
+  `depends_on` edge. Which rules see the change follows from what each one reads. A `deny`
+  rule judges every import that resolves to a node. A `forbid_import` rule judges every import
+  read, resolved or not, so it sees the relative JS/TS paths and `.vue` script blocks and not
+  the four languages, whose imports 7.0.0 already read. A `forbid` rule judges the new edges
+  unless its `edge_kind` names another kind. A `forbid_cycles` or `layers` rule judges them
+  only when its `edge_kind` includes `depends_on`, and a `layers` rule that sets none reads
+  `uses` edges and does not see them. An import that crosses a boundary one of those rules
+  declares is now a violation. Measured on 2026-10-08 on a two-module JavaScript project whose
+  one `forbid` rule says `ui` must not depend on `store`, with `ui` importing
+  `../store/store.js`: on the same files, 7.0.0 derives no edge and exits 0, and 8.0.0 derives
+  `ui` → `store` and exits 1. The exit code can also move the other way: `doc-area-coherence`
+  at severity `error` failed with "checked nothing" once a second source tree held two or more
+  nodes, and 8.0.0 judges each tree. Measured on a project with two such trees, 7.0.0 exits 1
+  and 8.0.0 exits 0.
 - **`sync-check` can report a document stale where 7.0.0 reported it fresh (#90).** A node
   whose source holds annotated and unannotated files now keeps a sync pair for every file;
   7.0.0 kept pairs only for the annotated ones, so an edit to an unannotated file went

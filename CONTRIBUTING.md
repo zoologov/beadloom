@@ -287,18 +287,26 @@ Releases are cut by a maintainer (trunk-based; `main` is always green):
    X.Y.Z ..." before X.Y.Z exists states a version nothing can hold it to, and
    `docs audit` reports it stale.
 4. **Verify the built wheel on a project that is not this repository.** Build the wheel from
-   a clean export of the branch (`git archive HEAD`, then `uv build --wheel`) and run
+   a clean export of the branch into an empty directory outside the repository, here
+   `<export>`, so the wheel lands in `<export>/dist/` and not in the repository's `dist/`.
+   Run from the repository root:
 
    ```bash
-   python3 tests/release/verify_the_release.py dist/beadloom-X.Y.Z-py3-none-any.whl \
+   git archive HEAD | tar -x -C <export>
+   uv build --wheel <export> --out-dir <export>/dist
+   python3 tests/release/verify_the_release.py \
+       <export>/dist/beadloom-X.Y.Z-py3-none-any.whl \
        --release X.Y.Z --node-bin <a Node 22+ bin directory>
    ```
 
    The script installs the artifact into a fresh environment with `UV_NO_CACHE=1`, writes a
    throwaway adopter project and runs the release's behaviour on it. Exit 0 means every check
-   holds; 2 means the run could not start or a step could not run; 3 means a version check
-   failed; 4 means a behaviour check failed. Pass `--release`: its default is the release the
-   script was last updated for.
+   holds; 3 means a version check failed; 4 means a behaviour check failed; 2 means the run
+   could not start or a step could not run, so the checks it did not reach were not judged.
+   When a run has more than one, the exit is the first of 3, 4, 2: a check that ran and failed
+   already settles that the artifact is not the release. So an exit 2 means no check that ran
+   failed, and the run is repeated once the step it names can run. Pass `--release`: its
+   default is the release the script was last updated for.
 5. **Open one PR to `main`** and merge when `beadloom ci` (the required check) is green.
 6. **Create a GitHub Release** tagged `vX.Y.Z` — this triggers `.github/workflows/pypi-publish.yml`
    (build → TestPyPI → PyPI). The version is read from `__version__`.

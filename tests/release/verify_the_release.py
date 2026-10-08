@@ -33,16 +33,21 @@ The checks, in the order they run and are reported:
 * **pages workflow** -- ``docs site --pages-workflow`` writes
   ``.github/workflows/beadloom-portal.yml`` with ``fetch-depth: 0``.
 
-Every check runs, and the report names the FIRST that failed. A step that cannot run once
-the checks have started -- a ``git`` command that fails while the project is written, or the
-shallow clone -- is recorded as ``CANNOT RUN`` beside the checks that ran, and the report is
-printed and recorded all the same; the checks that do not depend on that step still run.
+The report names every check, and the FIRST that did not pass. A check whose step it depends
+on failed is listed as ``NOT RUN`` with the reason: the project's checks after a failed
+``init``, and the portal build after a scaffold that was not written. A step that cannot run
+once the checks have started is recorded as ``CANNOT RUN``, and the report is printed and
+recorded all the same. The shallow clone failing stops only its own check. A ``git`` command
+that fails while the project is written or committed stops every project check not yet
+reached, and each is listed as ``NOT RUN``. A child that exits 0 and prints no JSON where JSON
+was asked for fails its check, and the detail quotes what it printed.
 
 Exit codes: 0 every check holds; 2 the run could not start (an unpinned or unknown artifact,
 no ``uv``/``git``, a Node older than 22, an install that failed) or a step could not run, so
 the verdict is incomplete; 3 a version check failed, or the index serves no such pin; 4 a
-behaviour check failed and every version check held. A failed version check outranks an
-incomplete run, because it already settles that the artifact is not the release.
+behaviour check failed and every version check held. When a run has several, the order is
+3, then 4, then 2: a check that ran and failed already settles that the artifact is not the
+release, and the checks an incomplete run did not reach cannot overturn that.
 
 It uses the standard library only, so any Python 3.10+ can run it, and it needs ``uv``,
 ``git`` and ``node``/``npm`` on ``PATH`` (``--node-bin`` puts a Node directory first).
@@ -108,6 +113,21 @@ _EXIT_BEHAVIOUR = 4
 #: The status of a check whose own step failed for a reason outside the artifact.
 _CANNOT_RUN = "CANNOT RUN"
 
+#: How much of a child's output a check's detail quotes.
+_EXCERPT = 300
+
+#: The adopter project's checks in the order they run, by the stage each check's name begins
+#: with; a check not reached is listed under its stage.
+_PROJECT_STAGES = (
+    "init",
+    "reindex",
+    "activity",
+    "shallow history",
+    "portal scaffold",
+    "portal build",
+    "pages workflow",
+)
+
 
 class CannotRunError(Exception):
     """The run could not start, so there is no verdict about the artifact."""
@@ -130,7 +150,7 @@ class Artifact:
 class Check:
     """One assertion and its outcome: ``PASS``, ``FAIL``, ``NOT RUN`` or ``CANNOT RUN``.
 
-    ``NOT RUN`` is a check skipped because an earlier check of the artifact failed;
+    ``NOT RUN`` is a check skipped because a check or a step it depends on did not pass;
     ``CANNOT RUN`` is a check whose own step failed for a reason outside the artifact.
     """
 
@@ -163,12 +183,23 @@ class Report:
         return next((check for check in self.checks if check.status != "PASS"), None)
 
     def exit_code(self) -> int:
+        """3, then 4, then 2: a check that ran and failed outranks an incomplete run."""
         failed = [check for check in self.checks if check.status != "PASS"]
         if any(check.kind == "version" for check in failed):
             return _EXIT_VERSION
+        if any(check.status == "FAIL" for check in failed):
+            return _EXIT_BEHAVIOUR
         if any(check.status == _CANNOT_RUN for check in failed):
             return _EXIT_CANNOT_RUN
         return _EXIT_BEHAVIOUR if failed else _EXIT_OK
+
+    def not_reached(self, stages: tuple[str, ...], why: str) -> None:
+        """List as ``NOT RUN`` each of *stages* no check of this report names yet."""
+        for stage in stages:
+            if not any(
+                check.name == stage or check.name.startswith(f"{stage}:") for check in self.checks
+            ):
+                self.not_run(stage, "behaviour", why)
 
 
 @dataclass(frozen=True)
@@ -374,6 +405,17 @@ def declare_portal(root: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _json_object(text: str, what: str) -> tuple[dict[str, object] | None, str]:
+    """*text* read as a JSON object, or ``None`` and why not, quoting what *what* printed."""
+    try:
+        loaded = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return None, f"{what} printed no JSON ({exc}): {text.strip()[-_EXCERPT:]!r}"
+    if not isinstance(loaded, dict):
+        return None, f"{what} printed JSON that is not an object: {text.strip()[-_EXCERPT:]!r}"
+    return loaded, ""
+
+
 def check_versions(room: Room, artifact: Artifact, report: Report) -> None:
     release = report.release
     done = room.run([str(room.bin / "beadloom"), "--version"], room.workdir)
@@ -391,25 +433,31 @@ def check_versions(room: Room, artifact: Artifact, report: Report) -> None:
         "'file': beadloom.__file__}))"
     )
     done = room.run([str(room.bin / "python"), "-I", "-c", probe], room.workdir)
-    found: dict[str, str] = json.loads(done.stdout) if done.returncode == 0 else {}
+    parsed, why = (
+        _json_object(done.stdout, "the version probe")
+        if done.returncode == 0
+        else (None, f"the version probe exited {done.returncode}: {done.stderr[-_EXCERPT:]}")
+    )
+    found: dict[str, object] = parsed or {}
+    unread = f"; {why}" if why else ""
     report.record(
         "version: beadloom.__version__",
         "version",
         passed=found.get("version") == release,
-        detail=f"reads {found.get('version')!r}, expected {release}",
+        detail=f"reads {found.get('version')!r}, expected {release}{unread}",
     )
     report.record(
         "version: importlib.metadata.version('beadloom')",
         "version",
         passed=found.get("metadata") == release,
-        detail=f"reads {found.get('metadata')!r}, expected {release}",
+        detail=f"reads {found.get('metadata')!r}, expected {release}{unread}",
     )
-    module = Path(found.get("file", ""))
+    module = Path(str(found.get("file", "")))
     report.record(
         "version: the imported module is the one in the fresh environment",
         "version",
         passed=bool(found) and room.venv.resolve() in module.resolve().parents,
-        detail=f"beadloom imported from {module}",
+        detail=f"beadloom imported from {module}{unread}",
     )
     if artifact.is_wheel:
         report.record(
@@ -418,13 +466,13 @@ def check_versions(room: Room, artifact: Artifact, report: Report) -> None:
             passed=artifact.claimed_version == found.get("metadata"),
             detail=(
                 f"file name says {artifact.claimed_version}, metadata says "
-                f"{found.get('metadata')!r}"
+                f"{found.get('metadata')!r}{unread}"
             ),
         )
 
 
-def _graph_sources(room: Room, project: Path) -> dict[str, str]:
-    """Each node's source directory mapped to its ref_id, read from the graph files."""
+def _graph_sources(room: Room, project: Path) -> tuple[dict[str, str], str]:
+    """Each node's source directory mapped to its ref_id, or why the graph could not be read."""
     probe = (
         "import json, pathlib, sys, yaml\n"
         "found = {}\n"
@@ -437,17 +485,22 @@ def _graph_sources(room: Room, project: Path) -> dict[str, str]:
     graph = project / ".beadloom" / "_graph"
     done = room.run([str(room.bin / "python"), "-I", "-c", probe, str(graph)], project)
     if done.returncode != 0:
-        return {}
-    loaded: dict[str, str] = json.loads(done.stdout)
-    return loaded
+        return {}, f"the graph probe exited {done.returncode}: {done.stderr[-_EXCERPT:]}"
+    loaded, why = _json_object(done.stdout, "the graph probe")
+    if loaded is None:
+        return {}, why
+    return {str(source): str(ref_id) for source, ref_id in loaded.items()}, ""
 
 
 def _activity(room: Room, project: Path, ref_id: str) -> tuple[dict[str, object] | None, str]:
     done = room.beadloom(project, "ctx", ref_id, "--json", "--project", str(project))
     if done.returncode != 0:
         return None, f"ctx {ref_id} --json exited {done.returncode}: {done.stderr.strip()[-300:]}"
-    focus = json.loads(done.stdout).get("focus") or {}
-    activity = focus.get("activity")
+    loaded, why = _json_object(done.stdout, f"ctx {ref_id} --json")
+    if loaded is None:
+        return None, why
+    focus = loaded.get("focus")
+    activity = focus.get("activity") if isinstance(focus, dict) else None
     if not isinstance(activity, dict):
         return None, f"ctx {ref_id} --json carries no focus.activity"
     return activity, ""
@@ -455,7 +508,10 @@ def _activity(room: Room, project: Path, ref_id: str) -> tuple[dict[str, object]
 
 def check_activity(room: Room, project: Path, report: Report) -> None:
     name = "activity: ctx --json carries the five-level activity and lines_30d"
-    sources = _graph_sources(room, project)
+    sources, unread = _graph_sources(room, project)
+    if unread:
+        report.record(name, "behaviour", passed=False, detail=unread)
+        return
     expected = {
         _CHANGED_RECENTLY: {"hot", "warm", "cool"},
         _CHANGED_IN_90_DAYS: {"quiet"},
@@ -596,8 +652,7 @@ def check_project(room: Room, report: Report) -> None:
         passed=done.returncode == 0,
         detail=f"rc {done.returncode}: {done.output.strip()[-300:]}",
     ):
-        for remaining in ("reindex", "activity", "shallow history", "portal", "pages workflow"):
-            report.not_run(remaining, "behaviour", "init failed")
+        report.not_reached(_PROJECT_STAGES, "init failed")
         return
     declare_portal(project)
     room.git(project, "add", "-A")
@@ -690,6 +745,7 @@ def verify(
         check_project(room, report)
     except CannotRunError as exc:
         report.cannot_run(_PROJECT_STEP, "behaviour", str(exc))
+        report.not_reached(_PROJECT_STAGES, "the project step could not run")
     return report
 
 

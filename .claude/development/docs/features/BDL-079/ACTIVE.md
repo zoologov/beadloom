@@ -17,8 +17,9 @@
 | `beadloom-jxp4` | V1 | ✓ done | `tests/release/verify_the_release.py` on a wheel path or `beadloom==X.Y.Z`: the built wheel 12 of 12 (exit 0); `beadloom==7.0.0` red, first: `--version` (with `--release 7.0.0`: the activity levels); `beadloom ci` rc 0 |
 | `beadloom-urgi` | R | ✓ done (ISSUES) | review, bead id only |
 | `beadloom-1l8d.1` | fix | ✓ done | CHANGELOG Breaking: `lint --strict` (7.0.0 rc 0 -> 8.0.0 rc 1, measured) and `sync-check` (rc 0 -> 2); Upgrading step 2; harness: `CANNOT RUN` kept in the report, exit 2, 16-case test; CONTRIBUTING steps 4 and 7; `export` wording; `beadloom ci` rc 0 |
-| `beadloom-1l8d.2` | review | in progress | re-review of the fix |
-| `beadloom-fymn` | P | blocked | PR, merge, Release, downloaded wheel, portal |
+| `beadloom-1l8d.2` | review | ✓ done | re-review of the fix |
+| `beadloom-1l8d.3` | fix | ✓ done | lint Breaking line names the rules by what each reads; harness: unreached project checks NOT RUN, exit order 3 > 4 > 2, non-JSON stdout a FAIL (22 tests); `--pair` in Upgrading; CONTRIBUTING step 4 `<export>/dist/` and the order; `beadloom ci` rc 0 |
+| `beadloom-fymn` | P | ready | PR, merge, Release, downloaded wheel, portal |
 
 ## Results
 
