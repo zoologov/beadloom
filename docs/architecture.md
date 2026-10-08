@@ -24,7 +24,7 @@ The system is organized into six DDD domain packages, an application (use-case o
 - `status.py` — the read-side of `beadloom status` (index/coverage/health/trend counts + context-bundle metrics)
 - `debt_report/` — architecture-debt aggregation, scoring, trend tracking, CI gating, a cohesion-split package
 - `watcher.py` — file watcher for auto-reindex on change
-- `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor → optional federate)
+- `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → docs audit → docs-quality → issue-log → readme-pair → doc-spaces → scope-check → config-check → doctor → optional federate)
 - `guards/` — the flow-guard primitive behind `beadloom guard` (BDL-061 S1): a verdict per named guard, the `guards:` block of `.beadloom/flow.yml`, one invocation boundary, and the firing record `--liveness` reads
 - `waves/` — the wave decision behind `beadloom waves` (BDL-061 S6): resolve each bead's declared node scope, decide from the graph which beads may run at once with one named reason per serialised pair, and check the plan-time precondition of each of the seven media every wave shares whatever its width, and hold each bead's declaration against the `## Axes` section its work item recorded, and build the clean room each bead measures in — derived from that bead and created rather than entered — a cohesion-split package
 - `review_brief/` — the reviewer's input behind `beadloom review-brief` (BDL-061 S6): assemble the assignment, the declared scope, the specification documents, the bound scenarios and the changed files, and withhold the bead's own comments until a verdict is recorded
@@ -47,6 +47,10 @@ The graph distinguishes the kinds of node it tracks:
 | `feature` | `features/<name>/SPEC.md` | `# beadloom:feature=<id>` | A user-facing capability inside a domain |
 | `component` | `<name>/DOC.md` | `# beadloom:component=<id>` | An internal/infra building block — the mirror of a `feature` for code that is not user-facing |
 | `entity` / `adr` | — | — | Domain entities and architecture decisions |
+
+These six are the kinds a rule's `kind:` matcher accepts (`graph.rules.types.VALID_NODE_KINDS`). The
+graph loader accepts any other kind string: this repository's `vitepress-site` node, the portal
+scaffold, is of kind `site`, and no rule can select it by kind.
 
 The **`component` kind** (BDL-051) and the **`module-coverage` lint** (promoted to `severity: error`) together close the no-shadow-code gap: every `src` module with at least one symbol must be a tracked node (`feature` or `component`, or covered by a node's `source` — including a **directory** source like `tui/`) or named on a small, visible `exempt:` list in `rules.yml`. A new untracked module therefore fails `beadloom lint --strict` / `beadloom ci`.
 
@@ -84,8 +88,8 @@ The database is stored in `.beadloom/beadloom.db` and uses WAL mode for concurre
 
 | Table | Key columns | Description |
 |-------|-------------|-------------|
-| `nodes` | ref_id (PK), kind, summary, source, extra | Graph nodes (domain, feature, service, entity, adr) |
-| `edges` | src_ref_id, dst_ref_id, kind (composite PK), extra | Graph edges (part_of, depends_on, uses, implements, touches_entity, touches_code) |
+| `nodes` | ref_id (PK), kind, summary, source, extra, lifecycle | Graph nodes (domain, feature, component, service, entity, adr, or any other kind the graph declares). `lifecycle` is `active`, `planned`, `deprecated`, `dead` or `external` |
+| `edges` | src_ref_id, dst_ref_id, kind, contract_key (composite PK), extra, lifecycle | Graph edges (part_of, depends_on, uses, implements, touches_entity, touches_code, and the contract edges produces / consumes, which carry a `contract_key`) |
 | `docs` | id (PK), path (UNIQUE), kind, ref_id (FK→nodes), hash, metadata | Document index |
 | `chunks` | id (PK), doc_id (FK→docs), chunk_index, heading, section, content, node_ref_id | Document chunks (max 2000 chars) |
 | `code_symbols` | id (PK), file_path, symbol_name, kind, line_start, line_end, annotations, file_hash | Code symbols (function, class, type, route, component) |
@@ -179,10 +183,13 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 - **Rich** — human-readable with Unicode indicators (✓, ✗, ▲, ▼)
 - **JSON** — structured violations array + summary
 - **Porcelain** — machine-readable, one TAB-separated line per violation
+- **GitHub** — GitHub Actions `::error` annotations
 
-**CLI:** `beadloom lint [--strict] [--format rich|json|porcelain] [--no-reindex]`
+**CLI:** `beadloom lint [--strict] [--fail-on-warn] [--format rich|json|porcelain|github] [--no-reindex]`
 
-The `--strict` flag exits with code 1 on `error`-severity violations (for CI/CD). Rules support `error` and `warn` severity levels.
+The `--strict` flag exits with code 1 on `error`-severity violations (for CI/CD), and
+`--fail-on-warn` exits 1 on any finding a rule decided, warnings included. Rules support `error`
+and `warn` severity levels.
 
 > **`domain-size-limit`: 200 → 280 (BDL-059 S3) → 290 (BDL-060 S4) → 180 (BDL-UX #144).** The first two moves were threshold recalibrations under the OLD metric, where `max_symbols` counted every file under a node's path prefix — so an in-domain split changed nothing and the honest option was to raise the bar for legitimately large bounded contexts.
 >
@@ -202,7 +209,8 @@ nodes:
     tags: [ui-layer, presentation]
 ```
 
-Tags are arbitrary strings. Rules reference them via `{ tag: <tag-name> }` selectors in `forbid_edge` and `layer` rules.
+Tags are arbitrary strings. Rules reference them via `{ tag: <tag-name> }` node selectors, which
+the `forbid` and `layers` rules use (their internal `rule_type` is `forbid` and `layer`).
 
 ### Cache Architecture
 
@@ -258,9 +266,9 @@ Each reindex captures a health snapshot:
 `beadloom snapshot` manages point-in-time captures of the architecture graph for historical comparison.
 
 **Commands:**
-- `beadloom snapshot save [--name NAME]` — save current graph state
+- `beadloom snapshot save [--label LABEL]` — save current graph state
 - `beadloom snapshot list` — list saved snapshots
-- `beadloom snapshot compare [SNAP_ID]` — compare current graph with a snapshot
+- `beadloom snapshot compare OLD_ID NEW_ID [--json]` — compare two saved snapshots
 
 Snapshots are stored in SQLite and enable architecture drift detection across releases.
 
@@ -287,8 +295,8 @@ Snapshots are stored in SQLite and enable architecture drift detection across re
 
 `application/gate.py` powers `beadloom ci` — the unified gate that composes the
 existing checkers into one verdict with a single exit code: **reindex → `lint
---strict` → sync-check → docs audit → docs-quality → doc-spaces → config-check →
-doctor → (optional) federate landscape gate**. Every step's honest result is printed (PASS / WARN / FAIL / SKIP) —
+--strict` → sync-check → docs audit → docs-quality → issue-log → readme-pair →
+doc-spaces → scope-check → config-check → doctor → (optional) federate landscape gate**. Every step's honest result is printed (PASS / WARN / FAIL / SKIP) —
 never a green that silently skipped a step. `--format rich|json|github` applies
 uniformly; `--hub <export>` arms the cross-service landscape gate. The same gate
 runs as the **pre-push Beadloom Gate** hook (`install-hooks --pre-push`) and in
@@ -367,7 +375,7 @@ under `.beadloom/flow/`:
 - **`flow_suppression.py`** — a declared stand-down of a core rule (`rule` + `reason` + `until`, all mandatory), rendered as a visible notice into every composed artifact. Expiry is a `config-check` finding rather than a byte, so the composition stays a function of its inputs.
 - **`config_sync.py`** — compares each artifact against its composition, maps the manifest state onto a severity, names the project layer in effect and reports suppression liveness.
 
-The core `CLAUDE.md` measures **377 lines** (down from 440), with each removed line
+The core `CLAUDE.md` measures **380 lines** (down from 440), with each removed line
 mapped to a replacement in a stack overlay or in `§0 CRITICAL RULES`. The project
 layer is what makes that shrinkage possible: a project's own rules have a home that
 survives an upgrade instead of being appended to a drift-guarded shipped file.
@@ -389,8 +397,8 @@ see the `ai_agents` domain README + the `ai-techwriter` feature SPEC.
 
 ## Constraints
 
-- **Code indexer** parses every extension in `_EXTENSION_LOADERS` via tree-sitter: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.go`, `.rs`, `.kt`, `.kts`, `.java`, `.swift`, `.m`, `.mm`, `.c`, `.h`, `.cpp`, `.hpp`. Reindex change detection reads the same set
-- **Import analysis** covers Python, TypeScript, JavaScript, Go, Rust, Kotlin, Java, Swift, Objective-C, C and C++ over 17 file extensions — the keys of `context_oracle.code_indexer._EXTENSION_LOADERS`. `supported_extensions()` narrows that set to the grammars actually installed, so a missing optional tree-sitter package removes an extension rather than failing the walk. The count of parsed languages is deliberately not written as a digit here: `language_count` in the audit's fact vocabulary means the languages this project is WRITTEN in (1), so a digit beside the word `languages` is read as a claim about that and reported stale
+- **Code indexer** parses every extension in `_EXTENSION_LOADERS` via tree-sitter: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.go`, `.rs`, `.kt`, `.kts`, `.java`, `.swift`, `.m`, `.mm`, `.c`, `.h`, `.cpp`, `.hpp`. A `.vue` single-file component (`_SFC_SCRIPT_EXTENSIONS`) is read through its `<script>` blocks with the JavaScript grammar, and its template and style are not read. Reindex change detection reads the same set
+- **Import analysis** covers Python, TypeScript, JavaScript, Go, Rust, Kotlin, Java, Swift, Objective-C, C and C++ over 17 file extensions — the keys of `context_oracle.code_indexer._EXTENSION_LOADERS`. `.vue` files are read for imports as well, through their script blocks. `supported_extensions()` narrows the loaders and `.vue` to the grammars actually installed, so a missing optional tree-sitter package removes an extension rather than failing the walk. The count of parsed languages is deliberately not written as a digit here: `language_count` in the audit's fact vocabulary means the languages this project is WRITTEN in (1), so a digit beside the word `languages` is read as a claim about that and reported stale
 - Documentation root is configurable via `docs_dir` in `.beadloom/config.yml` (default: `docs/`)
 - Documentation SPACES (TO-BE / AS-IS / WORKING) — their roots, kinds, intent documents and the
   WORKING freshness exemption — are configurable via `doc_roots` in `.beadloom/config.yml`
@@ -414,3 +422,5 @@ see the `ai_agents` domain README + the `ai-techwriter` feature SPEC.
 | `doc_roots` | see the [Document Kinds guide](guides/document-kinds.md) | Per-space roots, kinds, intent documents and the WORKING freshness exemption |
 | `tests` | see [Getting Started](getting-started.md#configuration) | The test layout: roots (default `tests`, `test`, `spec`, `__tests__`, each where it exists, and only those that exist are named), kind folders, patterns by framework (a file name, or the end of a path such as `__tests__/**`), build-tool test trees, `beside_code` |
 | `sync.hook_mode` | `warn` | Pre-commit hook mode: `warn` or `block` |
+| `site` | the directory name, base `/`, no repository | The portal's identity: `title`, `description`, `base`, `repo_url`, `forges`; see the [`site:` reference](guides/vitepress-site.md#configuration-reference-site) |
+| `activity` | no block | `exclude:`, the project's own machine-written files, left out of node activity; see [Getting Started](getting-started.md#configuration) |

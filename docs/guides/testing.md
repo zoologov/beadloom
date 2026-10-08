@@ -147,6 +147,7 @@ Every key is optional, and a project that declares nothing is read by the defaul
 | `tests.patterns` | the five framework groups below | replaces all five groups |
 | `tests.mirrors` | `src/test/java: src/main/java`, `src/test/kotlin: src/main/kotlin`, `Tests: Sources` | replaces all three trees |
 | `tests.beside_code` | `true` | `true` or `false` |
+| `tests.flat_tests` | `false`; `beadloom init` writes `true` for a Python project | `true` or `false` |
 
 The default patterns, per language:
 
@@ -161,11 +162,13 @@ The default patterns, per language:
 A pattern without a `/` matches the file name. A pattern with a `/` matches the end of the path,
 folder by folder, and `**` stands for any number of folders. Declaring `patterns` states which
 frameworks the project has, so the other groups are dropped. A key that cannot be used is a
-reindex warning, and its default stands. This repository declares:
+reindex warning, and its default stands. A group name is the project's own: this repository
+adds a `playwright` group for the portal's browser tests, which ship under the scaffold. It
+declares:
 
 ```yaml
 tests:
-  roots: [tests]
+  roots: [tests, src/beadloom/site_scaffold/e2e]
   beside_code: false
   kinds:
     unit: unit
@@ -174,6 +177,7 @@ tests:
     self_check: self_check
   patterns:
     pytest: ["test_*.py", "*_test.py"]
+    playwright: ["*.spec.js", "*.test.js"]
 ```
 
 What is deliberately not bound, and the declaration that binds it, is listed in
@@ -302,8 +306,11 @@ every pull request, hands mutmut the exact mutant names of those functions with 
 as the selection, and scores the run with `--survivors`, which lists each survivor under its node.
 The selection also takes the acceptance step files by tag, falls back to the unplaced files of
 the mutation pool in `pyproject.toml` because they may exercise the node, and excludes every
-self-check. Its budget is 10 minutes on `ubuntu-latest`.
-<!-- TODO: verify the per-change job's time on the runner once `beadloom-paze` has read one run -->
+self-check. Its budget is 10 minutes on `ubuntu-latest`. A run over the budget prints a warning
+and does not fail, and the job's timeout is 30 minutes. `beadloom-paze` measured it on PR #86,
+the largest change this project will send (57 functions, 1 578 mutants): 980 s from the job's
+first step on the first run and 632 s on the third. A typical pull request has not been timed
+against the budget yet.
 
 **Weekly.** The `mutation-sample` job runs on Monday at 03:17 UTC and by hand. It draws 150
 mutants at random from the whole declared scope, seeded by the ISO week so a week's sample can be

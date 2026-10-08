@@ -136,8 +136,9 @@ asserting nothing. That is why this repository ships `pytest-bdd` in its `dev` e
 executed scenarios to the project's own parser count, so a feature file with no step module
 reddens instead of quietly counting as coverage. The expected number is read from the suite
 rather than written into the test, so a slice that adds a scenario does not redden a test it
-has nothing to do with. The size quoted below was measured on the same run, on 2026-08-26: 92
-scenarios in 20 files. On 2026-09-29 `beadloom lint` judged 528 scenarios in 82 files.
+has nothing to do with. The size was measured on the same run, on 2026-08-26: 92
+scenarios in 20 files. On 2026-09-29 `beadloom lint` judged 528 scenarios in 82 files, and on
+2026-10-08 650 scenarios in 115 files.
 
 ## Work with no behaviour says so
 
@@ -193,24 +194,24 @@ trusted the check.
   a scenario keyword after markdown stripping. `Example:` is a scenario keyword in Gherkin, so a
   prose line opening with it is read as a claim that a scenario exists, and an indented code
   block is read while a fenced one is not. Both are filed as `beadloom-mr2l.62` with a failing
-  test pinned to each, so the fix reddens the suite. Zero of the 26 reference findings on this
-  repository come from that class today.
+  test pinned to each, so the fix reddens the suite. Zero of the 29 reference findings on this
+  repository come from that class, measured on 2026-10-08.
 
 ## What this repository ships with, and why the number is not zero
 
-`beadloom lint` reports **59** `scenario-coverage` findings here — measured 2026-08-26 during
-BDL-062, with `--json`, on the shipped `rules.yml`:
+`beadloom lint` reports **49** `scenario-coverage` findings here, measured 2026-10-08 with
+`--json` on the shipped `rules.yml`:
 
 | Findings | What they are |
 |----------|---------------|
-| 32 | no scenario in the suite binds to a `feature` node the graph declares |
-| 26 | scenarios a planning document names and the suite does not contain |
+| 19 | no scenario in the suite binds to a `feature` node the graph declares |
+| 29 | scenarios a planning document names and the suite does not contain |
 | 1 | the rule stating the reach of its own population (see below) |
 
-The population is the honest one: `for: {kind: feature}` selects all **42** declared feature
-nodes, of which 10 are covered (`doc-quality`, `doc-shape`, `doc-templates`, `docs-audit`,
-`flow-guards`, `review-brief`, `rule-engine`, `scenario-binding`, `sync-check`, `wave-plan`).
-The suite holds 92 scenarios in 20 files. The uncovered count falls whenever a bead binds a
+The population is the honest one: `for: {kind: feature}` selects all **51** declared feature
+nodes, of which 32 are covered. The suite holds 650 scenarios in 115 files. BDL-062's
+measurement of 2026-08-26 read **59** findings, a population of **42** with 10 covered, and 92
+scenarios in 20 files. The uncovered count falls whenever a bead binds a
 scenario to a node its work touched, and the population grows whenever a feature node is
 declared, so the two move independently and neither is a target. A hand-picked `ref_id` list
 would report 0 by construction, which is the false

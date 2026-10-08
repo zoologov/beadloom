@@ -36,11 +36,11 @@ every adopter twice, the second time over the correction (BDL-UX #177).
 
 Composition answers both. The shipped core stays stack-neutral and is verified; the
 project layer is a separate file that composes after it and is never overwritten.
-Measured on the shipped artifact by composing it: the core `CLAUDE.md` went from **440 lines
-to 377**. A project composing `ddd` + `python` gets **407** back; a project composing neither
-keeps the 377, and its critical rules name no Python tooling. S3 landed the core at 376, S3b
-removed five more lines, and BDL-068 S5 added six — the two `bd` call forms an agent must
-read an exit code from. So the reduction is measured against the shipped template of the day
+Measured on the shipped artifact by composing it on 2026-10-08: the core `CLAUDE.md` went from
+**440 lines to 380**. A project composing `ddd` + `python` gets **410** back; a project
+composing no stack keeps the 380, and its critical rules name no Python tooling. S3 landed the
+core at 376, S3b removed five more lines, BDL-068 S5 added six — the two `bd` call forms an
+agent must read an exit code from — and BDL-068 S6 added three. So the reduction is measured against the shipped template of the day
 rather than quoted from the bead that first reported it, and it is a property of the layering
 rather than a budget the core is held under.
 
@@ -189,7 +189,7 @@ Three things to know about the result:
   reorder it. Start it with a horizontal rule and a heading if you want the seam to
   read cleanly.
 - **It cannot delete core text.** Overlays are append-only in bytes: concatenation is
-  the only operation, and every shipped fragment — 41 of them today — was measured to
+  the only operation, and every shipped fragment — 47 of them on 2026-10-08 — was measured to
   end with a newline, so a project layer cannot even rewrite the core's last line. The
   test is parametrised over whatever the package ships rather than over a written-down
   list, so a fragment added tomorrow is measured too. To stand a core rule down,
@@ -317,8 +317,10 @@ are superseded by `.claude/agents/`, and `epic-init.md` is superseded by
 `task-init.md`. Beadloom computes the list and the exact `rm -f` command for each, and
 **never deletes them itself** (BDL-UX #137).
 
-At present that list does not reach you: `setup-agentic-flow` computes it and does not
-print it (BDL-UX #188). Until that is fixed, remove them by hand after upgrading:
+`setup-agentic-flow` prints that list after its write summary, on stderr, under *Left by an
+older flow layout (N) — reported, never deleted*, one line per file with its `rm -f` command.
+Until BDL-061 S3b it computed the list and printed nothing (BDL-UX #188). For the pre-BDL-048
+layout the commands it names are:
 
 ```bash
 rm -f .claude/commands/dev.md .claude/commands/test.md \
@@ -349,12 +351,12 @@ beadloom setup-agentic-flow    # recompose onto the new core, keeping your layer
 beadloom config-check          # rc 0, or a named finding per file
 ```
 
-> **Known issue on a fresh scaffold.** `setup-agentic-flow` composes the role adapters
-> from the stack it auto-detects but does not write a `.beadloom/flow.yml`, and
-> `config-check` without one expects the plain vendored role files. Measured on a new
-> TypeScript project: `config-check` exits 1 with four errors immediately after a
-> clean scaffold. Writing a `flow.yml` — which every project adopting the flow wants
-> anyway — takes it to rc 0. Filed as BDL-UX #187.
+> **A fresh scaffold records its selection.** When the project has no `.beadloom/flow.yml`,
+> `setup-agentic-flow` writes one from the selection it composed and prints
+> `Wrote .beadloom/flow.yml (the selection above, recorded; yours to edit, never rewritten)`.
+> An existing `flow.yml` is never rewritten. Until BDL-061 S3b it wrote none, and
+> `config-check`, which then expected the plain vendored role files, exited 1 with four errors
+> on an untouched TypeScript scaffold (BDL-UX #262, filed as #187).
 
 ## Three limits, stated
 
@@ -399,17 +401,19 @@ its own finding, a deleted canonical file is its own finding, and one deletion n
 longer switches the checks off for every other file. All three composed kinds answer
 alike in that degraded state.
 
-### Your `CLAUDE.md` states Beadloom's version, not yours
+### Your `CLAUDE.md` project facts name Python tooling only
 
-The `project-info` auto-region renders `- **Current version:** <n>` from the installed
-`beadloom` package rather than from your project. Measured on a scaffolded project
-whose `package.json` declares a version of its own: the whole `## 0.1 Project:` section
-renders as a single bullet naming the installed `beadloom` release instead.
+The `project-info` auto-region renders its bullets from your project and omits a fact it
+cannot read rather than substituting one. The version comes from `pyproject.toml`
+(`[project]`, `[tool.poetry]`, then a dynamic version through `[tool.hatch.version]` or
+`[tool.setuptools.dynamic]`), `package.json` or `Cargo.toml`, in that order, and never from a
+VCS tag. The stack comes from `flow.yml`. A project where nothing is readable gets one bullet
+naming what was looked at. Until BDL-UX #183 closed in BDL-061 S3b, the region stated the
+installed Beadloom's version as the project's.
 
-The renderer also derives its stack, test, lint and type-check facts from
-`pyproject.toml` only, so a non-Python project gets that one bullet and it is false.
-Treat the section as unreliable until BDL-UX #183 closes; the rest of the file does
-not depend on it.
+The test, lint and type-check bullets are the limit: they are found by looking for `pytest`,
+`ruff` and `mypy` in your dependency manifests, so a project on another toolchain gets no
+bullet for them. The rest of the file does not depend on the section.
 
 ## See also
 
