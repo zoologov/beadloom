@@ -27,12 +27,14 @@
 | `beadloom-i3zs` | S1c | ✓ done | a layer is (rule, rank); legend grouped per rule; filter offers `rule: layer` where two rules are drawn; card names the rule; sixth tone a portal cyan (`brand` is VitePress's indigo); a rule scoped to a box inside the frame draws one box per layer in it (this portal: six in `vitepress-site`), stacked by layout-only lane edges because ELK reads no partition inside a box; one FSD finding drawn red; fixtures drawn alike with and without the new keys; full chromium 317 of 318 (the 318th `diagram-links`, red on HEAD since S1a) |
 | `beadloom-af99.1` | S1d | ✓ done | the link writer was right (`/services/vitepress-site`); the case needed a landscape node under `other/`, which this portal no longer holds. It now moves one drawn click target under `/other/` in the page's bundle; new site-generation scenario pins a site node's diagram link under `services/`; diagram-links + landscape + node-page 23 of 23, `BEADLOOM_E2E_NO_SKIP=1` |
 | `beadloom-lsev` | S1T | ✓ done | every S1 criterion measured on this portal and the fixtures: all hold; the 14 'unbound' files were scope-check's 'no node owns' count, 0 test files of the branch unbound; +4 test files (own portal as a service by its own rules 13, planted FSD crossing red 2, doctor 3, unreadable rule row 8) and 1 browser case (one rule drawn alike with and without the new keys), each seen red; full tree on the tree: pytest 2,420 + 5,859 + 3,573 + 1,705 (1 failed = stale pairs), chromium 319 of 319, performance 10 of 10, six stacks 86 of 86 |
-| `beadloom-af99.2` | S1e | ready | layer-box titles follow the title rule; title: on a layers rule (owner, after the look) |
+| `beadloom-af99.2` | S1e | in progress | layer-box titles follow the title rule; title: on a layers rule (owner, after the look) |
 | `beadloom-m7xq` | S1R | blocked | review, bead id only |
 | `beadloom-we9t` | S1W | blocked | docs |
 | `beadloom-z30s` | S1P | blocked | PR, merge on green |
 
 ## Notes
+
+- **S1T closed (2026-10-09):** `c242bea5` — every S1 criterion PASS on this portal and the six fixtures (27 pytest cases + 1 Playwright, each red against a planted defect); the '14 unbound test files' were the scope-check's count of paths no node OWNS, not unbound tests — every added test binds by its mirror; 167 unplaced unchanged. Full tree: pytest 2,420 + 5,859 + 3,573 + 1,705 (1 known red); Playwright 319 of 319; performance 10; adopters 86 of 86; `lint --strict` 0 errors; `beadloom ci` rc 1 on 103 stale pairs only. S1e launched.
 
 - **S1d closed (2026-10-08):** `694c831b` — no production defect: the portal links the site under `/services/` everywhere; the `diagram-links` case assumed a landscape node under `other/`, which this portal no longer has; the case now serves its own fixture; a Python scenario holds that a `kind: site` node links under `/services/`. S1T launched (full tree once for the slice; the 14 unbound test files of S1b).
 
