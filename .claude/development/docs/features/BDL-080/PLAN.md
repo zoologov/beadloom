@@ -1,6 +1,6 @@
 # PLAN: BDL-080 — The portal is a service, and the viewer serves a Feature-Sliced frontend
 
-> **Status:** Draft
+> **Status:** Approved
 > **Created:** 2026-10-08
 
 ---
@@ -39,19 +39,21 @@ graph TD
     S4P --> REL
 ```
 
+Epic: `beadloom-af99`.
+
 **Critical path:** S1 → S2 → release. S3 runs beside S2; S4 beside S2 after S1.
 
 ## Beads
 
 | ID | Tracker | Name | Priority | Depends On |
 |---|---|---|---|---|
-| S1a | — | dev: `site` an alias of `service`; this graph; pages, nav, skeleton, impact boundary | P0 | - |
-| S1b | — | dev: every layer rule in the data file, additively; `scope:` on the rule | P0 | - |
-| S1c | — | dev: the viewer draws every rule — key (rule, rank), legend per rule, filter, lanes, sixth tone, layer boxes at the overview | P0 | S1b |
-| S1T | — | test: S1 criteria on this portal and the fixtures | P0 | S1a, S1c |
-| S1R | — | review: S1, bead id only | P0 | S1T |
-| S1W | — | tech-writer: S1 docs, Gate green | P0 | S1R |
-| S1P | — | coordinator: S1 PR, merge on green | P0 | S1W |
+| S1a | `beadloom-je0i` | dev: `site` an alias of `service`; this graph; pages, nav, skeleton, impact boundary | P0 | - |
+| S1b | `beadloom-kgh6` | dev: every layer rule in the data file, additively; `scope:` on the rule | P0 | - |
+| S1c | `beadloom-i3zs` | dev: the viewer draws every rule — key (rule, rank), legend per rule, filter, lanes, sixth tone, layer boxes at the overview | P0 | S1b |
+| S1T | `beadloom-lsev` | test: S1 criteria on this portal and the fixtures | P0 | S1a, S1c |
+| S1R | `beadloom-m7xq` | review: S1, bead id only | P0 | S1T |
+| S1W | `beadloom-we9t` | tech-writer: S1 docs, Gate green | P0 | S1R |
+| S1P | `beadloom-z30s` | coordinator: S1 PR, merge on green | P0 | S1W |
 | S2a | — | dev: the cut — ten slices as nodes, four moves, byte-identical dump | P0 | S1P |
 | S2b | — | dev: cohesion — `tag_prefix`, `check` per FSD tag calibrated, `fsd` and `ddd` overlays, explore/dev protocols | P0 | S2a |
 | S2T/R/W/P | — | as S1 | P0 | chain |

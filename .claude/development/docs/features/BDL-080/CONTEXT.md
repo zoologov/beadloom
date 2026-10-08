@@ -1,6 +1,6 @@
 # CONTEXT: BDL-080 — The portal is a service, and the viewer serves a Feature-Sliced frontend
 
-> **Status:** Draft
+> **Status:** Approved
 > **Created:** 2026-10-08
 
 ---
@@ -40,6 +40,7 @@ per slice; merge on green CI.
 | 2026-10-08 | Layer-rule scope by FSD practice (per frontend root; optional explicit `scope:`); cohesion by shape first, a calibrated symbol signal second; two fixtures, Vue 3 + TS and React Native + TS, shaped like the owner's projects | Owner's answers to the PRD |
 | 2026-10-08 | `site` becomes an alias of `service` at the loader; the data file grows additively (schema 2 kept); the public-API rule is a rule over resolved imports, not a glob; legacy directories beside FSD layers become nodes | RFC D1, D2, D4, D5 |
 | 2026-10-08 | Steiger's `recommended` set is the reference for the FSD rules | One owner project runs it; FSD's own linter |
+| 2026-10-08 | Layers as drawn boxes at the overview for a scoped rule (derived, not nodes); Steiger on the scaffold, run with the style linters, named by the Gate as not run | Owner: «слои блоками — согласен»; «Steiger должен и у нас появиться» |
 | 2026-10-08 | Legend from the canvas, not the data; one-kind aggregated lines keep their dash | Owner's two legend observations (#uses, #contracts) |
 
 ## Related Files
@@ -54,6 +55,6 @@ scanner/rules_gen.py,templates/roles/architecture/fsd/*}`, the viewer under
 
 ## Current Phase
 
-- **Phase:** Planning
+- **Phase:** S1 development
 - **Current bead:** see ACTIVE.md
-- **Blockers:** the owner's answer on layers as drawn boxes (RFC open question 1)
+- **Blockers:** none

@@ -1,6 +1,6 @@
 # RFC: BDL-080 — The portal is a service, and the viewer serves a Feature-Sliced frontend
 
-> **Status:** Draft
+> **Status:** Approved
 > **Created:** 2026-10-08
 
 ---
@@ -92,8 +92,7 @@ union over rules.
 
 The viewer keys a layer by `(rule, rank)`: `layers.js` gains the sixth tone (`brand`), the
 legend groups layers per rule, the filter offers rule-qualified names, lanes partition siblings
-of one rule, the card names the rule. **Layers as boxes at the overview** (proposed, pending the
-owner): for a rule with a scope, the overview draws one box per layer inside the scope's box,
+of one rule, the card names the rule. **Layers as boxes at the overview** (owner, 2026-10-08, «согласен»): for a rule with a scope, the overview draws one box per layer inside the scope's box,
 derived from the rule — not graph nodes, no `part_of` edge — so an 81-slice frontend reads as
 six boxes that open by readability. *Rejected:* a schema 3 with `layer_rank` re-meant — a
 meaning change is MAJOR by the declared API.
@@ -230,5 +229,5 @@ All additive (MINOR): `kind: site` accepted as an alias; rule keys `scope:` (lay
 
 ## Open Questions
 
-1. **Layers as drawn boxes at the overview for a scoped rule** (D2) — the coordinator's
-   proposal; the owner rules.
+None. Layers as drawn boxes at the overview for a scoped rule (D2): owner, 2026-10-08 —
+«слои блоками — согласен».
