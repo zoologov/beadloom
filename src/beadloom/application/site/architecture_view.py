@@ -191,10 +191,17 @@ def _token(layer: LayerDef) -> str:
 
 @dataclass(frozen=True)
 class _Strata:
-    """The two layer readings one build takes: the first rule's, and every rule's."""
+    """The two layer readings one build takes, and the tags they are read from.
+
+    ``tags`` is every node's tags, unnarrowed: what a node declares, which its
+    card shows. ``first`` reads the first rule's scope only and ``every`` each
+    rule's own, so a rule's scope decides what it judges and never what a node
+    is shown to declare.
+    """
 
     first: _LayerView
     every: LayerRulesView
+    tags: Mapping[str, Collection[str]]
 
 
 def _strata(conn: sqlite3.Connection) -> _Strata:
@@ -240,6 +247,7 @@ def _strata(conn: sqlite3.Connection) -> _Strata:
             tags=every.scoped_tags[0] if rules else tags,
         ),
         every=every,
+        tags=tags,
     )
 
 
@@ -537,7 +545,7 @@ def build_architecture_view_data(
         parent=_parent_map(conn),
         strata=strata,
         relations=_Relations(depends_on, depended_on_by, uses, used_by),
-        card=card_sources(conn, tags=strata.first.tags, verdicts=verdicts, repository=repository),
+        card=card_sources(conn, tags=strata.tags, verdicts=verdicts, repository=repository),
         published_doc_slugs=published_doc_slugs,
     )
     rows = conn.execute(

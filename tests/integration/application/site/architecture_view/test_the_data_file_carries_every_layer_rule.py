@@ -352,6 +352,34 @@ class TestAScopedFirstRule:
         edge = _edge(_built_with_strays(*rules), "stray-shared", "stray-pages")
         assert "violation" not in edge
 
+    @pytest.mark.parametrize(
+        "rules",
+        [
+            pytest.param((("a-slices", FRONTEND, "portal"),), id="the-only-rule"),
+            pytest.param(
+                (("a-slices", FRONTEND, "portal"), ("architecture", BACKEND, None)),
+                id="first-of-two",
+            ),
+        ],
+    )
+    def test_a_node_outside_the_scope_keeps_the_tags_it_declares_on_its_card(
+        self, rules: tuple[tuple[str, Sequence[str], str | None], ...]
+    ) -> None:
+        """The card shows what a node declares; a rule's scope decides what it judges.
+
+        Re-review ``beadloom-af99.4``: the card was read from the scoped map, so
+        every node outside the first rule's scope showed no tags and a layer it
+        carries itself as inherited.
+        """
+        nodes = _nodes(_built_with_strays(*rules))
+        declared = {ref_id: nodes[ref_id]["tags"] for ref_id in ("api", "core", "stray-shared")}
+        assert declared == {
+            "api": ["tier-web"],
+            "core": ["tier-core"],
+            "stray-shared": ["ui-shared"],
+        }
+        assert nodes["shared"]["tags"] == ["ui-shared"]
+
     def test_a_node_inside_the_scope_keeps_the_first_rules_layer(self) -> None:
         data = _built_with_strays(("a-slices", FRONTEND, "portal"))
         nodes = _nodes(data)
