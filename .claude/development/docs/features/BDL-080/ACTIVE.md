@@ -13,8 +13,8 @@
 | Bead | Role | Status | Note |
 |---|---|---|---|
 | `beadloom-je0i` | S1a | ✓ done | site is an alias of service: `KIND_ALIASES` in `graph/loader.py` (not `rules/types.py`: a cycle, measured); the doc skeleton applies it too; lint 0 errors, `architecture-layers` judged 381 -> 425 of 434, no finding |
-| `beadloom-kgh6` | S1b | in progress | `layer_rules` + per node `layer_rule`/`layer_rule_rank` (new `application/site/layer_rules_view.py`); `scope:` parsed, validated, indexed, narrows evaluator/reach/liveness through `layers.within_scope`; site slices placed by `site-fsd-layers` (scope `vitepress-site`), `cli` by `architecture-layers` (scope `beadloom`); lint 0 errors / 69 warnings before and after; existing keys byte-identical |
-| `beadloom-i3zs` | S1c | blocked | the viewer draws every rule; layer boxes |
+| `beadloom-kgh6` | S1b | ✓ done | `layer_rules` + per node `layer_rule`/`layer_rule_rank` (new `application/site/layer_rules_view.py`); `scope:` parsed, validated, indexed, narrows evaluator/reach/liveness through `layers.within_scope`; site slices placed by `site-fsd-layers` (scope `vitepress-site`), `cli` by `architecture-layers` (scope `beadloom`); lint 0 errors / 69 warnings before and after; existing keys byte-identical |
+| `beadloom-i3zs` | S1c | in progress | the viewer draws every rule; layer boxes |
 | `beadloom-lsev` | S1T | blocked | criteria; full tree once |
 | `beadloom-m7xq` | S1R | blocked | review, bead id only |
 | `beadloom-we9t` | S1W | blocked | docs |
@@ -25,6 +25,8 @@
 (filled per wave)
 
 ## Notes
+
+- **S1b closed (2026-10-08):** `a20b7df3` — `layer_rules` top-level, per node `layer_rule` / `layer_rule_rank`, `violation` the union over rules; old keys unchanged (schema 2; this portal's old keys and edges byte-identical; six fixtures identical but the new keys); `scope:` on a `layers` rule parsed, validated, indexed, applied through `layers.within_scope`; derived scopes: `architecture-layers` -> `beadloom`, `site-fsd-layers` -> `vitepress-site`; 109 nodes under the first rule, 20 under the FSD rule, 1 under none. Lint identical before/after. 65 stale pairs -> S1W; 14 new test files bind to no node -> S1T. S1c launched.
 
 - **S1a closed (2026-10-08):** `3c798da3` — `KIND_ALIASES`/`canonical_kind` in `graph/loader.py` (not beside `VALID_NODE_KINDS`: the rule engine imports the loader, a cycle); the doc generator reads YAML directly and applies the same table through `onboarding.graph_files`; reindex prints an `[info]` for an alias; `vitepress-site.yml` kind service, `layer-service`; `lint --strict` 0 errors, 70 -> 69 warnings, `architecture-layers` judges 381 -> 425 of 434 edges, no new finding; the own portal page under `services/`. 5,469 passed on the touched packages; sync-check 15 stale pairs -> S1W. S1b launched.
 
