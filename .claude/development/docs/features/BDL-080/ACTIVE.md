@@ -29,12 +29,14 @@
 | `beadloom-lsev` | S1T | ✓ done | every S1 criterion measured on this portal and the fixtures: all hold; the 14 'unbound' files were scope-check's 'no node owns' count, 0 test files of the branch unbound; +4 test files (own portal as a service by its own rules 13, planted FSD crossing red 2, doctor 3, unreadable rule row 8) and 1 browser case (one rule drawn alike with and without the new keys), each seen red; full tree on the tree: pytest 2,420 + 5,859 + 3,573 + 1,705 (1 failed = stale pairs), chromium 319 of 319, performance 10 of 10, six stacks 86 of 86 |
 | `beadloom-af99.2` | S1e | ✓ done | a box holding a layer rule's boxes opens only where they are readable, also when tapped: the site tapped at the fit is framed whole and drawn closed (0.128, layer boxes 12.2 px), opens at 0.313 (29.7 px), 0 title overlaps zooming in and out (5 at 0.128 before); `title:` on a layers rule (loader, index, data file `layer_rules[].title`), legend `DDD architecture (top → bottom):`, filter `FSD architecture: widgets` with the value `site-fsd-layers: widgets`, card `widgets (FSD architecture, its own tag)` |
 | `beadloom-m7xq` | S1R | ✓ done | review, bead id only |
-| `beadloom-af99.3` | S1f | in progress | the first rule's `layer`/`layer_rank` read the tags inside its `scope:`, so a node outside has none and an edge no rule judged carries no `violation` (six fixtures' data files byte-identical; this portal's layer keys and edges identical); a bare `?layer=domains` on a portal of two rules opens on that layer (the first rule's by name where two share the name) and the URL takes the offered value; the evaluator walks a scoped rule's subtree once (`scoped_reach`) |
-| `beadloom-af99.4` | S1R2 | blocked | re-review of the fix |
+| `beadloom-af99.3` | S1f | ✓ done | the first rule's `layer`/`layer_rank` read the tags inside its `scope:`, so a node outside has none and an edge no rule judged carries no `violation` (six fixtures' data files byte-identical; this portal's layer keys and edges identical); a bare `?layer=domains` on a portal of two rules opens on that layer (the first rule's by name where two share the name) and the URL takes the offered value; the evaluator walks a scoped rule's subtree once (`scoped_reach`) |
+| `beadloom-af99.4` | S1R2 | in progress | re-review of the fix |
 | `beadloom-we9t` | S1W | blocked | docs |
 | `beadloom-z30s` | S1P | blocked | PR, merge on green |
 
 ## Notes
+
+- **S1f closed (2026-10-09):** `a19505b9` — the first rule's old keys from the tags inside its scope; an edge no rule judged has no `violation` key; the six fixtures byte-identical; a bare `?layer=` resolves to the rule that has it; the scoped subtree walked once. Re-review launched with the bead id only.
 
 - **S1R closed (2026-10-09):** `beadloom-m7xq` = ISSUES, 0 critical, 1 major: when the first layers rule by name declares `scope:`, the old keys are computed against the unscoped tags and an edge no rule judged is written `violation: false` (reviewer's probe; matters for S3's FSD-only projects) -> `beadloom-af99.3`, with the minors (a pre-S1 `?layer=` link on a two-rule portal; `reach_of` narrowing twice). RFC/CONTEXT drift corrected by the coordinator (sixth tone cyan; `KIND_ALIASES` in the loader; `title:` in the API list). The docs list for S1W includes `architecture-data.md` and the CHANGELOG's `[Unreleased]`.
 
