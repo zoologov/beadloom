@@ -31,11 +31,13 @@
 | `beadloom-m7xq` | S1R | ✓ done | review, bead id only |
 | `beadloom-af99.3` | S1f | ✓ done | the first rule's `layer`/`layer_rank` read the tags inside its `scope:`, so a node outside has none and an edge no rule judged carries no `violation` (six fixtures' data files byte-identical; this portal's layer keys and edges identical); a bare `?layer=domains` on a portal of two rules opens on that layer (the first rule's by name where two share the name) and the URL takes the offered value; the evaluator walks a scoped rule's subtree once (`scoped_reach`) |
 | `beadloom-af99.4` | S1R2 | ✓ done (ISSUES) | re-review of the fix |
-| `beadloom-af99.5` | S1R3 | in progress | the card-tags regression fix re-read |
-| `beadloom-we9t` | S1W | blocked | docs |
+| `beadloom-af99.5` | S1R3 | ✓ done (OK) | the card-tags regression fix re-read |
+| `beadloom-we9t` | S1W | in progress | docs |
 | `beadloom-z30s` | S1P | blocked | PR, merge on green |
 
 ## Notes
+
+- **S1R3 OK (2026-10-09):** `beadloom-af99.5` — the fix confined and correct; the new cases fail with the line reverted; one nitpick (two fields named `tags` with opposite meanings — `declared_tags` for the full map; left for S2's refactor or the debt epic). S1W launched.
 
 - **S1R2 (2026-10-09):** `beadloom-af99.4` = ISSUES, 1 major — the fix narrowed the tag map the card reads (`architecture_view.py:540`), so outside a scoped first rule a card showed `tags: none`; fixed in `42055d04` (red-first case; the author's earlier claim corrected). The three earlier findings confirmed fixed. Third review `beadloom-af99.5` launched.
 
