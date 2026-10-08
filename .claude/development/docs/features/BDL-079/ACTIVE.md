@@ -14,8 +14,8 @@
 |---|---|---|---|
 | `beadloom-91iv` | R1 | ✓ done | 8.0.0 in every place; public API in CONTRIBUTING.md + docs/guides/public-api.md; CHANGELOG [8.0.0]; `beadloom ci` rc 0 |
 | `beadloom-ghu3` | D1 | ✓ done | README pair: a portal and viewer section (125 blocks, 0 findings); 8 surface-drift docs read, corrected and attested one by one; vitepress-site TODO filled (318 cases); `beadloom ci` rc 0 |
-| `beadloom-jxp4` | V1 | in progress | the built wheel on another project |
-| `beadloom-urgi` | R | blocked | review, bead id only |
+| `beadloom-jxp4` | V1 | ✓ done | `tests/release/verify_the_release.py` on a wheel path or `beadloom==X.Y.Z`: the built wheel 12 of 12 (exit 0); `beadloom==7.0.0` red, first: `--version` (with `--release 7.0.0`: the activity levels); `beadloom ci` rc 0 |
+| `beadloom-urgi` | R | ready | review, bead id only |
 | `beadloom-fymn` | P | blocked | PR, merge, Release, downloaded wheel, portal |
 
 ## Results
