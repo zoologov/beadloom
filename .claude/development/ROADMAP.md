@@ -69,6 +69,16 @@ Beadloom for more (item 4). Each adoption is a work item of its own: `init`, the
 the owner, `lint --strict` over the FSD rules, the portal published, the findings filed as
 BDL-UX issues. What those two find is what ranks the rest of this list.
 
+### 1a. `beadloom-ba9w` — Debt to zero (P1, not started; the owner ranks it)
+
+Owner, 2026-10-08, reading the 8.0.0 dashboard (Lint 70 warnings, Debt 42.5 high, Doctor 262
+warnings): a work item that clears the debt rather than excuses it. Measured: 167 of 786 test
+files bound to no node (`beadloom-k6ou`, each excused — the reason the impact panel says "no
+bound tests" and the debt report says "not counted"); 49 features with no acceptance scenario;
+262 documents with no `ref_id`; complexity smells 35 of the 42.5 points (oversized 9, high
+fan-out 10, dormant 14). Four slices, each with its own measure (A tests, B scenarios, C docs,
+D smells); BDL-080 S2 takes `site-graph-viewer`'s oversized smell. **Needs `/task-init`.**
+
 ### 2. `beadloom-j4gi` — the rules leave the graph folder and are decomposed (P1, not started; the second epic, with `beadloom-tvjp`)
 
 **Needs `/task-init`.** Owner, 2026-10-07: `.beadloom/_graph/rules.yml` is 860 lines in the
