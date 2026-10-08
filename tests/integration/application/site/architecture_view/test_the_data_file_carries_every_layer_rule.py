@@ -21,6 +21,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+import pytest
+
 from beadloom.application.site.architecture_view import build_architecture_view_data
 from tests.support.in_memory_graph import add_edge, add_node, open_graph
 
@@ -275,3 +277,91 @@ class TestTheVerdictIsTheUnionOverRules:
         assert drawn[("shared", "widgets")] is True  # the frontend's finding
         assert drawn[("pages", "widgets")] is False
         assert drawn[("api", "core")] is False
+
+
+def _with_strays(conn: sqlite3.Connection) -> None:
+    """Two nodes OUTSIDE the portal carry slice tags, and the lower one imports the upper."""
+    add_node(conn, "stray-pages", "component", "ui-pages")
+    add_node(conn, "stray-shared", "component", "ui-shared")
+    add_edge(conn, "stray-pages", "shop", "part_of")
+    add_edge(conn, "stray-shared", "shop", "part_of")
+    add_edge(conn, "stray-shared", "stray-pages", "depends_on")
+
+
+def _built_with_strays(*rules: tuple[str, Sequence[str], str | None]) -> dict[str, Any]:
+    conn = open_graph()
+    try:
+        _portal_graph(conn)
+        _with_strays(conn)
+        for name, tags, scope in rules:
+            _declare(conn, name, tags, scope=scope)
+        conn.commit()
+        return build_architecture_view_data(conn, pages={})
+    finally:
+        conn.close()
+
+
+def _edge(data: dict[str, Any], src: str, dst: str) -> dict[str, Any]:
+    (edge,) = [
+        e for e in data["edges"] if (e["src"], e["dst"], e["kind"]) == (src, dst, "depends_on")
+    ]
+    return dict(edge)
+
+
+class TestAScopedFirstRule:
+    """BDL-080 S1f (``beadloom-af99.3``), review ``beadloom-m7xq`` finding 1.
+
+    The original keys describe the FIRST rule by name, and that rule judges
+    inside its ``scope:`` only. A node outside the scope that carries the rule's
+    tags is in none of its layers, and an edge between two such nodes was judged
+    by no rule — it carries no verdict rather than a healthy one. Both shapes are
+    the one S3's Feature-Sliced preset writes: a scoped rule that is the only
+    rule, and a scoped rule that sorts first beside a backend's.
+    """
+
+    @pytest.mark.parametrize(
+        "rules",
+        [
+            pytest.param((("a-slices", FRONTEND, "portal"),), id="the-only-rule"),
+            pytest.param(
+                (("a-slices", FRONTEND, "portal"), ("architecture", BACKEND, None)),
+                id="first-of-two",
+            ),
+        ],
+    )
+    def test_a_node_outside_the_scope_is_in_no_layer_of_the_first_rule(
+        self, rules: tuple[tuple[str, Sequence[str], str | None], ...]
+    ) -> None:
+        nodes = _nodes(_built_with_strays(*rules))
+        for stray in ("stray-pages", "stray-shared"):
+            assert (nodes[stray]["layer"], nodes[stray]["layer_rank"]) == ("", None), stray
+
+    @pytest.mark.parametrize(
+        "rules",
+        [
+            pytest.param((("a-slices", FRONTEND, "portal"),), id="the-only-rule"),
+            pytest.param(
+                (("a-slices", FRONTEND, "portal"), ("architecture", BACKEND, None)),
+                id="first-of-two",
+            ),
+        ],
+    )
+    def test_an_edge_no_rule_judged_carries_no_verdict(
+        self, rules: tuple[tuple[str, Sequence[str], str | None], ...]
+    ) -> None:
+        edge = _edge(_built_with_strays(*rules), "stray-shared", "stray-pages")
+        assert "violation" not in edge
+
+    def test_a_node_inside_the_scope_keeps_the_first_rules_layer(self) -> None:
+        data = _built_with_strays(("a-slices", FRONTEND, "portal"))
+        nodes = _nodes(data)
+        assert (nodes["shared"]["layer"], nodes["shared"]["layer_rank"]) == ("ui-shared", 2)
+        assert (nodes["widgets-ui"]["layer"], nodes["widgets-ui"]["layer_rank"]) == ("", 1)
+        assert _edge(data, "shared", "widgets")["violation"] is True
+        assert _edge(data, "pages", "widgets")["violation"] is False
+
+    def test_the_same_graph_without_a_scope_judges_the_strays(self) -> None:
+        """The control: unscoped, the rule reaches the strays and finds against their edge."""
+        data = _built_with_strays(("a-slices", FRONTEND, None))
+        assert _nodes(data)["stray-shared"]["layer_rank"] == 2
+        assert _edge(data, "stray-shared", "stray-pages")["violation"] is True

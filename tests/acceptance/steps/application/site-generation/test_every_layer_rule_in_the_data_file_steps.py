@@ -20,6 +20,7 @@ from beadloom.application.site.generate import generate_site
 from beadloom.graph.linter import lint
 from beadloom.graph.rules.types import LAYER_EDGE_RULE_TYPE
 from tests.support.tiered_project import (
+    SLICES_RULE,
     graph_with_a_portal,
     slices_rule_yaml,
     write_tiered_project,
@@ -45,6 +46,7 @@ def world(tmp_path: Path) -> dict[str, Any]:
         "stray": False,
         "scope": None,
         "title": None,
+        "slices_rule": SLICES_RULE,
     }
 
 
@@ -68,6 +70,15 @@ def _titled(world: dict[str, Any], title: str) -> None:
     world["title"] = title
 
 
+#: A name that sorts before the backend's ``tier-order``, so the frontend's rule is the first.
+_FIRST_BY_NAME = "a-slices"
+
+
+@given("the frontend's layer rule is the first by name")
+def _first_by_name(world: dict[str, Any]) -> None:
+    world["slices_rule"] = _FIRST_BY_NAME
+
+
 @when("the site is generated for the project")
 def _generate(world: dict[str, Any]) -> None:
     nodes, edges = graph_with_a_portal(stray_slices=world["stray"])
@@ -75,7 +86,9 @@ def _generate(world: dict[str, Any]) -> None:
         world["root"],
         nodes=nodes,
         edges=edges,
-        more_rules=slices_rule_yaml(scope=world["scope"], title=world["title"]),
+        more_rules=slices_rule_yaml(
+            scope=world["scope"], title=world["title"], name=world["slices_rule"]
+        ),
     )
     conn = sqlite3.connect(project / ".beadloom" / "beadloom.db")
     conn.row_factory = sqlite3.Row
@@ -157,6 +170,30 @@ def _drawn_healthy(world: dict[str, Any], src: str, dst: str) -> None:
     assert _verdicts(world)[(src, dst)] is False
 
 
+@then(parsers.parse('the node "{ref_id}" is in no layer of the first rule by name'))
+def _no_first_layer(world: dict[str, Any], ref_id: str) -> None:
+    node = _node(world, ref_id)
+    assert (node["layer"], node["layer_rank"]) == ("", None)
+
+
+@then(
+    parsers.parse('the node "{ref_id}" is in the first rule\'s layer "{token}" at rank {rank:d}')
+)
+def _first_layer(world: dict[str, Any], ref_id: str, token: str, rank: int) -> None:
+    node = _node(world, ref_id)
+    assert (node["layer"], node["layer_rank"]) == (token, rank)
+
+
+@then(parsers.parse('the edge "{src} -> {dst}" is drawn with no verdict'))
+def _drawn_unjudged(world: dict[str, Any], src: str, dst: str) -> None:
+    (edge,) = [
+        edge
+        for edge in world["data"]["edges"]
+        if (edge["src"], edge["dst"], edge["kind"]) == (src, dst, "depends_on")
+    ]
+    assert "violation" not in edge
+
+
 @then("the edges drawn as violations are the ones the linter reports")
 def _same_set(world: dict[str, Any]) -> None:
     drawn = {edge for edge, verdict in _verdicts(world).items() if verdict is True}
@@ -168,7 +205,7 @@ def _same_set(world: dict[str, Any]) -> None:
     assert drawn == reported
     # Both rules found something, so the equality is not one rule's verdict twice.
     reporting = {v.rule_name for v in world["violations"] if v.rule_type == LAYER_EDGE_RULE_TYPE}
-    assert reporting == {"tier-order", "ui-slices"}
+    assert reporting == {"tier-order", world["slices_rule"]}
 
 
 def _declared_rule(world: dict[str, Any], rule: str) -> dict[str, Any]:

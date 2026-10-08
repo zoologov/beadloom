@@ -15,11 +15,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from beadloom.graph.rules import layers as layers_module
+from beadloom.graph.rules.evaluators import evaluate_layer_rules
+from beadloom.graph.rules.layer_reach import reach_of, scoped_reach
 from beadloom.graph.rules.layers import subtree_of, within_scope
 from beadloom.graph.rules.loader import load_rules
-from beadloom.graph.rules.types import LayerRule
+from beadloom.graph.rules.types import LayerDef, LayerRule
+from tests.support.in_memory_graph import add_edge, add_node, open_graph
 
 if TYPE_CHECKING:
+    from collections.abc import Collection, Mapping
     from pathlib import Path
 
 
@@ -109,3 +114,62 @@ class TestWithinScope:
         """So no node outside is in a layer, and nothing inside inherits from above."""
         _, tags = within_scope("portal", EDGES, PARENTS, TAGS)
         assert tags == {"pages": {"ui-pages"}, "shared": {"ui-shared"}}
+
+
+class TestTheEvaluatorNarrowsOnce:
+    """BDL-080 S1f (``beadloom-af99.3``), review ``beadloom-m7xq`` finding 5.
+
+    The evaluator narrows a scoped rule's population and counts its reach over
+    that narrowed population; the count does not narrow it a second time. Read
+    as the number of subtree walks a lint run makes per scoped rule.
+    """
+
+    def test_a_scoped_rules_subtree_is_walked_once_per_evaluation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        conn = open_graph()
+        try:
+            for ref_id, tags in (
+                ("shop", ()),
+                ("portal", ()),
+                ("pages", ("ui-pages",)),
+                ("shared", ("ui-shared",)),
+            ):
+                add_node(conn, ref_id, "component", *tags)
+            for child, parent in (("portal", "shop"), ("pages", "portal"), ("shared", "portal")):
+                add_edge(conn, child, parent, "part_of")
+            add_edge(conn, "shared", "pages", "depends_on")
+            conn.commit()
+            walked: list[str] = []
+            walk = layers_module.subtree_of
+
+            def counted(scope: str, parents: Mapping[str, Collection[str]]) -> frozenset[str]:
+                walked.append(scope)
+                return walk(scope, parents)
+
+            monkeypatch.setattr(layers_module, "subtree_of", counted)
+            found = evaluate_layer_rules(conn, [_scoped_rule("portal")])
+        finally:
+            conn.close()
+        assert walked == ["portal"]
+        # The narrowed population is still judged: the upward import is found.
+        assert [(v.from_ref_id, v.to_ref_id) for v in found if v.from_ref_id] == [
+            ("shared", "pages")
+        ]
+
+    def test_the_reach_of_a_narrowed_population_is_the_reach_of_the_whole(self) -> None:
+        """Counting what the evaluator narrowed equals counting the whole graph."""
+        rule = _scoped_rule("portal")
+        edges, tags = within_scope(rule.scope, EDGES, PARENTS, TAGS)
+        assert scoped_reach(rule, edges, PARENTS, tags) == reach_of(rule, EDGES, PARENTS, TAGS)
+
+
+def _scoped_rule(scope: str) -> LayerRule:
+    return LayerRule(
+        name="ui-slices",
+        description="the portal's slices import downward",
+        layers=(LayerDef(name="pages", tag="ui-pages"), LayerDef(name="shared", tag="ui-shared")),
+        enforce="top-down",
+        edge_kind="depends_on",
+        scope=scope,
+    )

@@ -24,7 +24,7 @@ from beadloom.graph.rules.layer_reach import (
     live_edges_of_kind,
     part_of_parents,
     population_statement,
-    reach_of,
+    scoped_reach,
 )
 from beadloom.graph.rules.layers import (
     LayerMembership,
@@ -682,7 +682,7 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
             rule.scope, live_edges_of_kind(conn, rule.edge_kind), parents, tags
         )
         violations.extend(
-            population_statement(rule, reach_of(rule, all_edges, parents, rule_tags))
+            population_statement(rule, scoped_reach(rule, all_edges, parents, rule_tags))
         )
         violations.extend(
             declaration_statement(

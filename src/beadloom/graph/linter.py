@@ -255,7 +255,7 @@ def _evaluate(
         # How much of its edge set each layer rule can judge. Counted here for
         # the same reason `inert_rule_names` and `suppressed_crossings` are:
         # `evaluate_all` returns findings, and a finding carries the numbers as
-        # prose. Both counts come from `reach_of` over this one connection, so
+        # prose. Both counts come from `scoped_reach` over this one connection, so
         # they cannot differ in logic — what would differ is a renderer parsing
         # a sentence back into integers.
         #

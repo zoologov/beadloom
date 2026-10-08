@@ -450,19 +450,23 @@ SLICES = ("ui-pages", "ui-widgets", "ui-shared")
 SLICES_RULE = "ui-slices"
 
 
-def slices_rule_yaml(*, scope: str | None = None, title: str | None = None) -> str:
+def slices_rule_yaml(
+    *, scope: str | None = None, title: str | None = None, name: str = SLICES_RULE
+) -> str:
     """The frontend's layer rule over :data:`SLICES`, as a `rules.yml` list entry.
 
     *scope* writes the rule's ``scope:`` key, which names the container the
     rule judges inside; ``None`` writes no key, and the scope is derived.
     *title* writes the rule's ``title:`` key, the name the portal shows it by;
-    ``None`` writes none.
+    ``None`` writes none. *name* renames the rule: one that sorts before
+    ``tier-order`` makes the frontend's rule the first by name, the one the data
+    file's original layer keys describe.
     """
     declared = "\n".join(
         f"      - name: {tag.removeprefix('ui-')}\n        tag: {tag}" for tag in SLICES
     )
     return (
-        f"  - name: {SLICES_RULE}\n"
+        f"  - name: {name}\n"
         + (f'    title: "{title}"\n' if title else "")
         + '    description: "the portal\'s slices import downward"\n'
         "    severity: error\n"

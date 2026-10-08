@@ -33,6 +33,7 @@ import {
   FilterControls,
   contractFilterOptions,
   filterOptions,
+  layerChoiceOf,
   matchesQuery,
   visibleContracts,
   visibleNodeIds,
@@ -62,6 +63,8 @@ export const MODES = Object.freeze({
     filterDefaults: FILTER_DEFAULTS,
     filterControls: FilterControls,
     filterOptions: (graph, layers) => filterOptions(graph.nodes, layers),
+    // The Layer filter's value for a layer a link names, bare or said with its rule's.
+    layerChoiceOf,
     visible: (graph, filters, context) => ({
       nodes: visibleNodeIds(graph.nodes, filters, context),
       contracts: null,

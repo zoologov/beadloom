@@ -52,3 +52,18 @@ Feature: the architecture data file carries every layer rule the project declare
     When the site is generated for the project
     Then the data file's layer rule "ui-slices" is titled "Storefront FSD"
     And the data file's layer rule "tier-order" carries no title
+
+  # BDL-080 S1f: the original keys describe the first rule by name, and a rule
+  # that declares a scope judges inside it only. Feature-Sliced Design's preset
+  # writes a scope, and in a frontend-only project that rule is the first.
+  @bead:beadloom-af99.3
+  Scenario: a scoped first rule places nothing and judges nothing outside its scope
+    Given a project with a backend layer rule and a frontend layer rule inside its portal
+    And two slices outside the portal carry the frontend's tags
+    And the frontend's layer rule declares the scope "shop-portal"
+    And the frontend's layer rule is the first by name
+    When the site is generated for the project
+    Then the node "stray-shared" is in no layer of the first rule by name
+    And the edge "stray-shared -> stray-pages" is drawn with no verdict
+    And the node "portal-shared" is in the first rule's layer "ui-shared" at rank 2
+    And the edges drawn as violations are the ones the linter reports

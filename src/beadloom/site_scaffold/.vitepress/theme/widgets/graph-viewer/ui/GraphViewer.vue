@@ -461,6 +461,18 @@ watch(
     if (id) panelOpen.value = true;
   }
 );
+// A link from a portal that drew one layer rule names a layer by its bare name.
+// Once the layers are read, the mode that filters by layer reads it as the value
+// its Layer filter offers, so the filter shows that layer and the URL says so.
+watch(
+  layers,
+  (current) => {
+    if (!mode.layerChoiceOf) return;
+    const choice = mode.layerChoiceOf(state.layer, current);
+    if (choice !== state.layer) state.layer = choice;
+  },
+  { immediate: true }
+);
 
 let disposeHandle = () => {};
 onMounted(() => {

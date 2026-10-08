@@ -125,6 +125,10 @@ class _LayerView:
     (:mod:`beadloom.application.site.layer_rules_view`): changing what an
     existing key means is a major change by the declared public API.
 
+    ``tags`` are the ones inside the first rule's ``scope:``, the map the linter
+    judges it by, so a node outside the scope has no ``layer`` and no
+    ``layer_rank`` even where it carries one of the rule's tags (BDL-080 S1f).
+
     The view used to answer this itself, from a table of four tags and a table
     of four ranks, and it climbed ``part_of`` in a loop of its own. It was one of
     the three answers BDL-070 found disagreeing, so the arithmetic lives in
@@ -224,9 +228,18 @@ def _strata(conn: sqlite3.Connection) -> _Strata:
                 tagged,
                 _LAYER_TAG_PREFIX,
             )
+    every = layer_rules_view(rules, parents, tags)
+    # The first rule's view reads the tags inside its scope, as the linter does:
+    # a node outside it is in none of the rule's layers, and an edge between two
+    # such nodes is judged by no rule (review `beadloom-m7xq` finding 1). With no
+    # `scope:` the narrowing hands the same map on, so the keys are what they were.
     return _Strata(
-        first=_LayerView(rule=rules[0] if rules else None, parents=parents, tags=tags),
-        every=layer_rules_view(rules, parents, tags),
+        first=_LayerView(
+            rule=rules[0] if rules else None,
+            parents=parents,
+            tags=every.scoped_tags[0] if rules else tags,
+        ),
+        every=every,
     )
 
 
@@ -343,7 +356,8 @@ def _arch_edges(
       import can. The flag is honestly omitted when no rule places a layer at
       both ends — an edge no rule judged must not be drawn as healthy. The
       first rule's ranks are asked as well, which keeps the flag on every edge
-      that carried one before every rule was read.
+      that carried one before every rule was read; they are its ranks inside its
+      ``scope:``, so an edge outside the scope is not called judged by it.
     - the four ``why`` lists, sorted + de-duplicated: what a node imports
       (``depends_on``) and who imports it, kept SEPARATE from what it ``uses``
       at runtime and who uses it. Merging them would assert an import binding
