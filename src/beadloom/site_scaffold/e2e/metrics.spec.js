@@ -46,6 +46,7 @@ import {
 import { withTwoMoreEdges } from "./support/perturbedGraph.js";
 import { requireShape } from "./support/shape.js";
 import { architectureData, openArchitecture, openEveryBox, viewer, withAncestors } from "./support/viewer.js";
+import { layerBoxesOf } from "./support/layers.js";
 
 /** The one weight every line is drawn at, in pixels on screen. */
 const LINE_PX = 1.35;
@@ -575,6 +576,70 @@ test.describe("on this portal's architecture graph", () => {
 
     // A graph whose fit already draws the node readably needs no zoom: what is held is what the reader sees.
     expect({ drawn: (await viewer(page, "visibleIds")).includes(leaf), readable: height >= READABLE_PX * STAY_OPEN_SHARE, inCanvas }).toEqual({ drawn: true, readable: true, inCanvas: true });
+  });
+
+  // A box a layer rule draws is titled as every closed box is (owner, 2026-10-08):
+  // inside it at 10 px or more, wherever a reader's gesture draws it. Read on the
+  // two ways a reader reaches the scope's layers: a tap on the scope at the fit,
+  // which frames it whole, and zooming into the scope, then two steps further each.
+  test("every box a layer rule draws is titled at 10 px or more, inside its box, as a tap on its scope or a zoom into it draws it", async ({ page, request }) => {
+    const data = await architectureData(request);
+    const layerBoxes = layerBoxesOf(data);
+    requireShape(layerBoxes.length > 0, "no layer rule scoped to a box inside the project's frame, as a frontend service's rule is");
+    const scope = layerBoxes[0].scope;
+    const ids = layerBoxes.filter((box) => box.scope === scope).map((box) => box.id);
+    const wrong = [];
+    const sizes = [];
+    let read = 0;
+    const readTitles = async (gesture) => {
+      const view = await viewOf(page);
+      const boxes = await screenBoxes(page, view);
+      const byId = new Map((await viewer(page, "titles")).map((title) => [title.id, title]));
+      // A closed box is titled by the map; an open one at its layout's size, as every open box is.
+      const closed = new Set((await viewer(page, "level")).collapsed.map((box) => box.id));
+      for (const id of ids.filter((boxId) => boxes[boxId] && closed.has(boxId))) {
+        read += 1;
+        const title = byId.get(id);
+        const box = boxes[id];
+        if (!title) wrong.push(`${gesture} at ${view.zoom.toFixed(3)}: ${id} has no title`);
+        // At 10 px or more within a step of the map's scale: a mark keeps one size on screen between steps only.
+        else if (title.fontSize < SMALLEST_TITLE_PX / half - 0.01) wrong.push(`${gesture} at ${view.zoom.toFixed(3)}: ${id} ${title.fontSize.toFixed(2)} px`);
+        else if (!title.inside || !(title.x1 >= box.x1 - 0.5 && title.x2 <= box.x2 + 0.5 && title.y1 >= box.y1 - 0.5 && title.y2 <= box.y2 + 0.5)) {
+          wrong.push(`${gesture} at ${view.zoom.toFixed(3)}: ${id} outside its box${title.inside ? "" : " on a plate"}`);
+        }
+        if (title) sizes.push(title.fontSize);
+      }
+    };
+    const onwards = async (gesture) => {
+      for (let step = 0; step < ZOOM_STEPS && !(await viewer(page, "openBoxes")).includes(scope); step += 1) {
+        await readTitles(gesture);
+        await press(page, "Zoom in");
+        await settled(page);
+      }
+      for (let step = 0; step <= 2; step += 1) {
+        await readTitles(gesture);
+        await press(page, "Zoom in");
+        await settled(page);
+      }
+    };
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openArchitecture(page);
+    await page.getByTestId("graph-canvas").scrollIntoViewIfNeeded();
+    await twoFrames(page);
+    const at = (await viewer(page, "boxes"))[scope];
+    await page.mouse.click((at.x1 + at.x2) / 2, at.y1 + Math.min(12, (at.y2 - at.y1) / 4));
+    await expect.poll(() => viewer(page, "selection")).toBe(scope);
+    await settled(page);
+    await onwards("a tap");
+    await openArchitecture(page);
+    await zoomIntoBox(page, scope);
+    await settled(page);
+    await onwards("a zoom");
+    measured(`${ids.length} layer box(es) of ${scope}; ${read} title reading(s), ${spread(sizes)} px; ${wrong.length} wrong`);
+
+    expect(read).toBeGreaterThan(0);
+    expect(wrong).toEqual([]);
   });
 
   test("a box's activity reflects its parts: it has changed at least as many lines as its busiest part, and a part changed in 30 days leaves it changed", async ({ request }) => {

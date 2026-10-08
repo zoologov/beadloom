@@ -62,7 +62,7 @@ function boundariesOf(distances, edges, nodeById, layers) {
     const to = layerOfNode(dependency, layers);
     if (!from || !to || from === to) continue;
     const key = `${from.key}->${to.key}`;
-    const entry = counts.get(key) || { from: from.label, to: to.label, fromRank: from.rank, toRank: to.rank, order: [layers.indexOf(from), layers.indexOf(to)], count: 0 };
+    const entry = counts.get(key) || { from: from.caption, to: to.caption, fromRank: from.rank, toRank: to.rank, order: [layers.indexOf(from), layers.indexOf(to)], count: 0 };
     entry.count += 1;
     counts.set(key, entry);
   }

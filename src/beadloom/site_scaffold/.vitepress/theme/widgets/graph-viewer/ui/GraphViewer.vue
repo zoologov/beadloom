@@ -158,7 +158,7 @@ const visible = computed(() =>
 );
 const selectedNode = computed(() => nodeById.value.get(state.focus) || null);
 const selectedLayer = computed(() =>
-  selectedNode.value ? layerOfNode(selectedNode.value, layers.value)?.label || "" : ""
+  selectedNode.value ? layerOfNode(selectedNode.value, layers.value)?.caption || "" : ""
 );
 
 const ids = computed(() => new Set(nodeById.value.keys()));
@@ -249,7 +249,9 @@ const legendColours = computed(() =>
 // A selection made anywhere — a tap on the canvas, the URL, the card, the impact
 // list — is framed, so the neighbourhood the reader asked for is in view and
 // readable (the owner's ruling 7). A selected box is framed whole, open: the box
-// is what the reader asked to see, and zooms further in himself.
+// is what the reader asked to see, and zooms further in himself. A box holding
+// the boxes a layer rule draws opens where they are readable (`canvasMap`): below
+// that, their titles would stand on plates over each other (owner, 2026-10-08).
 function select(id) {
   if (!nodeById.value.has(id) || state.focus === id) return;
   state.focus = id;
@@ -345,7 +347,8 @@ function laidOutBoxOf(ids) {
  * Frame the selection's neighbourhood, at no less than the zoom at which its
  * node, and every node the selection draws as itself, is drawn readably, centred
  * on the node where the walk does not fit at that zoom; a selected box whole,
- * open at whatever zoom it fits at; with nothing selected, fit everything visible.
+ * open at whatever zoom it fits at (one holding a layer rule's boxes where they
+ * are readable); with nothing selected, fit everything visible.
  */
 function frameSelection({ animate }) {
   nextTick(() => {

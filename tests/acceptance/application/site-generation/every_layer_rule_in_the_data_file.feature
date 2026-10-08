@@ -42,3 +42,13 @@ Feature: the architecture data file carries every layer rule the project declare
     When the site is generated for the project
     Then the data file's layer rules are "tier-order" over "shop" and "ui-slices" over "shop-portal"
     And the node "stray-pages" is placed by no layer rule
+
+  # BDL-080 S1e: a rule's name is its identifier, written for lint and the URL;
+  # the portal shows a reader the rule's title where the rule declares one.
+  @bead:beadloom-af99.2
+  Scenario: a layer rule's declared title is carried beside its name
+    Given a project with a backend layer rule and a frontend layer rule inside its portal
+    And the frontend's layer rule declares the title "Storefront FSD"
+    When the site is generated for the project
+    Then the data file's layer rule "ui-slices" is titled "Storefront FSD"
+    And the data file's layer rule "tier-order" carries no title

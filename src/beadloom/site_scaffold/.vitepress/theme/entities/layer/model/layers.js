@@ -2,7 +2,7 @@
 // The layers of the architecture graph, read from the data file, and their colours.
 //
 // No layer is named here. A data file that carries every layer rule — `layer_rules:
-// [{ name, scope, edge_kind, layers: [{ name, rank, tag, token }] }]`, and on each
+// [{ name, title, scope, edge_kind, layers: [{ name, rank, tag, token }] }]`, and on each
 // node the rule that places it, `layer_rule`, at `layer_rule_rank` — names the
 // layers of each rule, and a layer is the pair (rule, rank): a project with a
 // backend and a frontend has two orders, and rank 2 of one is no layer of the
@@ -11,6 +11,11 @@
 // the ranks the nodes are in (`layer_rank`, inherited through `part_of`), named
 // by the tag token a node of that rank declares (`layer`). Such a file is drawn
 // as it always was.
+//
+// A rule is named two ways. Its `name` is its identifier, which lint reports and
+// the Layer filter's value and the URL carry, so a link stays good when a title
+// is reworded; its `title`, where it declares one ("DDD architecture"), is what a
+// reader is shown: the legend's heading, the filter's choices and the card.
 //
 // The colour of a layer is a theme tone chosen by its position in its own rule,
 // top to bottom, so each rule's layers are told apart from each other and the
@@ -50,18 +55,25 @@ export const RULE_SEPARATOR = ": ";
 /**
  * `layers` of one order, `[{ rank, name, tag }]`, top to bottom, each with its
  * tone by position and its key: the rule's name and the rank, so two orders'
- * ranks are never one layer.
+ * ranks are never one layer. `ruleTitle` is the rule's declared title, or null.
  */
-function toned(layers, rule) {
+function toned(layers, rule, ruleTitle = null) {
   return [...layers]
     .sort((a, b) => a.rank - b.rank)
     .map((layer, position) => ({
       ...layer,
       rule,
+      ruleTitle,
       key: `${rule ?? ""}\u0000${layer.rank}`,
       tone: LAYER_TONES[position % LAYER_TONES.length],
     }));
 }
+
+/** A rule's declared title, or null where it declares none. */
+const titleOf = (rule) => (typeof rule?.title === "string" && rule.title.trim() ? rule.title.trim() : null);
+
+/** What a reader is shown a layer's rule by: its title where it declares one, else its name. */
+export const ruleCaptionOf = (layer) => layer.ruleTitle || layer.rule || "";
 
 /** The layers a declaration lists, `[{ rank, name, tag }]`, or none. */
 function declaredLayers(declared) {
@@ -90,33 +102,38 @@ export function declaredRulesOf(rules) {
 }
 
 /**
- * The layers, `[{ key, rule, rank, name, label, tag, tone }]`: every rule's,
- * the rules in the file's order and each one's top to bottom.
+ * The layers, `[{ key, rule, ruleTitle, rank, name, label, caption, tag, tone }]`:
+ * every rule's, the rules in the file's order and each one's top to bottom.
  *
  * `rules` is the data file's `layer_rules`; when it names none, `declared`, its
  * `layers`, is the one order, `rule` null, and when that names none either the
- * layers are read from the nodes' tokens. `label` is the name a filter and a
- * page show: the layer's own name, said with its rule's (`RULE_SEPARATOR`)
- * where more than one rule is drawn and two rules may name a layer alike.
+ * layers are read from the nodes' tokens. `label` names the layer where a value
+ * must: the Layer filter's and the URL's. It is the layer's own name, said with
+ * its rule's (`RULE_SEPARATOR`) where more than one rule is drawn and two rules
+ * may name a layer alike. `caption` is what a reader is shown instead: the same,
+ * said with the rule's title where the rule declares one (`ruleCaptionOf`).
  */
 export function layersOf(nodes, declared, rules) {
   const ruled = declaredRulesOf(rules);
   if (ruled.length) {
     const qualified = ruled.length > 1;
+    const said = (rule, layer) => (qualified ? `${rule}${RULE_SEPARATOR}${layer.name}` : layer.name);
     return ruled.flatMap((rule) =>
-      toned(declaredLayers(rule.layers), rule.name).map((layer) => ({
+      toned(declaredLayers(rule.layers), rule.name, titleOf(rule)).map((layer) => ({
         ...layer,
-        label: qualified ? `${rule.name}${RULE_SEPARATOR}${layer.name}` : layer.name,
+        label: said(rule.name, layer),
+        caption: said(ruleCaptionOf(layer), layer),
       }))
     );
   }
   const layers = declaredLayers(declared);
-  return toned(layers.length ? layers : layersFromTokens(nodes), null).map((layer) => ({ ...layer, label: layer.name }));
+  return toned(layers.length ? layers : layersFromTokens(nodes), null).map((layer) => ({ ...layer, label: layer.name, caption: layer.name }));
 }
 
 /**
- * The rules the layers belong to, `[{ rule, layers }]`, in the layers' order: one
- * entry, `rule` null, for a file that names one order without a rule.
+ * The rules the layers belong to, `[{ rule, title, layers }]`, in the layers'
+ * order, `title` the rule's declared title or null: one entry, `rule` null, for
+ * a file that names one order without a rule.
  */
 export function layerRulesOf(layers) {
   const groups = new Map();
@@ -124,7 +141,7 @@ export function layerRulesOf(layers) {
     if (!groups.has(layer.rule)) groups.set(layer.rule, []);
     groups.get(layer.rule).push(layer);
   }
-  return [...groups].map(([rule, members]) => ({ rule, layers: members }));
+  return [...groups].map(([rule, members]) => ({ rule, title: members[0].ruleTitle ?? null, layers: members }));
 }
 
 /** Whether `layers` are each a rule's, read off a node's own rule, rather than one order read off its rank. */

@@ -13,7 +13,7 @@ import { architectureData, openArchitecture, openEveryBox, parentMap, viewer } f
 import { LACKING, requireShape } from "./support/shape.js";
 import { canvasBackground, channelDistance, drawnColours, legendSamples, over } from "./support/look.js";
 import { treeOf } from "./support/map.js";
-import { layerBoxesOf, layerOfNode, layerRulesOf, layersOfData, withoutLayerRules } from "./support/layers.js";
+import { layerBoxesOf, layerOfNode, layerRulesOf, layersOfData, ruleCaptionOf, withRuleTitles, withoutLayerRules } from "./support/layers.js";
 
 const CARD = "[data-testid='node-card']";
 
@@ -302,7 +302,7 @@ for (const turned of [false, true]) {
 
 const LACKING_RULES = "fewer than two layer rules; a project with a backend and a frontend declares one for each";
 
-test("the legend groups the layers per rule, each rule's top to bottom, under the rule's name", async ({ page, request }) => {
+test("the legend groups the layers per rule, each rule's top to bottom, under the rule's title, or its name where it has none", async ({ page, request }) => {
   const data = await architectureData(request);
   const rules = layerRulesOf(data);
   requireShape(rules.length > 1, LACKING_RULES);
@@ -320,13 +320,13 @@ test("the legend groups the layers per rule, each rule's top to bottom, under th
   expect(groups).toEqual(
     rules.map((rule) => ({
       rule: rule.name,
-      heading: `${rule.name} (top → bottom):`,
+      heading: `${ruleCaptionOf(rule)} (top → bottom):`,
       layers: layers.filter((layer) => layer.rule === rule.name).map((layer) => [layer.label, layer.name]),
     }))
   );
 });
 
-test("the Layer filter offers each layer by its rule's name and its own, and keeps the nodes of the one chosen", async ({ page, request }) => {
+test("the Layer filter offers each layer by its rule's title and its own, carries the rule's name in its value, and keeps the nodes of the one chosen", async ({ page, request }) => {
   const data = await architectureData(request);
   requireShape(layerRulesOf(data).length > 1, LACKING_RULES);
   const layers = layersOfData(data);
@@ -337,8 +337,8 @@ test("the Layer filter offers each layer by its rule's name and its own, and kee
 
   await openArchitecture(page);
   const select = page.getByLabel("Layer", { exact: true });
-  const offered = await select.locator("option").evaluateAll((options) => options.map((option) => option.value));
-  expect(offered).toEqual(["all", ...layers.map((layer) => `${layer.rule}: ${layer.name}`)]);
+  const offered = await select.locator("option").evaluateAll((options) => options.map((option) => [option.value, option.textContent.trim()]));
+  expect(offered).toEqual([["all", "all"], ...layers.map((layer) => [`${layer.rule}: ${layer.name}`, layer.caption])]);
   await select.selectOption(chosen.label);
 
   await expect.poll(() => new URL(page.url()).searchParams.get("layer")).toBe(chosen.label);
@@ -372,10 +372,72 @@ for (const own of [true, false]) {
 
     const field = page.locator(`${CARD} [data-card-field='layer']`);
     await expect(field).toContainText(layer.name);
-    await expect(field).toContainText(layer.rule);
+    await expect(field).toContainText(layer.title || `rule ${layer.rule}`);
     await expect(field).toContainText(own ? "its own tag" : "inherited through part_of");
   });
 }
+
+// A rule's name is its identifier: lint reports it, an exemption names it and the
+// portal's URL carries it. A reader is shown the rule's title where it declares
+// one (owner, 2026-10-08: "DDD architecture", "FSD architecture"): the legend's
+// heading, the Layer filter's choices and the card. The URL keeps the name, so a
+// link stays good when a title is reworded. The cases serve titles of their own,
+// so they hold whatever this portal's rules are titled.
+
+const TITLE_OF_LAST = "Storefront order";
+
+test("a rule's title names it in the legend, the Layer filter and the card, the URL keeps the rule's name, and a rule without one is named by its name", async ({ page, request }) => {
+  const served = await architectureData(request);
+  const rules = layerRulesOf(served);
+  requireShape(rules.length > 1, LACKING_RULES);
+  const last = rules[rules.length - 1];
+  const data = withRuleTitles(served, (rule) => (rule.name === last.name ? TITLE_OF_LAST : null));
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  const layers = layersOfData(data);
+  const membersOf = (layer) => data.nodes.filter((node) => layerOfNode(node, data, layers) === layer);
+  const chosen = layers.filter((layer) => layer.rule === last.name).sort((a, b) => membersOf(b).length - membersOf(a).length)[0];
+  const untitled = layers.find((layer) => layer.rule !== last.name && membersOf(layer).some((node) => (node.tags || []).includes(layer.tag)));
+  requireShape(Boolean(untitled), LACKING.ownLayer);
+
+  await openArchitecture(page);
+  const headings = await page.locator("[data-legend-rule]").evaluateAll((items) =>
+    items.map((item) => [item.dataset.legendRule, item.querySelector(".bl-legend-group")?.textContent.trim()])
+  );
+  expect(headings).toEqual(rules.map((rule) => [rule.name, `${rule.name === last.name ? TITLE_OF_LAST : rule.name} (top → bottom):`]));
+
+  const select = page.getByLabel("Layer", { exact: true });
+  const shown = await select.locator("option").evaluateAll((options) => options.map((option) => option.textContent.trim()));
+  expect(shown).toContain(`${TITLE_OF_LAST}: ${chosen.name}`);
+  expect(shown).not.toContain(`${last.name}: ${chosen.name}`);
+  await select.selectOption({ label: `${TITLE_OF_LAST}: ${chosen.name}` });
+  await expect.poll(() => new URL(page.url()).searchParams.get("layer")).toBe(`${last.name}: ${chosen.name}`);
+
+  // The card of a node the titled rule places says the title; one an untitled rule places, the rule's name.
+  for (const [layer, said, unsaid] of [
+    [chosen, TITLE_OF_LAST, `rule ${last.name}`],
+    [untitled, `rule ${untitled.rule}`, null],
+  ]) {
+    const node = membersOf(layer).find((member) => (member.tags || []).includes(layer.tag)) || membersOf(layer)[0];
+    await openArchitecture(page, `?focus=${encodeURIComponent(node.id)}`);
+    const field = page.locator(`${CARD} [data-card-field='layer']`);
+    await expect(field).toContainText(`${layer.name} (${said},`);
+    if (unsaid) await expect(field).not.toContainText(unsaid);
+  }
+});
+
+test("a file of one titled layer rule heads its legend with the title", async ({ page, request }) => {
+  const served = await architectureData(request);
+  requireShape(layerRulesOf(served).length > 0, "no layer rule; a project declares its layers with a layer rule in .beadloom/_graph/rules.yml");
+  const oneRule = withRuleTitles(firstRuleOnly(served), () => TITLE_OF_LAST);
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: oneRule }));
+  await openArchitecture(page);
+
+  const headings = await page.locator(".bl-legend-group").evaluateAll((items) => items.map((item) => item.textContent.trim()));
+  expect(headings[0]).toBe(`${TITLE_OF_LAST} (top → bottom):`);
+  // One rule: the filter offers the layers' own names, as it always did.
+  const values = await page.getByLabel("Layer", { exact: true }).locator("option").evaluateAll((options) => options.map((option) => [option.value, option.textContent.trim()]));
+  expect(values.slice(1)).toEqual(layersOfData(oneRule).map((layer) => [layer.name, layer.name]));
+});
 
 // Read on the graph with only its containment, so what orders the layers is the
 // lanes and not the edges: a Feature-Sliced frontend imports downward, and ELK

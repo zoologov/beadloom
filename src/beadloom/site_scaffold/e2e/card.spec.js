@@ -155,7 +155,8 @@ const LAYER_ORIGINS = [
 ];
 
 // Where the file names every layer rule, the card names the rule that places the
-// node beside where its tag comes from; a file without them names none.
+// node beside where its tag comes from — by its title where the rule declares
+// one, else "rule" and its name; a file without them names none.
 for (const { origin, own } of LAYER_ORIGINS) {
   test(`the card names the node's layer and says it is ${origin}`, async ({ page, request }) => {
     const data = await architectureData(request);
@@ -170,7 +171,7 @@ for (const { origin, own } of LAYER_ORIGINS) {
     requireShape(node, own ? LACKING.ownLayer : LACKING.inheritedLayer);
     // The declared name of the node's layer, not the tag token.
     const layer = layerOfNode(node, data, layers);
-    const said = layer.rule ? `rule ${layer.rule}, ${origin}` : origin;
+    const said = layer.rule ? `${layer.title || `rule ${layer.rule}`}, ${origin}` : origin;
 
     await openArchitecture(page, `?focus=${node.id}`);
 

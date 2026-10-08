@@ -14,6 +14,7 @@ export {
   layerToneOf,
   layersOf,
   ownsLayer,
+  ruleCaptionOf,
 } from "./model/layers.js";
 export { lanesOf } from "./model/lanes.js";
 export { layerBoxesOf } from "./model/layerBoxes.js";

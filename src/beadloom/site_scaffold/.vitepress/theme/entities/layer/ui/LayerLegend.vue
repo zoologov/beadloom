@@ -4,13 +4,18 @@
 // and one more for a node in no layer where the graph has such a node.
 //
 // Where more than one layer rule is drawn, the layers are grouped per rule under
-// the rule's name: each rule's layers take the tones by their own position, so a
-// tone says which layer only beside the rule it belongs to. One rule, or a file
-// that names one order, is one group under "Layers", as it always was.
+// the rule's title, or its name where it declares none: each rule's layers take
+// the tones by their own position, so a tone says which layer only beside the
+// rule it belongs to. One rule, or a file that names one order, is one group
+// under the rule's title where it declares one, else under "Layers", as it
+// always was.
 
 import { computed } from "vue";
 import { TOKEN_VARIABLES } from "../../../shared/theme-tokens/index.js";
 import { LAYER_FILL_SHARE, UNLAYERED_NAME, UNLAYERED_TONE, layerRulesOf } from "../model/layers.js";
+
+/** How the legend says a group's layers run. */
+const DIRECTION = "(top → bottom):";
 
 const props = defineProps({
   layers: { type: Array, required: true },
@@ -18,12 +23,13 @@ const props = defineProps({
   unlayered: { type: Boolean, default: false },
 });
 
-/** The groups the legend shows, `[{ rule, heading, layers }]`: one per rule, or one under "Layers". */
+/** The groups the legend shows, `[{ rule, heading, layers }]`: one per rule, or one under "Layers" or its rule's title. */
 const groups = computed(() => {
   const rules = layerRulesOf(props.layers);
-  if (rules.length > 1) return rules.map(({ rule, layers }) => ({ rule, heading: `${rule} (top → bottom):`, layers }));
+  if (rules.length > 1) return rules.map(({ rule, title, layers }) => ({ rule, heading: `${title || rule} ${DIRECTION}`, layers }));
   const [only] = rules;
-  return [{ rule: only?.rule ?? null, heading: props.layers.length ? "Layers (top → bottom):" : "Layers:", layers: props.layers }];
+  const heading = props.layers.length ? `${only?.title || "Layers"} ${DIRECTION}` : "Layers:";
+  return [{ rule: only?.rule ?? null, heading, layers: props.layers }];
 });
 
 /** A layer's sample: a border in the layer's tone over a light tint of it, as each of its nodes is drawn. */

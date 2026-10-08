@@ -8,7 +8,10 @@
 //   is in the layer of `layer_rule` at `layer_rule_rank`. A file without them is
 //   read as before: a node is in the declared layer of its `layer_rank`.
 // - A layer's name says its rule's (`rule: name`) where the file declares more
-//   than one rule; with one rule, a layer is named as before.
+//   than one rule; with one rule, a layer is named as before. That is its
+//   `label`, the value the Layer filter and the URL carry: the rule's NAME, its
+//   identifier. What a reader is shown, its `caption`, says the rule's `title`
+//   instead where the rule declares one (`title: name`), and the name where not.
 // - A rule whose scope is a box inside the project's frame draws one box per
 //   layer in that box: each holds the scope's own parts in that layer, and every
 //   other part stays where it is. A rule scoped to the frame itself, the box that
@@ -26,9 +29,13 @@ export function layerRulesOf(data) {
   return rules.filter((rule) => rule?.name && (rule.layers || []).some((layer) => typeof layer?.rank === "number"));
 }
 
+/** What a reader is shown a rule by: its declared title, else its name. */
+export const ruleCaptionOf = (rule) => (typeof rule?.title === "string" && rule.title) || rule?.name || "";
+
 /**
- * The layers, `[{ rule, rank, name, label, tag }]`: each rule's top to bottom,
- * or, for a file without rules, its declared `layers` with `rule` null.
+ * The layers, `[{ rule, title, rank, name, label, caption, tag }]`: each rule's
+ * top to bottom, or, for a file without rules, its declared `layers` with `rule`
+ * null. `title` is the rule's declared title, "" where it has none.
  */
 export function layersOfData(data) {
   const rules = layerRulesOf(data);
@@ -36,7 +43,7 @@ export function layersOfData(data) {
     return [...(data.layers || [])]
       .filter((layer) => typeof layer?.rank === "number")
       .sort((a, b) => a.rank - b.rank)
-      .map((layer) => ({ rule: null, rank: layer.rank, name: layer.name, label: layer.name, tag: layer.tag }));
+      .map((layer) => ({ rule: null, title: "", rank: layer.rank, name: layer.name, label: layer.name, caption: layer.name, tag: layer.tag }));
   }
   return rules.flatMap((rule) =>
     [...rule.layers]
@@ -44,9 +51,11 @@ export function layersOfData(data) {
       .sort((a, b) => a.rank - b.rank)
       .map((layer) => ({
         rule: rule.name,
+        title: typeof rule.title === "string" ? rule.title : "",
         rank: layer.rank,
         name: layer.name,
         label: rules.length > 1 ? `${rule.name}${RULE_SEPARATOR}${layer.name}` : layer.name,
+        caption: rules.length > 1 ? `${ruleCaptionOf(rule)}${RULE_SEPARATOR}${layer.name}` : layer.name,
         tag: layer.tag,
       }))
   );
@@ -66,6 +75,17 @@ export function withoutLayerRules(data) {
   return {
     ...rest,
     nodes: data.nodes.map(({ layer_rule: _rule, layer_rule_rank: _rank, ...node }) => node),
+  };
+}
+
+/** `data` with every layer rule titled by `titleOf(rule)`, or with no title where it answers null. */
+export function withRuleTitles(data, titleOf) {
+  return {
+    ...data,
+    layer_rules: (data.layer_rules || []).map(({ title: _title, ...rule }) => {
+      const title = titleOf(rule);
+      return title === null ? rule : { ...rule, title };
+    }),
   };
 }
 

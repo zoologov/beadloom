@@ -295,6 +295,11 @@ class LayerRule:
     #: backend's names its own service here, so a node elsewhere that happens to
     #: carry one of its tags is not judged by it.
     scope: str | None = None
+    #: The name the portal shows the rule by (BDL-080 S1e), ``None`` when the
+    #: rule declares none and is shown by its ``name``. The name stays the
+    #: rule's identifier — lint, an exemption and the portal's URL say it — so
+    #: a reader's name ("DDD architecture") needs a key of its own.
+    title: str | None = None
 
 
 @dataclass(frozen=True)

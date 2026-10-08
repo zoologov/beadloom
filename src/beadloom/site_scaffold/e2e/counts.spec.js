@@ -15,6 +15,8 @@
 // many it carries, one included; while a node is selected every line of its walk
 // says the selected node's count; a click on a box frames the whole box open, its
 // contents at full strength, and its lines to the outside as a hover shows them.
+// A box holding the boxes a layer rule draws opens only where they are readable
+// (owner, 2026-10-08): framed whole below that, it is drawn closed.
 //
 // The expected edges come from the data file (`support/map.js`,
 // `support/counts.js`); the cases read what was drawn through the test handle and
@@ -23,8 +25,8 @@
 // selection frames it at, and pointed at with the pointer there.
 
 import { test, expect } from "@playwright/test";
-import { drawnEdgesOf, treeOf } from "./support/map.js";
-import { settled, twoFrames } from "./support/levels.js";
+import { drawnEdgesOf, smallestChildOf, treeOf } from "./support/map.js";
+import { READABLE_PX, settled, twoFrames } from "./support/levels.js";
 import {
   boxSummaryOf,
   drawnLines,
@@ -38,7 +40,7 @@ import {
 } from "./support/counts.js";
 import { requireShape } from "./support/shape.js";
 import { architectureData, openArchitecture, viewer } from "./support/viewer.js";
-import { withoutLayerRules } from "./support/layers.js";
+import { layerBoxesOf, withoutLayerRules } from "./support/layers.js";
 
 /** How many cases the nodes are read in, each a share of the top-level boxes, so they run side by side. */
 const PARTS = 4;
@@ -203,7 +205,7 @@ for (let part = 0; part < PARTS; part += 1) {
   });
 }
 
-test("a click on every top-level box frames the whole box open, leaves its contents at full strength, draws its lines to the outside as pointing at it does and dims the rest, and its card says what it holds and where its edges go", async ({ page, request }) => {
+test("a click on every top-level box frames the whole box open — one holding a layer rule's boxes where they are readable — leaves its contents at full strength, draws its lines to the outside as pointing at it does and dims the rest, and its card says what it holds and where its edges go", async ({ page, request }) => {
   test.setTimeout(PART_MS);
   await page.emulateMedia({ reducedMotion: "reduce" });
   const data = await architectureData(request);
@@ -212,6 +214,8 @@ test("a click on every top-level box frames the whole box open, leaves its conte
   const top = Object.keys(tree.parents).filter((id) => id !== tree.wrapper && (tree.parents[id] || null) === tree.wrapper);
   const boxes = tree.topBoxes.filter((id) => id !== tree.wrapper).sort();
   requireShape(boxes.length > 0, "no box at the top of the containment tree");
+  // The scopes a layer rule draws boxes in: such a scope opens where its parts are readable.
+  const scopes = new Set(layerBoxesOf(data).map((layerBox) => layerBox.scope));
   const wrong = [];
   const read = {};
   for (const box of boxes) {
@@ -241,7 +245,11 @@ test("a click on every top-level box frames the whole box open, leaves its conte
     const right = panel && panel.x < canvas.x + canvas.width ? panel.x : canvas.x + canvas.width;
     const drawn = (await viewer(page, "boxes"))[box];
     const margins = [drawn.x1 - canvas.x, right - drawn.x2, drawn.y1 - canvas.y, canvas.y + canvas.height - drawn.y2];
-    if (!(await viewer(page, "openBoxes")).includes(box)) wrong.push(`${box}: not open`);
+    const opened = (await viewer(page, "openBoxes")).includes(box);
+    if (scopes.has(box)) {
+      const tall = smallestChildOf(tree, (await viewer(page, "elkGeometry")).boxes).get(box) * (await viewer(page, "zoom"));
+      if (opened !== tall >= READABLE_PX - 1e-6) wrong.push(`${box}: ${opened ? "open" : "closed"} with its parts ${tall.toFixed(1)} px tall`);
+    } else if (!opened) wrong.push(`${box}: not open`);
     if (Math.min(...margins) < FRAME_MARGIN_PX) wrong.push(`${box}: framed with margins ${margins.map((m) => m.toFixed(0)).join("/")} px`);
     // (2) Nothing inside dimmed, no line between two of its parts dimmed.
     const dimmed = new Set(await viewer(page, "dimmedIds"));

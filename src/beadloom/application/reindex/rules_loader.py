@@ -126,6 +126,10 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
         # the index of a project that declares none is unchanged.
         if rule.scope is not None:
             rule_def["scope"] = rule.scope
+        # The name the portal shows the rule by (BDL-080 S1e), read by the view
+        # from here like the scope; written only when declared, for the same reason.
+        if rule.title is not None:
+            rule_def["title"] = rule.title
         return ("layers", rule_def)
 
     if isinstance(rule, CardinalityRule):

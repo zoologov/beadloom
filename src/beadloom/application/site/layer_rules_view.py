@@ -72,7 +72,8 @@ def declared_layer_rules(conn: sqlite3.Connection) -> tuple[LayerRule, ...]:
     are found against. The ``exempt`` entries and the ``scope`` are, because they
     decide exactly that. An index written before a release carried them holds
     neither, so a project that excuses crossings or scopes a rule and renders its
-    site without reindexing sees the wider verdict until it does.
+    site without reindexing sees the wider verdict until it does. The ``title``
+    is read for the portal to show the rule by; an index without it shows the name.
 
     A row that is not readable JSON, or declares no layer, is left out and logged:
     one unreadable rule does not take the others' strata with it.
@@ -96,6 +97,7 @@ def _rule_from_row(row: sqlite3.Row) -> LayerRule | None:
     if not layers:
         return None
     scope = definition.get("scope")
+    title = definition.get("title")
     return LayerRule(
         name=name,
         description=str(row["description"] or ""),
@@ -105,6 +107,7 @@ def _rule_from_row(row: sqlite3.Row) -> LayerRule | None:
         edge_kind=str(definition.get("edge_kind", "uses")),
         exempt=_declared_exemptions(definition),
         scope=scope if isinstance(scope, str) and scope else None,
+        title=title if isinstance(title, str) and title else None,
     )
 
 
@@ -170,12 +173,14 @@ class LayerRulesView:
         """Every rule as the data file carries it, ordered by name.
 
         *ref_ids* is the graph's node set, from which a rule without a declared
-        ``scope`` derives the container it stratifies.
+        ``scope`` derives the container it stratifies. ``title`` is the rule's
+        declared title, ``""`` when it declares none and is shown by its name.
         """
         nodes = tuple(ref_ids)
         return [
             {
                 "name": rule.name,
+                "title": rule.title or "",
                 "scope": rule.scope or self._derived_scope(index, nodes),
                 "edge_kind": rule.edge_kind,
                 "layers": [

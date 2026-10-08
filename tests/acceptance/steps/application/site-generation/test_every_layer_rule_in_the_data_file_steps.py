@@ -39,7 +39,13 @@ _NOW = "2026-10-08T00:00:00+00:00"
 
 @pytest.fixture()
 def world(tmp_path: Path) -> dict[str, Any]:
-    return {"root": tmp_path / "shop", "site": tmp_path / "site", "stray": False, "scope": None}
+    return {
+        "root": tmp_path / "shop",
+        "site": tmp_path / "site",
+        "stray": False,
+        "scope": None,
+        "title": None,
+    }
 
 
 @given("a project with a backend layer rule and a frontend layer rule inside its portal")
@@ -57,6 +63,11 @@ def _scoped(world: dict[str, Any], scope: str) -> None:
     world["scope"] = scope
 
 
+@given(parsers.parse('the frontend\'s layer rule declares the title "{title}"'))
+def _titled(world: dict[str, Any], title: str) -> None:
+    world["title"] = title
+
+
 @when("the site is generated for the project")
 def _generate(world: dict[str, Any]) -> None:
     nodes, edges = graph_with_a_portal(stray_slices=world["stray"])
@@ -64,7 +75,7 @@ def _generate(world: dict[str, Any]) -> None:
         world["root"],
         nodes=nodes,
         edges=edges,
-        more_rules=slices_rule_yaml(scope=world["scope"]),
+        more_rules=slices_rule_yaml(scope=world["scope"], title=world["title"]),
     )
     conn = sqlite3.connect(project / ".beadloom" / "beadloom.db")
     conn.row_factory = sqlite3.Row
@@ -158,3 +169,18 @@ def _same_set(world: dict[str, Any]) -> None:
     # Both rules found something, so the equality is not one rule's verdict twice.
     reporting = {v.rule_name for v in world["violations"] if v.rule_type == LAYER_EDGE_RULE_TYPE}
     assert reporting == {"tier-order", "ui-slices"}
+
+
+def _declared_rule(world: dict[str, Any], rule: str) -> dict[str, Any]:
+    (declared,) = [r for r in world["data"]["layer_rules"] if r["name"] == rule]
+    return dict(declared)
+
+
+@then(parsers.parse('the data file\'s layer rule "{rule}" is titled "{title}"'))
+def _rule_titled(world: dict[str, Any], rule: str, title: str) -> None:
+    assert _declared_rule(world, rule)["title"] == title
+
+
+@then(parsers.parse('the data file\'s layer rule "{rule}" carries no title'))
+def _rule_untitled(world: dict[str, Any], rule: str) -> None:
+    assert _declared_rule(world, rule)["title"] == ""

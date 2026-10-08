@@ -4,8 +4,9 @@ BDL-080 S1b (``beadloom-kgh6``), RFC D2. Schema 2 stays: ``layers``,
 ``layer_order``, a node's ``layer`` and ``layer_rank`` describe the FIRST layer
 rule by name, as they did. Added beside them:
 
-- ``layer_rules``: every ``layers`` rule, ``{name, scope, edge_kind, layers:
-  [{name, rank, tag, token}]}``, ordered by name. ``scope`` is the rule's
+- ``layer_rules``: every ``layers`` rule, ``{name, title, scope, edge_kind,
+  layers: [{name, rank, tag, token}]}``, ordered by name. ``title`` is the
+  rule's declared ``title:``, else ``""`` (BDL-080 S1e). ``scope`` is the rule's
   declared ``scope:``, else derived — the lowest container holding every node
   the rule stratifies — else ``""``. ``token`` is the layer's name.
 - per node ``layer_rule`` and ``layer_rule_rank``: the rule that places the node
@@ -39,6 +40,7 @@ def _declare(
     *,
     scope: str | None = None,
     edge_kind: str = "depends_on",
+    title: str | None = None,
 ) -> None:
     """A layer rule written where a reindexed project carries it, layer name = tag's tail."""
     rule: dict[str, object] = {
@@ -49,6 +51,8 @@ def _declare(
     }
     if scope is not None:
         rule["scope"] = scope
+    if title is not None:
+        rule["title"] = title
     conn.execute(
         "INSERT INTO rules (name, description, rule_type, rule_json, enabled) "
         "VALUES (?, ?, 'layers', ?, 1)",
@@ -124,6 +128,7 @@ class TestTheRulesAreListed:
         assert data["layer_rules"] == [
             {
                 "name": "architecture",
+                "title": "",
                 "scope": "shop",
                 "edge_kind": "depends_on",
                 "layers": [
@@ -133,6 +138,7 @@ class TestTheRulesAreListed:
             },
             {
                 "name": "ui-slices",
+                "title": "",
                 "scope": "portal",
                 "edge_kind": "depends_on",
                 "layers": [
@@ -161,6 +167,38 @@ class TestTheRulesAreListed:
         assert data["layer_rules"] == []
         for node in data["nodes"]:
             assert (node["layer_rule"], node["layer_rule_rank"]) == ("", None)
+
+
+class TestTheRulesCarryTheirTitles:
+    """BDL-080 S1e (``beadloom-af99.2``): the name the portal shows a rule by."""
+
+    def test_a_declared_title_is_carried_beside_the_rules_name(self) -> None:
+        conn = open_graph()
+        try:
+            _portal_graph(conn)
+            _declare(conn, "architecture", BACKEND, title="Backend order")
+            _declare(conn, "ui-slices", FRONTEND)
+            conn.commit()
+            data = build_architecture_view_data(conn, pages={})
+        finally:
+            conn.close()
+        titled = [(rule["name"], rule["title"]) for rule in data["layer_rules"]]
+        assert titled == [("architecture", "Backend order"), ("ui-slices", "")]
+
+    def test_a_title_places_no_node_differently(self) -> None:
+        """The title is a name for a reader; what the rule places and finds is its own."""
+        conn = open_graph()
+        try:
+            _portal_graph(conn)
+            _declare(conn, "architecture", BACKEND, title="Backend order")
+            _declare(conn, "ui-slices", FRONTEND, title="Storefront FSD")
+            conn.commit()
+            titled = build_architecture_view_data(conn, pages={})
+        finally:
+            conn.close()
+        plain = _built(("architecture", BACKEND, None), ("ui-slices", FRONTEND, None))
+        assert titled["nodes"] == plain["nodes"]
+        assert titled["edges"] == plain["edges"]
 
 
 class TestEachNodeIsPlacedByOneRule:

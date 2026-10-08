@@ -38,11 +38,14 @@ const NOT_RECORDED = "not recorded";
 const NONE = "none";
 
 const layer = computed(() => layerOfNode(props.node, props.layers));
-// Where the layer comes from: the rule that places the node, where the file names it, and whether the tag is the node's own.
+// Where the layer comes from: the rule that places the node, where the file names
+// it — by its title where it declares one, else "rule" and its name — and
+// whether the tag is the node's own.
 const layerOrigin = computed(() => {
   if (!layer.value) return "";
   const origin = ownsLayer(props.node, props.layers) ? "its own tag" : "inherited through part_of";
-  return layer.value.rule ? `rule ${layer.value.rule}, ${origin}` : origin;
+  if (!layer.value.rule) return origin;
+  return `${layer.value.ruleTitle || `rule ${layer.value.rule}`}, ${origin}`;
 });
 
 const sourceUrl = computed(() => props.node.source_url || "");

@@ -483,7 +483,27 @@ def _parse_layer_rule(
         severity=severity,
         exempt=exempt,
         scope=_parse_layer_scope(name, rule_data),
+        title=_parse_layer_title(name, rule_data),
     )
+
+
+def _parse_layer_title(name: str, rule_data: dict[str, object]) -> str | None:
+    """The name the portal shows a layer rule by, or ``None`` when the rule declares none.
+
+    A value that is not a non-empty string is refused rather than read as "no
+    title": the portal would show the rule's name instead, and nobody would see
+    that the title they wrote was dropped.
+    """
+    if "title" not in rule_data:
+        return None
+    title = rule_data["title"]
+    if not isinstance(title, str) or not title.strip():
+        msg = (
+            f"Rule '{name}': 'title' must be a non-empty string, "
+            "the name the portal shows the rule by"
+        )
+        raise ValueError(msg)
+    return title.strip()
 
 
 def _parse_layer_scope(name: str, rule_data: dict[str, object]) -> str | None:
