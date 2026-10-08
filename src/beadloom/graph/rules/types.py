@@ -290,6 +290,11 @@ class LayerRule:
     #: (BDL-070 B2): a layer rule that can be switched off silently is a layer
     #: rule nobody can read the green of.
     exempt: tuple[LayerExemption, ...] = ()
+    #: The node whose ``part_of`` subtree the rule judges inside (BDL-080 S1b),
+    #: ``None`` for the whole graph. A frontend's layering declared beside a
+    #: backend's names its own service here, so a node elsewhere that happens to
+    #: carry one of its tags is not judged by it.
+    scope: str | None = None
 
 
 @dataclass(frozen=True)

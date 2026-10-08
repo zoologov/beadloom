@@ -120,6 +120,12 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
                 }
                 for exemption in rule.exempt
             ]
+        # The container a scoped rule judges inside (BDL-080 S1b). The view reads
+        # its rules from here, so a scope dropped on the way in would be one the
+        # linter honours and the portal ignores. Written only when declared, so
+        # the index of a project that declares none is unchanged.
+        if rule.scope is not None:
+            rule_def["scope"] = rule.scope
         return ("layers", rule_def)
 
     if isinstance(rule, CardinalityRule):

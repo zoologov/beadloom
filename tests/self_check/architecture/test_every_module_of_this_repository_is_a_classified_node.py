@@ -115,6 +115,8 @@ class TestSiteGenerationCluster:
         Vue's tokenizer reads it): twenty-three.
         ``beadloom-ujzb.23`` added ``markdown_attrs.py``, where VitePress's
         markdown-it-attrs reads a brace as the start of attributes: twenty-four.
+        BDL-080 S1b (``beadloom-kgh6``) added ``layer_rules_view.py``, every
+        declared layer rule as the architecture view draws it: twenty-five.
         The test keeps its historical name so its collected id is unchanged.
         """
         app_dir = self_check_snapshot / "src" / "beadloom" / "application"
@@ -122,7 +124,7 @@ class TestSiteGenerationCluster:
         assert (site_dir / "__init__.py").is_file()
         names = {p.name for p in site_dir.glob("*.py")} - {"__init__.py"}
         assert "generate.py" in names
-        assert len(names) == 24, names
+        assert len(names) == 25, names
         assert (site_dir / "dashboard").is_dir()
         assert sorted(p.name for p in app_dir.glob("site*.py")) == []
 

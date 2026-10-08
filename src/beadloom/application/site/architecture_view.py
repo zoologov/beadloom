@@ -49,12 +49,16 @@ from beadloom.application.site.architecture_card import (
     card_fields,
     card_sources,
 )
+from beadloom.application.site.layer_rules_view import (
+    FLAGGED_EDGE_KIND,
+    LayerRulesView,
+    declared_layer_rules,
+    layer_rules_view,
+)
 from beadloom.application.site.node_pages import _KIND_DIR
 from beadloom.graph.rule_engine import (
     LayerDef,
-    LayerExemption,
     LayerRule,
-    flagged_layer_edges,
     layer_of,
     node_tags,
     own_layer_of,
@@ -93,11 +97,9 @@ _LAYER_TAG_PREFIX = "layer-"
 _SERVED_DOC_EXT = ".html"
 _MD_EXT = ".md"
 
-# The edge kind the view renders a layering verdict on. A layer rule can be
-# declared over any edge kind; this picture draws the flag on dependency arrows,
-# so a rule declared over another kind is judged by `beadloom lint` and drawn by
-# nothing here.
-_FLAGGED_EDGE_KIND = "depends_on"
+# The edge kind the view renders a layering verdict on, and the one whose
+# `why` lists are built. Owned by `layer_rules_view`, where the verdict is read.
+_FLAGGED_EDGE_KIND = FLAGGED_EDGE_KIND
 
 # The kinds that name a contract, carried on the edge so two contracts between
 # one pair of nodes stay two edges.
@@ -115,26 +117,27 @@ _DOC_NONE = "none"
 
 @dataclass(frozen=True)
 class _LayerView:
-    """What layer each node is in, and which edges the layer rule finds against.
+    """What layer each node is in under the FIRST layer rule by name.
 
-    The view used to answer both questions itself, from a table of four tags and
-    a table of four ranks, and it climbed ``part_of`` in a loop of its own. It
-    was one of the three answers BDL-070 found disagreeing, so the arithmetic
-    lives in :mod:`beadloom.graph.rules.layers` and the verdict in the rule
-    engine. This class only says which question the view asks:
+    The data file's original layer keys — ``layers``, ``layer_order``, a node's
+    ``layer`` and ``layer_rank`` — describe one rule, the first by name, and keep
+    doing so since BDL-080 S1b added every rule beside them
+    (:mod:`beadloom.application.site.layer_rules_view`): changing what an
+    existing key means is a major change by the declared public API.
+
+    The view used to answer this itself, from a table of four tags and a table
+    of four ranks, and it climbed ``part_of`` in a loop of its own. It was one of
+    the three answers BDL-070 found disagreeing, so the arithmetic lives in
+    :mod:`beadloom.graph.rules.layers`. This class only says which question the
+    view asks:
 
     - :meth:`token` reads the node's OWN tag, because the card shows what the
       node declares — a feature inside a domain declares no layer and says so.
     - :meth:`rank` INHERITS through ``part_of``, because a feature has to sit in
       its container's lane or the layout has no lane for it.
-    - :meth:`flagged` is the RULE's verdict, asked of the rule (BDL-070 B4).
 
-    The first two differ on purpose. The third used to differ too, and that was
-    the defect: the view drew an edge red whenever ``dst_rank <= src_rank``,
-    which is every edge pointing up AND every edge staying inside one layer.
-    Measured on this repository on 2026-09-13, it drew 130 edges red that
-    ``beadloom lint`` finds nothing against — 116 dependencies between two parts
-    of one domain and 14 crossings the rules file excuses by name.
+    Which edges are found against is the rules' verdict, asked of every rule
+    (:meth:`~beadloom.application.site.layer_rules_view.LayerRulesView.flagged`).
     """
 
     rule: LayerRule | None
@@ -177,117 +180,23 @@ class _LayerView:
         """
         return layer_of(ref_id, self.layers, self.parents, self.tags)
 
-    def flagged(self, conn: sqlite3.Connection) -> frozenset[tuple[str, str]]:
-        """The edges the declared layer rule finds against — its verdict, not ours.
-
-        Empty when the project declares no layer rule, and empty when the rule
-        judges an edge kind other than ``depends_on``: this view renders the
-        flag on dependency arrows only, so a rule declared over ``uses`` or
-        ``part_of`` is reported by ``beadloom lint`` and drawn by nothing here.
-        That is a gap in what the picture shows rather than a disagreement about
-        what is true, and it is stated because the two read the same otherwise.
-        """
-        if self.rule is None or self.rule.edge_kind != _FLAGGED_EDGE_KIND:
-            return frozenset()
-        return flagged_layer_edges(conn, self.rule)
-
 
 def _token(layer: LayerDef) -> str:
     return layer.tag.removeprefix(_LAYER_TAG_PREFIX)
 
 
-def _declared_layer_rule(conn: sqlite3.Connection) -> LayerRule | None:
-    """The layer rule this project DECLARES, read from the indexed rules.
+@dataclass(frozen=True)
+class _Strata:
+    """The two layer readings one build takes: the first rule's, and every rule's."""
 
-    Read from the ``rules`` table — the same indexed graph every other read in
-    this module goes through — rather than from ``rules.yml``, so generating the
-    site needs no second path to the declaration and no project root. The JSON
-    is the one ``application.reindex.rules_loader._serialize_rule`` writes; that
-    is a coupling between a writer and a reader of one shape, stated here
-    because it is the kind of pair that drifts silently.
-
-    ``None`` when the index carries no layer rule (a graph that declares no
-    layers, or one indexed before rules were loaded): the view then shows no
-    lanes, which is honest, rather than putting every node in lane 0.
-
-    A project with more than one layer rule gets the first by name. The view
-    draws ONE stratification and has no way to show two.
-
-    The rule's ``severity`` is not in the index and is not reconstructed: it
-    decides how loudly a finding is reported and the view asks only WHICH edges
-    are found against. The ``exempt`` entries are in the index as of BDL-070 B4
-    and are reconstructed, because they decide exactly that — an index written
-    by an earlier release carries none, so a project that excuses crossings and
-    renders its site without reindexing sees those crossings drawn red until it
-    does.
-    """
-    row = conn.execute(
-        "SELECT name, description, rule_json FROM rules WHERE rule_type = 'layers' "
-        "ORDER BY name LIMIT 1"
-    ).fetchone()
-    if row is None:
-        return None
-    try:
-        definition = json.loads(str(row["rule_json"]))
-    except json.JSONDecodeError:
-        logger.warning("architecture view: the indexed layer rule is not readable JSON")
-        return None
-    if not isinstance(definition, dict):
-        return None
-    layers = _declared_layers(definition)
-    if not layers:
-        return None
-    return LayerRule(
-        name=str(row["name"]),
-        description=str(row["description"] or ""),
-        layers=layers,
-        enforce=str(definition.get("enforce", "top-down")),
-        allow_skip=bool(definition.get("allow_skip", True)),
-        edge_kind=str(definition.get("edge_kind", "uses")),
-        exempt=_declared_exemptions(definition),
-    )
+    first: _LayerView
+    every: LayerRulesView
 
 
-def _declared_layers(definition: dict[str, object]) -> tuple[LayerDef, ...]:
-    """The rule's layers, top to bottom, from its indexed JSON."""
-    declared = definition.get("layers")
-    if not isinstance(declared, list):
-        return ()
-    return tuple(
-        LayerDef(name=str(layer.get("name", "")), tag=str(layer["tag"]))
-        for layer in declared
-        if isinstance(layer, dict) and layer.get("tag")
-    )
+def _strata(conn: sqlite3.Connection) -> _Strata:
+    """The layer lookups for one build, over the declarations the index holds.
 
-
-def _declared_exemptions(definition: dict[str, object]) -> tuple[LayerExemption, ...]:
-    """The same-layer crossings the rule excuses, from its indexed JSON.
-
-    The entries were validated when the rules file was loaded — each names both
-    ends, a reason and an exit condition, or the load failed — so this reads
-    them rather than re-checking them. An entry missing an end is dropped
-    instead of being reconstructed with an empty glob, which would match
-    nothing and read as an entry that excuses nothing.
-    """
-    declared = definition.get("exempt")
-    if not isinstance(declared, list):
-        return ()
-    return tuple(
-        LayerExemption(
-            from_glob=str(entry["from"]),
-            to_glob=str(entry["to"]),
-            reason=str(entry.get("reason", "")),
-            until=str(entry.get("until", "")),
-        )
-        for entry in declared
-        if isinstance(entry, dict) and entry.get("from") and entry.get("to")
-    )
-
-
-def _layer_view(conn: sqlite3.Connection) -> _LayerView:
-    """The layer lookup for one build, over the declaration the index holds.
-
-    Reports the one case in which this release changes what a project sees: a
+    Reports the one case in which a release changed what a project sees: a
     graph whose nodes carry layer tags and whose index holds no layer rule
     rendered lanes from a table this module kept of its own and renders none
     now. The view has no way to tell which layering such a project meant — that
@@ -297,12 +206,13 @@ def _layer_view(conn: sqlite3.Connection) -> _LayerView:
     The condition counts ``layer-``-prefixed tags specifically, and that is not a
     hardcoded layer: the table this module used to keep held exactly the
     ``layer-*`` tags, so those are exactly the nodes whose lane moved. A project
-    whose tags are named otherwise rendered no lanes before this release either,
+    whose tags are named otherwise rendered no lanes before that release either,
     and is told nothing — the correct silence rather than a miss.
     """
-    rule = _declared_layer_rule(conn)
+    rules = declared_layer_rules(conn)
     tags = node_tags(conn).as_mapping()
-    if rule is None:
+    parents = part_of_parents(conn)
+    if not rules:
         tagged = sum(
             1 for node in tags.values() if any(tag.startswith(_LAYER_TAG_PREFIX) for tag in node)
         )
@@ -314,10 +224,9 @@ def _layer_view(conn: sqlite3.Connection) -> _LayerView:
                 tagged,
                 _LAYER_TAG_PREFIX,
             )
-    return _LayerView(
-        rule=rule,
-        parents=part_of_parents(conn),
-        tags=tags,
+    return _Strata(
+        first=_LayerView(rule=rules[0] if rules else None, parents=parents, tags=tags),
+        every=layer_rules_view(rules, parents, tags),
     )
 
 
@@ -404,7 +313,7 @@ def _doc_links(
 
 def _arch_edges(
     conn: sqlite3.Connection,
-    layers: _LayerView,
+    strata: _Strata,
 ) -> tuple[
     list[dict[str, object]],
     dict[str, list[str]],
@@ -419,8 +328,9 @@ def _arch_edges(
     - ``edges``: one entry per ``part_of`` / ``depends_on`` / ``uses`` /
       ``consumes`` / ``produces`` edge, sorted; a contract edge carries its
       ``contract`` key. A ``depends_on`` edge also carries a ``violation`` flag — ``True``
-      when the project's layer rule finds against that edge, ``False`` when it
-      does not. **The verdict is the rule's** (BDL-070 B4): the view asks
+      when any of the project's layer rules finds against that edge (BDL-080
+      S1b: the union over rules), ``False`` when none does. **The verdict is the
+      rules'** (BDL-070 B4): the view asks
       :func:`~beadloom.graph.rules.layer_edges.flagged_layer_edges` rather than
       deciding, so an edge is red here exactly when ``beadloom lint`` reports
       it. Until B4 this module flagged every edge at ``dst_rank <= src_rank``,
@@ -430,9 +340,10 @@ def _arch_edges(
       arrow), and neither does ``uses``: it records a RUNTIME coupling across a
       process or file boundary (a harness shelling out to the CLI, a reader of a
       file another node writes), which cannot break a layering rule the way an
-      import can. The flag is honestly omitted when either endpoint has no
-      resolvable rank — an edge the rule never judged must not be drawn as
-      healthy.
+      import can. The flag is honestly omitted when no rule places a layer at
+      both ends — an edge no rule judged must not be drawn as healthy. The
+      first rule's ranks are asked as well, which keeps the flag on every edge
+      that carried one before every rule was read.
     - the four ``why`` lists, sorted + de-duplicated: what a node imports
       (``depends_on``) and who imports it, kept SEPARATE from what it ``uses``
       at runtime and who uses it. Merging them would assert an import binding
@@ -446,7 +357,8 @@ def _arch_edges(
         "WHERE kind IN ('part_of', 'depends_on', 'uses', 'consumes', 'produces') "
         "ORDER BY kind, src_ref_id, dst_ref_id, contract_key"
     ).fetchall()
-    flagged = layers.flagged(conn)
+    flagged = strata.every.flagged(conn)
+    first = strata.first
     edges: list[dict[str, object]] = []
     depends_on: dict[str, set[str]] = {}
     depended_on_by: dict[str, set[str]] = {}
@@ -460,7 +372,8 @@ def _arch_edges(
         if kind == _FLAGGED_EDGE_KIND:
             depends_on.setdefault(src, set()).add(dst)
             depended_on_by.setdefault(dst, set()).add(src)
-            if layers.rank(src) is not None and layers.rank(dst) is not None:
+            judged_by_first = first.rank(src) is not None and first.rank(dst) is not None
+            if judged_by_first or strata.every.judges(src, dst):
                 edge["violation"] = (src, dst) in flagged
         elif kind == "uses":
             uses.setdefault(src, set()).add(dst)
@@ -507,7 +420,7 @@ class _BuildInputs:
 
     pages: Mapping[str, str]
     parent: Mapping[str, str]
-    layers: _LayerView
+    strata: _Strata
     relations: _Relations
     card: CardSources
     published_doc_slugs: set[str] | None
@@ -519,13 +432,18 @@ def _node_dict(
     """Project one graph node to its JSON-safe architecture-view payload."""
     ref_id, kind = str(row["ref_id"]), str(row["kind"])
     relations = inputs.relations
+    placement = inputs.strata.every.placement(ref_id)
     node: dict[str, object] = {
         "id": ref_id,
         "label": ref_id,
         "kind": kind,
         "summary": str(row["summary"] or ""),
-        "layer": inputs.layers.token(ref_id),
-        "layer_rank": inputs.layers.rank(ref_id),
+        "layer": inputs.strata.first.token(ref_id),
+        "layer_rank": inputs.strata.first.rank(ref_id),
+        # The rule that places the node, among every declared layer rule, and
+        # its rank there (BDL-080 S1b); `layer`/`layer_rank` stay the first's.
+        "layer_rule": "" if placement is None else placement.rule,
+        "layer_rule_rank": None if placement is None else placement.rank,
         "group": _KIND_DIR.get(kind, "other"),
         "symbols": _symbol_count(conn, ref_id),
         "doc_status": _doc_status(conn, ref_id),
@@ -591,19 +509,21 @@ def build_architecture_view_data(
     Returns:
         A JSON-safe dict with ``schema_version`` 2, ``scope``, ``nodes``,
         ``edges``, ``generated_at``, ``beadloom_version``, ``layers`` and
-        ``layer_order``, every section sorted for byte-stable
-        serialization. Each node carries its ``layer_rank`` (the partition
-        index for the layered-lanes layout) and each ``depends_on`` edge a
-        ``violation`` flag when both ends have a rank.
+        ``layer_order`` (the first layer rule by name), ``layer_rules`` (every
+        layer rule with its scope, BDL-080 S1b), every section sorted for
+        byte-stable serialization. Each node carries its ``layer_rank`` (the
+        partition index for the layered-lanes layout), its ``layer_rule`` and
+        ``layer_rule_rank``, and each ``depends_on`` edge a ``violation`` flag
+        when a rule judged both ends.
     """
-    layers = _layer_view(conn)
-    edges, depends_on, depended_on_by, uses, used_by = _arch_edges(conn, layers)
+    strata = _strata(conn)
+    edges, depends_on, depended_on_by, uses, used_by = _arch_edges(conn, strata)
     inputs = _BuildInputs(
         pages=pages or {},
         parent=_parent_map(conn),
-        layers=layers,
+        strata=strata,
         relations=_Relations(depends_on, depended_on_by, uses, used_by),
-        card=card_sources(conn, tags=layers.tags, verdicts=verdicts, repository=repository),
+        card=card_sources(conn, tags=strata.first.tags, verdicts=verdicts, repository=repository),
         published_doc_slugs=published_doc_slugs,
     )
     rows = conn.execute(
@@ -614,8 +534,9 @@ def build_architecture_view_data(
         "scope": "architecture",
         "generated_at": generated_at,
         "beadloom_version": __version__,
-        "layers": layers.declared(),
-        "layer_order": layers.order,
+        "layers": strata.first.declared(),
+        "layer_order": strata.first.order,
+        "layer_rules": strata.every.declared(str(row["ref_id"]) for row in rows),
         "nodes": [_node_dict(conn, row, inputs) for row in rows],
         "edges": edges,
     }

@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.cycles import _live_lifecycle_clause
-from beadloom.graph.rules.layers import layer_of, layer_population
+from beadloom.graph.rules.layers import layer_of, layer_population, within_scope
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import Violation
 
@@ -129,12 +129,19 @@ def reach_of(
     Pure, so the arithmetic is testable on a shape rather than on a database,
     and so the evaluator can pass the edge list it has already fetched instead
     of fetching it again.
+
+    A scoped rule counts its subtree only (BDL-080 S1b): an edge with an end
+    outside the scope is not the rule's to judge, so it is not in the total
+    either. The narrowing is :func:`~beadloom.graph.rules.layers.within_scope`
+    and is applied here whoever calls, so a caller that hands the whole edge set
+    and one that hands an already narrowed one count the same.
     """
+    scoped_edges, scoped_tags = within_scope(rule.scope, edges, parents, tags)
     return LayerReach(
         rule_name=rule.name,
         edge_kind=rule.edge_kind,
         population=layer_population(
-            edges, lambda ref_id: layer_of(ref_id, rule.layers, parents, tags)
+            scoped_edges, lambda ref_id: layer_of(ref_id, rule.layers, parents, scoped_tags)
         ),
     )
 

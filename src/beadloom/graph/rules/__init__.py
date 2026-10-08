@@ -59,9 +59,12 @@ from beadloom.graph.rules.layer_reach import (
 )
 from beadloom.graph.rules.layers import (
     LayerPopulation,
+    layer_membership,
     layer_of,
     own_layer_of,
     part_of_ancestors,
+    part_of_generations,
+    within_scope,
 )
 from beadloom.graph.rules.liveness import (
     INERT_RULE_HINT,
@@ -389,6 +392,7 @@ __all__ = [
     "flagged_layer_edges",
     "inert_rule_names",
     "is_advisory",
+    "layer_membership",
     "layer_of",
     "layer_rule_reach",
     "layer_rule_reaches",
@@ -396,9 +400,11 @@ __all__ = [
     "node_tags",
     "own_layer_of",
     "part_of_ancestors",
+    "part_of_generations",
     "part_of_parents",
     "population_phrase",
     "stated_populations",
     "suppressed_crossings",
     "validate_rules",
+    "within_scope",
 ]
