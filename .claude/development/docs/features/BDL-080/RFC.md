@@ -69,8 +69,10 @@ preset, rules generation, the role overlays), `site-layer`, `site-graph-viewer`,
 
 ### D1 — `site` is an alias of `service` (S1)
 
-`graph/loader.py:466` normalises the kind through `KIND_ALIASES = {"site": "service"}` (the table
-beside `VALID_NODE_KINDS`, `types.py:21`), so every reader of `nodes.kind` — rules, pages, nav,
+`graph/loader.py` normalises the kind through `KIND_ALIASES = {"site": "service"}` (the table lives
+in the loader, not beside `VALID_NODE_KINDS`: the rule engine imports the loader, so the other
+placement is a dependency cycle — S1a; the doc generator applies the same table through
+`onboarding.graph_files`), so every reader of `nodes.kind` — rules, pages, nav,
 the view, the landscape, the doc skeleton, the impact boundary — sees `service`; the alias is
 reported as an info line. This repository's graph: `vitepress-site.yml` becomes `kind: service`,
 `tags: [layer-service]` (as `tui.yml`); the `part_of beadloom`, `consumes` and `produces` edges
@@ -90,7 +92,7 @@ the rule stratifies — and an optional `scope: <ref_id>` key on the rule names 
 index; `layer_reach` restricts to the subtree). `token` is the layer's name. `flagged` is the
 union over rules.
 
-The viewer keys a layer by `(rule, rank)`: `layers.js` gains the sixth tone (`brand`), the
+The viewer keys a layer by `(rule, rank)`: `layers.js` gains a sixth tone (the portal's cyan: VitePress's brand is the indigo variable, and the sponsor pink fails 3:1 in the dark theme — S1c), the
 legend groups layers per rule, the filter offers rule-qualified names, lanes partition siblings
 of one rule, the card names the rule. **Layers as boxes at the overview** (owner, 2026-10-08, «согласен»): for a rule with a scope, the overview draws one box per layer inside the scope's box,
 derived from the rule — not graph nodes, no `part_of` edge — so an 81-slice frontend reads as
@@ -202,7 +204,7 @@ legend entry and every entry has a stroke.
 
 ### API Changes
 
-All additive (MINOR): `kind: site` accepted as an alias; rule keys `scope:` (layers) and
+All additive (MINOR): `kind: site` accepted as an alias; rule keys `scope:` and `title:` (layers) and
 `tag_prefix:` (matchers); rule types `slice_public_api`, `slice_shape`; config key
 `imports.aliases`; data file keys `layer_rules`, `layer_rule`, `layer_rule_rank`, `source_ref`,
 `lint`, `debt.inside`; `init` preset `fsd`. The CHANGELOG's next section lists each under Added.
