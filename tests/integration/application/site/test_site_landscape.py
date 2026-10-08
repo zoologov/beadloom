@@ -65,7 +65,8 @@ def _seed_contract_repo(conn: sqlite3.Connection) -> None:
     """
     nodes = [
         ("beadloom", "service", "Beadloom service (producer).", "src/beadloom"),
-        ("vitepress-site", "site", "VitePress site (consumer).", "site/"),
+        # `service`, as the graph loader stores a node declared `kind: site` (BDL-080 D1).
+        ("vitepress-site", "service", "VitePress site (consumer).", "site/"),
         ("graph", "domain", "Graph domain (not in any contract).", "src/beadloom/graph"),
     ]
     for ref_id, kind, summary, source in nodes:
@@ -358,16 +359,34 @@ def test_no_click_targets_a_missing_page(tmp_path: Path) -> None:
         assert (out / rel).exists(), f"dead click target: {url} (no {rel})"
 
 
-def test_site_node_clicks_through_to_its_page_under_other(tmp_path: Path) -> None:
-    """A node of a kind with no directory (kind=site) clicks to its page under ``other/``.
+def test_site_node_clicks_through_to_its_page_under_services(tmp_path: Path) -> None:
+    """The portal, a service since BDL-080 D1, clicks to its page under ``services/``."""
+    conn = _open()
+    out = tmp_path / "site"
+    try:
+        _seed_contract_repo(conn)
+        conn.commit()
+        generate_site(conn, out, project_root=tmp_path)
+    finally:
+        conn.close()
+    md = (out / "landscape-diagram.md").read_text(encoding="utf-8")
+    assert 'click n_vitepress_site "/services/vitepress-site"' in md
+    assert (out / "services" / "vitepress-site.md").exists()
+
+
+def test_a_node_of_a_kind_with_no_directory_clicks_through_under_other(tmp_path: Path) -> None:
+    """A contract participant of a kind with no directory clicks to its page under ``other/``.
 
     Every node has a page, and the diagram viewer's base-path rewrite covers
     ``/other/`` since BDL-076 A4, so the click is emitted, and it is not dead.
+    The portal stood for this case while it was ``kind: site``; a ``component``
+    stands for it now.
     """
     conn = _open()
     out = tmp_path / "site"
     try:
         _seed_contract_repo(conn)
+        conn.execute("UPDATE nodes SET kind = 'component' WHERE ref_id = 'vitepress-site'")
         conn.commit()
         generate_site(conn, out, project_root=tmp_path)
     finally:

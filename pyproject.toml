@@ -503,6 +503,7 @@ pytest_add_cli_args_test_selection = [
     "tests/unit/graph/rules/test_an_import_boundary_block_is_read_or_named.py",
     "tests/unit/graph/rules/test_a_suite_rule_block_is_read_or_named.py",
     "tests/unit/graph/rules/test_a_population_statement_is_a_warning_with_nothing_to_fix.py",
+    "tests/unit/graph/loader/test_a_kind_alias_reads_as_a_kind_the_rules_know.py",
     "tests/integration/graph/rules/test_an_uncovered_module_fails_strict_lint_at_error_severity.py",
     "tests/integration/graph/rules/test_a_directory_source_covers_its_whole_subtree.py",
     "tests/unit/doc_sync/engine/test_a_freshness_skip_needs_a_missing_baseline.py",

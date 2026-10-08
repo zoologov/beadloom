@@ -103,6 +103,9 @@ class ReindexResult:
     nothing_changed: bool = False
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    #: What the graph load read differently from how a file wrote it, with nothing
+    #: to fix (BDL-080 RFC D1: a kind read through its alias).
+    infos: list[str] = field(default_factory=list)
     #: The history a full reindex measured activity on (BDL-078 ``beadloom-btkd.9``):
     #: ``None`` when no activity was read, as on an incremental run or outside git.
     activity_history: GitHistory | None = None

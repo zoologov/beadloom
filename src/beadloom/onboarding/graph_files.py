@@ -37,13 +37,13 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from beadloom.graph.loader import NOT_A_GRAPH_FILE
+from beadloom.graph.loader import NOT_A_GRAPH_FILE, canonical_kind
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-__all__ = ["NOT_A_GRAPH_FILE", "each_graph_file"]
+__all__ = ["NOT_A_GRAPH_FILE", "canonical_kind", "each_graph_file"]
 
 
 def each_graph_file(
