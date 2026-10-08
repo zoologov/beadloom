@@ -63,7 +63,7 @@ import {
   dependentsOf,
   legendKeysOf,
 } from "../../../entities/graph-edge/index.js";
-import { LayerLegend, hasUnlayeredNode, layerOfNode, layersOf } from "../../../entities/layer/index.js";
+import { LayerLegend, hasUnlayeredNode, layerBoxesOf, layerOfNode, layersOf } from "../../../entities/layer/index.js";
 import {
   NAVIGATION_OPTIONS,
   NavigationControls,
@@ -130,7 +130,13 @@ const nodes = computed(() => graph.value.nodes);
 const edges = computed(() => graph.value.edges);
 const nodeById = computed(() => new Map(nodes.value.map((node) => [node.id, node])));
 const parents = computed(() => parentMapOf(nodes.value));
-const layers = computed(() => layersOf(nodes.value, graph.value.layers));
+const layers = computed(() => layersOf(nodes.value, graph.value.layers, graph.value.layerRules));
+// The boxes a layer rule scoped to a box draws inside it, one per layer, and the
+// containment the canvas draws: the file's, with each such layer's parts in its
+// box. What is drawn, kept or hidden is read from it; the card and the impact
+// summary read the file's own.
+const layered = computed(() => layerBoxesOf(nodes.value, parents.value, layers.value, graph.value.layerRules));
+const drawnParents = computed(() => layered.value.parents);
 // Whether the legend names a node in no layer: one is drawn in that tone. The
 // box that holds everything is not, whatever its layer: it is the project's frame.
 const unlayered = computed(() => {
@@ -148,11 +154,11 @@ const legendKeys = computed(() =>
 // `{ nodes, contracts }`: the node ids the filters show and, on the landscape,
 // the contracts they show (null where the mode filters no contract).
 const visible = computed(() =>
-  mode.visible(graph.value, state, { parents: parents.value, layers: layers.value })
+  mode.visible(graph.value, state, { parents: drawnParents.value, layers: layers.value })
 );
 const selectedNode = computed(() => nodeById.value.get(state.focus) || null);
 const selectedLayer = computed(() =>
-  selectedNode.value ? layerOfNode(selectedNode.value, layers.value)?.name || "" : ""
+  selectedNode.value ? layerOfNode(selectedNode.value, layers.value)?.label || "" : ""
 );
 
 const ids = computed(() => new Set(nodeById.value.keys()));
@@ -169,7 +175,7 @@ const neutralNeighbourhood = computed(
     state.dir === NEIGHBOURHOOD_DEFAULTS.dir &&
     Boolean(state.hide) === NEIGHBOURHOOD_DEFAULTS.hide
 );
-const children = computed(() => childrenOf(parents.value));
+const children = computed(() => childrenOf(drawnParents.value));
 // What a selected box holds, itself included, or null when the selection is no
 // box. The impact mode walks from the box's own node, as from any other.
 const selectedBox = computed(() =>
@@ -177,7 +183,7 @@ const selectedBox = computed(() =>
 );
 // The boxes that hold the selected node: an edge onto one of them is no neighbour's.
 const holdersOfFocus = computed(() => {
-  const held = withAncestors([state.focus], parents.value);
+  const held = withAncestors([state.focus], drawnParents.value);
   held.delete(state.focus);
   return held;
 });
@@ -211,7 +217,7 @@ const selection = computed(() => {
     focus: state.focus,
     distances,
     edges: walked,
-    keep: new Set([...withAncestors(distances.keys(), parents.value), ...(inside || [])]),
+    keep: new Set([...withAncestors(distances.keys(), drawnParents.value), ...(inside || [])]),
     hide: Boolean(state.hide),
     rings: summary.value
       ? new Map([...distances].map(([id, distance]) => [id, ringOf(distance)]))
@@ -276,12 +282,16 @@ const canvas = useGraphCanvas(container, {
 const unplaced = computed(() => canvas.layingOut.value || Boolean(canvas.layoutError.value));
 // The graph could not be laid out: there is nothing to zoom, filter or walk.
 const graphControlsOff = computed(() => Boolean(canvas.layoutError.value));
+/** What a note calls a drawn end: its node's label, or the title of a box a layer rule draws, which is no node of the file. */
+function drawnLabelOf(id, instance) {
+  return nodeById.value.get(id)?.label || instance.getElementById(id).data("label") || id;
+}
 // The edges along the line under the pointer, named, when the line carries more than one.
 const bundleNote = computed(() => {
   const ids = canvas.hoveredEdges.value;
   const instance = canvas.cy.value;
   if (ids.length < 2 || !instance) return "";
-  const labelOf = (id) => nodeById.value.get(id)?.label || id;
+  const labelOf = (id) => drawnLabelOf(id, instance);
   const named = ids.slice(0, NAMED_EDGES).map((id) => {
     const ends = endsOfLine(instance.getElementById(id));
     return `${labelOf(ends.source)} → ${labelOf(ends.target)}`;
@@ -297,7 +307,7 @@ const aggregateNote = computed(() => {
   if (ids.length !== 1 || !instance) return "";
   const edge = instance.getElementById(ids[0]);
   if (edge.empty() || !edge.data(AGGREGATE)) return "";
-  const labelOf = (id) => nodeById.value.get(id)?.label || id;
+  const labelOf = (id) => drawnLabelOf(id, instance);
   const way = (count, from, to) =>
     count ? `${count} ${count === 1 ? "edge" : "edges"} ${labelOf(from)} → ${labelOf(to)}` : "";
   const [a, b] = [edge.data("source"), edge.data("target")];
@@ -411,8 +421,9 @@ const onKeydown = keyHandler({
 async function render() {
   if (!data.value || !tokens.value || !container.value) return;
   const elements = buildElements(nodes.value, edges.value, {
-    parents: parents.value,
+    parents: drawnParents.value,
     layers: layers.value,
+    layerBoxes: layered.value.boxes,
   });
   const mounted = await canvas.mount(elements, buildStylesheet(tokens.value));
   if (!mounted) return;

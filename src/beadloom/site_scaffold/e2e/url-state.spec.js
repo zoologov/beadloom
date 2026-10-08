@@ -8,6 +8,7 @@
 
 import { test, expect } from "@playwright/test";
 import { architectureData, openArchitecture, viewer, waitForViewer } from "./support/viewer.js";
+import { layersOfData } from "./support/layers.js";
 import { requireShape } from "./support/shape.js";
 
 test("a linked view opens in the state its query names", async ({ page, request }) => {
@@ -53,12 +54,13 @@ test("a change in the toolbar is written to the URL and survives a reload", asyn
   request,
 }) => {
   const data = await architectureData(request);
-  const layers = data.layers || [];
+  // The names the Layer filter offers: every rule's, said with the rule's where there is more than one.
+  const layers = layersOfData(data);
   requireShape(
     layers.length > 0,
     "no declared layer; a project declares its layers with a layer rule in .beadloom/_graph/rules.yml"
   );
-  const layer = layers[layers.length - 1].name;
+  const layer = layers[layers.length - 1].label;
   // A domain when the graph has one; the focus is any node's.
   const focus = (data.nodes.find((n) => n.kind === "domain") ?? data.nodes[0]).id;
 

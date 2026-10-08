@@ -38,6 +38,7 @@ import {
 } from "./support/counts.js";
 import { requireShape } from "./support/shape.js";
 import { architectureData, openArchitecture, viewer } from "./support/viewer.js";
+import { withoutLayerRules } from "./support/layers.js";
 
 /** How many cases the nodes are read in, each a share of the top-level boxes, so they run side by side. */
 const PARTS = 4;
@@ -260,8 +261,9 @@ test("a click on every top-level box frames the whole box open, leaves its conte
       if (neighbours.has(id) && isDimmed) wrong.push(`${box}: its neighbour ${id} dimmed`);
       if (!neighbours.has(id) && !isDimmed && (await viewer(page, "visibleIds")).includes(id)) wrong.push(`${box}: ${id}, no neighbour, not dimmed`);
     }
-    // (4) The card: how many nodes it holds, and how many edges go out to and come in from each neighbour.
-    const summary = boxSummaryOf(tree, edges, box);
+    // (4) The card: how many nodes of the file it holds — a box a layer rule draws is none — and how
+    // many edges go out to and come in from each neighbour.
+    const summary = boxSummaryOf(treeOf(withoutLayerRules(data)), edges, box);
     const card = page.locator('[data-card-field="contents"]');
     const said = (await card.count())
       ? await card.evaluate((element) => ({

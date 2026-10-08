@@ -60,13 +60,16 @@ function boundariesOf(distances, edges, nodeById, layers) {
     if (!dependent || !dependency) continue;
     const from = layerOfNode(dependent, layers);
     const to = layerOfNode(dependency, layers);
-    if (!from || !to || from.rank === to.rank) continue;
-    const key = `${from.rank}->${to.rank}`;
-    const entry = counts.get(key) || { from: from.name, to: to.name, fromRank: from.rank, toRank: to.rank, count: 0 };
+    if (!from || !to || from === to) continue;
+    const key = `${from.key}->${to.key}`;
+    const entry = counts.get(key) || { from: from.label, to: to.label, fromRank: from.rank, toRank: to.rank, order: [layers.indexOf(from), layers.indexOf(to)], count: 0 };
     entry.count += 1;
     counts.set(key, entry);
   }
-  return [...counts.values()].sort((a, b) => a.fromRank - b.fromRank || a.toRank - b.toRank);
+  // In the layers' order: every rule's top to bottom, the rules in the file's order.
+  return [...counts.values()]
+    .sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1])
+    .map(({ order: _order, ...entry }) => entry);
 }
 
 /**

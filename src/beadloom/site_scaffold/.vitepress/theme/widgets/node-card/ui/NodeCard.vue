@@ -2,8 +2,9 @@
 // beadloom:component=site-node-card
 // A node's card: everything the data file says about one node.
 //
-// Identity (kind, summary, lifecycle, tags), the layer it is in and whether
-// the tag is its own or inherited, its source linked to the address the data
+// Identity (kind, summary, lifecycle, tags), the layer it is in, the rule that
+// places it there where the data file names every layer rule, and whether the
+// tag is its own or inherited, its source linked to the address the data
 // file gives (the generator decides it per forge, and gives none for a host it
 // does not recognise, so the card knows no forge), its
 // docs each with its freshness, its bound tests, its public symbols, its edges
@@ -20,7 +21,7 @@
 import { computed } from "vue";
 import { withBase } from "vitepress";
 import { boxEdgesOf, edgeGroupsOf } from "../../../entities/graph-edge/index.js";
-import { layerOfNode } from "../../../entities/layer/index.js";
+import { layerOfNode, ownsLayer } from "../../../entities/layer/index.js";
 import { shellQuote } from "../../../shared/lib/index.js";
 import { CopyCommand } from "../../../shared/ui/index.js";
 
@@ -37,9 +38,11 @@ const NOT_RECORDED = "not recorded";
 const NONE = "none";
 
 const layer = computed(() => layerOfNode(props.node, props.layers));
+// Where the layer comes from: the rule that places the node, where the file names it, and whether the tag is the node's own.
 const layerOrigin = computed(() => {
   if (!layer.value) return "";
-  return props.node.layer ? "its own tag" : "inherited through part_of";
+  const origin = ownsLayer(props.node, props.layers) ? "its own tag" : "inherited through part_of";
+  return layer.value.rule ? `rule ${layer.value.rule}, ${origin}` : origin;
 });
 
 const sourceUrl = computed(() => props.node.source_url || "");

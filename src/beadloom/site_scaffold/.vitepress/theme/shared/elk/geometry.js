@@ -10,6 +10,7 @@
 // the drawing's ids and have no prototype (`idRecord`), so any id is a key of its own.
 
 import { idRecord } from "../ids/index.js";
+import { LANE_EDGE } from "./graph.js";
 
 const pointOf = ({ x, y }) => Object.freeze({ x, y });
 
@@ -48,7 +49,8 @@ export function geometryOf(laidOut) {
   const boxes = idRecord();
   const routes = idRecord();
   const visit = (shape) => {
-    for (const edge of shape.edges || []) routes[edge.id] = routeOf(edge);
+    // A lane edge only stacked a box's children (`graph.js`): the drawing has no such edge.
+    for (const edge of shape.edges || []) if (!edge[LANE_EDGE]) routes[edge.id] = routeOf(edge);
     for (const child of shape.children || []) {
       boxes[child.id] = boxOf(child);
       visit(child);

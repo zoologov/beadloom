@@ -50,6 +50,8 @@ SPEC_SLICE = {
     "landscape-impact.spec.js": "site-impact-view",
     "landscape.spec.js": "site-landscape-page",
     "layers.spec.js": "site-layer",
+    # The boxes a layer rule scoped to a box draws inside it, at the map's levels (BDL-080 S1c).
+    "layer-boxes.spec.js": "site-graph-viewer",
     # When a box opens, what an open box draws, "+N", a selection framed readably (BDL-078 V3).
     "levels.spec.js": "site-graph-viewer",
     # The base look: one line weight, whole arrowheads, followed lines on top (BDL-078 V1).

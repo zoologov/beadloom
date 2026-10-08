@@ -9,16 +9,18 @@
 // show none of the declared names.
 
 import { test, expect } from "@playwright/test";
-import { architectureData, openArchitecture, openEveryBox, viewer } from "./support/viewer.js";
+import { architectureData, openArchitecture, openEveryBox, parentMap, viewer } from "./support/viewer.js";
 import { LACKING, requireShape } from "./support/shape.js";
 import { canvasBackground, channelDistance, drawnColours, legendSamples, over } from "./support/look.js";
 import { treeOf } from "./support/map.js";
+import { layerBoxesOf, layerOfNode, layerRulesOf, layersOfData, withoutLayerRules } from "./support/layers.js";
 
 const CARD = "[data-testid='node-card']";
 
 /** The data file with each declared layer renamed, and its tag and every node's token rewritten. */
 async function serveRenamedLayers(page, request) {
-  const data = await architectureData(request);
+  // The one order a file without every rule's keys names (`layer-rules` cases below read every rule).
+  const data = withoutLayerRules(await architectureData(request));
   requireShape((data.layers || []).length > 1, LACKING.layers);
   const tokens = new Map();
   data.layers = data.layers.map((layer, index) => {
@@ -88,7 +90,7 @@ test("a file that declares no layer names falls back to the nodes' tokens", asyn
   page,
   request,
 }) => {
-  const data = await architectureData(request);
+  const data = withoutLayerRules(await architectureData(request));
   delete data.layers;
   await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
   const tokenOfRank = new Map();
@@ -108,13 +110,18 @@ test("a file that declares no layer names falls back to the nodes' tokens", asyn
 // The colours come from the project's declared layers, by position, not from a
 // palette keyed to one project's layer names: before slice 2 the viewer coloured
 // four names of its own and drew every other project's layers in the grey of a
-// node in no layer. Read on the portal as built, without renaming anything.
-test("each declared layer is drawn in a colour of its own, apart from a node in no layer", async ({
+// node in no layer. Read on the portal as built, without renaming anything. A
+// layer is its rule's: each rule's layers take the tones by their
+// own position, so a rule of six layers — Feature-Sliced Design's — has six, and
+// before, the sixth repeated the first and this portal's site slices were all
+// drawn in the tone of their service's layer.
+test("each declared layer is drawn in a colour of its own within its rule, six tones for six layers, apart from a node in no layer", async ({
   page,
   request,
 }) => {
   const data = await architectureData(request);
-  requireShape((data.layers || []).length > 1, LACKING.layers);
+  const layers = layersOfData(data);
+  requireShape(layers.length > 1, LACKING.layers);
 
   await openArchitecture(page);
   // Every node's border, at full detail: at the whole-graph fit only the boxes at the top are drawn.
@@ -127,23 +134,35 @@ test("each declared layer is drawn in a colour of its own, apart from a node in 
   // A status is drawn over the layer's colour, so a node with one says nothing here.
   const withStatus = new Set(Object.keys(await viewer(page, "statusLooks")));
   const drawn = data.nodes.filter((node) => borders.has(node.id) && !withStatus.has(node.id));
-  const declaredRanks = new Set(data.layers.map((layer) => layer.rank));
-  const coloursOfRank = new Map();
-  for (const node of drawn.filter((n) => declaredRanks.has(n.layer_rank))) {
-    if (!coloursOfRank.has(node.layer_rank)) coloursOfRank.set(node.layer_rank, new Set());
-    coloursOfRank.get(node.layer_rank).add(borders.get(node.id));
+  const coloursOf = new Map();
+  for (const node of drawn) {
+    const layer = layerOfNode(node, data, layers);
+    if (!layer) continue;
+    if (!coloursOf.has(layer)) coloursOf.set(layer, new Set());
+    coloursOf.get(layer).add(borders.get(node.id));
   }
-  const unlayered = new Set(
-    drawn.filter((n) => typeof n.layer_rank !== "number").map((n) => borders.get(n.id))
-  );
-  // The tones repeat after five layers, so distinctness is asked of the top five.
-  const topRanks = [...coloursOfRank.keys()].sort((a, b) => a - b).slice(0, 5);
-  const colourOf = (rank) => [...coloursOfRank.get(rank)].join(" | ");
+  // A box a scoped rule draws is in its layer's tone too, and carries no status.
+  for (const box of layerBoxesOf(data).filter((b) => borders.has(b.id))) {
+    const layer = layers.find((l) => l.rule === box.rule && l.rank === box.rank);
+    if (!coloursOf.has(layer)) coloursOf.set(layer, new Set());
+    coloursOf.get(layer).add(borders.get(box.id));
+  }
+  const unlayered = new Set(drawn.filter((n) => !layerOfNode(n, data, layers)).map((n) => borders.get(n.id)));
+  const colourOf = (layer) => [...coloursOf.get(layer)].join(" | ");
+  // The tones repeat after six layers, so distinctness is asked of each rule's top six.
+  const rules = [...new Set(layers.map((layer) => layer.rule))];
+  const topOf = (rule) => layers.filter((layer) => layer.rule === rule && coloursOf.has(layer)).slice(0, 6);
 
-  expect(topRanks.length).toBeGreaterThan(1);
-  expect([...coloursOfRank.values()].every((colours) => colours.size === 1)).toBe(true);
-  expect(new Set(topRanks.map(colourOf)).size).toBe(topRanks.length);
-  expect(topRanks.filter((rank) => unlayered.has(colourOf(rank)))).toEqual([]);
+  expect([...coloursOf.keys()].length).toBeGreaterThan(1);
+  expect([...coloursOf.values()].filter((colours) => colours.size !== 1).length).toBe(0);
+  for (const rule of rules) {
+    const top = topOf(rule);
+    expect(new Set(top.map(colourOf)).size, `${rule ?? "the declared layers"}: ${top.map((l) => `${l.name} ${colourOf(l)}`).join(", ")}`).toBe(top.length);
+    expect(top.filter((layer) => unlayered.has(colourOf(layer))).map((layer) => layer.label)).toEqual([]);
+  }
+  // A rule of six layers with a node in each is drawn in six tones, where the portal has one.
+  const sixes = rules.filter((rule) => topOf(rule).length === 6);
+  requireShape(sixes.length > 0, "no layer rule of six layers with a node drawn in each, as a Feature-Sliced frontend's");
 });
 
 // A node is drawn as the legend draws its layer: a border in the layer's tone
@@ -162,8 +181,11 @@ for (const colorScheme of ["light", "dark"]) {
       request,
     }) => {
       const data = await architectureData(request);
-      requireShape((data.layers || []).length > 0, "no declared layer; a project declares its layers with a layer rule in .beadloom/_graph/rules.yml");
-      const layerOf = new Map(data.nodes.map((node) => [node.id, data.layers.find((layer) => layer.rank === node.layer_rank)?.name]));
+      const layers = layersOfData(data);
+      requireShape(layers.length > 0, "no declared layer; a project declares its layers with a layer rule in .beadloom/_graph/rules.yml");
+      // Each node by the name the legend gives its layer, and each box a scoped rule draws by its layer's.
+      const layerOf = new Map(data.nodes.map((node) => [node.id, layerOfNode(node, data, layers)?.label]));
+      for (const box of layerBoxesOf(data)) layerOf.set(box.id, layers.find((l) => l.rule === box.rule && l.rank === box.rank).label);
       await openArchitecture(page);
       const samples = await legendSamples(page);
       const background = await canvasBackground(page);
@@ -203,8 +225,12 @@ for (const colorScheme of ["light", "dark"]) {
 // every portal, whether it declares layers or not. The box that holds everything
 // is drawn as the project's frame whatever its layer, so it is no such node.
 
-/** Whether `node` is in a layer of `data`'s: the declared ranks, or, where none is declared, any rank. */
+/**
+ * Whether `node` is in a layer of `data`'s: its rule's, where the file carries
+ * every rule; else the declared ranks, or, where none is declared, any rank.
+ */
 function inALayer(node, data) {
+  if (layerRulesOf(data).length) return Boolean(layerOfNode(node, data));
   const declared = (data.layers || []).filter((layer) => typeof layer?.rank === "number").map((layer) => layer.rank);
   return typeof node.layer_rank === "number" && (!declared.length || declared.includes(node.layer_rank));
 }
@@ -223,6 +249,11 @@ function unlayeredOf(data) {
  */
 function withTheOtherAnswer(data) {
   const unlayered = new Set(unlayeredOf(data));
+  const [rule] = layerRulesOf(data);
+  if (unlayered.size && rule) {
+    const top = Math.min(...rule.layers.map((layer) => layer.rank));
+    return { ...data, nodes: data.nodes.map((node) => (unlayered.has(node.id) ? { ...node, layer_rule: rule.name, layer_rule_rank: top } : node)) };
+  }
   if (unlayered.size) {
     const layers = data.layers?.length ? data.layers : [{ name: "the one layer", rank: 0, tag: "the-one-layer", token: "the-one-layer" }];
     const rank = Math.min(...layers.map((layer) => layer.rank));
@@ -230,7 +261,8 @@ function withTheOtherAnswer(data) {
   }
   const { wrapper } = treeOf(data);
   const [first, ...rest] = [...data.nodes].sort((a, b) => (a.id === wrapper) - (b.id === wrapper) || a.id.localeCompare(b.id));
-  const { layer_rank: _rank, layer: _token, ...unlayeredFirst } = first;
+  const { layer_rank: _rank, layer: _token, ...untokened } = first;
+  const unlayeredFirst = rule ? { ...untokened, layer_rule: "", layer_rule_rank: null } : untokened;
   return { ...data, nodes: [unlayeredFirst, ...rest] };
 }
 
@@ -258,3 +290,144 @@ for (const turned of [false, true]) {
     expect(borders.filter((border) => channelDistance(border, sample) > 0)).toEqual([]);
   });
 }
+
+// Every layer rule is drawn. Before, the viewer read the
+// first rule by name and nothing else, so a project with a backend and a frontend
+// drew its frontend in the tone of the backend layer that held it: on this portal
+// the twenty site slices were drawn as "services", the Layer filter offered none
+// of their layers and the card named none. A layer is now its rule's: the legend
+// groups each rule's layers under its name, the filter names a layer with its
+// rule's, the card names the rule beside the layer, and the lanes inside a box
+// follow the rule its parts are placed by.
+
+const LACKING_RULES = "fewer than two layer rules; a project with a backend and a frontend declares one for each";
+
+test("the legend groups the layers per rule, each rule's top to bottom, under the rule's name", async ({ page, request }) => {
+  const data = await architectureData(request);
+  const rules = layerRulesOf(data);
+  requireShape(rules.length > 1, LACKING_RULES);
+  const layers = layersOfData(data);
+
+  await openArchitecture(page);
+
+  const groups = await page.locator("[data-legend-rule]").evaluateAll((items) =>
+    items.map((item) => ({
+      rule: item.dataset.legendRule,
+      heading: item.querySelector(".bl-legend-group")?.textContent.trim(),
+      layers: [...item.querySelectorAll("[data-legend-layer]")].map((layer) => [layer.dataset.legendLayer, layer.textContent.trim()]),
+    }))
+  );
+  expect(groups).toEqual(
+    rules.map((rule) => ({
+      rule: rule.name,
+      heading: `${rule.name} (top → bottom):`,
+      layers: layers.filter((layer) => layer.rule === rule.name).map((layer) => [layer.label, layer.name]),
+    }))
+  );
+});
+
+test("the Layer filter offers each layer by its rule's name and its own, and keeps the nodes of the one chosen", async ({ page, request }) => {
+  const data = await architectureData(request);
+  requireShape(layerRulesOf(data).length > 1, LACKING_RULES);
+  const layers = layersOfData(data);
+  // The last rule's busiest layer: on this portal a layer of the site's slices, which no filter offered before.
+  const lastRule = layers[layers.length - 1].rule;
+  const membersOf = (layer) => data.nodes.filter((node) => layerOfNode(node, data, layers) === layer).map((node) => node.id);
+  const chosen = layers.filter((layer) => layer.rule === lastRule).sort((a, b) => membersOf(b).length - membersOf(a).length)[0];
+
+  await openArchitecture(page);
+  const select = page.getByLabel("Layer", { exact: true });
+  const offered = await select.locator("option").evaluateAll((options) => options.map((option) => option.value));
+  expect(offered).toEqual(["all", ...layers.map((layer) => `${layer.rule}: ${layer.name}`)]);
+  await select.selectOption(chosen.label);
+
+  await expect.poll(() => new URL(page.url()).searchParams.get("layer")).toBe(chosen.label);
+  // What the filter keeps inside closed boxes is drawn once its boxes are open.
+  await openEveryBox(page, { edges: false });
+  const shown = new Set(await viewer(page, "visibleIds"));
+  const members = membersOf(chosen);
+  expect(members.length).toBeGreaterThan(0);
+  expect(members.filter((id) => !shown.has(id))).toEqual([]);
+  const others = data.nodes.filter((node) => shown.has(node.id) && !members.includes(node.id) && !data.nodes.some((n) => n.parent === node.id));
+  expect(others.map((node) => node.id)).toEqual([]);
+});
+
+for (const own of [true, false]) {
+  test(`the card names the layer and the rule that places a node whose layer is ${own ? "its own" : "inherited"}`, async ({ page, request }) => {
+    const data = await architectureData(request);
+    requireShape(layerRulesOf(data).length > 1, LACKING_RULES);
+    const layers = layersOfData(data);
+    // A node of the last rule where it has one, so the rule named is not the first rule by name.
+    const candidates = data.nodes
+      .filter((node) => {
+        const layer = layerOfNode(node, data, layers);
+        return layer && (node.tags || []).includes(layer.tag) === own;
+      })
+      .sort((a, b) => (b.layer_rule || "").localeCompare(a.layer_rule || "") || a.id.localeCompare(b.id));
+    const node = candidates[0];
+    requireShape(node, own ? LACKING.ownLayer : LACKING.inheritedLayer);
+    const layer = layerOfNode(node, data, layers);
+
+    await openArchitecture(page, `?focus=${node.id}`);
+
+    const field = page.locator(`${CARD} [data-card-field='layer']`);
+    await expect(field).toContainText(layer.name);
+    await expect(field).toContainText(layer.rule);
+    await expect(field).toContainText(own ? "its own tag" : "inherited through part_of");
+  });
+}
+
+// Read on the graph with only its containment, so what orders the layers is the
+// lanes and not the edges: a Feature-Sliced frontend imports downward, and ELK
+// alone lays such slices out top to bottom whether or not they have lanes. And
+// read without the project's frame, because ELK keeps lanes among the nodes at
+// the top of the graph only (`shared/elk/graph.js`): inside a box it stacks only
+// the layer boxes a scoped rule draws, which it is asked to.
+test("lanes partition the siblings of one rule: at the top, and inside a scope by its layer boxes, each layer lies below the one above it", async ({ page, request }) => {
+  const served = await architectureData(request);
+  requireShape(layerRulesOf(served).length > 1, LACKING_RULES);
+  const { wrapper } = treeOf(served);
+  const nodes = served.nodes.filter((node) => node.id !== wrapper).map((node) => (node.parent === wrapper ? { ...node, parent: node.id } : node));
+  const data = { ...served, nodes, edges: served.edges.filter((edge) => edge.kind === "part_of" && edge.dst !== wrapper && edge.src !== wrapper) };
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  const layers = layersOfData(data);
+  await openArchitecture(page);
+  const { boxes } = await viewer(page, "elkGeometry");
+  const parents = parentMap(data);
+  // Each drawn node's layer: a node's own, a layer box's the layer it is drawn for.
+  const layerOf = new Map(data.nodes.map((node) => [node.id, layerOfNode(node, data, layers)]));
+  const scopes = new Set();
+  for (const box of layerBoxesOf(data)) {
+    layerOf.set(box.id, layers.find((l) => l.rule === box.rule && l.rank === box.rank));
+    scopes.add(box.scope);
+  }
+
+  const crossed = [];
+  const judged = new Set();
+  let partitioned = 0;
+  const siblingsOf = new Map();
+  for (const [id, parent] of Object.entries(parents)) {
+    if ((parent && !scopes.has(parent)) || !layerOf.get(id) || !boxes[id]) continue;
+    if (!siblingsOf.has(parent)) siblingsOf.set(parent, []);
+    siblingsOf.get(parent).push(id);
+  }
+  for (const [parent, ids] of siblingsOf) {
+    // Of a box holding parts of two rules, the siblings of the rule that places most of them.
+    const counts = new Map();
+    for (const id of ids) counts.set(layerOf.get(id).rule, (counts.get(layerOf.get(id).rule) || 0) + 1);
+    const rule = [...counts].sort(([, m], [, n]) => n - m)[0][0];
+    const ofRule = ids.filter((id) => layerOf.get(id).rule === rule);
+    for (const a of ofRule) {
+      for (const b of ofRule) {
+        const [la, lb] = [layerOf.get(a), layerOf.get(b)];
+        if (la.rank >= lb.rank) continue;
+        partitioned += 1;
+        judged.add(parent ?? "the top");
+        if (boxes[a].y2 > boxes[b].y1 + 1e-6) crossed.push(`${parent ?? "the top"}: ${a} (${la.name}) reaches below ${b} (${lb.name})`);
+      }
+    }
+  }
+  expect([...judged].sort()).toEqual(["the top", ...scopes].sort());
+  expect(partitioned).toBeGreaterThan(0);
+  expect(crossed).toEqual([]);
+});

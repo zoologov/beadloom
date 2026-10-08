@@ -242,7 +242,8 @@ function readers(source) {
   const cy = () => source.cy();
   const rect = () => source.container().getBoundingClientRect();
   const originals = () => cy().edges().filter((edge) => !isAggregate(edge));
-  // The nodes of the file: a loop's end is a point the viewer draws a line to, not a node.
+  // The nodes drawn: the file's and the boxes a scoped layer rule draws (`LAYER_BOX`,
+  // `lib/levels.js`); a loop's end is a point the viewer draws a line to, not a node.
   const fileNodes = () => cy().nodes().not(`.${LOOP_END}`);
   return {
     // Laid out, and holding still: no animated move under way and no change of the view left to read.

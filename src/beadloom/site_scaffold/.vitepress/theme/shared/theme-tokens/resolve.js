@@ -26,6 +26,8 @@ export const TOKEN_VARIABLES = {
   green: "--vp-c-green-1",
   yellow: "--vp-c-yellow-1",
   red: "--vp-c-red-1",
+  // A sixth hue, which the palette has no variable for: the portal's own (`tones.css`).
+  cyan: "--bl-c-cyan-1",
   gray: "--vp-c-gray-1",
 };
 

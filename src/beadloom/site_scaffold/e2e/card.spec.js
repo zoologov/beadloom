@@ -6,6 +6,7 @@
 
 import { test, expect } from "@playwright/test";
 import { architectureData, openArchitecture, viewer } from "./support/viewer.js";
+import { layerOfNode, layersOfData } from "./support/layers.js";
 import { LACKING, requireShape } from "./support/shape.js";
 
 const CARD = "[data-testid='node-card']";
@@ -96,7 +97,8 @@ function fieldValue(page, name) {
 /** For each field, how a node comes to hold nothing for it in a version 2 data file. */
 const EMPTIED = {
   tags: (node) => Object.assign(node, { tags: [] }),
-  layer: (node) => Object.assign(node, { layer: "", layer_rank: null }),
+  // In no layer by any reading: the first rule's keys, and the keys of every rule.
+  layer: (node) => Object.assign(node, { layer: "", layer_rank: null, layer_rule: "", layer_rule_rank: null }),
   docs: (node) => Object.assign(node, { docs: [] }),
   symbols: (node) => Object.assign(node, { public_symbols: { names: [], omitted: 0 } }),
   findings: (node) => Object.assign(node, { findings: [], lint_clean: true }),
@@ -152,19 +154,27 @@ const LAYER_ORIGINS = [
   { origin: "inherited through part_of", own: false },
 ];
 
+// Where the file names every layer rule, the card names the rule that places the
+// node beside where its tag comes from; a file without them names none.
 for (const { origin, own } of LAYER_ORIGINS) {
   test(`the card names the node's layer and says it is ${origin}`, async ({ page, request }) => {
     const data = await architectureData(request);
+    const layers = layersOfData(data);
+    const ownsIt = (n, layer) => (layer.rule ? (n.tags || []).includes(layer.tag) : Boolean(n.layer));
     const node = data.nodes
-      .filter((n) => typeof n.layer_rank === "number" && Boolean(n.layer) === own)
+      .filter((n) => {
+        const layer = layerOfNode(n, data, layers);
+        return layer && ownsIt(n, layer) === own;
+      })
       .sort((a, b) => a.id.localeCompare(b.id))[0];
     requireShape(node, own ? LACKING.ownLayer : LACKING.inheritedLayer);
     // The declared name of the node's layer, not the tag token.
-    const layer = data.layers.find((l) => l.rank === node.layer_rank).name;
+    const layer = layerOfNode(node, data, layers);
+    const said = layer.rule ? `rule ${layer.rule}, ${origin}` : origin;
 
     await openArchitecture(page, `?focus=${node.id}`);
 
-    expect(await fieldValue(page, "layer")).toBe(`${layer} (${origin})`);
+    expect(await fieldValue(page, "layer")).toBe(`${layer.name} (${said})`);
   });
 }
 

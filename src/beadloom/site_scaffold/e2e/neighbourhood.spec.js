@@ -55,10 +55,14 @@ function drawnEdges(data) {
   );
 }
 
-/** Every node that is neither in the walk nor a container of a node in it. */
+/**
+ * Every node drawn that is neither in the walk nor a container of a node in it:
+ * the file's, and the boxes a scoped layer rule draws (`support/layers.js`).
+ */
 function outside(data, walked) {
-  const kept = withAncestors(walked, parentMap(data));
-  return sorted(data.nodes.map((n) => n.id).filter((id) => !kept.has(id)));
+  const parents = parentMap(data);
+  const kept = withAncestors(walked, parents);
+  return sorted(Object.keys(parents).filter((id) => !kept.has(id)));
 }
 
 test("depth 2 outgoing shows the node, what it reaches in two steps and those edges; the rest is dimmed", async ({

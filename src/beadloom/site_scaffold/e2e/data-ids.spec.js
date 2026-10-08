@@ -20,6 +20,7 @@
 import { test, expect } from "@playwright/test";
 import { edgeKey } from "./support/graph.js";
 import { architectureData, openArchitecture, viewer, waitForViewer } from "./support/viewer.js";
+import { withoutLayerRules } from "./support/layers.js";
 
 const CARD = "[data-testid='node-card']";
 
@@ -94,7 +95,8 @@ function objectNamedGraph(served, roles) {
     dependsOn(middle, "leaf-1"),
     dependsOn(inner, "leaf-2"),
   ];
-  return { ...served, nodes, edges };
+  // One order of ranks, as a file without every rule's keys names it (`support/layers.js`).
+  return { ...withoutLayerRules(served), nodes, edges };
 }
 
 /**

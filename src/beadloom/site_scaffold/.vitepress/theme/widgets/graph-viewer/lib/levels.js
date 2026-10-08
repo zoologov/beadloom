@@ -54,6 +54,20 @@
 export const COLLAPSED = "is-collapsed";
 /** The class of the one root that holds everything: the stylesheet draws it as the project's frame, the map sets it. */
 export const PROJECT_BOX = "is-project";
+/**
+ * The data of a box that holds the boxes a scoped rule draws: ELK stacks them
+ * top to bottom by their layers' ranks (`shared/elk`, `stack`; `lib/elements.js` sets it), which it does for
+ * no box's children by their lanes alone.
+ */
+export const STACK_LANES = "stackLanes";
+
+/**
+ * The data a layer's box carries, the name of the rule it is drawn for
+ * (`lib/elements.js`): no node of the file has it, and a box that carries it is
+ * opened, titled and joined by lines like any box, and has no card.
+ */
+export const LAYER_BOX = "layerBox";
+
 /** The data an aggregated edge is told apart by. */
 export const AGGREGATE = "aggregate";
 /** The data a drawn end carries: how many of its aggregated edges the budget leaves out. */

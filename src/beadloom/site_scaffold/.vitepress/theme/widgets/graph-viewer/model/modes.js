@@ -54,8 +54,10 @@ export const MODES = Object.freeze({
       nodes: list(data?.nodes),
       edges: list(data?.edges),
       contracts: [],
-      // The declared layers: the names the legend, the filter and the card show.
+      // The declared layers: the names the legend, the filter and the card show,
+      // and every layer rule where the file carries them, which a layer is read from first.
       layers: list(data?.layers),
+      layerRules: list(data?.layer_rules),
     }),
     filterDefaults: FILTER_DEFAULTS,
     filterControls: FilterControls,

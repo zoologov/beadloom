@@ -16,6 +16,8 @@
 // whatever the served file declares: the same boxes, nodes and edges, laid out
 // in that many ranks.
 
+import { withoutLayerRules } from "./layers.js";
+
 /**
  * The tag of every case that runs on this graph rather than on the portal's own.
  * The graph takes nothing from the served file but its schema and its declared
@@ -147,6 +149,8 @@ export function adopterSizedGraph(served, { layerRanks } = {}) {
   const ranks = layers.map((layer) => layer.rank).filter((value) => typeof value === "number");
   const tree = nodesOf(ranks, random);
   const containment = tree.nodes.map((n) => ({ src: n.id, dst: n.parent, kind: "part_of" }));
-  const graph = { ...served, nodes: tree.nodes, edges: [...containment, ...edgesOf(tree, random)] };
+  // Its nodes are in one order of ranks, as a file that names one order without a rule says:
+  // the served file's every-rule keys would place none of them.
+  const graph = { ...withoutLayerRules(served), nodes: tree.nodes, edges: [...containment, ...edgesOf(tree, random)] };
   return typeof layerRanks === "number" ? { ...graph, layers } : graph;
 }

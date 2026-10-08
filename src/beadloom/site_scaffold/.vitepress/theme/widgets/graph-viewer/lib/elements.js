@@ -1,9 +1,11 @@
 // beadloom:component=site-graph-viewer
 // The data file's nodes and edges as Cytoscape elements.
 //
-// A node carries its layer's tone and its status as data, and the stylesheet
-// maps each value to a resolved colour, so a theme switch restyles the graph
-// without rebuilding it. Containment becomes Cytoscape's `parent`; every other
+// A node carries its layer's tone, its lane and its status as data, and the
+// stylesheet maps each value to a resolved colour, so a theme switch restyles the
+// graph without rebuilding it. The box a layer rule scoped to a box draws around
+// each of its layers' parts (`entities/layer`) is a node here too, no node of the
+// file. Containment becomes Cytoscape's `parent`; every other
 // drawn kind becomes an edge with its style key. A landscape node carries its
 // health, and a landscape edge its contract and, when broken, its badge.
 //
@@ -14,9 +16,10 @@
 import { freshId } from "../../../shared/ids/index.js";
 import { EDGE_STYLES, edgeKeyOf, isDrawnKind, styleKeyOf } from "../../../entities/graph-edge/index.js";
 import { statusOf } from "../../../entities/graph-node/index.js";
-import { layerToneOf } from "../../../entities/layer/index.js";
+import { lanesOf, layerToneOf } from "../../../entities/layer/index.js";
+import { LAYER_BOX, STACK_LANES } from "./levels.js";
 
-function nodeElement(node, { parents, layers }) {
+function nodeElement(node, { parents, layers }, lanes, scopes) {
   const data = {
     id: node.id,
     label: node.label || node.id,
@@ -25,9 +28,21 @@ function nodeElement(node, { parents, layers }) {
     status: statusOf(node) || "",
   };
   if (node.health) data.health = node.health;
-  // The layer rank is the node's lane in the layout; a node with no rank has none.
-  if (typeof node.layer_rank === "number") data.partition = node.layer_rank;
+  // The node's lane in the layout (`entities/layer`, `lanesOf`); a node with none is placed by its edges alone.
+  if (lanes.has(node.id)) data.partition = lanes.get(node.id);
   if (parents[node.id]) data.parent = parents[node.id];
+  if (scopes.has(node.id)) data[STACK_LANES] = true;
+  return { group: "nodes", data };
+}
+
+/**
+ * The box a scoped rule draws around one layer's parts (`entities/layer`): drawn
+ * as a box of the layer's tone, titled by the layer's name, in its layer's lane
+ * of its scope, and marked as no node of the file (`LAYER_BOX`).
+ */
+function layerBoxElement(box, lanes) {
+  const data = { id: box.id, label: box.label, kind: "", tone: box.tone, status: "", parent: box.scope, [LAYER_BOX]: box.rule };
+  if (lanes.has(box.id)) data.partition = lanes.get(box.id);
   return { group: "nodes", data };
 }
 
@@ -50,11 +65,22 @@ function edgeElement(edge, id) {
   };
 }
 
-/** Cytoscape elements for the nodes and the drawn edges between them. */
+/**
+ * Cytoscape elements for the nodes, the boxes the scoped layer rules draw, and
+ * the drawn edges between the nodes. `context` is `{ parents, layers,
+ * layerBoxes }`: the containment drawn, the layers, and the layer boxes
+ * (`entities/layer`, `layerBoxesOf`), none by default.
+ */
 export function buildElements(nodes, edges, context) {
-  const ids = new Set(nodes.map((node) => node.id));
+  const layerBoxes = context.layerBoxes || [];
+  const ids = new Set([...nodes.map((node) => node.id), ...layerBoxes.map((box) => box.id)]);
   const taken = new Set(ids);
-  const elements = nodes.map((node) => nodeElement(node, context));
+  const lanes = lanesOf(nodes, { parents: context.parents, layers: context.layers, layerBoxes });
+  const scopes = new Set(layerBoxes.map((box) => box.scope));
+  const elements = [
+    ...nodes.map((node) => nodeElement(node, context, lanes, scopes)),
+    ...layerBoxes.map((box) => layerBoxElement(box, lanes)),
+  ];
   edges.forEach((edge, index) => {
     if (isDrawnKind(edge.kind) && ids.has(edge.src) && ids.has(edge.dst)) {
       const id = freshId(`e${index}:${edge.src}->${edge.dst}`, taken);

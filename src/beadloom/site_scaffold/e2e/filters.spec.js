@@ -21,6 +21,7 @@ import {
   viewer,
   withAncestors,
 } from "./support/viewer.js";
+import { layerOfNode, layersOfData } from "./support/layers.js";
 import { LACKING, requireShape } from "./support/shape.js";
 
 const sorted = (ids) => [...ids].sort();
@@ -98,20 +99,21 @@ test("a layer filter keeps every node in that layer, inherited or its own, with 
 }) => {
   const data = await architectureData(request);
   const parents = parentMap(data);
-  // The declared layer the most nodes are in without a tag of their own, so the
-  // case sees the inherited layer and not only the nodes that name it.
-  const untagged = (rank) => data.nodes.filter((n) => n.layer_rank === rank && !n.layer).length;
-  const declared = data.nodes
-    .filter((n) => n.layer && typeof n.layer_rank === "number")
-    .sort((a, b) => untagged(b.layer_rank) - untagged(a.layer_rank) || a.id.localeCompare(b.id))[0];
-  requireShape(declared && untagged(declared.layer_rank) > 0, LACKING.inheritedLayer);
-  const members = data.nodes.filter((n) => n.layer_rank === declared.layer_rank).map((n) => n.id);
+  // The layer of the layers the file declares (every rule's, where it names them,
+  // `support/layers.js`) that the most nodes are in without a tag of their own, so
+  // the case sees the inherited layer and not only the nodes that name it.
+  const layers = layersOfData(data);
+  const membersOf = (layer) => data.nodes.filter((n) => layerOfNode(n, data, layers) === layer);
+  const owns = (n, layer) => (layer.rule ? (n.tags || []).includes(layer.tag) : Boolean(n.layer));
+  const untagged = (layer) => membersOf(layer).filter((n) => !owns(n, layer)).length;
+  const declared = [...layers].sort((a, b) => untagged(b) - untagged(a))[0];
+  requireShape(declared && untagged(declared) > 0, LACKING.inheritedLayer);
+  const members = membersOf(declared).map((n) => n.id);
 
   await openArchitecture(page);
   await openEveryBox(page);
-  // The filter offers the declared names, not the tag tokens.
-  const name = data.layers.find((layer) => layer.rank === declared.layer_rank).name;
-  await page.getByLabel("Layer", { exact: true }).selectOption(name);
+  // The filter offers the declared names, not the tag tokens: with its rule's where more than one rule is drawn.
+  await page.getByLabel("Layer", { exact: true }).selectOption(declared.label);
 
   await expect.poll(() => viewer(page, "visibleIds")).toEqual(
     sorted(withAncestors(members, parents))
