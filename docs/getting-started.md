@@ -49,7 +49,7 @@ import from a file in any other language, so no edge is drawn from that code, an
 you unless the run finds no symbol at all. Install the extra for a project in any other
 language.
 
-The current release is **7.0.0**. `beadloom --version` reports the build you actually
+The current release is **8.0.0**. `beadloom --version` reports the build you actually
 installed. This line is the one place a document states the version as a claim, and
 `beadloom docs audit` compares it against `pyproject.toml` on every run — so a release that
 bumps the manifest and forgets the prose is reported instead of merely being wrong. Every

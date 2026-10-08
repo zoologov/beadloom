@@ -12,9 +12,9 @@
 
 | Bead | Role | Status | Note |
 |---|---|---|---|
-| `beadloom-91iv` | R1 | in progress | bump, public API, CHANGELOG |
-| `beadloom-ghu3` | D1 | blocked | README pair, drifted reference docs, TODO, version places |
-| `beadloom-jxp4` | V1 | blocked | the built wheel on another project |
+| `beadloom-91iv` | R1 | ✓ done | 8.0.0 in every place; public API in CONTRIBUTING.md + docs/guides/public-api.md; CHANGELOG [8.0.0]; `beadloom ci` rc 0 |
+| `beadloom-ghu3` | D1 | ready | README pair, drifted reference docs, TODO, version places |
+| `beadloom-jxp4` | V1 | ready | the built wheel on another project |
 | `beadloom-urgi` | R | blocked | review, bead id only |
 | `beadloom-fymn` | P | blocked | PR, merge, Release, downloaded wheel, portal |
 
