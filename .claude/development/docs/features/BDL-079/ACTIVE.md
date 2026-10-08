@@ -6,7 +6,7 @@
 
 ## Current Bead
 
-**Bead:** R1 `beadloom-91iv` (the bump, the declaration, the change log); then D1 ∥ V1, R, P.
+**Bead:** none — the work item shipped on 2026-10-08 (8.0.0 on PyPI, verified on the downloaded wheel); epic `beadloom-1l8d` closed.
 
 ## Progress
 
@@ -23,7 +23,7 @@
 
 ## Results
 
-(filled per wave)
+- R1 `be97f6f5`, D1 `9d18e000`, V1 `e766aca0`, review ISSUES -> fixes `2eb17cb7`, `0809863c`, `de1d843e` -> OK; PR #95 -> `main` 7b9a9b65; Release `v8.0.0`; PyPI publish run 37771690138 success; the downloaded wheel 11 of 11; the published portal shows five activity levels on 130 nodes.
 
 ## Notes
 

@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** wave 3 — `beadloom-nh7h` ∥ `beadloom-ytcg` (gate owner); then F-jcng, V1 → V2 → V3; T → R → W → P.
+**Bead:** none — the work item shipped on 2026-10-08 (PR #94, `main` 539ed4a3); epic `beadloom-btkd` closed.
 **Goal:** a viewer without visual artefacts, an activity metric that means something, five defects fixed.
 **Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
 
