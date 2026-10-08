@@ -431,3 +431,53 @@ test("lanes partition the siblings of one rule: at the top, and inside a scope b
   expect(partitioned).toBeGreaterThan(0);
   expect(crossed).toEqual([]);
 });
+
+// A file that carries every rule's keys and declares one rule is drawn as the same
+// file without them (the file keeps its schema version, and a viewer reading the old
+// keys sees what it saw). The viewer reads the new keys where a file has them and
+// the old ones where it has not; on a project of one layer rule the two readings
+// must be one picture. The file is made from the served one by keeping its first
+// rule by name, whose placement the old keys carry: a node's layer is its
+// `layer_rank`. A rule scoped to a box would add its layer boxes, which
+// `layer-boxes.spec.js` holds, so such a scope is left out here.
+
+/** `data` reduced to its first layer rule, placed as the old keys place it. */
+function firstRuleOnly(data) {
+  const [first] = layerRulesOf(data);
+  const nodes = data.nodes.map((node) => ({
+    ...node,
+    layer_rule: typeof node.layer_rank === "number" ? first.name : "",
+    layer_rule_rank: typeof node.layer_rank === "number" ? node.layer_rank : null,
+  }));
+  const reduced = { ...data, nodes, layer_rules: [first] };
+  return layerBoxesOf(reduced).length ? { ...reduced, layer_rules: [{ ...first, scope: "" }] } : reduced;
+}
+
+/** What one served file draws: every node's place, look and box, the legend, and the filter's values. */
+async function drawingOf(page, data) {
+  await page.unroute("**/architecture.data.json");
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  await openArchitecture(page);
+  await openEveryBox(page, { edges: false });
+  const looks = Object.fromEntries(
+    (await viewer(page, "nodeLooks")).map((look) => [look.id, [look.parent, look.fill, look.borderColour, look.shape]])
+  );
+  return {
+    positions: await viewer(page, "positions"),
+    looks,
+    legend: await page.locator("[data-legend-layer]").evaluateAll((items) => items.map((item) => [item.dataset.legendLayer, item.textContent.trim()])),
+    filter: await page.getByLabel("Layer", { exact: true }).locator("option").evaluateAll((options) => options.map((option) => option.value)),
+  };
+}
+
+test("a file of one layer rule is drawn the same with every rule's keys as without them", async ({ page, request }) => {
+  const served = await architectureData(request);
+  requireShape(layerRulesOf(served).length > 0, "no layer rule; a project declares its layers with a layer rule in .beadloom/_graph/rules.yml");
+  const oneRule = firstRuleOnly(served);
+
+  const withKeys = await drawingOf(page, oneRule);
+  const withoutKeys = await drawingOf(page, withoutLayerRules(oneRule));
+
+  expect(withKeys.legend.length).toBeGreaterThan(1);
+  expect(withKeys).toEqual(withoutKeys);
+});
