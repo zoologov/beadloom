@@ -86,7 +86,23 @@ files bound to no node (`beadloom-k6ou`, each excused — the reason the impact 
 bound tests" and the debt report says "not counted"); 49 features with no acceptance scenario;
 262 documents with no `ref_id`; complexity smells 35 of the 42.5 points (oversized 9, high
 fan-out 10, dormant 14). Four slices, each with its own measure (A tests, B scenarios, C docs,
-D smells); BDL-080 S2 takes `site-graph-viewer`'s oversized smell. **Needs `/task-init`.**
+D smells); BDL-080 S2 takes `site-graph-viewer`'s oversized smell.
+
+Owner, 2026-10-09, three more slices, agreed with two conditions: **E the Beads upgrade** —
+every claim the composed CLAUDE.md measured on bd 1.0.4 (the merge-slot forms, `--suggest-next`'s
+16-of-23 shapes, the `bd list` caps) is re-measured on the new version and confirmed or
+rewritten, in a claim / was / is table; **F the agents' capability check** — Claude Code and
+Cursor against their current docs (agent frontmatter, hooks, skills, MCP), the deltas applied to
+the role templates and `setup-agentic-flow`; **G dependencies** — Python, the portal scaffold
+(VitePress, Cytoscape, elkjs, Playwright) and GitHub Actions, each major verified by the full tree
+and the six adopter stacks. The conditions: the work recurs, so the one-off pass lives here and
+the recurrence goes into the flow (Dependabot or Renovate for dependencies; a "tooling baseline"
+duty in the release role); the epic stays sliced, one PR per slice, never a bag.
+Owner, 2026-10-09, the template slice (`beadloom-cnty`) covers all six flow documents, not
+ACTIVE alone: header fields with a fixed vocabulary (`Status`, `Approval: approved|delegated by
+the owner on <date>`), no quotations in metadata, the section set and order enforced by the
+Gate — the files are filled by template, without free prose.
+**Needs `/task-init`.**
 
 ### 2. `beadloom-j4gi` — the rules leave the graph folder and are decomposed (P1, not started; the second epic, with `beadloom-tvjp`)
 

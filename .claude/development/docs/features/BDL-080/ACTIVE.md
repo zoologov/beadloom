@@ -1,13 +1,13 @@
 # ACTIVE: BDL-080 — The portal is a service, and the viewer serves a Feature-Sliced frontend
 
-> **Last updated:** 2026-10-08
+> **Last updated:** 2026-10-09
 > **Phase:** Development
 
 ---
 
 ## Current Bead
 
-**Bead:** S2a `beadloom-7jgr` (the cut) · S3a `beadloom-cwzc` (the resolver) · S4a/b/c (`beadloom-5pxv`, `beadloom-bjrw`, `beadloom-e1xo`) — as `beadloom waves` allows.
+**Bead:** PAUSED by the owner on 2026-10-09 (evening). S2c `beadloom-af99.8` landed as `23963f84` (Steiger green; `site-graph-edge/node/layer` → `site-graph-edges/nodes/layers`; `lint:fsd` in CI site-build) — its dev agent was finishing the combined-tree gate and the close when the pause was called; check `bd show beadloom-af99.8` first: if still in_progress, read its comments, run the gate (pytest unit+integration, ruff, mypy, lint, doctor) and close it. Then, each alone per `beadloom waves`: S4e `beadloom-af99.9` (brand corrections), S3d `beadloom-chdx`, S4c `beadloom-e1xo`; then S2T/S2R/S2W/S2P, S3T/…, S4T/…. Wave-1 gate (S3b + S4a): 8536 passed on a detached worktree (removed), one path-sensitive self-check test red there only (noted on `beadloom-tnya`).
 **Goal:** the site a service, every layer rule drawn (S1); then S2, S3, S4.
 **Done when:** every PRD goal's *Done when* holds; four PRs merged; a MINOR release.
 
@@ -37,14 +37,17 @@
 | `beadloom-z30s` | S1P | ✓ done | PR, merge on green |
 
 | `beadloom-7jgr` | S2A | ✓ done | the viewer cut into ten slices, eight new nodes; four moves; dump byte-identical; Steiger 13 errors, all `insignificant-slice` and `inconsistent-naming` (left red, reason on the bead); chromium 325 + performance 10 green |
-| `beadloom-5wh2` | S2B | ready | cohesion rule, overlays |
+| `beadloom-5wh2` | S2B | ✓ done | `tag_prefix` on a matcher; six per-layer cohesion checks (80 widgets / 60 rest, measured 65 / 56); fsd+ddd overlays restated, `cohesion` duty in dev/explore/review; Steiger in gate_coverage; commit `bebbbd7d` |
+| `beadloom-af99.9` | S4E | ready | brand corrections from the owner's look (2026-10-09): the square icon is the only mark, bigger + monochrome in the nav, theme-adaptive favicon, Powered by without a link, adopter favicon from site.logo, azuredevops, square social preview |
+| `beadloom-af99.8` | S2C | in progress | Steiger green by the owner's ruling: `insignificant-slice` off with the reason, slices renamed, `lint:fsd` in CI with the style linters |
 | `beadloom-cwzc` | S3A | ✓ done | tsconfig `paths`/`baseUrl` (JSON with comments; nearest folder's configs, relative `extends`), `imports.aliases:` (refused like `activity:`; `init` writes a text scan of `babel.config.*`/`vite.config.*` and says so), `.ios .android .native .web` before each extension, `.mjs`/`.cjs` parsed (closes `beadloom-zd4m`); tsconfig + aliases in the manifest fingerprint. Synthetic Vue tree: Vite aliases 0/4 -> 4/4, baseUrl 0/1 -> 1/1, edges 13 -> 18; synthetic Expo tree: relative 4/7 -> 8/8, tsconfig `@/` 0/2 -> 2/2, Babel aliases 2/9 -> 10/10, edges 3 -> 14. Six fixtures identical (imports, edges, file index) |
-| `beadloom-wbqd` | S3B | ready | Expo module bridge |
+| `beadloom-wbqd` | S3B | ✓ done | `graph/expo_modules.py`: uses edges from the module's TS node to its ios/android parts, rebuilt with the import edges, in the manifest fingerprint; init writes `<name>`, `<name>-ios`, `<name>-android`; 38 cases; commit `5a7d5ac2`; combined-tree gate of wave 1 falls to the coordinator after S4a lands |
 | `beadloom-5t8d` | S3C | ✓ done | `fsd` preset first (src/ or root, >= 3 layers); slices `component` `fsd-<layer>` part_of the root, app/shared containers of segments, legacy folders `fsd-legacy`; rules.yml: `fsd-layers` (scope, title), `slice_public_api`, `slice_shape`, six `fsd-cohesion-*` checks (no `tag_prefix`); `lint:fsd` written; no import edge frozen into the YAML; init names the code as what fails. Synthetic tree: 3 of 3 planted violations found |
 | `beadloom-chdx` | S3D | ready | two fixtures, matrix 8 |
-| `beadloom-5pxv` | S4A | ready | lint totals, debt inside |
+| `beadloom-5pxv` | S4A | ✓ done | `lint_reach.py`, `page_map.py`; data file: top-level `lint` {errors, warnings, nodes_with_findings, nodeless[]}, `debt.inside` {nodes, score, by_reason}; dashboard `pages` + two panels; card «none — this project: 0 errors, 69 warnings on 27 nodes», box debt own/inside; 11 Playwright + 20 pytest cases; dump byte-identical; commit `35a69743`; 4 wording questions for the owner |
 | `beadloom-bjrw` | S4B | ready | legend from the canvas |
 | `beadloom-e1xo` | S4C | ready | Source link |
+| `beadloom-af99.7` | S4D | ✓ done (commits `afa468b5`, `43046bde`; brand files in `site_scaffold/public/brand/`; `site.logo`, `site.powered_by`, `site.repo_icon`; footer widget slice `site-powered-by`; 3 overview cases red from the extra slice → S4b/S4T) | the portal's logo: `site.logo`, `site.powered_by`, favicon, brand files (approved 2026-10-09; files parked in presentation/public/brand/ until it lands). Footer: icon + «Powered by Beadloom»; line 2: MIT + GitHub link with the header's GitHub icon. Header link = the adopter's `site.repo_url`, its icon derived from the host (github/gitlab/bitbucket/codeberg/gitea/generic git) with override `site.repo_icon` |
 | `beadloom-tnya` | S2T | blocked | |
 | `beadloom-cp4u` | S2R | blocked | |
 | `beadloom-s6mb` | S2W | blocked | |

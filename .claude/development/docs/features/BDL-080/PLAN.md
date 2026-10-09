@@ -21,7 +21,8 @@ graph TD
     S1T --> S1R[S1 review] --> S1W[S1 docs] --> S1P[S1 PR]
     S1P --> S2a[S2a the cut: ten slices as nodes, four moves]
     S2a --> S2b[S2b cohesion rule: tag_prefix, check per tag; roles]
-    S2b --> S2T[S2 test] --> S2R[S2 review] --> S2W[S2 docs] --> S2P[S2 PR]
+    S2b --> S2c[S2c Steiger green by ruling; lint:fsd in CI]
+    S2c --> S2T[S2 test] --> S2R[S2 review] --> S2W[S2 docs] --> S2P[S2 PR]
     S3a[S3a resolver: tsconfig paths, aliases key, suffixes, mjs/cjs] --> S3b[S3b Expo module bridge edges]
     S3a --> S3c[S3c init fsd preset + rules_gen + slice_public_api + slice_shape]
     S3c --> S3d[S3d two fixtures + matrix 8 legs]
@@ -30,9 +31,12 @@ graph TD
     S1P --> S4a[S4a lint totals, nodeless, debt inside in the data file + card]
     S1P --> S4b[S4b legend from the canvas; one-kind dash]
     S1P --> S4c[S4c Source link on an unpushed build]
+    S1P --> S4d[S4d the portal's logo: site.logo, site.powered_by, favicon, brand files]
     S4a --> S4T[S4 test]
     S4b --> S4T
     S4c --> S4T
+    S4d --> S4e[S4e brand corrections]
+    S4e --> S4T
     S4T --> S4R[S4 review] --> S4W[S4 docs] --> S4P[S4 PR]
     S2P --> REL[release MINOR]
     S3P --> REL
@@ -56,7 +60,8 @@ Epic: `beadloom-af99`.
 | S1P | `beadloom-z30s` | coordinator: S1 PR, merge on green | P0 | S1W |
 | S2a | `beadloom-7jgr` | dev: the cut — ten slices as nodes, four moves, byte-identical dump | P0 | S1P |
 | S2b | `beadloom-5wh2` | dev: cohesion — `tag_prefix`, `check` per FSD tag calibrated, `fsd` and `ddd` overlays, explore/dev protocols | P0 | S2a |
-| S2T/R/W/P | `beadloom-tnya` `beadloom-cp4u` `beadloom-s6mb` `beadloom-jkqc` | as S1 | P0 | chain |
+| S2c | `beadloom-af99.8` | dev: Steiger green by the owner's ruling — `insignificant-slice` off with the reason, slices renamed, `lint:fsd` in CI (2026-10-09) | P0 | S2b |
+| S2T/R/W/P | `beadloom-tnya` `beadloom-cp4u` `beadloom-s6mb` `beadloom-jkqc` | as S1 | P0 | chain (S2T after S2c) |
 | S3a | `beadloom-cwzc` | dev: resolver — tsconfig paths/baseUrl, `imports.aliases`, platform suffixes, `.mjs/.cjs` | P0 | - |
 | S3b | `beadloom-wbqd` | dev: Expo module bridge edges (`expo-module.config.json` → `uses`) | P1 | S3a |
 | S3c | `beadloom-5t8d` | dev: `init` fsd preset, legacy as nodes, rules_gen with `layers`+`scope`, `slice_public_api`, `slice_shape`, cohesion `check` | P0 | S3a |
@@ -65,6 +70,8 @@ Epic: `beadloom-af99`.
 | S4a | `beadloom-5pxv` | dev: `lint` totals and nodeless findings, debt inside — data file and card | P1 | S1P |
 | S4b | `beadloom-bjrw` | dev: legend from the canvas; one-kind aggregated dash | P1 | S1P |
 | S4c | `beadloom-e1xo` | dev: the Source link on an unpushed build; `source_ref`; the warning | P1 | S1P |
+| S4e | `beadloom-af99.9` | dev: brand corrections from the owner's look — the square icon is the only mark; theme-adaptive monochrome favicon; footer line 1 without a link; adopter favicon from site.logo (2026-10-09) | P1 | S4d |
+| S4d | `beadloom-af99.7` | dev: the portal's logo — `site.logo`, `site.powered_by`, the favicon, the brand files, the social preview (owner, 2026-10-09) | P1 | S1P |
 | S4T/R/W/P | `beadloom-brgd` `beadloom-xkrn` `beadloom-n644` `beadloom-3dqv` | as S1 | P1 | chain |
 | REL | — | the MINOR release (its own /task-init, by BDL-079's recipe) | P1 | S2P, S3P, S4P |
 

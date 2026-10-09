@@ -14,7 +14,7 @@
 ## Progress
 
 - [x] Explore axes (`axes.md`); three probes (`RND.md`); the owner's fourteen rulings; PRD approved (2026-10-05)
-- [x] RFC, CONTEXT, PLAN — approval delegated by the owner ("Утверждаю, дальше веди сам", 2026-10-05)
+- [x] RFC, CONTEXT, PLAN — approval delegated by the owner on 2026-10-05
 - [x] Beads: epic `beadloom-btkd`, eight from one plan, five existing defects wired in
 - [ ] Development
 - [x] Test, review, docs, the owner's look, PR (merged 2026-10-08, #94)
