@@ -778,7 +778,7 @@ test("a closed box large enough to say it says how many edges come in and how ma
 /** Plan `input` with the shipped router, in the page. */
 function plan(page, input) {
   return page.evaluate(async (given) => {
-    const { planOverview } = await import("/widgets/graph-viewer/lib/overviewRoutes.js");
+    const { planOverview } = await import("/shared/grid-routing/overviewRoutes.js");
     const { paths, failed } = planOverview(given);
     return { paths: Object.fromEntries(paths), failed };
   }, input);
@@ -939,7 +939,7 @@ test("a line drawn along its medoid, where the router found it no route, has its
   const options = { headRun: 15, headRunStep: 1, headRunClearance: 4, cellSize: 50, bandWidth: 8 };
   const routes = await page.evaluate(
     async (given) => {
-      const { lengthenLineEnds } = await import("/widgets/graph-viewer/lib/headRuns.js");
+      const { lengthenLineEnds } = await import("/shared/bundling/headRuns.js");
       return Object.fromEntries(lengthenLineEnds(given.input, given.options));
     },
     {
@@ -1101,7 +1101,7 @@ test("every port of the overview lies on the straight part of a side: a line mee
 test("the pill search passes over a too-dear stretch of a run at once and tries the very points it tries asking at each", async ({ page }) => {
   await openThemeModules(page);
   const found = await page.evaluate(async () => {
-    const { candidatesOf } = await import("/widgets/graph-viewer/lib/pillPoints.js");
+    const { candidatesOf } = await import("/shared/geometry/pillPoints.js");
     // Three runs, the middle one long and level; along it, stretches where a pill would cover other lines.
     const line = { points: [{ x: 0, y: 0 }, { x: 0, y: 300 }, { x: 900, y: 300 }, { x: 900, y: 20 }], heads: [true, true] };
     const spans = [[100, 260], [180, 400.5], [610, 700], [700, 702]];

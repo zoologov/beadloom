@@ -1,7 +1,7 @@
 // beadloom:component=site-graph-viewer
 // The map drawn on the canvas: which boxes are open and closed, and the level they make drawn on Cytoscape.
 //
-// The levels are decided in `lib/levels.js`; this is what they do to Cytoscape.
+// The levels are decided in `shared/map-levels/levels.js`; this is what they do to Cytoscape.
 // A closed box keeps its place and its size, ELK's, and its children are taken
 // out of the graph with `cy.remove` and put back with `restore`: elements hidden
 // with `display: none` stay in the graph, and Cytoscape keeps spending time on
@@ -9,19 +9,19 @@
 // everything it had, where it was.
 //
 // The pairs of drawn ends a level holds are drawn as aggregated edges, elements
-// of the map's own (`aggregateElements.js`). An aggregated edge the budget
+// of the map's own (`features/overview-map/model/aggregateElements.js`). An aggregated edge the budget
 // leaves out is taken out of the graph as well, and each end it would join
 // carries the count (`hiddenEdges`); while the pointer is on an end, or the end
 // is selected, all of its edges are drawn. A closed box carries how many edges
 // come into it and go out of it (`tally`), the ones left out included. What the
 // pointer, a selection and the test handle draw besides — a node's own lines,
-// edges as themselves, stubs, a walk's counts — is `mapExtras.js`'s; an edge
+// edges as themselves, stubs, a walk's counts — is `features/overview-map/model/mapExtras.js`'s; an edge
 // from a node to a box that holds it is drawn by a line of its own along its
-// route (`loopLines.js`).
+// route (`shared/map-levels/loopLines.js`).
 //
 // The map's marks keep one size on screen at a scale stepped with the zoom, and
 // the titles and boxes drawn larger than their layout are dressed at it
-// (`mapTitles.js`), every node's corners too (`nodeCorners.js`). An edge out of
+// (`features/overview-map/model/mapTitles.js`), every node's corners too (`nodeCorners.js`). An edge out of
 // the graph is given the scale when it is put back, so it comes back at the size
 // of the rest: Cytoscape restyles an element out of the graph as it does one in
 // it, and giving every edge of the file the scale at each step restyled them
@@ -45,28 +45,37 @@ import {
   LAYER_BOX,
   LEVEL_OPTIONS,
   MAP_SCALE,
+  OUTWARD,
   PROJECT_BOX,
+  STUB_AT,
+  TALLY,
   boxTreeOf,
   boxesRevealing,
   budgetOf,
   isWithinAny,
   levelOf,
+  loopLines,
   openInView,
   outwardOf,
   smallestChildOf,
   zoomDrawingOf,
-} from "../lib/levels.js";
-import { STUB_AT } from "../lib/heads.js";
-import { OUTWARD, TALLY } from "../lib/mapMarks.js";
-import { routePointsOf } from "../lib/lineMarks.js";
-import { aggregateElements, isOwnLine, talliesOf, weigh } from "./aggregateElements.js";
+} from "../../../shared/map-levels/index.js";
+import { routePointsOf } from "../../../entities/graph-edge/index.js";
+import {
+  FORCED,
+  aggregateElements,
+  isOwnLine,
+  mapExtras,
+  overviewPlanner,
+  scaleAt,
+  talliesOf,
+  titleDresser,
+  titleLooks,
+  weigh,
+} from "../../../features/overview-map/index.js";
 import { isLoop } from "./canvasLayout.js";
-import { giveData, setClass } from "./canvasMarks.js";
-import { loopLines } from "./loopLines.js";
-import { FORCED, mapExtras } from "./mapExtras.js";
-import { scaleAt, titleDresser, titleLooks } from "./mapTitles.js";
+import { giveData, setClass } from "../../../shared/canvas-marks/index.js";
 import { nodeCorners } from "./nodeCorners.js";
-import { overviewPlanner } from "./overviewPlan.js";
 
 const sameSet = (a, b) => a.size === b.size && [...a].every((id) => b.has(id));
 
@@ -113,7 +122,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   let ownPairs = [];
   // The edges of the file a line other than their box's draws now: as themselves, or on a node's own line.
   let drawnElsewhere = new Set();
-  // The lines that end as a stub at an open box, and the box (`mapExtras.js`).
+  // The lines that end as a stub at an open box, and the box (`features/overview-map/model/mapExtras.js`).
   let stubs = new Map();
   // The scale the map is drawn at: the overview plan's, read from ELK's boxes, from the first drawing on
   // (`apply`), so the first fit measures the map as the overview draws it. Without a plan, the scale of the
@@ -142,7 +151,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     if (scale === null) scale = scaleAt(fitZoom());
     return scale;
   }
-  /** The map's drawing now, as the titles read it (`mapTitles.js`). */
+  /** The map's drawing now, as the titles read it (`features/overview-map/model/mapTitles.js`). */
   const drawnNow = () => ({ scale: scaleNow(), hiddenAt, grownNow, ownEnds });
   const corners = nodeCorners(cy);
   /** The route an edge of the file is drawn along, bundled, or null. */
@@ -450,7 +459,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     scale: scaleNow,
     /** A number that changes whenever what the map draws or the scale it draws at changes. */
     version: () => version,
-    /** What the overview's last plan was (`overviewPlan.js`): `{ ms, unit, routed, failed, grown, plates }`. */
+    /** What the overview's last plan was (`features/overview-map/model/overviewPlan.js`): `{ ms, unit, routed, failed, grown, plates }`. */
     plan: () => planner.report(),
     /**
      * The room box `id` holds besides its children as drawn, or null: for the box
@@ -464,7 +473,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
       return boxes.reduce((a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) }));
     },
     fitZoom,
-    /** The least zoom at which node `id` is drawn as itself and readable (`lib/levels.js`, `zoomDrawingOf`). */
+    /** The least zoom at which node `id` is drawn as itself and readable (`shared/map-levels/levels.js`, `zoomDrawingOf`). */
     zoomDrawing: (id) => zoomDrawingOf(tree, id, smallest, fitZoom(), options),
     /** Whether a change of the view is still to be read: the boxes open may be about to change. */
     pending: () => queued,

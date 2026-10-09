@@ -17,7 +17,7 @@ import { freshId } from "../../../shared/ids/index.js";
 import { EDGE_STYLES, edgeKeyOf, isDrawnKind, styleKeyOf } from "../../../entities/graph-edge/index.js";
 import { statusOf } from "../../../entities/graph-node/index.js";
 import { lanesOf, layerToneOf } from "../../../entities/layer/index.js";
-import { LAYER_BOX, STACK_LANES } from "./levels.js";
+import { LAYER_BOX, STACK_LANES } from "../../../shared/map-levels/index.js";
 
 function nodeElement(node, { parents, layers }, lanes, scopes) {
   const data = {

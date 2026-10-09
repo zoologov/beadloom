@@ -12,7 +12,8 @@
     "docs:build": "vitepress build .",
     "docs:preview": "vitepress preview .",
     "dev-check": "node scripts/dev-optimize-check.mjs",
-    "test:e2e": "playwright test -c e2e"
+    "test:e2e": "playwright test -c e2e",
+    "lint:fsd": "steiger .vitepress/theme"
   },
   "dependencies": {
     "cytoscape": "3.34.1",
@@ -22,8 +23,10 @@
     "vue-echarts": "8.1.0"
   },
   "devDependencies": {
+    "@feature-sliced/steiger-plugin": "0.8.0",
     "@playwright/test": "1.63.0",
     "mermaid": "11.17.0",
+    "steiger": "0.7.0",
     "vitepress": "1.6.4",
     "vitepress-plugin-mermaid": "2.0.17"
   }

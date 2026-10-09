@@ -46,7 +46,7 @@ import {
 import { withTwoMoreEdges } from "./support/perturbedGraph.js";
 import { requireShape } from "./support/shape.js";
 import { architectureData, openArchitecture, openEveryBox, viewer, withAncestors } from "./support/viewer.js";
-import { layerBoxesOf } from "./support/layers.js";
+import { layerBoxesOf, layerScopesOf } from "./support/layers.js";
 
 /** The one weight every line is drawn at, in pixels on screen. */
 const LINE_PX = 1.35;
@@ -162,10 +162,14 @@ async function openLayout(page, layout, data) {
   await openArchitecture(page);
 }
 
-/** The top-level box holding the most nodes; the case is skipped without one. */
+/**
+ * The top-level box holding the most nodes; the case is skipped without one. A box holding a scoped rule's layer
+ * boxes is not one: it holds layer boxes rather than nodes (`layerScopesOf`, `layer-boxes.spec.js`).
+ */
 function largestTopBox(data, tree) {
   const held = (box) => data.nodes.filter((n) => n.id !== box && withAncestors([n.id], tree.parents).has(box)).length;
-  const box = [...tree.topBoxes].sort((a, b) => held(b) - held(a) || (a < b ? -1 : 1))[0];
+  const scopes = layerScopesOf(data);
+  const box = [...tree.topBoxes].filter((id) => !scopes.has(id)).sort((a, b) => held(b) - held(a) || (a < b ? -1 : 1))[0];
   requireShape(Boolean(box), "no box at the top of the containment tree");
   return box;
 }

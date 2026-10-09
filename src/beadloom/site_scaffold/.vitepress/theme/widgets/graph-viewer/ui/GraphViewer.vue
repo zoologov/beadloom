@@ -24,7 +24,7 @@
 // edge — under the pointer, or on a selection's walk — is drawn on top of every
 // edge it crosses, over a casing, so it can be followed through a busy area.
 //
-// The graph is drawn like a map (`lib/levels.js`): at the whole-graph fit the
+// The graph is drawn like a map (`shared/map-levels/levels.js`): at the whole-graph fit the
 // boxes at the top and one aggregated edge per pair of them, more detail where
 // the reader zooms in: a box opens once its nodes are readable. An open box keeps
 // its edges to the outside on its own lines; a node in it says how many of its
@@ -61,6 +61,7 @@ import {
   NEIGHBOURHOOD_KINDS,
   adjacencyOf,
   dependentsOf,
+  edgePaletteOf,
   legendKeysOf,
 } from "../../../entities/graph-edge/index.js";
 import { LayerLegend, hasUnlayeredNode, layerBoxesOf, layerOfNode, layersOf } from "../../../entities/layer/index.js";
@@ -88,10 +89,9 @@ import { childrenOf, subtreeOf, withAncestors } from "../../../shared/lib/index.
 import { useThemeTokens } from "../../../shared/theme-tokens/index.js";
 import { buildElements } from "../lib/elements.js";
 import { buildStylesheet } from "../lib/stylesheet.js";
-import { edgePaletteOf } from "../lib/edgePalette.js";
-import { AGGREGATE, boxTreeOf, endsOfLine, selectionReveals } from "../lib/levels.js";
+import { AGGREGATE, boxTreeOf, endsOfLine, selectionReveals } from "../../../shared/map-levels/index.js";
 import { useGraphCanvas } from "../model/useGraphCanvas.js";
-import { SAID } from "../model/aggregateElements.js";
+import { SAID } from "../../../features/overview-map/index.js";
 import { keyHandler } from "../model/viewerKeys.js";
 import { exposeTestHandle } from "../model/testHandle.js";
 import { usePanelId } from "../model/usePanelId.js";

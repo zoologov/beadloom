@@ -1,0 +1,14 @@
+  # BDL-080 S2a (`beadloom-7jgr`): the viewer cut by cohesion into Feature-Sliced
+  # slices (RFC D3). A segment of the site's `shared` layer is a node of its own,
+  # `part_of site-shared` and tagged `fsd-shared`: two segments importing each
+  # other are peers inside one tagged container, which `site-fsd-layers` allows.
+nodes:
+  - ref_id: site-shared-geometry
+    kind: component
+    summary: "The plane geometry of the drawn graph: indexes of what lies near a place and which routes run through a point, ELK's routes as segments, corner radii, boxes grown around their titles, an aggregated line's route from its edges' routes, and where a line's count may stand"
+    source: src/beadloom/site_scaffold/.vitepress/theme/shared/geometry/
+    tags: [fsd-shared]
+edges:
+  - src: site-shared-geometry
+    dst: site-shared
+    kind: part_of

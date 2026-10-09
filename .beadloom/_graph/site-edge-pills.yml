@@ -1,0 +1,13 @@
+  # BDL-080 S2a (`beadloom-7jgr`): the viewer cut by cohesion into Feature-Sliced
+  # slices (RFC D3). The slice carries its FSD layer as a tag, and
+  # `site-fsd-layers` in rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-edge-pills
+    kind: component
+    summary: "The map's counts drawn over the canvas: a line's count on a pill, a closed box's edges in and out, and a node's outward count"
+    source: src/beadloom/site_scaffold/.vitepress/theme/features/edge-pills/
+    tags: [fsd-features]
+edges:
+  - src: site-edge-pills
+    dst: vitepress-site
+    kind: part_of

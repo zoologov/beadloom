@@ -9,7 +9,7 @@
 // A node is drawn as the legend draws its layer, whether it holds other nodes or
 // not: a thin border in its layer's tone over a tint of it, its title in the
 // middle, its corners rounded at one radius on screen whatever its size and the
-// zoom, a box's as a card's (`lib/corners.js`). Its status is a mark in its top right corner (`NODE_STATUSES`),
+// zoom, a box's as a card's (`shared/geometry/corners.js`). Its status is a mark in its top right corner (`NODE_STATUSES`),
 // filled for an error finding or stale docs and a ring for warn findings only,
 // and never changes its border, which stays its layer's. A box that is open is a
 // fainter tint of its layer's tone inside a thin solid border, its title inside
@@ -22,12 +22,12 @@
 //
 // Every line has one thin weight, at every zoom, whatever its kind, its count or
 // its state; kinds differ by colour and dash. A line is one colour from end to
-// end (`lib/edgePalette.js`), and its arrowhead carries the direction: one size
+// end (`entities/graph-edge/lib/edgePalette.js`), and its arrowhead carries the direction: one size
 // on screen where its run has room for it, on a straight run of its own, and one
 // head where lines share their last run, the others ending at its base
-// (`lib/lineMarks.js`, `lib/heads.js`). A followed line is drawn again
+// (`entities/graph-edge/lib/lineMarks.js`, `entities/graph-edge/lib/heads.js`). A followed line is drawn again
 // on top by the layer over the canvas, with its label when it is under the
-// pointer (`model/followedOverlay.js`); Cytoscape draws no edge label but a
+// pointer (`features/follow-edge/model/followedOverlay.js`); Cytoscape draws no edge label but a
 // landscape badge. While the pointer rests on a node, its lines are drawn on
 // top in the same way and every other line falls back to a fainter look.
 //
@@ -35,56 +35,55 @@
 // node or edge is dimmed, or hidden when the reader asks for it. In impact mode
 // a node's fill is its distance ring's tone, and a risky node carries a dashed
 // danger outline. A dimmed node is drawn see-through, a dimmed line opaque in
-// its colour faded towards the background (`lib/edgePalette.js`).
+// its colour faded towards the background (`entities/graph-edge/lib/edgePalette.js`).
 //
-// The map (`lib/levels.js`) adds its own looks. A closed box's title, and a
+// The map (`shared/map-levels/levels.js`) adds its own looks. A closed box's title, and a
 // top-level node's while the map titles it, is drawn at the size its data names,
-// inside its box or above it on a plate with a border (`lib/mapMarks.js`); a
+// inside its box or above it on a plate with a border (`shared/map-levels/mapMarks.js`); a
 // top-level node too small for its title is drawn at the size its data names,
-// around its laid-out box (`lib/grownBoxes.js`); an aggregated edge is a solid
+// around its laid-out box (`shared/geometry/grownBoxes.js`); an aggregated edge is a solid
 // line with an arrowhead at each end edges arrive at, its count on a pill drawn
-// over the canvas (`model/pillOverlay.js`). Every size that keeps one size on screen
+// over the canvas (`features/edge-pills/model/pillOverlay.js`). Every size that keeps one size on screen
 // whatever the zoom multiplies by the map's scale, which every mark of the map
 // and every line keeps in its data.
 
-import { mixRgb } from "../../../shared/theme-tokens/index.js";
-import { EDGE_STYLES, dashOf } from "../../../entities/graph-edge/index.js";
+import { RING_TONES, mixRgb } from "../../../shared/theme-tokens/index.js";
+import {
+  DIMMED_SHARE,
+  EDGE_STYLES,
+  NO_SOURCE_HEAD,
+  NO_TARGET_HEAD,
+  arrowScaleOf,
+  dashOf,
+  dashOffsetOf,
+  dashOnScreen,
+  edgeCornerRadiiOf,
+  edgePaletteOf,
+  endHeadLength,
+  headEndsOf,
+  lineWidthOf,
+} from "../../../entities/graph-edge/index.js";
 import { NODE_STATUSES } from "../../../entities/graph-node/index.js";
 import { LAYER_FILL_SHARE, LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layer/index.js";
-import { RING_TONES } from "../../../features/impact-view/index.js";
-import { DIMMED_SHARE, edgePaletteOf } from "./edgePalette.js";
-import { NO_SOURCE_HEAD, NO_TARGET_HEAD, STUB_AT, headEndsOf } from "./heads.js";
-import { CORNER } from "./corners.js";
-import { AGGREGATE, COLLAPSED, HIDDEN_EDGES, LOOP_END, PROJECT_BOX } from "./levels.js";
-import { arrowScaleOf, dashOffsetOf, dashOnScreen, edgeCornerRadiiOf, endHeadLength, lineWidthOf } from "./lineMarks.js";
-import { MAP_BOX, MAP_MARKS, MAP_TITLE, boxMarkInsetOf, boxMarkOf, plateLiftOf, scaleOf, titleOf } from "./mapMarks.js";
-
-/**
- * A node's sizes, in layout units. `outerWidth` and `outerHeight` are a leaf's
- * size with its border, the size the layout places it by, and the same whatever
- * its status: a status is a mark inside the card, so a finding moves no node.
- */
-export const GEOMETRY = Object.freeze({
-  outerWidth: 163,
-  outerHeight: 47,
-  /** A node's title size, in layout units. */
-  nodeTitle: 12,
-  cardBorder: 1.5,
-  boxBorder: 1,
-  selectedBorder: 3,
-  riskOutlineWidth: 4,
-  /** A status mark's side, and how far it sits in from the card's top right corner. */
-  statusMark: 10,
-  statusMarkInset: 6,
-  /** How far an open box's title sits below its top border. */
-  boxTitleInset: 20,
-  /**
-   * The room an open box keeps above its children for its title: the title,
-   * drawn `boxTitleInset` in, ends about 22.5 below the border, and the children
-   * keep about the 12 ELK keeps from a border below it (`shared/elk`, `boxTop`).
-   */
-  boxTitleRoom: 36,
-});
+import { CORNER } from "../../../shared/geometry/index.js";
+import {
+  AGGREGATE,
+  COLLAPSED,
+  GEOMETRY,
+  HIDDEN_EDGES,
+  LOOP_END,
+  MAP_BOX,
+  MAP_MARKS,
+  MAP_TITLE,
+  PROJECT_BOX,
+  STUB_AT,
+  boxMarkInsetOf,
+  boxMarkOf,
+  drawnSizeOf,
+  plateLiftOf,
+  scaleOf,
+  titleOf,
+} from "../../../shared/map-levels/index.js";
 
 /** How much of a ring's tone a node's fill takes; the rest is the node's usual fill. */
 const RING_FILL_SHARE = 0.55;
@@ -105,7 +104,7 @@ const PROJECT_FRAME = Object.freeze({ borderPx: 1, border: "text3", tint: "text1
 /**
  * The curve style of an edge the layout did not route. Every line drawn has a
  * route — an edge into the node's own box too, by a line of its own to an end
- * on the box's border (`model/loopLines.js`) — so this is a fallback only.
+ * on the box's border (`shared/map-levels/loopLines.js`) — so this is a fallback only.
  */
 export const CURVE_STYLE = "bezier";
 
@@ -173,7 +172,7 @@ function nodeRules(tokens) {
         "text-max-width": GEOMETRY.outerWidth - 20,
       },
     },
-    // The radius the map gives a drawn node's corners, in layout units (`lib/corners.js`); a node it gives none keeps Cytoscape's own.
+    // The radius the map gives a drawn node's corners, in layout units (`shared/geometry/corners.js`); a node it gives none keeps Cytoscape's own.
     { selector: `node[${CORNER}]`, style: { "corner-radius": (node) => node.data(CORNER) } },
     ...tones.map((tone) => ({
       selector: `node[tone = "${tone}"]`,
@@ -246,7 +245,7 @@ const pixels = (value) => `${decimal(value)}px`;
 
 /**
  * The rules that draw ELK's geometry: a box at the size ELK gave it, and an edge
- * along ELK's route (`lib/routes.js`) with its corners rounded (`lib/lineMarks.js`).
+ * along ELK's route (`shared/geometry/routes.js`) with its corners rounded (`entities/graph-edge/lib/lineMarks.js`).
  * Their values are read from each element's data, so a stylesheet rebuilt for
  * another theme draws the same geometry.
  */
@@ -334,7 +333,7 @@ function edgeRules(tokens, palette) {
   ];
 }
 
-/** An edge behind the lines of the node under the pointer (`model/canvasMarks.js`, `BEHIND`): its own look faded towards the background. */
+/** An edge behind the lines of the node under the pointer (`shared/canvas-marks/canvasMarks.js`, `BEHIND`): its own look faded towards the background. */
 function behindEdgeRules(palette) {
   return Object.keys(EDGE_STYLES).map((key) => ({
     selector: `edge.is-behind[styleKey = "${key}"]`,
@@ -428,29 +427,6 @@ function mapTitleRule(tokens) {
   };
 }
 
-/** The border a node of the map is drawn with at rest: a closed box's, or a card's. */
-const borderOf = (node) => (node.hasClass(COLLAPSED) ? GEOMETRY.boxBorder : GEOMETRY.cardBorder);
-
-/**
- * The size `node`'s shape is drawn at, in layout units, `{ width, height }`, read
- * from its data as the rules here size it: the box the map draws it as, its
- * border taken off; ELK's box; or a card's. Read from the data rather than from
- * Cytoscape, whose sizes trail a change of the data made in the same batch.
- */
-export function drawnSizeOf(node) {
-  const grown = node.data(MAP_BOX);
-  if (grown) return { width: grown.width - borderOf(node), height: grown.height - borderOf(node) };
-  const box = node.data("box");
-  if (box) return { width: box.width, height: box.height };
-  return { width: GEOMETRY.outerWidth - GEOMETRY.cardBorder, height: GEOMETRY.outerHeight - GEOMETRY.cardBorder };
-}
-
-/** How far `node`'s border reaches outside its shape at rest, in layout units: half of it, drawn on its edge; none of the project's frame, drawn inside. */
-export function rimOf(node) {
-  if (node.hasClass(PROJECT_BOX)) return 0;
-  return (node.isParent() || node.hasClass(COLLAPSED) ? GEOMETRY.boxBorder : GEOMETRY.cardBorder) / 2;
-}
-
 /** The map's looks: a closed box and its title, a top-level node's title and size, an aggregated edge, a count of hidden edges. */
 function mapRules(tokens) {
   const tones = [...LAYER_TONES, UNLAYERED_TONE];
@@ -491,7 +467,7 @@ function mapRules(tokens) {
 
 /**
  * The ends that draw no arrowhead because another line on their last run draws
- * it (`lib/heads.js`), or that start where another line arrives along its last
+ * it (`entities/graph-edge/lib/heads.js`), or that start where another line arrives along its last
  * run: such a line ends at that head's base rather than on into the head, past
  * its sides near the tip and in its own colour across it.
  */

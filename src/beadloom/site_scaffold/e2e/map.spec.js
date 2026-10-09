@@ -299,7 +299,7 @@ test("wherever the pointer rests at the overview, it draws the left-out edges of
 async function leftOutByBudget(page, pairs, budget = AGGREGATE_BUDGET) {
   return page.evaluate(
     async ({ list, most }) => {
-      const { budgetOf } = await import("/widgets/graph-viewer/lib/levels.js");
+      const { budgetOf } = await import("/shared/map-levels/levels.js");
       return [...budgetOf(list, most)].sort();
     },
     { list: pairs, most: budget }

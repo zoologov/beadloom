@@ -1,0 +1,13 @@
+  # BDL-080 S2a (`beadloom-7jgr`): the viewer cut by cohesion into Feature-Sliced
+  # slices (RFC D3). The slice carries its FSD layer as a tag, and
+  # `site-fsd-layers` in rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-follow-edge
+    kind: component
+    summary: "Following a line: every edge along a hovered line and on a selection's walk drawn again over the canvas, and the lines that share a run with one arrowhead at a shared last run"
+    source: src/beadloom/site_scaffold/.vitepress/theme/features/follow-edge/
+    tags: [fsd-features]
+edges:
+  - src: site-follow-edge
+    dst: vitepress-site
+    kind: part_of

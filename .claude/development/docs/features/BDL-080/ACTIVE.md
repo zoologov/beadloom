@@ -36,7 +36,7 @@
 | `beadloom-af99.6` | S1g | ✓ done | cause: the runner, not S1e (same node `application`, same move at 8.0.0; the old case red 5/5 at 6x CPU throttling on both commits, green 5/5 at 4x); fix: the navigation model counts the frames its move is drawn over, the handle's `move()` reads it, the case judges 1 frame reduced and > 1 otherwise: 5/5 green at 4x (7-8 frames), 6x (3), 20x (2); committed as `e5fd94cb`; tech-writer pass: `navigate-graph.md` gains `lastMove()`, `graph-viewer.md` the handle's `move`, the two hash-only pairs attested after reading; stale 4 -> 0, `beadloom ci` rc 0; pushed, CI to read |
 | `beadloom-z30s` | S1P | ✓ done | PR, merge on green |
 
-| `beadloom-7jgr` | S2A | in progress | the cut |
+| `beadloom-7jgr` | S2A | ✓ done | the viewer cut into ten slices, eight new nodes; four moves; dump byte-identical; Steiger 13 errors, all `insignificant-slice` and `inconsistent-naming` (left red, reason on the bead); chromium 325 + performance 10 green |
 | `beadloom-5wh2` | S2B | ready | cohesion rule, overlays |
 | `beadloom-cwzc` | S3A | ✓ done | tsconfig `paths`/`baseUrl` (JSON with comments; nearest folder's configs, relative `extends`), `imports.aliases:` (refused like `activity:`; `init` writes a text scan of `babel.config.*`/`vite.config.*` and says so), `.ios .android .native .web` before each extension, `.mjs`/`.cjs` parsed (closes `beadloom-zd4m`); tsconfig + aliases in the manifest fingerprint. Synthetic Vue tree: Vite aliases 0/4 -> 4/4, baseUrl 0/1 -> 1/1, edges 13 -> 18; synthetic Expo tree: relative 4/7 -> 8/8, tsconfig `@/` 0/2 -> 2/2, Babel aliases 2/9 -> 10/10, edges 3 -> 14. Six fixtures identical (imports, edges, file index) |
 | `beadloom-wbqd` | S3B | ready | Expo module bridge |

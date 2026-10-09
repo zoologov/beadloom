@@ -1,7 +1,7 @@
 // beadloom:component=site-graph-viewer
 // The corners of the drawn nodes: the radius each is drawn at for the map's scale, held where a line ends near one.
 //
-// The rule is `lib/corners.js`'s; this reads what it needs off the canvas, its
+// The rule is `shared/geometry/corners.js`'s; this reads what it needs off the canvas, its
 // sizes from the data (`drawnSizeOf`), so it can run in the batch a level is
 // drawn in. Each time a level is drawn, every line's two ends are found where
 // its route meets a node's border, and each node keeps the room the end nearest
@@ -9,9 +9,8 @@
 // out again at each step of the map's scale, and written only where it changed,
 // so a zoom step restyles no card whose corners stay as they were.
 
-import { CORNER, cornerRadiusOf, cornerRoomOf } from "../lib/corners.js";
-import { LOOP_END, LOOP_OF } from "../lib/levels.js";
-import { drawnSizeOf, rimOf } from "../lib/stylesheet.js";
+import { CORNER, cornerRadiusOf, cornerRoomOf } from "../../../shared/geometry/index.js";
+import { LOOP_END, LOOP_OF, drawnSizeOf, rimOf } from "../../../shared/map-levels/index.js";
 
 /** How far a line's end may lie off a node's border and still be on it, in pixels on screen. */
 const ON_BORDER_PX = 0.5;

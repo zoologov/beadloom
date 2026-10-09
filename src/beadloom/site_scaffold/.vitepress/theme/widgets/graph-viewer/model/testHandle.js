@@ -32,10 +32,9 @@
 
 import { idRecord } from "../../../shared/ids/index.js";
 import { isLoop } from "./canvasLayout.js";
-import { BEHIND, DISTANCE_DATA, IN_FRONT } from "./canvasMarks.js";
-import { AGGREGATE, COLLAPSED, HIDDEN_EDGES, LOOP_END, LOOP_OF, STUB_AT, endsOfLine } from "../lib/levels.js";
-import { MAP_TITLE } from "../lib/mapMarks.js";
-import { pathOfSegments } from "../lib/routes.js";
+import { BEHIND, DISTANCE_DATA, IN_FRONT } from "../../../shared/canvas-marks/index.js";
+import { AGGREGATE, COLLAPSED, HIDDEN_EDGES, LOOP_END, LOOP_OF, MAP_TITLE, STUB_AT, endsOfLine } from "../../../shared/map-levels/index.js";
+import { pathOfSegments } from "../../../shared/geometry/index.js";
 
 const HANDLE = "__beadloomViewer";
 
@@ -244,7 +243,7 @@ function readers(source) {
   const rect = () => source.container().getBoundingClientRect();
   const originals = () => cy().edges().filter((edge) => !isAggregate(edge));
   // The nodes drawn: the file's and the boxes a scoped layer rule draws (`LAYER_BOX`,
-  // `lib/levels.js`); a loop's end is a point the viewer draws a line to, not a node.
+  // `shared/map-levels/levels.js`); a loop's end is a point the viewer draws a line to, not a node.
   const fileNodes = () => cy().nodes().not(`.${LOOP_END}`);
   return {
     // Laid out, and holding still: no animated move under way and no change of the view left to read.
