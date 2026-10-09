@@ -20,9 +20,9 @@ import yaml
 
 from beadloom.onboarding.scanner import rules_gen
 from beadloom.onboarding.scanner.rules_gen import FSD_COHESION_LIMITS
+from tests.support.repository_root import REPO_ROOT
 
-_ROOT = Path(__file__).resolve().parents[3]
-_RULES = _ROOT / ".beadloom" / "_graph" / "rules.yml"
+_RULES = REPO_ROOT / ".beadloom" / "_graph" / "rules.yml"
 
 
 def _prose(text: str) -> str:
