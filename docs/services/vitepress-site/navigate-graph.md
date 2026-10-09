@@ -35,17 +35,24 @@ no shape (`beadloom-btkd.10`).
 not fit at that zoom, centres on `focus` instead. The viewer frames every selection this way, at
 the zoom where the selected node is drawn as itself and readable. Animated, the move takes
 `FRAME_MS` (350 ms, `ease-in-out-cubic`); a reader whose browser asks for reduced motion
-(`prefers-reduced-motion: reduce`) is moved at once.
+(`prefers-reduced-motion: reduce`) is moved at once. Each framing move is recorded where it is
+made (BDL-080 S1g): Cytoscape's step callback counts the frames an animated move is drawn over,
+because a reader of the zoom from outside can start too late on a slow machine to see the move.
 
 ## Public API
 
 - `NAVIGATION_OPTIONS`, `ZOOM_STEP`, `FIT_PADDING`, `FIT_MAX_ZOOM`.
 - `useGraphNavigation(getCy, { getInset })` returns `panOnNodes()`, `zoomIn()`, `zoomOut()`,
-  `fit(selector)`, `fitZoom({ drawing })`, `frame({ box, focus, leastZoom }, { animate })` and
-  `centre(id)`. `panOnNodes` is called once the graph holds its
+  `fit(selector)`, `fitZoom({ drawing })`, `frame({ box, focus, leastZoom }, { animate })`,
+  `lastMove()` and `centre(id)`. `panOnNodes` is called once the graph holds its
   nodes. `fit` fits the visible elements the selector names, or everything visible. `centre`
   centres on a node, or on what is visible when no node is named. `getInset()` returns
   `{ right }` in pixels.
+- `lastMove()` returns a copy of the last framing move `frame` made, animated or not, as
+  `{ animated, from, to, frames, done }`: the zoom it left, the zoom it ends at, how many of
+  Cytoscape's frames drew it (one per step of an animated move, 1 for a move made at once with
+  `cy.viewport`), and `done` once the animation's `complete` callback has run (`true` at once
+  when not animated). It returns `null` before any `frame()`.
 - `NavigationControls` (Vue component): no props; events `zoom-in`, `zoom-out`, `fit`, `centre`.
 
 ## Depends on
@@ -59,4 +66,6 @@ node; no page offers a control that moves nodes; on the architecture page and on
 drag and a long press on a node pan the view and move no node, whatever toolbar button was
 pressed before; the keys and the buttons zoom, fit and clear the selection. Framing a selection,
 animated and with reduced motion, is held by `levels.spec.js` and `metrics.spec.js` on the
-viewer.
+viewer. The reduced-motion case in `levels.spec.js` judges the move by `lastMove()`, read through
+the test handle's `move`: reduced, one frame and not animated; otherwise animated over more than
+one frame.

@@ -392,8 +392,10 @@ that leaves the page removes only its own. Records keyed by a node id have no pr
 `outwardMarks` answer such a record before the map has drawn a count and after. It reads:
 
 - the canvas: `ready` (false while the view is animated or a change is still to be read),
-  `visibleIds`, `selection`, `state`, `positions`, `pan`, `zoom`, `boxes` (page coordinates),
-  `nodeBoxes` (drawn boxes, graph coordinates), `colours`, `statusLooks` (with `mark`);
+  `visibleIds`, `selection`, `state`, `positions`, `pan`, `zoom`, `move` (the last move that
+  framed a selection or a search, `site-navigate-graph`'s `lastMove()`: `{ animated, from, to,
+  frames, done }`, or `null` before any), `boxes` (page coordinates), `nodeBoxes` (drawn boxes,
+  graph coordinates), `colours`, `statusLooks` (with `mark`);
 - the looks: `nodeLooks` (fill, border and its position, title, status mark, shape, size,
   `cornerRadius`), `lineLooks` (every drawn line: width, dash and `dashOffset`, colour, arrows,
   `arrowScale`, `sourceDistance` / `targetDistance`, `cornerRadii`, `walk`, `dimmed`, `front`,
