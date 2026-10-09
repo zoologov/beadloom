@@ -22,7 +22,7 @@
 // drawn in passes, every casing lies under every line. A followed line is drawn
 // as Cytoscape draws it — the same route, the same corners, the same sizes on
 // screen, a dashed line's pattern ending a dash inside its head
-// (`entities/graph-edge/lib/lineMarks.js`) — and always with its arrowhead, also where it shares its
+// (`entities/graph-edges/lib/lineMarks.js`) — and always with its arrowhead, also where it shares its
 // last run with a line that carries the head at rest.
 //
 // What is followed is read again on `refresh`, whenever the hover, the
@@ -45,7 +45,7 @@ import {
   headLengthOf,
   lineWidthOf,
   routePointsOf,
-} from "../../../entities/graph-edge/index.js";
+} from "../../../entities/graph-edges/index.js";
 import { mixRgb } from "../../../shared/theme-tokens/index.js";
 import { crossesAny } from "../../../shared/geometry/index.js";
 import { AGGREGATE, COLLAPSED, MAP_TITLE, scaleOf } from "../../../shared/map-levels/index.js";

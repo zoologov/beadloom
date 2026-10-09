@@ -192,7 +192,7 @@ def test_no_css_variable_reaches_cytoscape() -> None:
 
 def test_violation_edges_have_their_own_style() -> None:
     """A depends_on the layer rule judged against the layers is drawn as a violation."""
-    kinds = _read("entities/graph-edge/model/edgeKinds.js")
+    kinds = _read("entities/graph-edges/model/edgeKinds.js")
     assert 'edge.kind === "depends_on" && edge.violation === true' in kinds
     assert "[VIOLATION_KEY]: {" in kinds
     assert 'edge[styleKey = "violation"]' in _read("widgets/graph-viewer/lib/stylesheet.js")

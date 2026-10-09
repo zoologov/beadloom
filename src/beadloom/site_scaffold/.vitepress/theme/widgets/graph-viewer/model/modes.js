@@ -20,7 +20,7 @@
 // landscape page are two pages, and a query cannot turn one into the other.
 
 import { useArchitectureData } from "../../../entities/architecture-data/index.js";
-import { DEPENDENT_ENDS } from "../../../entities/graph-edge/index.js";
+import { DEPENDENT_ENDS } from "../../../entities/graph-edges/index.js";
 import {
   CONTRACT_DEPENDENT_ENDS,
   landscapeGraphOf,

@@ -71,7 +71,7 @@ in full screen it sits beside the canvas.
   open panel covers. Keys, while focus is in the viewer: `+` and `-` zoom, `0` fits, `f` toggles
   full screen, `Esc` clears the selection.
 - **Layer boxes** (BDL-080 S1c). A layer rule whose scope is a box other than the project's frame
-  draws one box per layer inside that box (`site-layer`, `layerBoxesOf`). The viewer draws from
+  draws one box per layer inside that box (`site-layers`, `layerBoxesOf`). The viewer draws from
   that containment, `drawnParents`: the elements, the filters' ancestors, and the selection's
   kept nodes, holders and selected box read it. The card and impact read the file's own
   `parents`, because a layer box is no node of the graph. `buildElements` emits each layer box as
@@ -135,7 +135,7 @@ The stylesheet (`lib/stylesheet.js`) is built from theme tokens resolved to lite
 values and rebuilt when VitePress switches between light and dark; no colour is a fallback.
 
 - **A node is a card.** Leaf or box, it is drawn as the legend draws its layer: a thin border in
-  its layer's tone over a tint of it (`LAYER_FILL_SHARE`, 0.16, `site-layer`), its title in the
+  its layer's tone over a tint of it (`LAYER_FILL_SHARE`, 0.16, `site-layers`), its title in the
   middle. A node in no layer takes the `text2` tone, and the legend then names "no layer". Its
   corners keep one radius on screen at every zoom, 8 px (`lib/corners.js`, `NODE_CORNER_PX`), a
   quarter of its shorter side where that is less, and a corner gives way where a line ends nearer
@@ -143,7 +143,7 @@ values and rebuilt when VitePress switches between light and dark; no colour is 
   The overview's boxes have the same rounded corners as the nodes (owner, 2026-10-07).
 - **Status is a corner mark** (owner's ruling 5): a dot 10 units across in the top right corner,
   filled for an error finding or a stale document, a ring for warn findings only (`NODE_STATUSES[s].mark`,
-  `site-graph-node`). The border stays its layer's, so a status moves nothing.
+  `site-graph-nodes`). The border stays its layer's, so a status moves nothing.
 - **An open box** is a fainter tint of its layer's tone (0.07) inside a thin solid border, its
   title inside at the top. ELK keeps 36 units above a box's children for that title
   (`GEOMETRY.boxTitleRoom`, `shared/elk`, `boxTop`).
@@ -165,7 +165,7 @@ detail, and every node's border keeps 3:1 (`look.spec.js`, `metrics.spec.js`).
   by colour and dash only. A count is said on a pill, never in the width.
 - **No gradient** (ruling 3). A line is one colour from end to end; its arrowhead carries the
   direction. At rest a line takes its kind's share of its tone over the background
-  (`EDGE_STYLES[k].strength`, `site-graph-edge`): an import is a light neutral, a violation the
+  (`EDGE_STYLES[k].strength`, `site-graph-edges`): an import is a light neutral, a violation the
   full danger colour. A followed line is drawn in its full tone. A line outside a selection is its
   rest colour faded towards the background at full opacity (`DIMMED_SHARE` 0.14), because edges
   drawn along one trunk at opacity 0.14 would add up to about four fifths of full strength. While
@@ -487,8 +487,8 @@ old junction index.
 
 - `site-filter-graph`, `site-navigate-graph`, `site-select-neighbourhood`, `site-impact-view`,
   `site-fullscreen`, `site-url-state` (features).
-- `site-architecture-data`, `site-landscape-data`, `site-graph-node`, `site-graph-edge`,
-  `site-layer` (entities).
+- `site-architecture-data`, `site-landscape-data`, `site-graph-nodes`, `site-graph-edges`,
+  `site-layers` (entities).
 - `site-shared` (`cytoscape`, `elk`, `ids`, `theme-tokens`, `lib`).
 
 ## Tests

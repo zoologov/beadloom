@@ -67,9 +67,9 @@ it holds `ui`, `model`, `lib` or `api` segments as it needs them. Each slice is 
 | `entities` | [`site-architecture-data`](vitepress-site/architecture-data.md) | `architecture.data.json` and its schema version. |
 | `entities` | [`site-landscape-data`](vitepress-site/landscape-data.md) | `landscape.data.json`, its contracts' health, and which are verified. |
 | `entities` | [`site-dashboard-data`](vitepress-site/dashboard-data.md) | `dashboard.data.json`. |
-| `entities` | [`site-graph-node`](vitepress-site/graph-node.md) | A node's status, its risks and its container. |
-| `entities` | [`site-graph-edge`](vitepress-site/graph-edge.md) | Edge kinds, their styles, the legend, and which edges a walk follows. |
-| `entities` | [`site-layer`](vitepress-site/layer.md) | The declared layers, and their colours. |
+| `entities` | [`site-graph-nodes`](vitepress-site/graph-nodes.md) | A node's status, its risks and its container. |
+| `entities` | [`site-graph-edges`](vitepress-site/graph-edges.md) | Edge kinds, their styles, the legend, and which edges a walk follows. |
+| `entities` | [`site-layers`](vitepress-site/layers.md) | The declared layers, and their colours. |
 | `shared` | [`site-shared`](vitepress-site/shared.md) | Browser checks, JSON loading, tree walks, shell quoting, theme tokens, Cytoscape, the ELK layout in a Web Worker, fresh ids, ECharts and the copy button. |
 
 This node keeps what belongs to no slice: `theme/index.js`, the file VitePress looks for, which
@@ -101,7 +101,7 @@ relative imports between theme files, which resolve to the files they name. The 
 places. Since BDL-080 the portal draws this rule beside `architecture-layers`: the slices are
 coloured by their FSD layer, the legend has one group per rule, and `vitepress-site` opens onto
 six layer boxes, app, pages, widgets, features, entities and shared, stacked top to bottom
-([`site-layer`](vitepress-site/layer.md)). An edge either rule finds against is drawn red.
+([`site-layers`](vitepress-site/layers.md)). An edge either rule finds against is drawn red.
 
 ## What the tools show
 

@@ -12,7 +12,7 @@ function choices(values) {
  * first, each a value or `{ value, text }`. A layer's value is its label, which
  * says its rule's name where more than one rule is drawn, and is what the URL
  * carries; its text is its caption, which says the rule's title where the rule
- * declares one (`entities/layer`).
+ * declares one (`entities/layers`).
  */
 export function filterOptions(nodes, layers) {
   return {

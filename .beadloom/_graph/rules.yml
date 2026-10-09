@@ -267,7 +267,7 @@ rules:
   # Calibrated on the index after the viewer was cut into slices (S2a, f85ae435),
   # measured on 2026-10-09 over the 28 fsd-tagged components: widgets own at most
   # 65 (site-graph-viewer; then site-dashboard 17), every other layer at most 56
-  # (site-shared-map-levels; then site-graph-edge and site-shared-bundling 53,
+  # (site-shared-map-levels; then site-graph-edges and site-shared-bundling 53,
   # site-shared-geometry 49, the site-shared container 41), pages at most 5, app 1.
   # So 80 for widgets -- the one layer that composes, and ~23% over its largest --
   # and 60 for the rest, which the largest shared segment sits 4 under: the next

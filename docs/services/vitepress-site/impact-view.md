@@ -14,7 +14,7 @@ toolbar's **Impact** button switches between it and the neighbourhood. The walk 
 selected node to what depends on it, then to what depends on those, and so on. Each reached node
 is drawn in the ring of its fewest steps: the selection is ring 0, direct dependents ring 1, and
 every distance from the last tone on shares that tone. Which end of an edge depends on the other
-is the mode's table (`site-graph-edge`, `site-landscape-data`), so one walk serves both modes.
+is the mode's table (`site-graph-edges`, `site-landscape-data`), so one walk serves both modes.
 
 - **Architecture** (`lib/impact.js`). The walk goes backwards along `depends_on`, `uses` and
   `consumes`. The summary gives the count, the rings, the domains and services that hold the
@@ -48,7 +48,7 @@ the reconciler recorded. A click on a node in the risk list selects it.
 
 ## Depends on
 
-- `site-graph-node`, `site-graph-edge`, `site-layer`, `site-landscape-data` (entities).
+- `site-graph-nodes`, `site-graph-edges`, `site-layers`, `site-landscape-data` (entities).
 - `site-shared`, for `breadthFirst`, `shellQuote`, the theme variables of the ring swatches and
   `CopyCommand`.
 

@@ -25,8 +25,8 @@
 
 import { computed } from "vue";
 import { withBase } from "vitepress";
-import { boxEdgesOf, edgeGroupsOf } from "../../../entities/graph-edge/index.js";
-import { layerOfNode, ownsLayer } from "../../../entities/layer/index.js";
+import { boxEdgesOf, edgeGroupsOf } from "../../../entities/graph-edges/index.js";
+import { layerOfNode, ownsLayer } from "../../../entities/layers/index.js";
 import { shellQuote } from "../../../shared/lib/index.js";
 import { boxTreeOf } from "../../../shared/map-levels/index.js";
 import { CopyCommand } from "../../../shared/ui/index.js";

@@ -32,7 +32,7 @@ export const ALONG_HOVER = "is-along-hover";
 /** The class of every line of the node under the pointer, drawn in front of the rest. */
 export const IN_FRONT = "is-in-front";
 
-/** The class of every other line while the pointer rests on a node: drawn fainter (`entities/graph-edge/lib/edgePalette.js`, `behind`). */
+/** The class of every other line while the pointer rests on a node: drawn fainter (`entities/graph-edges/lib/edgePalette.js`, `behind`). */
 export const BEHIND = "is-behind";
 
 /** The edges a reader is following: on the line under the pointer, on a selection's walk, or of the node under the pointer. */

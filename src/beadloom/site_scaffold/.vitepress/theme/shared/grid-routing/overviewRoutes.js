@@ -18,7 +18,7 @@
 //
 // Two lines never share a track, with one exception: lines that end at one box
 // and agree on having an arrowhead there may share their last run and end in one
-// port, so they end in one arrowhead (`entities/graph-edge/lib/heads.js`), and a line with a head never
+// port, so they end in one arrowhead (`entities/graph-edges/lib/heads.js`), and a line with a head never
 // shares its last run with one without. Lines that reach a box separately stay a
 // track apart. A line with no corner at all is accepted only when it is long
 // enough for the arrowheads it carries, so two boxes nearer than that are joined

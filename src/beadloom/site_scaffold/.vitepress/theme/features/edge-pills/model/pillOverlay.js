@@ -37,7 +37,7 @@
 // closed box's tally and each node's "+N", and where they were drawn.
 
 import { idRecord } from "../../../shared/ids/index.js";
-import { headEndsOf, headLengthOf, routePointsOf } from "../../../entities/graph-edge/index.js";
+import { headEndsOf, headLengthOf, routePointsOf } from "../../../entities/graph-edges/index.js";
 import { AGGREGATE, COLLAPSED, GEOMETRY, MAP_MARKS, MAP_TITLE, OUTWARD, OWN_LINE, TALLY } from "../../../shared/map-levels/index.js";
 import { PILL_MARKS, pillStagesOf } from "../../../shared/geometry/index.js";
 import { BEHIND, IN_FRONT, overlayCanvas } from "../../../shared/canvas-marks/index.js";

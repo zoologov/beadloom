@@ -27,7 +27,7 @@
 // move; and a segment another line runs along as well, a source's bus or a
 // trunk, does not move, since moving it would part the channel they share. No
 // node moves, and a line whose run is long enough keeps its route. Where the run
-// cannot be made long enough, the head is drawn smaller (`entities/graph-edge/lib/lineMarks.js`).
+// cannot be made long enough, the head is drawn smaller (`entities/graph-edges/lib/lineMarks.js`).
 //
 // The same pass gives room to the heads of a line the overview's router found no
 // route for (`shared/grid-routing/overviewRoutes.js`), drawn along the medoid of its edges' routes:

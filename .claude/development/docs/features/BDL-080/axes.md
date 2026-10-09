@@ -29,7 +29,7 @@
 
 ## Readers of `layers` rules
 
-loader `rules/loader.py:408-474`; lint `linter.py:271`, `evaluators.py:623`; `layer_reach.py`, `layer_crossings.py`, `layer_edges.py`, `layer_exemptions.py`, `layer_declaration.py`; index `reindex/rules_loader.py:99-123`; debt `debt_report/collect.py:330`; portal (`LIMIT 1`) `architecture_view.py:225,253`; prime `scanner/prime.py:39,56`; TUI `lint_panel.py:69,126`, `data_providers.py:182`; viewer `entities/layer/model/layers.js:65`, `GraphViewer.vue:133`, `modes.js:58`, `filterOptions.js:15`, `NodeCard.vue:39`; config-check: none; init: none.
+loader `rules/loader.py:408-474`; lint `linter.py:271`, `evaluators.py:623`; `layer_reach.py`, `layer_crossings.py`, `layer_edges.py`, `layer_exemptions.py`, `layer_declaration.py`; index `reindex/rules_loader.py:99-123`; debt `debt_report/collect.py:330`; portal (`LIMIT 1`) `architecture_view.py:225,253`; prime `scanner/prime.py:39,56`; TUI `lint_panel.py:69,126`, `data_providers.py:182`; viewer `entities/layers/model/layers.js:65`, `GraphViewer.vue:133`, `modes.js:58`, `filterOptions.js:15`, `NodeCard.vue:39`; config-check: none; init: none.
 
 ## Owners of `widgets/graph-viewer/**`
 

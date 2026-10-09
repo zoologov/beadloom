@@ -41,7 +41,7 @@ In order, the card shows:
 - its rule findings with their severity;
 - for a box, when the viewer passes `parents`, an **Inside** section (`data-card-field=contents`,
   BDL-078 `beadloom-btkd.7`): how many nodes it holds at any depth, and its edges out to and in
-  from each node its lines reach, with their counts (`boxEdgesOf`, `site-graph-edge`);
+  from each node its lines reach, with their counts (`boxEdgesOf`, `site-graph-edges`);
 - a link to the node's page, and `beadloom ctx <ref>` and `beadloom why <ref>` to copy.
 
 A field the data file holds nothing for says "none". A field a version 1 file does not carry at
@@ -55,7 +55,7 @@ all says "not recorded", because the two are different answers.
 
 ## Depends on
 
-- `site-graph-edge`, `site-layer` (entities).
+- `site-graph-edges`, `site-layers` (entities).
 - `site-shared`, for `shellQuote` and `CopyCommand`.
 
 ## Tests

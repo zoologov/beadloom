@@ -10,7 +10,7 @@
 //   instead (`shared/geometry/routeIndex.js`, `routesAlong`).
 // - **One arrowhead per shared last run**: lines that reach one end along one run
 //   would each draw a head there, on top of each other. Every line but one drops
-//   its head, by a class the stylesheet reads (`entities/graph-edge/lib/heads.js`), and ends at the
+//   its head, by a class the stylesheet reads (`entities/graph-edges/lib/heads.js`), and ends at the
 //   base of the head that stays; a line that reaches the end on its own keeps its own.
 //   A line that leaves its node beside where another's head arrives, close
 //   enough to run along the head's side, starts at that head's base too; and of
@@ -23,7 +23,7 @@
 // - **The room a head has**: the straight run behind its tip that every line
 //   ending there has before its last corner, or before another line crosses it
 //   (`headRoomsOf`, `shared/geometry/routeIndex.js`), which the head is sized to
-//   (`entities/graph-edge/lib/lineMarks.js`), kept in each line's data (`HEAD_ROOM`).
+//   (`entities/graph-edges/lib/lineMarks.js`), kept in each line's data (`HEAD_ROOM`).
 //
 // All three are found for the routed lines drawn now, aggregated edges of the
 // map included: a filter, a hidden neighbourhood or a level that removes a line
@@ -44,7 +44,7 @@ import {
   headEndsOf,
   headRoomsOf,
   routePointsOf,
-} from "../../../entities/graph-edge/index.js";
+} from "../../../entities/graph-edges/index.js";
 import { AGGREGATE } from "../../../shared/map-levels/index.js";
 import { routeIndexOf, routesAlong, segmentRect } from "../../../shared/geometry/index.js";
 import { setClass } from "../../../shared/canvas-marks/index.js";

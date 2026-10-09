@@ -4,7 +4,7 @@
 // A mark of the map carries the map's scale in its data, a power of 1.25 near
 // 1 / zoom (`widgets/graph-viewer/model/canvasMap.js`); multiplied by it, a size in pixels stays about
 // that many pixels on screen at any zoom. So does every line, which is drawn at
-// one weight whatever it carries (`entities/graph-edge/lib/lineMarks.js`).
+// one weight whatever it carries (`entities/graph-edges/lib/lineMarks.js`).
 //
 // A title is tried inside its box at 14, 12.5, 11 and 10 px, the largest that
 // fits with a little room around it and clear of the box's status mark; a title
@@ -29,7 +29,7 @@ import { HIDDEN_EDGES, MAP_SCALE } from "./levels.js";
  * at, the room it keeps from its box's edges, the height of a line of it as a
  * share of its size; a plate's padding, border and gap above its box; and a
  * status mark on a closed box and how far in from its corner it sits. A closed
- * box's tint is its layer's, as any node's (`entities/layer`, `LAYER_FILL_SHARE`).
+ * box's tint is its layer's, as any node's (`entities/layers`, `LAYER_FILL_SHARE`).
  */
 export const MAP_MARKS = Object.freeze({
   titleSizes: Object.freeze([14, 12.5, 11, 10]),

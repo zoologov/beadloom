@@ -347,7 +347,7 @@ One feature node covers the cooperating modules below (all annotated
   The `layer` field stays the short token — the declared tag with its
   conventional `layer-` prefix removed — and a tag that does not carry the prefix
   is used verbatim. Since BDL-076 A2 the viewer holds no table of those tokens:
-  its `site-layer` slice (`entities/layer/model/layers.js`) builds the layers
+  its `site-layers` slice (`entities/layers/model/layers.js`) builds the layers
   from the `layer_rank` values that occur, names each one by the `layer` of a
   node that declares it, and colours it by its position in the order, so an
   adopter whose layers are called differently gets its own names. `layer` reads

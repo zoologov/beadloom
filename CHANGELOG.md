@@ -77,9 +77,8 @@ names its bead; the pull request is to be opened.
   (`beadloom-7jgr`).** The graph viewer's 43 files are ten slices under `shared`, `entities`,
   `features` and `widgets`, each entered through its `index`, with a byte-identical dump of nine
   views before and after. The scaffold's `package.json` gains `steiger` and the `lint:fsd`
-  script with Steiger's `recommended` set; over the cut it reports 13 errors, 12
-  `insignificant-slice` and 1 `inconsistent-naming`, left red for the owner's ruling and run by
-  no CI job yet.
+  script with Steiger's `recommended` set; over the cut it reported 13 errors, 12
+  `insignificant-slice` and 1 `inconsistent-naming`, which `beadloom-af99.8` settles below.
 - **The portal names lint's reach and the findings bound to no node (`beadloom-5pxv`).**
   `architecture.data.json` gains a top-level `lint` with `errors`, `warnings`,
   `nodes_with_findings` and `nodeless`, a list of findings each with `rule`, `severity`, `message`,
@@ -120,6 +119,16 @@ names its bead; the pull request is to be opened.
 
 ### Changed
 
+- **Steiger passes on the scaffold, and this repository's CI runs it (`beadloom-af99.8`).** The
+  scaffold's `steiger.config.js` switches `fsd/insignificant-slice` off and says why beside the
+  switch: the theme is cut so that beads can run in parallel on disjoint graph nodes, not for
+  reuse, so a feature that one widget uses is the intended shape. Every other rule of the
+  `recommended` set stays on. Three `entities` slices take the plural that
+  `fsd/inconsistent-naming` asks for: `graph-edge`, `graph-node` and `layer` become
+  `graph-edges`, `graph-nodes` and `layers`, and their graph nodes `site-graph-edges`,
+  `site-graph-nodes` and `site-layers`. The next `docs site` retires the old folders' files from
+  a portal written by an earlier version. The `site-build` job runs `npm run lint:fsd` after
+  `npm ci`, so the Gate lists the FSD linter under `Not run by this gate:`.
 - **A `codeberg.org` repository link draws Codeberg's mark (`beadloom-af99.7`).** It drew
   Gitea's, the software Codeberg runs, and a host whose first label is `gitlab` or `gitea` now
   draws that forge's mark rather than git's own. The source links of either are unchanged.

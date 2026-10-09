@@ -60,7 +60,7 @@ import {
   smallestChildOf,
   zoomDrawingOf,
 } from "../../../shared/map-levels/index.js";
-import { routePointsOf } from "../../../entities/graph-edge/index.js";
+import { routePointsOf } from "../../../entities/graph-edges/index.js";
 import {
   FORCED,
   aggregateElements,

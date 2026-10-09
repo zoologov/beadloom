@@ -56,5 +56,5 @@ Decides which nodes the graph viewer shows, in each of its two modes.
 
 ## Depends on
 
-- `site-graph-node`, `site-layer`, `site-landscape-data` (entities).
+- `site-graph-nodes`, `site-layers`, `site-landscape-data` (entities).
 - `site-shared`.

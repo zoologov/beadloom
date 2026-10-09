@@ -22,10 +22,10 @@
 //
 // Every line has one thin weight, at every zoom, whatever its kind, its count or
 // its state; kinds differ by colour and dash. A line is one colour from end to
-// end (`entities/graph-edge/lib/edgePalette.js`), and its arrowhead carries the direction: one size
+// end (`entities/graph-edges/lib/edgePalette.js`), and its arrowhead carries the direction: one size
 // on screen where its run has room for it, on a straight run of its own, and one
 // head where lines share their last run, the others ending at its base
-// (`entities/graph-edge/lib/lineMarks.js`, `entities/graph-edge/lib/heads.js`). A followed line is drawn again
+// (`entities/graph-edges/lib/lineMarks.js`, `entities/graph-edges/lib/heads.js`). A followed line is drawn again
 // on top by the layer over the canvas, with its label when it is under the
 // pointer (`features/follow-edge/model/followedOverlay.js`); Cytoscape draws no edge label but a
 // landscape badge. While the pointer rests on a node, its lines are drawn on
@@ -35,7 +35,7 @@
 // node or edge is dimmed, or hidden when the reader asks for it. In impact mode
 // a node's fill is its distance ring's tone, and a risky node carries a dashed
 // danger outline. A dimmed node is drawn see-through, a dimmed line opaque in
-// its colour faded towards the background (`entities/graph-edge/lib/edgePalette.js`).
+// its colour faded towards the background (`entities/graph-edges/lib/edgePalette.js`).
 //
 // The map (`shared/map-levels/levels.js`) adds its own looks. A closed box's title, and a
 // top-level node's while the map titles it, is drawn at the size its data names,
@@ -62,9 +62,9 @@ import {
   endHeadLength,
   headEndsOf,
   lineWidthOf,
-} from "../../../entities/graph-edge/index.js";
-import { NODE_STATUSES } from "../../../entities/graph-node/index.js";
-import { LAYER_FILL_SHARE, LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layer/index.js";
+} from "../../../entities/graph-edges/index.js";
+import { NODE_STATUSES } from "../../../entities/graph-nodes/index.js";
+import { LAYER_FILL_SHARE, LAYER_TONES, UNLAYERED_TONE } from "../../../entities/layers/index.js";
 import { CORNER } from "../../../shared/geometry/index.js";
 import {
   AGGREGATE,
@@ -245,7 +245,7 @@ const pixels = (value) => `${decimal(value)}px`;
 
 /**
  * The rules that draw ELK's geometry: a box at the size ELK gave it, and an edge
- * along ELK's route (`shared/geometry/routes.js`) with its corners rounded (`entities/graph-edge/lib/lineMarks.js`).
+ * along ELK's route (`shared/geometry/routes.js`) with its corners rounded (`entities/graph-edges/lib/lineMarks.js`).
  * Their values are read from each element's data, so a stylesheet rebuilt for
  * another theme draws the same geometry.
  */
@@ -467,7 +467,7 @@ function mapRules(tokens) {
 
 /**
  * The ends that draw no arrowhead because another line on their last run draws
- * it (`entities/graph-edge/lib/heads.js`), or that start where another line arrives along its last
+ * it (`entities/graph-edges/lib/heads.js`), or that start where another line arrives along its last
  * run: such a line ends at that head's base rather than on into the head, past
  * its sides near the tip and in its own colour across it.
  */

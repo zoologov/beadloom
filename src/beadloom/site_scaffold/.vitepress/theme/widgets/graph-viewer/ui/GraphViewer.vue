@@ -55,7 +55,7 @@
 // asks; the containers of what it reached stay.
 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { NodeStatusLegend, parentMapOf, statusesOf } from "../../../entities/graph-node/index.js";
+import { NodeStatusLegend, parentMapOf, statusesOf } from "../../../entities/graph-nodes/index.js";
 import {
   EdgeLegend,
   NEIGHBOURHOOD_KINDS,
@@ -63,8 +63,8 @@ import {
   dependentsOf,
   edgePaletteOf,
   legendKeysOf,
-} from "../../../entities/graph-edge/index.js";
-import { LayerLegend, hasUnlayeredNode, layerBoxesOf, layerOfNode, layersOf } from "../../../entities/layer/index.js";
+} from "../../../entities/graph-edges/index.js";
+import { LayerLegend, hasUnlayeredNode, layerBoxesOf, layerOfNode, layersOf } from "../../../entities/layers/index.js";
 import {
   NAVIGATION_OPTIONS,
   NavigationControls,

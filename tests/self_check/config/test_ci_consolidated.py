@@ -7,7 +7,7 @@ The three independent PR workflows (``beadloom-gate.yml``, ``tests.yml``,
     ci.yml (on: pull_request -> main)
       gate        (ubuntu)               beadloom ci
       tests       (ubuntu, 3.10-3.13)    pytest matrix, NO paths filter
-      site-build  (ubuntu)               beadloom docs site + vitepress build
+      site-build  (ubuntu)               beadloom docs site + Steiger + vitepress build
       site-e2e    (ubuntu)               needs: site-build; Playwright, advisory
       ai-techwriter (self-hosted)        needs: [gate, tests, site-build]
 
