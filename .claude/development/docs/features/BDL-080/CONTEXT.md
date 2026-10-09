@@ -42,6 +42,7 @@ per slice; merge on green CI.
 | 2026-10-08 | Steiger's `recommended` set is the reference for the FSD rules | One owner project runs it; FSD's own linter |
 | 2026-10-08 | Layers as drawn boxes at the overview for a scoped rule (derived, not nodes); Steiger on the scaffold, run with the style linters, named by the Gate as not run | Owner: «слои блоками — согласен»; «Steiger должен и у нас появиться» |
 | 2026-10-09 | `title:` on a layers rule is the display name (legend, filter, card); the URL keeps the rule's name; a box holding a rule's layer boxes opens only once they are readable, even when selected | Owner: «делай через title, и фильтр тоже так показывай»; the owner's look at S1 |
+| 2026-10-09 | The release after BDL-080 is MAJOR: a `kind: site` node is judged by service rules, which can move `lint`'s exit code on an unedited project (Breaking by the public API guide); the alias stays everywhere rather than being narrowed to the portal | Owner: «1 вариант» — the strict reading over the narrowed alias and over 'site was never public' |
 | 2026-10-08 | Legend from the canvas, not the data; one-kind aggregated lines keep their dash | Owner's two legend observations (#uses, #contracts) |
 
 ## Related Files

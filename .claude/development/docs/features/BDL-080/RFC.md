@@ -11,8 +11,10 @@ Four slices, one PR each. S1 makes `vitepress-site` a service and draws every la
 cuts the viewer into FSD slices that are nodes and declares the cohesion rule, in the graph and
 in the roles. S3 closes the import resolver's gaps for Vue and React Native, gives `init` an FSD
 preset with the FSD rules, and adds two adopter fixtures shaped like the owner's own projects.
-S4 makes every number and colour on a card or legend name its population. The version is MINOR:
-every change adds, `kind: site` stays accepted, the data file's existing keys keep their meaning.
+S4 makes every number and colour on a card or legend name its population. The version is MAJOR
+(owner, 2026-10-09): the `site` alias lets service rules judge a `kind: site` node, which can move
+`lint`'s exit code on an unedited project; every other change adds, `kind: site` stays accepted,
+the data file's existing keys keep their meaning.
 
 ## Motivation
 
@@ -204,7 +206,8 @@ legend entry and every entry has a stroke.
 
 ### API Changes
 
-All additive (MINOR): `kind: site` accepted as an alias; rule keys `scope:` and `title:` (layers) and
+One Breaking (MAJOR): a `kind: site` node is judged by `kind: service` rules. Additive: the alias
+for the portal, pages, nav, docs and impact; rule keys `scope:` and `title:` (layers) and
 `tag_prefix:` (matchers); rule types `slice_public_api`, `slice_shape`; config key
 `imports.aliases`; data file keys `layer_rules`, `layer_rule`, `layer_rule_rank`, `source_ref`,
 `lint`, `debt.inside`; `init` preset `fsd`. The CHANGELOG's next section lists each under Added.

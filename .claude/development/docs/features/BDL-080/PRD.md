@@ -129,8 +129,10 @@ hand-written rule; every number and colour on a card or legend names its populat
 - Metrics cases: every colour and dash on the canvas has a legend entry; `Rule findings` and
   `Debt` on a box name their population; the Source link of a local build from an unpushed
   commit returns 200 on this repository's remote.
-- The version: MINOR (every change adds; `kind: site` stays accepted), unless the RFC finds an
-  incompatible change — then it is named and the owner rules.
+- The version: **MAJOR** (owner, 2026-10-09, after S1's docs): a `kind: site` node is now judged by
+  the service rules, so `lint`'s exit code can move on an unedited project — Breaking by the
+  public API guide; every other change adds, `kind: site` stays accepted. The first ruling under
+  the declared API, kept strict on purpose: the first exception would have voided the rule.
 
 ## Slices (one PR each, as agreed 2026-10-08)
 

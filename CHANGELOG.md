@@ -7,19 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-BDL-080 slice 1: the portal is a service, and every layer rule is drawn. Every change below adds
-to a public surface; nothing is removed or renamed, the data file stays schema 2, and
-`kind: site` stays accepted. Each line names its bead; the pull request is to be opened.
+BDL-080 slice 1: the portal is a service, and every layer rule is drawn. **The next version is
+major** (owner, 2026-10-09): one change under Breaking can move `lint`'s exit code on a project
+nobody edited, which the public API guide classes MAJOR. Everything else adds; nothing is
+removed or renamed, the data file stays schema 2, and `kind: site` stays accepted. Each line
+names its bead; the pull request is to be opened.
+
+### Breaking
+
+- **A node declared `kind: site` is judged as a `service` (`beadloom-je0i`).** A rule whose
+  matcher names `kind: service` now selects such a node — `service-needs-parent`, a `layers`
+  rule tagging services, a `check` over services — where before no rule could match the kind.
+  On a project that declares a `kind: site` node and such a rule, `beadloom lint --strict` can
+  exit 1 where it exited 0, and the Gate with it; the data file and `ctx --json` show the node's
+  `kind` as `service`. Nothing else is removed or renamed. Measured on this repository, where the
+  node was moved to `kind: service` and tagged `layer-service`: 0 errors before and after, and
+  `architecture-layers` judges 425 of 434 live `depends_on` edges, up from 381.
 
 ### Upgrading — what to check
 
 1. **Reindex**, so the rules index carries a layer rule's `scope` and `title`. An index written
    before them gives the portal the wider verdict and the rule's name until it is rebuilt.
-2. **A node declared `kind: site` is now judged as a `service`.** A rule whose matcher names
-   `kind: service` selects it, which it did not before, so such a rule can report on it. Run
-   `beadloom lint --strict` once on the new version. Measured on this repository, where the node
-   was moved to `kind: service` and tagged `layer-service`: 0 errors before and after, and
-   `architecture-layers` judges 425 of 434 live `depends_on` edges, up from 381.
+2. **If the graph declares a `kind: site` node**, run `beadloom lint --strict` once on the new
+   version and read what the service rules now report on it (see Breaking); give the node the
+   tags a service of the project carries, or move it to `kind: service` outright.
 
 ### Added
 
