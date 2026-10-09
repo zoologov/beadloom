@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.application.site.scaffold import MARKABLE_SUFFIXES, shipped_files
-from tests.support.adopter_portals import without_the_footer_link
+from tests.support.footer_link import without_the_footer_link
 from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:

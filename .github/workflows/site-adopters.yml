@@ -84,6 +84,7 @@ on:
       - "tests/support/adopter_portals.py"
       - "tests/support/committed_project.py"
       - "tests/support/contact_guard.py"
+      - "tests/support/footer_link.py"
       - "tests/support/portal_browser_suite.py"
       - "tests/support/repository_root.py"
       - "tests/support/self_check_snapshot.py"

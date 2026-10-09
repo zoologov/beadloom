@@ -21,7 +21,6 @@ which module imports which. A test compares the published data file with that.
 from __future__ import annotations
 
 import json
-import re
 import shutil
 import subprocess
 import time
@@ -433,19 +432,6 @@ def build_portal(fixture: AdopterFixture, workdir: Path, npm: str) -> BuiltPorta
     if built.steps["npm ci"].returncode == 0:
         built.steps["vitepress build"] = _run([npm, "run", "docs:build"], built.site)
     return built
-
-
-#: Beadloom's own repository, which the "Powered by Beadloom" footer links on every
-#: portal by the owner's ruling of 2026-10-09 (BDL-080 S4d, ``beadloom-af99.7``). It is
-#: the one mention of this repository a portal may carry, and only as this address:
-#: a path under it, or any other text of this repository's identity, is still a leak.
-BEADLOOM_REPOSITORY = "https://github.com/zoologov/beadloom"
-_FOOTER_LINK = re.compile(re.escape(BEADLOOM_REPOSITORY) + r"(?![\w./-])")
-
-
-def without_the_footer_link(text: str) -> str:
-    """*text* without the footer's link to Beadloom's repository, the one mention allowed."""
-    return _FOOTER_LINK.sub("", text)
 
 
 def this_repositorys_identity() -> tuple[str, ...]:

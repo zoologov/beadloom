@@ -26,11 +26,8 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from tests.support.adopter_portals import (
-    FIXTURES_BY_STACK,
-    this_repositorys_identity,
-    without_the_footer_link,
-)
+from tests.support.adopter_portals import FIXTURES_BY_STACK, this_repositorys_identity
+from tests.support.footer_link import without_the_footer_link
 
 if TYPE_CHECKING:
     from collections.abc import Callable

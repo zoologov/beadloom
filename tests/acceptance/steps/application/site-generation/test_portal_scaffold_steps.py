@@ -19,7 +19,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from beadloom.application.site.generate import SiteResult, generate_site
 from beadloom.application.site.scaffold import read_marker
 from beadloom.application.site.site_config import SiteConfigError
-from tests.support.adopter_portals import without_the_footer_link
+from tests.support.footer_link import without_the_footer_link
 from tests.support.scaffold_node_ids import node_ids_named, scaffold_node_ids
 from tests.support.tiered_project import write_zoned_import_project
 
