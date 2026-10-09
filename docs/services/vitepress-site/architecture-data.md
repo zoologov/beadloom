@@ -28,6 +28,27 @@ knows no forge. Nothing else from the git remote is in the file. `activity` carr
 the test files bound to the node itself, and the counts are taken over the node and its `part_of`
 descendants.
 
+Since BDL-080 S1 the file carries every layer rule the project declares, still as schema 2,
+because every key is added and none changes meaning for a project without `scope:`:
+
+- at the top level, `layer_rules`: one entry per `layers` rule, ordered by name, each
+  `{name, title, scope, edge_kind, layers}`. `title` is the rule's declared `title:` (`""` when
+  none), which the viewer shows the rule by; the `name` stays its identifier in the URL.
+  `scope` is the declared `scope:` or the container the rule is derived to stratify, `""` when
+  there is none. Each layer is `{name, rank, tag, token}`, and `token` here is the layer's name;
+- per node, `layer_rule` (the rule that places the node, `""` when none) and `layer_rule_rank`
+  (its rank in that rule, `null` when no rule places it). The node's own tag places it first,
+  then its nearest tagged `part_of` ancestor; at one distance the first rule by name wins;
+- per `depends_on` edge, `violation` is `true` when ANY rule finds against the edge. The key is
+  absent on an edge no rule judged, never `false`.
+
+`layers`, `layer_order` and each node's `layer` and `layer_rank` still describe the first
+`layers` rule by name, and since BDL-080 S1f they follow that rule's `scope:`: a node outside the
+scope has `layer` `""` and `layer_rank` `null` even when it carries the rule's tag, and an edge
+between two nodes no rule places carries no `violation` key. Without a `scope:` on the first
+rule the original keys are what they were. A file without `layer_rules` is read through the
+original keys, as before.
+
 A field a version 1 file does not carry is shown as "not recorded" and is never a risk. The full
 contract is in the
 [Site Generation SPEC](../../domains/application/features/site-generation/SPEC.md#the-architecture-data-file-schema-version-2).

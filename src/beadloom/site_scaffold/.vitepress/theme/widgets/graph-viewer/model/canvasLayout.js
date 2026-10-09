@@ -20,6 +20,7 @@
 import { idRecord } from "../../../shared/ids/index.js";
 import { bundleRoutes } from "../lib/bundles.js";
 import { centreOf, compoundSizeOf, pathOf, segmentsOf } from "../lib/routes.js";
+import { STACK_LANES } from "../lib/levels.js";
 
 /** Node sizes as Cytoscape lays them out: the shape, without the label. */
 const LAYOUT_DIMENSIONS = Object.freeze({ nodeDimensionsIncludeLabels: false });
@@ -34,6 +35,8 @@ export function layoutInputOf(cy) {
       width: w,
       height: h,
       partition: node.data("partition"),
+      // A box that holds the boxes of a scoped rule's layers stacks them by lane (`lib/elements.js`).
+      stack: node.data(STACK_LANES) === true,
     };
   });
   const edges = cy.edges().map((edge) => ({

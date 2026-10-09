@@ -49,8 +49,10 @@ The graph distinguishes the kinds of node it tracks:
 | `entity` / `adr` | — | — | Domain entities and architecture decisions |
 
 These six are the kinds a rule's `kind:` matcher accepts (`graph.rules.types.VALID_NODE_KINDS`). The
-graph loader accepts any other kind string: this repository's `vitepress-site` node, the portal
-scaffold, is of kind `site`, and no rule can select it by kind.
+graph loader accepts any other kind string. One spelling is an alias: a node declared `kind: site`
+is stored and read as `service` (`graph.loader.KIND_ALIASES`, BDL-080), so the rules, the portal
+and `docs generate` treat a portal as the service it is. This repository's `vitepress-site` node,
+the portal scaffold, is declared `kind: service`.
 
 The **`component` kind** (BDL-051) and the **`module-coverage` lint** (promoted to `severity: error`) together close the no-shadow-code gap: every `src` module with at least one symbol must be a tracked node (`feature` or `component`, or covered by a node's `source` — including a **directory** source like `tui/`) or named on a small, visible `exempt:` list in `rules.yml`. A new untracked module therefore fails `beadloom lint --strict` / `beadloom ci`.
 

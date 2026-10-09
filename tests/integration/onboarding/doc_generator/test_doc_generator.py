@@ -120,6 +120,29 @@ class TestGenerateSkeletons:
         svc = tmp_path / "docs" / "services" / "cli.md"
         assert svc.exists()
 
+    def test_creates_service_md_for_a_node_declared_kind_site(self, tmp_path: Path) -> None:
+        """`kind: site` is an alias of `service` (BDL-080 RFC D1), here as at the loader.
+
+        The skeleton reads the graph files rather than the index, so it does not
+        meet the loader's normalisation and applies the same table itself.
+        """
+        portal = {**_service_node("portal"), "kind": "site"}
+        edges = [*_basic_edges(), {"src": "portal", "dst": "myproject", "kind": "part_of"}]
+
+        generate_skeletons(
+            _a_project_whose_graph_holds(tmp_path, [*_basic_nodes(), portal], edges)
+        )
+
+        assert (tmp_path / "docs" / "services" / "portal.md").exists()
+        architecture = (tmp_path / "docs" / "architecture.md").read_text(encoding="utf-8")
+        services = architecture.split("## Services", 1)[1].split("\n## ", 1)[0]
+        assert "portal" in services
+        written = yaml.safe_load(
+            (tmp_path / ".beadloom" / "_graph" / "services.yml").read_text(encoding="utf-8")
+        )
+        kinds = {node["ref_id"]: node["kind"] for node in written["nodes"]}
+        assert kinds["portal"] == "site", "the skeleton must not rewrite the declared kind"
+
     def test_creates_feature_spec(self, tmp_path: Path) -> None:
         generate_skeletons(_a_project_whose_graph_holds(tmp_path, _basic_nodes(), _basic_edges()))
 

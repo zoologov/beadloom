@@ -1,6 +1,6 @@
 # PRD: BDL-079 — Release 8.0.0: the viewer ships, and the public API is declared
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-10-08
 
 ---

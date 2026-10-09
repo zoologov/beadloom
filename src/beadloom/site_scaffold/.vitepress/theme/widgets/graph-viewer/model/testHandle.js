@@ -2,7 +2,8 @@
 // The read-only test handle, `window.__beadloomViewer`, exposed under automation only.
 //
 // The browser tests assert state rather than pixels, and read it here: the
-// visible node ids, the selection, node positions, the viewport, the colours
+// visible node ids, the selection, node positions, the viewport and the last
+// move that framed a selection or a search, the colours
 // Cytoscape resolved, each node's look — its fill, its border, its title and
 // its status mark — and each line's — its weight, dash, colour, arrowheads and
 // corners — and what a selection marked — the neighbourhood, the dimmed nodes,
@@ -242,7 +243,8 @@ function readers(source) {
   const cy = () => source.cy();
   const rect = () => source.container().getBoundingClientRect();
   const originals = () => cy().edges().filter((edge) => !isAggregate(edge));
-  // The nodes of the file: a loop's end is a point the viewer draws a line to, not a node.
+  // The nodes drawn: the file's and the boxes a scoped layer rule draws (`LAYER_BOX`,
+  // `lib/levels.js`); a loop's end is a point the viewer draws a line to, not a node.
   const fileNodes = () => cy().nodes().not(`.${LOOP_END}`);
   return {
     // Laid out, and holding still: no animated move under way and no change of the view left to read.
@@ -256,6 +258,10 @@ function readers(source) {
       idRecord((source.map()?.allNodes() || cy().nodes()).map((node) => [node.id(), { ...node.position() }])),
     pan: () => ({ ...cy().pan() }),
     zoom: () => cy().zoom(),
+    // The last move that framed a selection or a search: `{ animated, from, to,
+    // frames, done }`, the zoom it left and ends at, how many frames drew it and
+    // whether it has ended; null before any.
+    move: () => source.move(),
     boxes: () => {
       const r = rect();
       return idRecord(
@@ -552,7 +558,8 @@ function readers(source) {
  * `tallies()`, the map's counts drawn last,
  * `hoveredEdges()`, the ids of the edges along the line under the pointer,
  * `map()`, the map drawn now (`canvasMap.js`), `outward()`, each node's "+N",
- * and `revealNodes(ids, options)`, which draws the nodes in `ids` as themselves.
+ * `move()`, the last framing move (`useGraphNavigation`'s `lastMove()`), and
+ * `revealNodes(ids, options)`, which draws the nodes in `ids` as themselves.
  * The handle is the last viewer's to install it, and the disposer removes it only
  * while it is still this one's, so a viewer that leaves the page does not take a
  * live neighbour's handle along.

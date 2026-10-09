@@ -5,6 +5,7 @@
 // (`navigator.webdriver`). No test compares pixels.
 
 import { expect } from "@playwright/test";
+import { drawnParentMap } from "./layers.js";
 
 /** Cytoscape's colour for a style value it could not parse. */
 export const CYTOSCAPE_FALLBACK_COLOUR = "rgb(153,153,153)";
@@ -79,14 +80,13 @@ export async function architectureData(request) {
   return response.json();
 }
 
-/** Each node's parent, from the data file (a root that is its own parent has none). */
+/**
+ * Each drawn node's box: the data file's parent (a root that is its own parent
+ * has none), or the box of its layer where its rule draws one inside its scope
+ * (`support/layers.js`), so every case reads the containment the canvas draws.
+ */
 export function parentMap(data) {
-  const ids = new Set(data.nodes.map((n) => n.id));
-  const parents = {};
-  for (const n of data.nodes) {
-    parents[n.id] = n.parent && n.parent !== n.id && ids.has(n.parent) ? n.parent : null;
-  }
-  return parents;
+  return drawnParentMap(data);
 }
 
 /** Every ancestor of each id in `ids`, plus the ids themselves. */

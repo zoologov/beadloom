@@ -147,7 +147,8 @@ broken edges get a red `linkStyle`.
 
 **Safe clicks (no 404s).** A node is clickable to its intra-repo page ONLY when a
 page was actually generated for it. Every node of the project's own graph has one,
-under `other/` for a kind with no directory of its own; a foreign federated repo has
+under `other/` for a kind with no directory of its own (a node declared `kind: site` is read as a
+service, so its page is under `services/`); a foreign federated repo has
 none and renders without a click, so the map never links to a dead URL.
 
 ### Showcase C — published validated documentation
@@ -192,8 +193,10 @@ no bridges, no dots where lines part and no colour gradient along a line any mor
 - **Nodes are cards.** Every node, a feature or a domain box alike, is a card in its layer's
   colour: a thin border over a light tint of it, its title in the middle, its corners rounded at
   one radius on screen at every zoom. The layers are the ones the project declares, top to
-  bottom, so an adopter sees its own names; a node in no layer is drawn in a neutral grey and the
-  legend then names **no layer**. An open box is a fainter tint inside a thin solid border, with
+  bottom, so an adopter sees its own names. Every `layers` rule in `rules.yml` is drawn: a node
+  takes the colour of its layer in the rule that places it (its own tag first, else its nearest
+  tagged container's), and each rule's layers have tones of their own. A node in no layer is drawn
+  in a neutral grey and the legend then names **no layer**. An open box is a fainter tint inside a thin solid border, with
   its title inside at the top. The one box that holds the whole project is a frame: a border a
   pixel wide and a tint fainter than any node.
 - **Node status is a mark in the corner.** A node carries at most one status, as a dot in its top
@@ -204,7 +207,7 @@ no bridges, no dots where lines part and no colour gradient along a line any mor
 - **One thin line weight.** Every line is drawn at one thin weight at every zoom, whatever its
   kind or how many edges it carries. Kinds differ by colour and dash: `depends_on` solid in a
   light neutral (an import), `uses` dotted (a declared runtime use), `consumes` and `produces`
-  dashed with different dashes and tones. A `depends_on` edge the layer rule finds against is
+  dashed with different dashes and tones. A `depends_on` edge any layer rule finds against is
   dashed in red, exactly when `beadloom lint` reports it. A line is one colour from end to end.
 - **Arrowheads carry the direction.** A head is one size on screen and stands on a straight piece
   of line at least as long as itself. Lines that share their last run into a node or a box end in
@@ -218,7 +221,16 @@ no bridges, no dots where lines part and no colour gradient along a line any mor
   (below).
 - **The legend** under the canvas lists the layers, the node statuses (each as a small card with
   its mark) and the edge kinds actually drawn, each sample in the colour the canvas uses, so it
-  never names something the canvas does not show.
+  never names something the canvas does not show. Where two or more layer rules are drawn, the
+  layers are grouped per rule under the rule's `title:` (its name where it declares none), each
+  group top to bottom.
+- **Layer boxes.** A layer rule scoped to a box inside the project, such as a Feature-Sliced
+  frontend's rule scoped to its service, draws one box per layer inside that box, each holding the
+  parts the rule places in that layer, stacked top to bottom. A layer box is no node: it has no
+  card and no page, and a tap on it selects nothing. The box holding them opens only where they
+  are readable, also when you tap it: at the zoom that frames it whole it stays closed and titled.
+  The scope is the rule's `scope:` key, or else the lowest box holding every node the rule places.
+  A rule whose scope is the whole project draws its layers as lanes, as before.
 
 ### Laying out
 
@@ -319,8 +331,10 @@ the part of the canvas the open panel covers.
 
 ### Filters
 
-On the architecture: **Kind**, **Domain** (the domain and everything inside it), **Layer**, a
-search box (id or label, ignoring case) and **Only flagged** (nodes with a status). The boxes
+On the architecture: **Kind**, **Domain** (the domain and everything inside it), **Layer** (where
+two or more layer rules are drawn, each layer named with its rule's title, such as
+`FSD architecture: widgets`; the URL carries the rule's name instead, `site-fsd-layers: widgets`,
+and a link naming a bare layer still opens on it), a search box (id or label, ignoring case) and **Only flagged** (nodes with a status). The boxes
 that hold a shown node stay, so a filtered feature is still drawn inside its domain. On the
 landscape: **Protocol**, **Verdict** (problems, healthy or neutral) and **Only problems**; a
 service is shown when it takes part in a shown contract.
@@ -340,8 +354,8 @@ toolbar controls set the neighbourhood:
 
 A selection — a click, a search, a link, the card or a node page — zooms and pans the view to the
 neighbourhood, never so far out that the node is too small to read, in a short animation, or at
-once when your browser asks for reduced motion. A click on a box selects the box: it opens, is
-framed whole, keeps its contents at full strength, and draws its edges to the outside as pointing
+once when your browser asks for reduced motion. A click on a box selects the box: it opens (a box holding layer boxes opens once they
+are readable), is framed whole, keeps its contents at full strength, and draws its edges to the outside as pointing
 at it does; its card says what it holds. Selecting a node with the default neighbourhood draws its
 edges on the same lines pointing at it draws them, each line with its count; change the depth,
 the direction or the hide setting, or turn on Impact, to open the boxes of every node the walk

@@ -105,7 +105,12 @@ from typing import TYPE_CHECKING
 from beadloom.graph.rules.cycles import _live_lifecycle_clause
 from beadloom.graph.rules.evaluators import _disk_modules
 from beadloom.graph.rules.layer_reach import part_of_parents
-from beadloom.graph.rules.layers import MIN_POPULATED_LAYERS, can_fire_on, layer_of
+from beadloom.graph.rules.layers import (
+    MIN_POPULATED_LAYERS,
+    can_fire_on,
+    layer_of,
+    within_scope,
+)
 from beadloom.graph.rules.loader import validate_rules
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
@@ -331,8 +336,17 @@ def _layer_reasons(rule: LayerRule, facts: _GraphFacts) -> list[str]:
     naming the tags nobody carries is the actionable diagnosis, and otherwise the
     edge set is.
     """
-    tags = facts.all_tags()
-    edges = facts.live_edges_of_kinds((rule.edge_kind,))
+    if rule.scope is not None and rule.scope not in facts.ref_ids:
+        # Said before anything is counted: every count below would be zero for
+        # this one reason, and "fewer than two layers are populated" would send
+        # a reader to the tags when the defect is the scope's name.
+        return [f"its scope '{rule.scope}' names no node in the graph"]
+    edges, tags = within_scope(
+        rule.scope,
+        facts.live_edges_of_kinds((rule.edge_kind,)),
+        facts.parents,
+        facts.all_tags(),
+    )
     if can_fire_on(edges, rule.layers, facts.parents, tags):
         return []
     inhabited = {

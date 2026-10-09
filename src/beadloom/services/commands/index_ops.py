@@ -93,6 +93,10 @@ def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
         click.echo("")
         for warn in result.warnings:
             click.echo(f"  [warn] {warn}")
+    if result.infos:
+        click.echo("")
+        for info in result.infos:
+            click.echo(f"  [info] {info}")
 
     # Warn about missing language parsers when symbols == 0.
     if result.symbols_indexed == 0 and not result.nothing_changed:

@@ -63,8 +63,13 @@ def rules_yaml(
     with_layer_rule: bool = True,
     severity: str = "error",
     exempt: str = "",
+    more_rules: str = "",
 ) -> str:
     """The project's `rules.yml`: one layer rule over *tiers*, or no rule at all.
+
+    *more_rules* is appended to the rule list as written, for a project that
+    declares a second layering beside the first (BDL-080 S1b): see
+    :func:`slices_rule_yaml`.
 
     *severity* is a parameter because an adopter may declare its layering at
     `warn` — and because a warning the RULE decided is the only way to tell
@@ -94,7 +99,7 @@ def rules_yaml(
         f"{declared}\n"
         "    enforce: top-down\n"
         "    allow_skip: true\n"
-        "    edge_kind: depends_on\n" + exempt
+        "    edge_kind: depends_on\n" + exempt + more_rules
     )
 
 
@@ -138,6 +143,7 @@ def write_tiered_project(
     with_layer_rule: bool = True,
     severity: str = "error",
     exempt: str = "",
+    more_rules: str = "",
     sources: Mapping[str, str] | None = None,
     modules: Mapping[str, str] | None = None,
 ) -> Path:
@@ -167,6 +173,7 @@ def write_tiered_project(
             with_layer_rule=with_layer_rule,
             severity=severity,
             exempt=exempt,
+            more_rules=more_rules,
         ),
         encoding="utf-8",
     )
@@ -428,3 +435,102 @@ def write_zoned_import_project(root: Path, *, tests: Mapping[str, str] | None = 
         sources={"storage-pool": "src/storage/pool.py"},
         modules={**_ZONED_MODULES, **(tests or {})},
     )
+
+
+#: A SECOND layering, a frontend's, declared beside :data:`TIERS` (BDL-080 S1b,
+#: `beadloom-kgh6`). The shape of a repository with a backend and a frontend:
+#: the portal service carries a backend tier, and its slices carry these tags of
+#: their own. The tags are none of ours and none of Feature-Sliced Design's, so a
+#: claim proved over them is a claim about a declaration.
+SLICES = ("ui-pages", "ui-widgets", "ui-shared")
+
+#: The second rule's name. It sorts AFTER ``tier-order``, as this repository's
+#: ``site-fsd-layers`` sorts after ``architecture-layers``, so the first rule by
+#: name — the one the data file's original layer keys describe — is the backend's.
+SLICES_RULE = "ui-slices"
+
+
+def slices_rule_yaml(
+    *, scope: str | None = None, title: str | None = None, name: str = SLICES_RULE
+) -> str:
+    """The frontend's layer rule over :data:`SLICES`, as a `rules.yml` list entry.
+
+    *scope* writes the rule's ``scope:`` key, which names the container the
+    rule judges inside; ``None`` writes no key, and the scope is derived.
+    *title* writes the rule's ``title:`` key, the name the portal shows it by;
+    ``None`` writes none. *name* renames the rule: one that sorts before
+    ``tier-order`` makes the frontend's rule the first by name, the one the data
+    file's original layer keys describe.
+    """
+    declared = "\n".join(
+        f"      - name: {tag.removeprefix('ui-')}\n        tag: {tag}" for tag in SLICES
+    )
+    return (
+        f"  - name: {name}\n"
+        + (f'    title: "{title}"\n' if title else "")
+        + '    description: "the portal\'s slices import downward"\n'
+        "    severity: error\n"
+        "    layers:\n"
+        f"{declared}\n"
+        "    enforce: top-down\n"
+        "    allow_skip: true\n"
+        "    edge_kind: depends_on\n" + (f"    scope: {scope}\n" if scope else "")
+    )
+
+
+def graph_with_a_portal(*, stray_slices: bool = False) -> tuple[list[Node], list[Edge]]:
+    """A backend under :data:`TIERS` and a portal whose slices carry :data:`SLICES`.
+
+    ``shop`` carries no tier and holds everything. ``shop-portal`` carries the
+    top tier, so its slices are in that tier by ``part_of`` — and each carries a
+    slice tag of its OWN, which is what places it in the frontend's rule. Two
+    edges are findings, one per rule, so a picture that draws one rule's verdict
+    is told from one that draws both:
+
+    - ``portal-shared -> portal-widgets`` runs upward among the slices, a finding
+      of ``ui-slices``; under ``tier-order`` both ends are in one tier inside
+      one tagged container, and legal.
+    - ``shop-core -> shop-api`` runs upward among the tiers, a finding of
+      ``tier-order``; ``ui-slices`` reaches neither end.
+
+    ``loose`` carries nothing and is inside nothing: a node no rule stratifies.
+
+    With *stray_slices*, two nodes OUTSIDE the portal carry slice tags and
+    ``stray-shared -> stray-pages`` runs upward between them: judged by a
+    ``ui-slices`` that reaches the whole graph, and by none that is scoped to the
+    portal.
+    """
+    nodes: list[Node] = [
+        ("shop", "service", []),
+        ("shop-api", "domain", [TIERS[0]]),
+        ("shop-core", "domain", [TIERS[1]]),
+        ("shop-portal", "service", [TIERS[0]]),
+        ("portal-pages", "component", [SLICES[0]]),
+        ("portal-widgets", "component", [SLICES[1]]),
+        ("portal-shared", "component", [SLICES[2]]),
+        ("loose", "component", []),
+    ]
+    edges: list[Edge] = [
+        ("shop-api", "shop", "part_of"),
+        ("shop-core", "shop", "part_of"),
+        ("shop-portal", "shop", "part_of"),
+        ("portal-pages", "shop-portal", "part_of"),
+        ("portal-widgets", "shop-portal", "part_of"),
+        ("portal-shared", "shop-portal", "part_of"),
+        ("shop-api", "shop-core", "depends_on"),
+        ("shop-core", "shop-api", "depends_on"),
+        ("portal-pages", "portal-widgets", "depends_on"),
+        ("portal-widgets", "portal-shared", "depends_on"),
+        ("portal-shared", "portal-widgets", "depends_on"),
+    ]
+    if stray_slices:
+        nodes += [
+            ("stray-pages", "component", [SLICES[0]]),
+            ("stray-shared", "component", [SLICES[2]]),
+        ]
+        edges += [
+            ("stray-pages", "shop", "part_of"),
+            ("stray-shared", "shop", "part_of"),
+            ("stray-shared", "stray-pages", "depends_on"),
+        ]
+    return nodes, edges

@@ -8,6 +8,6 @@ export {
   contractFilterOptions,
   visibleContracts,
 } from "./lib/contractFilters.js";
-export { filterOptions } from "./model/filterOptions.js";
+export { filterOptions, layerChoiceOf } from "./model/filterOptions.js";
 export { default as ContractFilterControls } from "./ui/ContractFilterControls.vue";
 export { default as FilterControls } from "./ui/FilterControls.vue";

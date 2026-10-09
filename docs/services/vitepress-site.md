@@ -9,6 +9,12 @@ renders that content: the node pages, `architecture.data.json`, `landscape.data.
 described in [the VitePress site guide](../guides/vitepress-site.md); this page describes the
 scaffold.
 
+The node is a service of its product, with its own runtime, build and tests. Since BDL-080 S1a it
+is declared `kind: service`, `part_of` `beadloom` and tagged `layer-service`, so the rules judge
+it, its page is under `services/` and `architecture-layers` places its slices through it. The
+spelling `kind: site` is still accepted and read as `service` (the
+[graph loader](../domains/graph/components/graph-loader/DOC.md)).
+
 Since BDL-076 B1 the scaffold is package data, so every project gets the same theme from the
 installed beadloom, and `site/` in this repository is output only: `/site/` is ignored, and
 `docs site --out site` writes this repository's portal the way it writes an adopter's.
@@ -81,11 +87,16 @@ which carried a nested elkjs 0.9 of its own, and `web-worker`, the one ranged pi
 user was elkjs's entry point under `cytoscape-elk`.
 
 **The layer rule.** `site-fsd-layers` in `.beadloom/_graph/rules.yml` declares the six layers by
-the tags `fsd-app` to `fsd-shared`, at `error`. Each slice carries its layer as its own tag and no
+the tags `fsd-app` to `fsd-shared`, at `error`, titled `FSD architecture`. Each slice carries its layer as its own tag and no
 node stands for a layer, so a dependency between two slices of one layer is reported as a
 same-layer crossing, which is FSD's rule that slices of a layer do not know each other. `app` and
 `shared` have segments rather than slices, so each is one node. The edges it judges are the
-relative imports between theme files, which resolve to the files they name.
+relative imports between theme files, which resolve to the files they name. The rule declares no
+`scope:`; the portal derives `vitepress-site` as its scope, the lowest container of every slice it
+places. Since BDL-080 the portal draws this rule beside `architecture-layers`: the slices are
+coloured by their FSD layer, the legend has one group per rule, and `vitepress-site` opens onto
+six layer boxes, app, pages, widgets, features, entities and shared, stacked top to bottom
+([`site-layer`](vitepress-site/layer.md)). An edge either rule finds against is drawn red.
 
 ## What the tools show
 
@@ -107,7 +118,7 @@ portal written by `docs site` carries them in its `e2e/`. `.beadloom/config.yml`
 `src/beadloom/site_scaffold/e2e` as a test root and names the `playwright` pattern group. This
 node declares the whole directory, and each spec is also declared in the `tests:` list of the one
 slice it drives, which is where it binds: a test file binds to one node, and a node does not
-inherit its ancestors' tests. The thirty specs bind to sixteen slices, thirteen of them to
+inherit its ancestors' tests. The thirty-one specs bind to sixteen slices, fourteen of them to
 `site-graph-viewer`. No spec drives
 `site-app`, `site-dashboard`, `site-dashboard-data` or `site-landscape-data`, so those four report
 no bound tests.
@@ -125,11 +136,19 @@ does not ask the viewer to grade itself:
 - `viewer.js`: `waitForViewer`, `viewerAfter(page, navigate)` (waits for a handle other than the
   one installed before a client-side move, because VitePress pushes the URL before it loads the
   next page) and `openEveryBox(page)`, which a case that reads every node or edge calls first,
-  since the overview draws only the top-level boxes.
+  since the overview draws only the top-level boxes. Since BDL-080 `parentMap(data)` returns the
+  drawn containment, the layer boxes of a scoped rule included.
+- `layers.js` (BDL-080): the specs' own reading of the layers, apart from the viewer's:
+  `layerRulesOf`, `layersOfData`, `layerOfNode`, `layerBoxesOf`, `drawnParentMap`,
+  `fileParentMap` (the file's own containment), `withoutLayerRules` (a file without the
+  every-rule keys) and `withRuleTitles`.
 - `adopterGraph.js`: `adopterSizedGraph(served, { layerRanks })`, a seeded graph of about four
   hundred and fifty nodes and thirteen hundred drawn edges made from the served file's
-  declarations, laid out in the served layer ranks or in `layerRanks` of them, up to
-  `RANK_POSITIONS` (four). Every case that runs on it carries the tag `ADOPTER_SIZED`
+  declarations, given the served layer ranks or `layerRanks` of them, up to `RANK_POSITIONS`
+  (four), and without the every-rule keys (`withoutLayerRules`). Its boxes sit inside one root
+  box, and ELK reads no partition inside a box (measured by BDL-080 S1c on elkjs 0.12, see
+  [`site-shared`](vitepress-site/shared.md)), so the ranks do not pin the boxes to lanes: the
+  edges place them. Every case that runs on it carries the tag `ADOPTER_SIZED`
   (`@adopter-sized`), and `BEADLOOM_E2E_NO_ADOPTER_SIZED=1` leaves those cases out of a run, in
   every project (`playwright.config.js` sets the filter, because a `--grep-invert` on the
   command line filters nothing in `chromium`, which `performance` depends on).

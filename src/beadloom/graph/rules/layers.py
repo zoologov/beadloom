@@ -108,6 +108,47 @@ def part_of_ancestors(ref_id: str, parents: Mapping[str, Collection[str]]) -> fr
     )
 
 
+def subtree_of(scope: str, parents: Mapping[str, Collection[str]]) -> frozenset[str]:
+    """*scope* and every node transitively ``part_of`` it — what a scoped rule judges.
+
+    Answered from the same :func:`part_of_ancestors` walk the layer lookup
+    climbs, so "inside the scope" and "inherits from the scope" cannot be two
+    readings of containment. A *scope* that names no node holds only its own
+    name, which is an empty subtree for every edge: the rule's liveness says why.
+    """
+    return frozenset(
+        {scope} | {node for node in parents if scope in part_of_ancestors(node, parents)}
+    )
+
+
+def within_scope(
+    scope: str | None,
+    edges: Iterable[tuple[str, str]],
+    parents: Mapping[str, Collection[str]],
+    tags: Mapping[str, Collection[str]],
+) -> tuple[list[tuple[str, str]], Mapping[str, Collection[str]]]:
+    """The edges and the tag map a rule with *scope* is handed — the one narrowing.
+
+    ``None`` hands both on unchanged. Otherwise an edge is kept when BOTH ends
+    are in :func:`subtree_of` the scope: an edge leaving the subtree runs
+    between the rule's population and a node it does not judge, so it is
+    neither found against nor counted as skipped. Tags outside the subtree are
+    dropped as well, so no node outside is in one of the rule's layers and no
+    node inside inherits a layer from a container above the scope.
+
+    Every reader of a layer rule's population narrows through here — the
+    evaluator, the reach count, liveness, ``validate_rules`` and the
+    architecture view — so two of them cannot draw the subtree differently.
+    """
+    if scope is None:
+        return list(edges), tags
+    members = subtree_of(scope, parents)
+    return (
+        [(src, dst) for src, dst in edges if src in members and dst in members],
+        {ref_id: node_tags for ref_id, node_tags in tags.items() if ref_id in members},
+    )
+
+
 def own_layer_of(
     ref_id: str,
     layers: Sequence[LayerDef],

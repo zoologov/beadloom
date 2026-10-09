@@ -1,0 +1,17 @@
+/* beadloom:component=site-shared */
+/*
+ * The one tone the viewer draws with that the VitePress palette has no variable
+ * for: a sixth hue, so the six layers of Feature-Sliced Design are six colours.
+ * The palette's hues are gray, indigo, purple, green, yellow and red; its brand
+ * colour is its indigo unless a project sets it, and its sponsor pink keeps only
+ * 2.78:1 against a tinted box in the dark theme, under WCAG's 3:1 for a
+ * boundary (`look.spec.js`). Cyan stands between green and indigo, and keeps
+ * 5.4:1 on the light canvas and 9.5:1 on the dark one.
+ */
+:root {
+  --bl-c-cyan-1: #0e7490;
+}
+
+.dark {
+  --bl-c-cyan-1: #22d3ee;
+}

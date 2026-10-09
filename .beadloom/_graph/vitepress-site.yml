@@ -10,9 +10,15 @@
   # `beadloom docs site` writes it into every project's portal, this one's
   # included. The node follows the code: its slices are judged where they are
   # written, and `site/` is output.
+  #
+  # BDL-080 S1a (`beadloom-je0i`): the portal is a service of the product, as
+  # `tui` is -- its own runtime, build, dependencies, tests and layer rule. It
+  # was `kind: site`, a kind no rule could match; the loader still accepts
+  # `site` and reads it as `service`, and this graph says `service` directly.
 nodes:
   - ref_id: vitepress-site
-    kind: site
+    kind: service
+    tags: [layer-service]
     summary: "The VitePress portal scaffold shipped in the wheel — renders the beadloom-produced site data (graph pages, dashboard.data.json, landscape Mermaid)"
     source: src/beadloom/site_scaffold/
     # The document replaced the `docs_absent` reason of BDL-062 `.4` when the

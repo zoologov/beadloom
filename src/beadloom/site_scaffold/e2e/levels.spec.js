@@ -299,11 +299,36 @@ test("selecting a node frames its neighbourhood at a zoom where it is drawn as i
   expect(found["by the URL"].zoom).toBeGreaterThanOrEqual(readableZoomOf(quiet.id, tree, boxes) - 1e-6);
 });
 
+/** Within this of each other, two zooms are one. */
+const SAME_ZOOM = 1e-9;
+
+/** The zooms the view is drawn at over the next `count` frames, each once, to six places. */
+const zoomsOverFrames = (page, count) =>
+  page.evaluate(
+    (frames) =>
+      new Promise((done) => {
+        const out = [];
+        const tick = () => {
+          out.push(window.__beadloomViewer.zoom().toFixed(6));
+          if (out.length < frames) requestAnimationFrame(tick);
+          else done([...new Set(out)]);
+        };
+        requestAnimationFrame(tick);
+      }),
+    count
+  );
+
+// The move is judged by the viewer's own count of the frames it drew the move
+// over (`move` on the handle), not by sampling the zoom from outside: the case
+// can start reading only once the click has returned, and on a slow machine the
+// 350 ms move is over by then. Measured with the CPU throttled 6x, the case run
+// alone, in the viewer of 8.0.0 and of the next version: the 30 frames read after
+// the click saw one zoom in 5 runs of 5, as a CI runner had seen once.
 test("with reduced motion a selection's frame is reached at once; otherwise the view moves there over several frames", async ({ page, request }) => {
   const data = await architectureData(request);
   const tree = treeOf(data);
   const target = largestTopBox(data, tree);
-  const zooms = {};
+  const found = {};
   for (const motion of ["reduce", "no-preference"]) {
     await page.emulateMedia({ reducedMotion: motion });
     await openArchitecture(page);
@@ -312,26 +337,25 @@ test("with reduced motion a selection's frame is reached at once; otherwise the 
     const b = (await viewer(page, "boxes"))[target];
     const start = await viewer(page, "zoom");
     await page.mouse.click((b.x1 + b.x2) / 2, b.y1 + Math.min(12, (b.y2 - b.y1) / 4));
-    const seen = await page.evaluate(
-      () =>
-        new Promise((done) => {
-          const out = [];
-          const tick = () => {
-            out.push(window.__beadloomViewer.zoom());
-            if (out.length < 30) requestAnimationFrame(tick);
-            else done(out);
-          };
-          requestAnimationFrame(tick);
-        })
-    );
-    zooms[motion] = { start, seen: [...new Set(seen.map((z) => z.toFixed(6)))] };
+    // Reduced, nothing is left to move once the click has returned: every frame read shows one zoom.
+    const seen = motion === "reduce" ? await zoomsOverFrames(page, 30) : null;
+    await expect.poll(async () => (await viewer(page, "move"))?.done ?? false).toBe(true);
+    const move = await viewer(page, "move");
+    const zoom = await viewer(page, "zoom");
+    found[motion] = {
+      animated: move.animated,
+      frames: move.frames,
+      fromWhereItWas: Math.abs(move.from - start) < SAME_ZOOM,
+      reached: Math.abs(move.to - start) > SAME_ZOOM && Math.abs(zoom - move.to) < SAME_ZOOM,
+      ...(seen ? { oneZoomSeen: seen.length === 1 && seen[0] === move.to.toFixed(6) } : {}),
+    };
   }
-  test.info().annotations.push({ type: "measured", description: JSON.stringify(zooms) });
-  // Reduced: one zoom over every frame read, other than where it started.
-  expect(zooms.reduce.seen.length).toBe(1);
-  expect(Number(zooms.reduce.seen[0])).not.toBeCloseTo(zooms.reduce.start, 6);
-  // Otherwise: several zooms in between.
-  expect(zooms["no-preference"].seen.length).toBeGreaterThan(2);
+  test.info().annotations.push({ type: "measured", description: JSON.stringify(found) });
+  // Reduced: the frame is reached in one frame of the viewer's.
+  expect(found.reduce).toEqual({ animated: false, frames: 1, fromWhereItWas: true, reached: true, oneZoomSeen: true });
+  // Otherwise: the view moves there over several.
+  expect(found["no-preference"]).toMatchObject({ animated: true, fromWhereItWas: true, reached: true });
+  expect(found["no-preference"].frames).toBeGreaterThan(1);
 });
 
 test("every line drawn is routed square, a loop from a node to its own box included: at the fit, zoomed into a box, a node hovered and selected, and every box open", async ({

@@ -21,7 +21,12 @@ every other layer does.
 - `theme-tokens`: resolves the VitePress CSS variables to opaque `rgb(...)` through
   `getComputedStyle`, flattening a translucent colour over the background, and `useThemeTokens`
   re-resolves them when VitePress toggles dark mode. Cytoscape rejects `var(...)` and draws its
-  fallback grey, `rgb(153,153,153)`, which is why no variable reaches it.
+  fallback grey, `rgb(153,153,153)`, which is why no variable reaches it. Since BDL-080 S1c the
+  segment also defines the one tone the VitePress palette has no variable for, the sixth layer
+  tone `cyan` (`--bl-c-cyan-1`, `tones.css`, loaded by the segment's `index.js`): `#0e7490` in
+  the light theme, 5.4:1 on the canvas, and `#22d3ee` in the dark theme, 9.5:1. The palette's
+  brand colour is its indigo unless a project sets it, and its sponsor pink keeps 2.78:1 against
+  a tinted box in the dark theme, under the 3:1 a boundary needs.
 - `cytoscape`: `loadCytoscape()` imports Cytoscape in the browser only, once. It loads Cytoscape
   alone: the layout is not Cytoscape's.
 - `elk`: the layered layout, run by elkjs 0.12 in a Web Worker so that the page's main thread is
@@ -32,7 +37,19 @@ every other layer does.
   padding, `[top=boxTop, left=12, bottom=12, right=12]`: ELK's own 12 units on three sides and
   `boxTop` above its children, the room its title is drawn in, 12 when none is given (BDL-078
   `beadloom-btkd.6`; the viewer passes 36, `GEOMETRY.boxTitleRoom`), so no child stands under
-  an open box's title. Nothing about the canvas is
+  an open box's title.
+
+  **Partitions pin lanes among the root's children only.** Measured on elkjs 0.12 by BDL-080
+  S1c: with `INCLUDE_CHILDREN`, ELK reads no partition of a node inside a box. Three children of
+  one box in partitions 2, 0 and 1, with no edge between them, are laid out in one row, whether or
+  not the box activates partitioning itself. On this repository every node is inside the frame
+  `beadloom`, so lanes under the frame have only ever come from the edges' topology. A box that
+  asks for its children to be stacked (`stack`) therefore gets layout-only lane edges
+  (`LANE_EDGE`, `"lane"`) from each child of a partition to each child of the next partition
+  present, which puts each partition below the one above it. They are no edge of the drawing:
+  `geometry.js` leaves them out of the routes. The viewer asks for `stack` only on a box holding
+  a scoped rule's layer boxes, so their number does not grow with a domain's children; five lane
+  edges on this repository. Nothing about the canvas is
   handed over, neither its shape nor where a node stands, so the layout depends on the graph
   alone. `layOut(graph)` resolves to `{ geometry, source, ms }`: `geometry` is
   `{ boxes, routes }`, a frozen box `{ x1, y1, x2, y2 }` per node and a route

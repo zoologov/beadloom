@@ -298,7 +298,7 @@ def _count_violations(
 
     This collector is one of the two surfaces that call ``evaluate_all`` without
     ever building a ``LintResult``, so the population is read here from the same
-    ``reach_of`` the evaluator uses rather than parsed back out of a finding's
+    ``scoped_reach`` count the evaluator takes rather than parsed back out of a finding's
     prose (BDL-070 A4).
 
     Nothing here re-counts: the population advisory is counted exactly as A2

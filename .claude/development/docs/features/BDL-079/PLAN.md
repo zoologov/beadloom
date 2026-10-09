@@ -1,6 +1,6 @@
 # PLAN: BDL-079 — Release 8.0.0
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-10-08
 
 ---

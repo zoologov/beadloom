@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.cycles import _live_lifecycle_clause
-from beadloom.graph.rules.layers import layer_of, layer_population
+from beadloom.graph.rules.layers import layer_of, layer_population, within_scope
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import Violation
 
@@ -126,15 +126,36 @@ def reach_of(
 ) -> LayerReach:
     """Count *edges* against the declaration, without reading the graph.
 
-    Pure, so the arithmetic is testable on a shape rather than on a database,
-    and so the evaluator can pass the edge list it has already fetched instead
-    of fetching it again.
+    Pure, so the arithmetic is testable on a shape rather than on a database.
+
+    A scoped rule counts its subtree only (BDL-080 S1b): an edge with an end
+    outside the scope is not the rule's to judge, so it is not in the total
+    either. *edges* and *tags* are the whole graph's, and are narrowed here by
+    :func:`~beadloom.graph.rules.layers.within_scope`; a caller that has
+    narrowed them already counts with :func:`scoped_reach` instead, so a
+    subtree is walked once per rule (review ``beadloom-m7xq`` finding 5).
+    """
+    scoped_edges, scoped_tags = within_scope(rule.scope, edges, parents, tags)
+    return scoped_reach(rule, scoped_edges, parents, scoped_tags)
+
+
+def scoped_reach(
+    rule: LayerRule,
+    scoped_edges: Sequence[tuple[str, str]],
+    parents: Mapping[str, Collection[str]],
+    scoped_tags: Mapping[str, Collection[str]],
+) -> LayerReach:
+    """Count a population :func:`~beadloom.graph.rules.layers.within_scope` already narrowed.
+
+    The evaluator narrows a scoped rule once and hands every statement it makes
+    the same edges and tags, so its count is taken here rather than through
+    :func:`reach_of`, which would walk the subtree again.
     """
     return LayerReach(
         rule_name=rule.name,
         edge_kind=rule.edge_kind,
         population=layer_population(
-            edges, lambda ref_id: layer_of(ref_id, rule.layers, parents, tags)
+            scoped_edges, lambda ref_id: layer_of(ref_id, rule.layers, parents, scoped_tags)
         ),
     )
 

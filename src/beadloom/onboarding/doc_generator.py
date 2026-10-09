@@ -42,9 +42,25 @@ def _load_graph_from_yaml(
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
     for _yml, data in each_graph_file(graph_dir):
-        nodes.extend(data.get("nodes") or [])
+        nodes.extend(_with_canonical_kind(node) for node in data.get("nodes") or [])
         edges.extend(data.get("edges") or [])
     return nodes, edges
+
+
+def _with_canonical_kind(node: dict[str, Any]) -> dict[str, Any]:
+    """*node* with its kind read through ``KIND_ALIASES``, as the graph loader reads it.
+
+    This reader takes the graph files rather than the index, so it never meets
+    the loader's normalisation (BDL-080 RFC D1): without this a node declared
+    ``kind: site`` got no skeleton and no entry under "Services". A copy is
+    returned, so a later write of the graph files keeps the kind as declared.
+    """
+    from beadloom.onboarding.graph_files import canonical_kind
+
+    kind = node.get("kind")
+    if not isinstance(kind, str) or canonical_kind(kind) == kind:
+        return node
+    return {**node, "kind": canonical_kind(kind)}
 
 
 def _generate_mermaid(

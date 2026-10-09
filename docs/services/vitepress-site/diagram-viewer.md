@@ -33,4 +33,6 @@ base-aware click targets.
 
 `src/beadloom/site_scaffold/e2e/diagram-links.spec.js`: a landscape diagram link to a page
 under `other/` carries the base path, and a diagram rendered again by a theme switch keeps its
-links and its controls.
+links and its controls. Since BDL-080 S1d the first case does not need a node under `other/` in
+the served landscape, which this repository no longer has: it moves one drawn node's click target
+under `/other/` in the page's bundle and asserts that the link carries the base.

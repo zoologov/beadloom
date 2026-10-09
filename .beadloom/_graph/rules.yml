@@ -46,6 +46,9 @@ rules:
       edge_kind: depends_on
 
   - name: architecture-layers
+    # The name the portal's legend, Layer filter and card show the rule by
+    # (owner, BDL-080 S1e); lint and the portal's URL keep saying the name.
+    title: "DDD architecture"
     description: "Services → application → domains → infrastructure — not reverse"
     severity: error
     layers:
@@ -233,6 +236,7 @@ rules:
   # and counted as skipped. `architecture-layers` above skips every site edge for
   # the same reason: the two rules judge disjoint populations.
   - name: site-fsd-layers
+    title: "FSD architecture"
     description: "The site's Feature-Sliced layers import downward: app, pages, widgets, features, entities, shared"
     severity: error
     layers:

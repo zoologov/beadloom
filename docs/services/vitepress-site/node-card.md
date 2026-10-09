@@ -16,7 +16,12 @@ its own, the service card of `site-landscape-page`.
 In order, the card shows:
 
 - the node's id and summary; its kind, lifecycle and tags;
-- its layer, and whether the layer is the node's own tag or inherited through `part_of`;
+- its layer, and whether the layer is the node's own tag or inherited through `part_of`. Where
+  the data file names every layer rule (BDL-080), the card also names the rule that places the
+  node, by its title where it declares one: `widgets (FSD architecture, its own tag)` on this
+  repository, `<layer> (rule <name>, inherited through part_of)` for an untitled rule. A one-rule
+  project names its rule too. "Its own tag" is read from the node's `tags`, which the data file
+  writes as the node declares them, also outside a scoped rule's scope;
 - its source, linked to the address the data file gives in `source_url`, and as plain text when
   the file gives none;
 - its activity and its debt with the reasons. Since BDL-078 the activity line states changed
@@ -56,7 +61,7 @@ all says "not recorded", because the two are different answers.
 ## Tests
 
 `src/beadloom/site_scaffold/e2e/card.spec.js`: every field the data file holds, "none" where it
-holds nothing, the layer's origin, every edge kind by direction with a click that moves the
+holds nothing, the layer's origin and its rule by title or name, every edge kind by direction with a click that moves the
 selection, the commands copied, the symbol cap, every doc and test file by name, a source
 linked per forge, and a source without a link when the file gives none; the activity line in
 lines, in commits for an older file, in the singular for one, and in words for `quiet` and

@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Protocol
 import yaml
 
 from beadloom.graph.rules.layer_declaration import declaration_warnings
+from beadloom.graph.rules.layer_reach import part_of_parents
+from beadloom.graph.rules.layers import within_scope
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
     DEFAULT_DOC_AREA_MIN_SUPPORT,
@@ -480,7 +482,48 @@ def _parse_layer_rule(
         edge_kind=edge_kind,
         severity=severity,
         exempt=exempt,
+        scope=_parse_layer_scope(name, rule_data),
+        title=_parse_layer_title(name, rule_data),
     )
+
+
+def _parse_layer_title(name: str, rule_data: dict[str, object]) -> str | None:
+    """The name the portal shows a layer rule by, or ``None`` when the rule declares none.
+
+    A value that is not a non-empty string is refused rather than read as "no
+    title": the portal would show the rule's name instead, and nobody would see
+    that the title they wrote was dropped.
+    """
+    if "title" not in rule_data:
+        return None
+    title = rule_data["title"]
+    if not isinstance(title, str) or not title.strip():
+        msg = (
+            f"Rule '{name}': 'title' must be a non-empty string, "
+            "the name the portal shows the rule by"
+        )
+        raise ValueError(msg)
+    return title.strip()
+
+
+def _parse_layer_scope(name: str, rule_data: dict[str, object]) -> str | None:
+    """The node a layer rule judges inside, or ``None`` when the rule names none.
+
+    Whether the node EXISTS is a question about the graph, which the loader does
+    not read: :func:`validate_rules` and the rule's liveness answer it. What is
+    refused here is a value that cannot be a ref_id at all, because an empty
+    scope read as "no scope" would widen the rule to the whole graph in silence.
+    """
+    if "scope" not in rule_data:
+        return None
+    scope = rule_data["scope"]
+    if not isinstance(scope, str) or not scope.strip():
+        msg = (
+            f"Rule '{name}': 'scope' must name one node by its ref_id, "
+            "the container the rule judges inside"
+        )
+        raise ValueError(msg)
+    return scope.strip()
 
 
 def _parse_check_rule(
@@ -1248,6 +1291,8 @@ def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]:
                 ref_ids.add(rule.to_matcher.ref_id)
         elif isinstance(rule, CardinalityRule) and rule.for_matcher.ref_id is not None:
             ref_ids.add(rule.for_matcher.ref_id)
+        elif isinstance(rule, LayerRule) and rule.scope is not None:
+            ref_ids.add(rule.scope)
 
     # A layer rule references the graph through tags rather than ref_ids, so the
     # tag map is read only when one is present — `node_tags` defers its query
@@ -1255,8 +1300,12 @@ def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]:
     layer_rules = [rule for rule in rules if isinstance(rule, LayerRule)]
     if layer_rules:
         tags = node_tags(conn).as_mapping()
+        parents = part_of_parents(conn)
         for rule in layer_rules:
-            warnings.extend(declaration_warnings(rule, tags))
+            # A scoped rule's layers are populated by the nodes inside its scope
+            # only, which is what the evaluator judges (BDL-080 S1b).
+            _, scoped_tags = within_scope(rule.scope, (), parents, tags)
+            warnings.extend(declaration_warnings(rule, scoped_tags))
 
     # Check each against the database
     for ref_id in sorted(ref_ids):

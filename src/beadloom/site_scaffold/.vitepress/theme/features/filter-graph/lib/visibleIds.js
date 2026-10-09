@@ -35,7 +35,9 @@ export function matchesQuery(node, query) {
  *
  * The domain filter keeps the domain's whole subtree, not only its direct
  * children; the layer filter compares the layer a node is in, inherited or its
- * own, by the layer's name.
+ * own, by the layer's label: its name, said with its rule's where more than one
+ * rule is drawn. `parents` is the containment drawn, so the box a scoped rule
+ * draws around a layer's parts is kept with them.
  */
 export function visibleNodeIds(nodes, filters, { parents, layers }) {
   const inDomain =
@@ -43,7 +45,7 @@ export function visibleNodeIds(nodes, filters, { parents, layers }) {
   const matched = nodes.filter(
     (node) =>
       (filters.kind === ALL || node.kind === filters.kind) &&
-      (filters.layer === ALL || layerOfNode(node, layers)?.name === filters.layer) &&
+      (filters.layer === ALL || layerOfNode(node, layers)?.label === filters.layer) &&
       (!inDomain || inDomain.has(node.id)) &&
       (!filters.violations || isFlagged(node)) &&
       matchesQuery(node, filters.q || "")

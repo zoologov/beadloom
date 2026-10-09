@@ -51,6 +51,9 @@ V2_TOP_KEYS = {
     "beadloom_version",
     "layers",
     "layer_order",
+    # BDL-080 S1b (`beadloom-kgh6`): every layer rule, beside the first rule's
+    # `layers` / `layer_order`, which keep their meaning.
+    "layer_rules",
 }
 
 #: Every node key of schema version 1, with `lint_clean` present because lint ran.
@@ -88,6 +91,10 @@ V2_NODE_KEYS = {
     "activity",
     "debt",
     "findings",
+    # BDL-080 S1b (`beadloom-kgh6`): the rule that places the node among every
+    # layer rule, and its rank there; `layer` / `layer_rank` stay the first's.
+    "layer_rule",
+    "layer_rule_rank",
 }
 
 #: What a node's ``tests`` carries: the files bound to the node itself, and the

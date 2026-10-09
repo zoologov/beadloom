@@ -24,9 +24,14 @@ from beadloom.graph.rules.layer_reach import (
     live_edges_of_kind,
     part_of_parents,
     population_statement,
-    reach_of,
+    scoped_reach,
 )
-from beadloom.graph.rules.layers import LayerMembership, can_fire_on, layer_membership
+from beadloom.graph.rules.layers import (
+    LayerMembership,
+    can_fire_on,
+    layer_membership,
+    within_scope,
+)
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
     LAYER_EDGE_RULE_TYPE,
@@ -670,18 +675,27 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
     for rule in rules:
         # Live edges only (planned/deprecated/dead edges are intent or history,
         # not live layering violations).
-        all_edges = live_edges_of_kind(conn, rule.edge_kind)
-        violations.extend(population_statement(rule, reach_of(rule, all_edges, parents, tags)))
+        # A scoped rule is handed its subtree only (BDL-080 S1b): the edges with
+        # both ends inside it and the tags of the nodes inside it, so every
+        # statement below is about the population the rule declares it judges.
+        all_edges, rule_tags = within_scope(
+            rule.scope, live_edges_of_kind(conn, rule.edge_kind), parents, tags
+        )
+        violations.extend(
+            population_statement(rule, scoped_reach(rule, all_edges, parents, rule_tags))
+        )
         violations.extend(
             declaration_statement(
-                rule, tags, can_fire=can_fire_on(all_edges, rule.layers, parents, tags)
+                rule,
+                rule_tags,
+                can_fire=can_fire_on(all_edges, rule.layers, parents, rule_tags),
             )
         )
-        violations.extend(same_layer_statements(rule, all_edges, parents, tags))
+        violations.extend(same_layer_statements(rule, all_edges, parents, rule_tags))
 
         for src_ref_id, dst_ref_id in all_edges:
-            src = layer_membership(src_ref_id, rule.layers, parents, tags)
-            dst = layer_membership(dst_ref_id, rule.layers, parents, tags)
+            src = layer_membership(src_ref_id, rule.layers, parents, rule_tags)
+            dst = layer_membership(dst_ref_id, rule.layers, parents, rule_tags)
 
             # An end in no declared layer, its own or a container's: not judged.
             if src is None or dst is None:

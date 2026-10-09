@@ -1,15 +1,15 @@
 # ACTIVE: BDL-078 — The viewer looks finished, and five defects are fixed
 
-> **Last updated:** 2026-10-05
-> **Phase:** Development
+> **Last updated:** 2026-10-08
+> **Phase:** Completed
 
 ---
 
 ## Current Bead
 
-**Bead:** wave 3 — `beadloom-nh7h` ∥ `beadloom-ytcg` (gate owner); then F-jcng, V1 → V2 → V3; T → R → W → P.
+**Bead:** none — the work item shipped on 2026-10-08 (PR #94, `main` 539ed4a3); epic `beadloom-btkd` closed.
 **Goal:** a viewer without visual artefacts, an activity metric that means something, five defects fixed.
-**Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word.
+**Done when:** every PRD criterion holds in the suite, the owner has looked, the PR is merged on the owner's word — done: measured by `beadloom-q63p`, the owner looked on 2026-10-06 and 2026-10-07, PR #94 merged 2026-10-08.
 
 ## Progress
 
@@ -17,7 +17,7 @@
 - [x] RFC, CONTEXT, PLAN — approval delegated by the owner ("Утверждаю, дальше веди сам", 2026-10-05)
 - [x] Beads: epic `beadloom-btkd`, eight from one plan, five existing defects wired in
 - [ ] Development
-- [ ] Test, review, docs, the owner's look, PR
+- [x] Test, review, docs, the owner's look, PR (merged 2026-10-08, #94)
 
 ## Results
 

@@ -157,16 +157,23 @@ def test_architecture_component_registered_in_theme() -> None:
 
 
 def test_the_layout_hands_each_node_its_lane() -> None:
-    """ELK partitioning is on, and each node's layer rank reaches ELK as its partition."""
+    """ELK partitioning is on, and each node's lane reaches ELK as its partition.
+
+    A node's lane is the rank of its layer among siblings of one rule (BDL-080
+    S1c), and a box that holds a scoped rule's layer boxes stacks them with lane
+    edges, since ELK reads no partition of a node inside a box.
+    """
     layout = _read("shared/elk/graph.js")
     assert '"elk.partitioning.activate": "true"' in layout
     assert '"elk.direction": "DOWN"' in layout
     assert "layoutOptions: laneOf(node)" in layout
     assert '"elk.partitioning.partition"' in layout
+    assert "root.edges.push(...laneEdgesOf(nodes, taken))" in layout
     elements = _read("widgets/graph-viewer/lib/elements.js")
-    assert "data.partition = node.layer_rank" in elements
+    assert "data.partition = lanes.get(node.id)" in elements
     canvas = _read("widgets/graph-viewer/model/canvasLayout.js")
     assert 'partition: node.data("partition")' in canvas
+    assert "stack: node.data(STACK_LANES) === true" in canvas
 
 
 def test_the_layout_answers_in_root_coordinates() -> None:

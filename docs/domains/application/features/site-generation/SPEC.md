@@ -295,8 +295,12 @@ One feature node covers the cooperating modules below (all annotated
   container when the node declares none), symbol count, doc-status, served
   `.html` doc links (gated by the published-slug set so a link never 404s), and
   the `beadloom why` dependency lists; each `depends_on` edge carries a
-  `violation` flag (true when the project's layer rule finds against that edge).
-  Honest degradation throughout.
+  `violation` flag (true when any of the project's layer rules finds against that edge).
+  Since BDL-080 S1b it also writes every layer rule the project declares (`layer_rules`) and,
+  per node, the rule that places it (`layer_rule`, `layer_rule_rank`), read through
+  `layer_rules_view.py`. The original keys `layers`, `layer_order`, `layer` and `layer_rank`
+  still describe one rule, the first `layers` rule by name, and since S1f they read that rule
+  inside its `scope:`. Honest degradation throughout.
 
   **Which layers exist is read, not written down here (BDL-070 A5).** The view
   held a table of four `layer-*` tags and a table of four ranks and climbed
@@ -344,6 +348,15 @@ One feature node covers the cooperating modules below (all annotated
   judge such an edge, and drawing it as healthy would be the same overclaim in
   the other direction.
 
+  **Since BDL-080 S1b the verdict is the union over every rule.** The view asks
+  `flagged_layer_edges` of each `layers` rule over `depends_on` and marks an edge
+  `violation: true` when any of them finds against it. The key is written when the
+  first rule by name ranks both ends, as before, or when any `depends_on` rule places
+  a layer at both ends (`LayerRulesView.judges`). Measured on this repository by S1b:
+  the edges and their `violation` keys were byte-identical to the build before it,
+  because the first rule already ranks both ends of every edge the second one judges: the
+  site's slices inherit `layer-service` from `vitepress-site`.
+
   The rule's `exempt:` entries reach the view through the indexed rule, so
   `reindex` carries them into `rules.rule_json`. An index written by an earlier
   release carries none, and a project that excuses crossings and regenerates its
@@ -383,6 +396,27 @@ One feature node covers the cooperating modules below (all annotated
   VitePress theme: `ArchitectureMap.vue` is a thin page over the `graph-viewer`
   widget and the `node-card` widget, described in [the site's
   page](../../../../services/vitepress-site.md).
+- **layer_rules_view.py** — every layer rule the project declares, as the architecture view
+  draws it (BDL-080 S1b, RFC D2). The view drew one stratification, the first `layers` rule by
+  name, so a repository with a backend and a frontend drew its frontend grey while
+  `beadloom lint` judged it. `declared_layer_rules(conn)` reads every `layers` rule from the
+  indexed `rules` table, ordered by name, with its `exempt:` entries, its `scope` and its
+  `title`. A row that is not readable JSON, or declares no layer, is left out and logged, so one
+  unreadable rule does not take the others' strata with it. `layer_rules_view(rules, parents,
+  tags)` builds a `LayerRulesView` in which each rule reads only the tags inside its scope
+  (`graph.rules.layers.within_scope`, the narrowing the linter applies). The view answers three
+  questions, each from the rule engine's arithmetic:
+  - **which rule places a node** (`placement`) — the rule whose tag the node carries itself
+    (distance 0), else the rule of its nearest tagged `part_of` ancestor (distance = the
+    generation). At one distance the first rule by name wins. A scoped rule places nothing
+    outside its subtree.
+  - **which container a rule stratifies** (`declared`) — the declared `scope:`, else the lowest
+    container that is a strict `part_of` ancestor of every node the rule places a layer on (a
+    container holds its parts and is not its own), else `""` when the rule places no node or no
+    single container holds them all.
+  - **which edges are found against** (`flagged`) — the union of `flagged_layer_edges` over
+    every rule whose `edge_kind` is `depends_on` (`FLAGGED_EDGE_KIND`). A rule over another edge
+    kind is reported by `beadloom lint` and drawn by nothing here.
 - **architecture_card.py** — the node card of `architecture.data.json` (BDL-076
   A1): what one node shows beyond its place in the graph. `card_sources(conn, *,
   tags, verdicts)` reads the per-build inputs once — the test placements, the
@@ -623,9 +657,25 @@ version 2:
 
 - `generated_at` — the run's `now_ts`, so a fixed instant regenerates byte for byte;
 - `beadloom_version`;
-- `layers` — the declared layers top to bottom, each `{name, rank, tag, token}`, where `token`
-  is what a node in that layer carries as its `layer`;
-- `layer_order` — the direction the declared layer rule enforces, `""` when none is declared.
+- `layers` — the declared layers of the first `layers` rule by name, top to bottom, each
+  `{name, rank, tag, token}`, where `token` is what a node in that layer carries as its `layer`
+  (the tag with its `layer-` prefix removed);
+- `layer_order` — the direction that rule enforces, `""` when none is declared;
+- `layer_rules` (BDL-080 S1b, S1e) — every `layers` rule the index holds, ordered by name, each
+  `{name, title, scope, edge_kind, layers}`. `title` is the rule's declared `title:`, `""` when
+  it declares none. `scope` is the declared `scope:`, else the derived one (the lowest container
+  holding every node the rule places a layer on), else `""`. `layers` is the rule's layers top
+  to bottom, each `{name, rank, tag, token}`, where `token` is the layer's NAME (`services`,
+  `widgets`), unlike `layers[].token` above (`service`). `[]` when no layer rule is declared.
+
+**The original layer keys describe the first rule, inside its scope.** `layers`, `layer_order`
+and each node's `layer` and `layer_rank` keep the meaning they had in schema 2 before every rule
+was written: the first `layers` rule by name. Since BDL-080 S1f that rule is read inside its
+`scope:`, as the linter reads it. A node outside the scope has `layer` `""` and `layer_rank`
+`null` even when it carries one of the rule's tags, and a `depends_on` edge between nodes no rule
+places carries no `violation` key. A project whose first rule declares no `scope:` gets output
+byte-identical to the build before S1f (measured on the six adopter fixtures). The node card's
+`tags` stay what the node declares, scope or not.
 
 Nothing derived from the git remote is at the top level. A1 wrote a `project` name and A3 a
 `repository {url, ref}`; no screen read either, and a remote could carry a credential or a
@@ -635,7 +685,16 @@ file only as each node's `source_url`, and only when the project declares no `si
 **Per node.** Version 1: `id`, `label`, `kind`, `summary`, `layer`, `layer_rank`, `group`,
 `symbols`, `doc_status`, `doc_links`, `url`, `parent`, `depends_on`, `depended_on_by`, `uses`,
 `used_by`, and `lint_clean` when lint ran. `url` comes from `node_pages.node_page_urls`, so every
-node links to its page, `other/` included. Version 2 adds the card:
+node links to its page, `other/` included. Since BDL-080 S1b every node also carries:
+
+- `layer_rule` — the name of the rule that places the node (`LayerRulesView.placement`), `""`
+  when no rule does;
+- `layer_rule_rank` — the node's rank in that rule's layers, `null` when no rule places it.
+
+On this repository `site-graph-viewer` reads `layer_rule` `site-fsd-layers`, `layer_rule_rank`
+2, while its `layer` stays `""` and its `layer_rank` 0 under the first rule.
+
+Version 2 adds the card:
 
 | Key | Shape | Absent or empty when |
 |---|---|---|
@@ -674,7 +733,14 @@ file went from 376,794 to 331,941 bytes (gzip 44,755 to 38,711), and the listing
 **Edges.** One per `part_of`, `depends_on`, `uses`, `consumes` and `produces` edge, sorted. A
 contract edge (`consumes`/`produces`, new in version 2) carries its `contract` key, so two
 contracts between one pair of nodes stay two edges. A `depends_on` edge carries `violation` when
-both ends have a rank. `touches_code` stays out: it points at a file, not at a node.
+a rule judged it: the first rule by name ranks both ends inside its scope, or any `depends_on`
+rule places a layer at both ends. Its value is `true` when any rule finds against the edge.
+An edge no rule judged carries no `violation` key, never `false`. `touches_code` stays out: it
+points at a file, not at a node.
+
+Every key BDL-080 added is additive, and `schema_version` stays 2. A version-2 file written
+before it carries no `layer_rules`, `layer_rule` or `layer_rule_rank`, and the viewer then reads
+the first rule's `layers` and `layer_rank` as before.
 
 ### The landscape data file
 
@@ -739,6 +805,9 @@ carries it.
   annotations are stripped at write time, and a self-check reads every node id and the tracker.
 - A `site:` value the portal cannot use stops `docs site` before any file is written.
 - `activity` in the data file carries only the keys in `CARD_ACTIVITY_KEYS`.
+- `layers`, `layer_order`, `layer` and `layer_rank` describe the first `layers` rule by name,
+  inside its `scope:`; every other rule reaches the file through `layer_rules`, `layer_rule`
+  and `layer_rule_rank`. An edge carries `violation` only when a rule judged both ends.
 
 ## API
 
@@ -944,6 +1013,17 @@ Module `src/beadloom/application/site/architecture_view.py`:
 - `serialize_architecture_view(data)` -> `str` — byte-stable JSON (`sort_keys`)
 - `render_architecture_view_md(data)` -> `str` — the `architecture.md` page
 
+Module `src/beadloom/application/site/layer_rules_view.py` (BDL-080 S1b):
+- `FLAGGED_EDGE_KIND` — `"depends_on"`, the edge kind the view renders a layering verdict on
+- `declared_layer_rules(conn)` -> `tuple[LayerRule, ...]` — every `layers` rule in the index,
+  ordered by name; an unreadable row is skipped and logged
+- `RulePlacement` — frozen dataclass `rule`, `rank`
+- `LayerRulesView` — frozen dataclass `rules`, `parents`, `scoped_tags` (per rule, the tags
+  inside its scope); `declared(ref_ids)` -> `list[dict]` (the `layer_rules` key),
+  `placement(ref_id)` -> `RulePlacement | None`, `judges(src, dst)` -> `bool`,
+  `flagged(conn)` -> `frozenset[tuple[str, str]]`
+- `layer_rules_view(rules, parents, tags)` -> `LayerRulesView`
+
 Module `src/beadloom/application/site/architecture_card.py`:
 - `PUBLIC_SYMBOL_CAP` — `50`; `DOC_UNPAIRED` — `"unpaired"`; `CARD_ACTIVITY_KEYS` —
   `("commits_30d", "lines_30d", "level")`
@@ -980,12 +1060,17 @@ Tests bound to this node (the binding moved with the package in K1):
 `test_a_node_page_opens_the_viewer_on_its_node.py` (A4),
 `test_every_landscape_node_links_to_its_page.py` (A4), and
 `architecture_view/test_the_data_file_carries_the_node_card.py` (A1, K4, the source link and
-the activity allow-list) and
-`architecture_view/test_the_view_ranks_nodes_by_the_declared_layers.py`;
+the activity allow-list),
+`architecture_view/test_the_view_ranks_nodes_by_the_declared_layers.py`, and since BDL-080
+`architecture_view/test_the_data_file_carries_every_layer_rule.py` (`layer_rules`, placement,
+the derived scope, the union verdict, a scoped first rule, the rule's title) and
+`architecture_view/test_the_six_fixtures_keep_every_existing_layer_key.py` (the six adopter
+fixtures' data files, the new keys stripped, identical to the build before S1b);
 and `tests/unit/application/site/` — `test_site_about.py`, `test_site_mermaid_guard.py`,
 `test_a_remote_becomes_the_web_address_of_its_repository.py` and
 `test_a_source_links_to_its_forge_or_not_at_all.py` (the remote and the forge routes), and
-`test_a_contract_names_what_decided_its_verdict.py` (`verdict_basis`).
+`test_a_contract_names_what_decided_its_verdict.py` (`verdict_basis`), and
+`layer_rules_view/test_an_unreadable_layer_rule_row_leaves_the_others_drawn.py` (BDL-080 S1T).
 
 Slice 2 (BDL-076 B1–B4, `beadloom-ujzb.8`, `.11`–`.13`, `.18`, `.20`, `.21`), under
 `tests/unit/application/site/`: the `site:` block and the forges
@@ -1025,7 +1110,8 @@ missed 84 such files, `application/reindex` and the `init` command among them.
 
 Scenarios: `tests/acceptance/application/site-generation/node_card_data.feature` (the card, the
 source link per forge, no commit author and no credential in any generated file, an unreadable
-remote), `layer_view_verdict.feature`, and since slice 2 `portal_scaffold.feature`,
+remote), `layer_view_verdict.feature`, since BDL-080 `every_layer_rule_in_the_data_file.feature`
+and `a_site_node_is_a_service_on_the_portal.feature`, and since slice 2 `portal_scaffold.feature`,
 `pages_workflow.feature`, `pages_base_warning.feature`, `self_hosted_forge_links.feature`,
 `project_links_on_the_portal.feature` and `project_text_is_not_a_vue_template.feature`, with
 their steps under `tests/acceptance/steps/application/site-generation/`.

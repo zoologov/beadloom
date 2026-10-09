@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 import yaml
@@ -57,6 +58,28 @@ def get_node_tags(conn: sqlite3.Connection, ref_id: str) -> set[str]:
 #: ``graph`` and the reverse is a cycle, so a constant needed on both sides can
 #: only live on this one (BDL-069).
 NOT_A_GRAPH_FILE = frozenset({"rules.yml"})
+
+#: A node kind a graph file may declare that is read as another kind (BDL-080
+#: RFC D1). ``site`` stays accepted — removing a kind from the graph schema
+#: would be a major change — and is read as ``service``, because a portal is a
+#: service of its product: its own runtime, build and tests. :func:`load_graph`
+#: applies the table once, so every reader of ``nodes.kind`` sees the kind it
+#: maps to; each target is one of ``rules.types.VALID_NODE_KINDS``, so a rule
+#: can match it.
+#:
+#: It is declared HERE rather than beside ``VALID_NODE_KINDS`` because the rule
+#: engine already depends on this module (``rules/scenario_coverage.py`` reads
+#: ``get_node_tags``): the loader importing the rule model would close a
+#: ``depends_on`` cycle, an error under ``no-dependency-cycles`` (measured). A
+#: reader of the graph files outside this domain reaches it through
+#: ``onboarding.graph_files``, as it reaches ``NOT_A_GRAPH_FILE``.
+KIND_ALIASES: MappingProxyType[str, str] = MappingProxyType({"site": "service"})
+
+
+def canonical_kind(kind: str) -> str:
+    """The kind *kind* is read as: its alias target, or itself when it is no alias."""
+    return KIND_ALIASES.get(kind, kind)
+
 
 # Fields mapped directly to SQLite columns (not stored in ``extra``).
 _NODE_DIRECT_FIELDS = frozenset({"ref_id", "kind", "summary", "source", "lifecycle"})
@@ -227,6 +250,9 @@ class GraphLoadResult:
     edges_loaded: int = 0
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    #: What the load read differently from how the file wrote it, with nothing
+    #: for the author to fix — today a kind read through ``KIND_ALIASES``.
+    infos: list[str] = field(default_factory=list)
     foreign_edges: list[ForeignEdge] = field(default_factory=list)
 
 
@@ -395,6 +421,25 @@ def _normalize_source(
     return source
 
 
+def _read_kind(declared: Any, *, ref_id: str, result: GraphLoadResult) -> Any:
+    """The kind a node is stored under, and an info line when an alias was read.
+
+    The one place ``KIND_ALIASES`` is applied (BDL-080 RFC D1): every reader of
+    ``nodes.kind`` — the rules, the portal's pages, nav and views, the impact
+    boundary — sees the kind the alias names, with no alias table of its own.
+    A value that is not a string is stored as it was written, as before this
+    table existed: it is ``Any`` because the YAML it came from is.
+    """
+    if not isinstance(declared, str):
+        return declared
+    kind = canonical_kind(declared)
+    if kind != declared:
+        result.infos.append(
+            f"Node '{ref_id}' declares kind '{declared}', read as '{kind}' (an accepted alias)"
+        )
+    return kind
+
+
 def load_graph(
     graph_dir: Path,
     conn: sqlite3.Connection,
@@ -464,7 +509,7 @@ def load_graph(
             continue
         seen_ref_ids.add(ref_id)
 
-        kind: str = node.get("kind", "")
+        kind = _read_kind(node.get("kind", ""), ref_id=ref_id, result=result)
         summary: str = node.get("summary", "")
         source: str | None = _normalize_source(
             node.get("source"), ref_id=ref_id, project_root=project_root, result=result

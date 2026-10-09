@@ -45,6 +45,7 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 308 | 2026-10-08 | medium | active-sync reconciles the bead table and leaves ACTIVE.md's header, 'Current bead' and checklist stale when the work item ships |
 | 307 | 2026-10-07 | medium | the portal's Source link is a permalink to the built commit, so a local build from an unpushed commit links to a 404 on every node |
 | 306 | 2026-10-07 | medium | a box's card says `Debt 0` from the box's own score while its activity rolls up from its parts — two populations on one card, unnamed |
 | 305 | 2026-10-07 | medium | `Rule findings: none` on a node card is indistinguishable from "lint never ran", and the 36 findings bound to no node are shown nowhere on the portal |
@@ -129,6 +130,14 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+308. [2026-10-08] [MEDIUM] active-sync reconciles the bead table and leaves ACTIVE.md's header, 'Current bead' and checklist stale when the work item ships
+
+    **Severity:** medium (the document the owner reads as a work item's status says 'Development' after the item shipped)
+    **Command:** the pre-commit `beadloom active-sync`
+    **Context:** BDL-078 shipped on 2026-10-08; its ACTIVE.md table read done on every row, its header read 'Last updated: 2026-10-05, Phase: Development', its Current Bead named a bead, a Progress item was unticked. The owner: «Почему у нас BDL-078 файл Active не актуален и не закрыт? У нас же был механизм по ACTIVE.md, он не работает?»
+    **Issue:** the mechanism reconciles the bead-status table only (BDL-053); the header, the Current Bead line and the checklist are prose it never reads, so a closed work item keeps a development-time header.
+    **Expected:** when every bead incl. the parent is closed, active-sync sets the phase and date, rewrites the Bead line to 'none — shipped', and reports unticked Progress items; docs quality names an ACTIVE whose epic is closed but whose header is not. Tracked on `beadloom-cnty`.
 
 307. [2026-10-07] [MEDIUM] the portal's Source link is a permalink to the built commit, so a local build from an unpushed commit links to a 404 on every node
 

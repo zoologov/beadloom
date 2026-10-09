@@ -118,6 +118,7 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
         result.edges_loaded = graph_result.edges_loaded
         result.errors.extend(graph_result.errors)
         result.warnings.extend(graph_result.warnings)
+        result.infos.extend(graph_result.infos)
         # A node's `tests:` declaration is read here, once, into its own table:
         # the `extra["tests"]` it arrived in is rebuilt from the binding below.
         result.warnings.extend(record_declared_test_overrides(conn))

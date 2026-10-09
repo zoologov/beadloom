@@ -31,12 +31,18 @@
 // per frame at most and not while the view is animated, the readable boxes in
 // view and those a selection or a search needs are worked out again, and when
 // they differ the canvas is told to draw the level again (`onLevel`). A box the
-// test handle reveals is open at any zoom: the one way to force it.
+// test handle reveals is open at any zoom: the one way to force it. A selected box
+// is open at any zoom too, the box being what the reader asked to see — but not a
+// box holding the boxes a layer rule draws (`LAYER_BOX`): a closed box's title
+// keeps one size on screen, so layer boxes drawn smaller than their parts are
+// readable at would stand their titles on plates over each other. Such a box
+// opens where they are readable, selected or not, as a reader's zoom opens any box.
 
 import {
   AGGREGATE,
   COLLAPSED,
   HIDDEN_EDGES,
+  LAYER_BOX,
   LEVEL_OPTIONS,
   MAP_SCALE,
   PROJECT_BOX,
@@ -94,6 +100,8 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   // The edge of the file each loop's end stands for, by the end's id.
   const loopEdgeOfEnd = new Map([...loops].map(([id, { end }]) => [end.id(), id]));
   const smallest = smallestChildOf(tree, geometry.boxes);
+  // The boxes that hold the boxes a layer rule draws: they open only where those are readable.
+  const layered = new Set(cy.nodes().filter((node) => node.data(LAYER_BOX) && node.isChild()).map((node) => node.parent().id()));
   const reveals = new Map();
   const exempt = new Map();
   let shown = () => true;
@@ -168,12 +176,16 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
    * The boxes to draw open now: the readable ones in view and those a reveal
    * needs, once the view has been placed — before, the canvas stands at a zoom
    * nobody chose, and the first drawing is the overview — every one the test
-   * handle forces, and the root.
+   * handle forces, and the root. A reveal at any zoom other than the handle's
+   * (a selected box) opens a box holding a layer rule's boxes only where they are
+   * readable.
    */
   function wanted() {
     const needed = new Set();
     const forced = new Set();
-    for (const { boxes, anyZoom } of reveals.values()) for (const box of boxes) (anyZoom ? forced : needed).add(box);
+    for (const [source, { boxes, anyZoom }] of reveals) {
+      for (const box of boxes) (anyZoom && (source === FORCED || !layered.has(box)) ? forced : needed).add(box);
+    }
     const next = placed ? openInView(tree, geometry.boxes, smallest, open, viewNow(), needed, options, forced) : new Set();
     for (const box of forced) next.add(box);
     if (tree.wrapper) next.add(tree.wrapper);
@@ -371,7 +383,8 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
      * Draw each node of `ids` as itself with its own edges, for `source`: every
      * box that holds one open, and each one that is a box, once its nodes are
      * readable — at any zoom for the test handle (`FORCED`) and with `anyZoom`
-     * (a selected box); an empty list lets them close.
+     * (a selected box), but for a box holding a layer rule's boxes, which only
+     * the handle opens at any zoom (`wanted`); an empty list lets them close.
      */
     reveal(source, ids, { anyZoom = source === FORCED } = {}) {
       reveals.set(source, { boxes: boxesRevealing(tree, ids || []), anyZoom });

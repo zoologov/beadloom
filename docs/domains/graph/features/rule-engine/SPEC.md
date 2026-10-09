@@ -11,8 +11,8 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/attribution.py` — which node a source FILE belongs to, and how many files belong to none.
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers. `evaluate_one_import_rule` — one `forbid_import` rule over a list of imports — is public since BDL-074 C3, because `test_import_boundary` runs it over test imports.
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code. Since BDL-070 A5 it reads a node's layer through `layers.own_layer_of` and its tags through `node_tags`, so the answer it decides a `layers` rule's liveness on is the answer the evaluator decides its verdict on.
-- `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's, and which node's tag decided (`layer_membership`). Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1). Since BDL-070 B2 it also answers what containment makes of an edge INSIDE one layer: `shares_tagged_ancestor` and `same_layer_crossings`.
-- `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted against the layer each end is IN, and the finding that states the fraction (BDL-070 A2, recounted in B3).
+- `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's, and which node's tag decided (`layer_membership`). Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1). Since BDL-070 B2 it also answers what containment makes of an edge INSIDE one layer: `shares_tagged_ancestor` and `same_layer_crossings`. Since BDL-080 S1b it holds the one narrowing a scoped rule goes through, `within_scope` over `subtree_of`.
+- `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted against the layer each end is IN, and the finding that states the fraction (BDL-070 A2, recounted in B3). Since BDL-080 S1f `scoped_reach` counts a population already narrowed to the rule's scope, and `reach_of` is `within_scope` followed by `scoped_reach`.
 - `rules/layer_declaration.py` — which declared layers no node is in. A layer rule names TAGS rather than ref_ids, so it fell outside `validate_rules`' `isinstance` chain and a rule could declare a layer nothing carries without anything saying so. One predicate answers both surfaces — the `validate_rules` warning and the evaluator's `warn` finding — and the finding stands down when fewer than two layers are populated AND the rule is inert, because `liveness` names them for exactly that graph (BDL-070 A6). Both halves are needed since BDL-070 B5-fix: a rule whose one inhabited layer holds two peers that cross is live, so liveness says nothing about it, and standing down on the layer count alone would drop the report entirely (BDL-UX #296).
 - `rules/advisories.py` — the rule types whose findings report a rule's REACH rather than a defect (`layer_population`, `layer_declaration`, and since BDL-074 C3 `suite_population`), and the one thing that follows: `lint --fail-on-warn` does not exit 1 on them (BDL-070 A8).
 - `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2), and of the sixth cache `liveness._GraphFacts` kept beside them (BDL-070 A5).
@@ -226,7 +226,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 | `forbid_cycles` | the graph holds **0** *live* (`active`) edges of the declared `edge_kind`(s), so there is no chain to walk | `liveness.py` |
 | `forbid_import` | its `from` glob matches **0** indexed source files, or its `to` glob matches **0** indexed import paths | `evaluators.py` (a stale `exempt` entry: `exemptions.py`) |
 | `forbid` (edge) | its `from`/`to` selects **0** nodes, or the graph holds **0** edges of its `edge_kind` | `liveness.py` |
-| `layers` | no live `edge_kind` edge is one the rule COMPARES — across two layers for direction, or inside one layer against the shared-container predicate. An edge with an unlayered end is passed over and an edge inside one tagged container is legal by construction, so neither is a check the rule performed. A node is in the layer its own tag declares, else its nearest `part_of` container's, which is the reading the rule's own verdict rests on. How many layers hold a node decides only WHICH reason is printed: with fewer than **2** inhabited, the tags nobody carries are named, and otherwise the edge set is (BDL-070 B5-fix, `beadloom-5tcc.6`, closing BDL-UX #296 — before it, one run could report an error from a rule and count that same rule inert) | `liveness.py` |
+| `layers` | no live `edge_kind` edge is one the rule COMPARES — across two layers for direction, or inside one layer against the shared-container predicate. An edge with an unlayered end is passed over and an edge inside one tagged container is legal by construction, so neither is a check the rule performed. A node is in the layer its own tag declares, else its nearest `part_of` container's, which is the reading the rule's own verdict rests on. How many layers hold a node decides only WHICH reason is printed: with fewer than **2** inhabited, the tags nobody carries are named, and otherwise the edge set is (BDL-070 B5-fix, `beadloom-5tcc.6`, closing BDL-UX #296 — before it, one run could report an error from a rule and count that same rule inert). A rule with a `scope:` is read inside that subtree only, and a scope naming no node is the reason given before anything is counted (BDL-080 S1b) | `liveness.py` |
 | `check` (cardinality) | its `for` selects **0** nodes, **or** no threshold is set at all (`max_symbols`, `max_files` and `min_doc_coverage` all unset), so nothing is compared | `liveness.py` |
 | `unregistered_feature_candidate` | its `for` selects **0** nodes, or none of the nodes it selects declares a `source`, so it has no files to inspect | `liveness.py` |
 | `module_coverage` | its `source_root` holds **0** modules, on disk or in the index — "complete coverage" of nothing | `liveness.py` |
@@ -362,6 +362,34 @@ Enforces dependency direction between ordered architecture layers.
 | `edge_kind`  | `str`                 | Edge kind to check (default `"uses"`).                  |
 | `severity`   | `str`                 | `"error"` or `"warn"`.                                  |
 | `exempt`     | `tuple[LayerExemption, ...]` | Same-layer crossings the rule excuses (default empty). |
+| `scope`      | `str \| None`         | The node whose `part_of` subtree the rule judges inside (BDL-080 S1b); `None` for the whole graph. |
+| `title`      | `str \| None`         | The name the portal shows the rule by (BDL-080 S1e); `None` shows the `name`. |
+
+**`scope:` — a rule that judges inside one container (BDL-080 S1b).** A frontend's layering
+declared beside a backend's names its own service, so a node elsewhere that carries one of its
+tags is not judged by it. With a scope, an edge is judged only when BOTH ends are in the subtree
+(the scope node and its `part_of` descendants). An edge with an end outside is neither found
+against nor counted in the population line. Tags outside the subtree are not read, so nothing
+inside inherits a layer from a container above the scope, and the empty-layer declaration
+warning counts only the nodes inside. The loader refuses a value that is not a non-empty string:
+`Rule '<name>': 'scope' must name one node by its ref_id, the container the rule judges inside`.
+A scope naming no node is reported twice, before any count: `validate_rules` warns
+`Rule references unknown ref_id '<scope>' (not found in nodes table)`, and liveness reports the
+rule inert with `its scope '<scope>' names no node in the graph`. This repository declares no
+`scope:`: the portal derives `vitepress-site` for `site-fsd-layers` from where its tags are, and
+an explicit scope would change that rule's population line.
+
+**`title:` — the name a reader is shown (BDL-080 S1e).** The `name` stays the rule's identifier:
+`beadloom lint`, an `exempt:` entry and the portal's URL say it. `title:` is what the portal's
+legend, Layer filter, card and impact summary show. The value is stripped, and a non-string,
+empty or null value is refused at load:
+
+```
+Rule '<name>': 'title' must be a non-empty string, the name the portal shows the rule by
+```
+
+This repository titles `architecture-layers` `DDD architecture` and `site-fsd-layers`
+`FSD architecture`.
 
 #### `LayerExemption`
 
@@ -792,6 +820,8 @@ rules:
     enforce: top-down                          # higher layers may depend on lower
     allow_skip: true                           # optional, default: true
     edge_kind: depends_on                      # optional, default: uses
+    scope: <ref-id>                            # optional, judge inside this node's part_of subtree
+    title: "<the name the portal shows>"       # optional, default: the rule's name
     exempt:                                    # optional, excuses same-layer crossings
       - from: <src-ref-id-or-glob>             # mandatory
         to: <dst-ref-id-or-glob>               # mandatory
@@ -983,6 +1013,8 @@ def layer_population(edges, layer_at) -> LayerPopulation
 def tagged_containers(ref_id, layers, parents, tags) -> frozenset[str]
 def shares_tagged_ancestor(src, dst, layers, parents, tags) -> bool
 def same_layer_crossings(edges, layers, parents, tags) -> list[tuple[str, str]]
+def subtree_of(scope, parents) -> frozenset[str]
+def within_scope(scope, edges, parents, tags) -> tuple[list[tuple[str, str]], Mapping]
 ```
 
 One answer to "what layer is this node in", for every caller that asks. Three bodies asked it
@@ -1037,6 +1069,15 @@ iteration order:
 `import_resolver._part_of_ancestors` reads the direct edges out of SQLite and calls
 `part_of_ancestors` rather than climbing a second time; a test derives that from the source and
 fails on a second walk reachable from `graph/rules/`.
+
+**The one narrowing for a scoped rule** (BDL-080 S1b). `subtree_of(scope, parents)` is the scope
+and every node transitively `part_of` it, answered from the same `part_of_ancestors` walk the layer
+lookup climbs. A scope naming no node holds only its own name. `within_scope(scope, edges,
+parents, tags)` returns the edges with both ends in that subtree and the tag map restricted to it;
+`None` hands both on unchanged. Every reader of a layer rule's population narrows through it: the
+evaluator, the reach count, liveness, `validate_rules` and the portal's architecture view. Both are
+re-exported from `beadloom.graph.rules` and `beadloom.graph.rule_engine` with `layer_membership`
+and `part_of_generations`, except `subtree_of`, which stays in `layers.py`.
 
 `layer_population` counts an edge set into `evaluated` (a layer at both ends) and
 `skipped_untagged` (the rest). The resolver is a parameter rather than a fixed call, so the same
@@ -1131,6 +1172,8 @@ class LayerReach:
     edge_kind: str
     population: LayerPopulation   # what the rule decides on, by own tag or by container
 
+def reach_of(rule, edges, parents, tags) -> LayerReach  # pure; narrows to the rule's scope first
+def scoped_reach(rule, scoped_edges, parents, scoped_tags) -> LayerReach  # already narrowed
 def layer_rule_reach(conn, rule) -> LayerReach
 def layer_rule_reaches(conn, rules) -> list[LayerReach]   # one read of the graph for the whole list
 def population_statement(rule, reach) -> list[Violation]  # the finding, with its remediation
@@ -1252,8 +1295,11 @@ were no violations would have vanished from exactly the two formats it exists fo
 
 `LintResult.layer_populations` is counted in `linter._evaluate` beside `inert_rule_names` and
 `suppressed_crossings` rather than returned by `evaluate_all`, which returns findings. Both counts
-come from `reach_of` over one connection, so they cannot differ in logic, and a test holds the
-numbers on the result against the numbers in the finding.
+come from `scoped_reach` over one connection, so they cannot differ in logic, and a test holds the
+numbers on the result against the numbers in the finding. `reach_of` is `within_scope` followed by
+`scoped_reach`; the evaluator narrows a scoped rule once and counts with `scoped_reach`, so the
+subtree is walked once per rule rather than twice (BDL-080 S1f, review `beadloom-m7xq` finding 5).
+A scoped rule's population line counts its subtree only.
 
 ##### The surfaces outside `beadloom lint` (BDL-070 A4)
 
@@ -1622,6 +1668,21 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
   tag as a `warn` finding of type `layer_declaration` — never at the rule's declared severity
   (`tests/integration/graph/rules/test_a_layer_the_declaration_names_and_no_node_is_in.py`).
 - **Every layer populated.** Assert both surfaces are silent.
+
+### Layer Rule Scope and Title Tests (BDL-080)
+
+- **Scope** (`tests/unit/graph/rules/test_a_layer_rule_judges_inside_its_scope.py`). Parsing and
+  refusal of `scope:`, an edge leaving the subtree neither found against nor counted, no tag
+  inherited from above the scope, and the evaluator narrowing once (`TestTheEvaluatorNarrowsOnce`,
+  BDL-080 S1f).
+- **Scope against the graph**
+  (`tests/integration/graph/rules/test_a_layer_rules_scope_is_validated_against_the_graph.py`). A
+  scope naming no node is a `validate_rules` warning and a liveness reason.
+- **Title** (`tests/unit/graph/rules/test_a_layer_rule_carries_its_title.py`). A declared title is
+  carried on the rule, a rule without one has `None`, and an empty, blank, list, number or null
+  title is refused at load.
+- **Scenarios** (`tests/acceptance/graph/rule-engine/layer_scope.feature`, three scenarios, one of
+  them the unscoped control).
 
 ### Liveness Tests (`tests/integration/graph/rules/test_rule_liveness_all_types.py`)
 

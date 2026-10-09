@@ -36,7 +36,10 @@ A node's `source` is STAT'ed as it is loaded (BDL-061.50):
 
 - `load_graph(...)` — parse the graph YAML and populate `nodes` / `edges` (and
   `foreign_edges` for `@repo:ref` cross-repo endpoints); returns a
-  `GraphLoadResult` carrying `errors` + `warnings`.
+  `GraphLoadResult` carrying `errors`, `warnings` and, since BDL-080 S1a, `infos`:
+  what the load read differently from how the file wrote it, with nothing for the
+  author to fix. `beadloom reindex` prints `infos` as an `[info]` block after its
+  warnings.
 - `parse_graph_file(path)` — parse one `*.yml` into a `ParsedFile`; raises
   `GraphParseError` on malformed YAML, on a top-level value that is not a
   mapping, and — since BDL-069 — on a file that will not DECODE. `read_text` sat
@@ -50,6 +53,9 @@ A node's `source` is STAT'ed as it is loaded (BDL-061.50):
   `onboarding.graph_files` for the readers that go through the skip policy. The
   direction is what makes one constant possible: `onboarding` may import `graph`
   and the reverse is a cycle.
+- `KIND_ALIASES` — `{"site": "service"}` (a read-only mapping), the node kinds a
+  graph file may declare that are read as another kind (BDL-080 RFC D1).
+  `canonical_kind(kind)` returns the alias target, or the kind itself. See below.
 - `unique_by_ref_id(nodes)` — the one body that decides which node survives a
   `ref_id` carried twice, and reports every node the reduction drops. It takes
   `(where, node)` pairs, keeps the FIRST node under a `ref_id`, and returns
@@ -99,6 +105,39 @@ Three properties of the placement, each load-bearing:
 - **The writer no longer produces the collision** (`beadloom-cgco`, the other
   half of #214). This half is for the graphs that already exist: bootstrapped by
   an earlier release, or written by hand.
+
+## A kind alias is read once, at the loader
+
+A node declared `kind: site` is stored and read as `service` (BDL-080 S1a). A portal
+is a service of its product, with its own runtime, build and tests, and `site` is
+no kind the rules know. Removing `site` from the accepted spelling would be a major
+change, so it stays valid and is read as the kind it names.
+
+The table is applied once, in pass 1 of `load_graph` (`_read_kind`), so every reader
+of `nodes.kind` sees `service` with no alias table of its own: the rules (a
+`service-needs-parent` rule judges a `kind: site` node), the portal's pages, nav,
+architecture and landscape views, and the impact boundary. Each alias read adds
+one line to `GraphLoadResult.infos`:
+
+```
+Node 'portal' declares kind 'site', read as 'service' (an accepted alias)
+```
+
+A value that is not a string is stored as written, as before. A unit case pins
+every alias target inside `VALID_NODE_KINDS` and no alias shadowing a known kind.
+
+**Why the table is here and not beside `VALID_NODE_KINDS`.** The rule engine
+already depends on this module (`rules/scenario_coverage.py` reads
+`get_node_tags`), so the loader importing `graph/rules/types.py` would close a
+`depends_on` cycle. Measured by S1a: `lint --strict` reported
+`no-dependency-cycles: rule-engine -> graph-loader` at error severity. A reader of
+the graph files outside this domain reaches the table through
+`onboarding.graph_files`, as it reaches `NOT_A_GRAPH_FILE`. `docs generate` is
+one: it reads the YAML directly and applies `canonical_kind` itself.
+
+Tests: `tests/unit/graph/loader/test_a_kind_alias_reads_as_a_kind_the_rules_know.py`
+and `tests/acceptance/graph/graph-loader/site_is_an_alias_of_service.feature`
+(three scenarios).
 
 ## The skip policy, and why this module restates it
 

@@ -16,6 +16,10 @@ const SELECTS = [
   { key: "layer", label: "Layer", optionsKey: "layers" },
 ];
 
+/** A choice's value and the text it is shown by: a value alone is shown as itself. */
+const valueOf = (choice) => (typeof choice === "object" && choice !== null ? choice.value : choice);
+const textOf = (choice) => (typeof choice === "object" && choice !== null ? choice.text : choice);
+
 function change(key, value) {
   if (props.filters[key] !== value) emit("change", key, value);
 }
@@ -30,8 +34,8 @@ function change(key, value) {
         :value="filters[select.key]"
         @change="change(select.key, $event.target.value)"
       >
-        <option v-for="value in options[select.optionsKey]" :key="value" :value="value">
-          {{ value }}
+        <option v-for="choice in options[select.optionsKey]" :key="valueOf(choice)" :value="valueOf(choice)">
+          {{ textOf(choice) }}
         </option>
       </select>
     </label>
