@@ -123,7 +123,8 @@ the ELK worker engine for the dev server (`vite.optimizeDeps.include`, BDL-078 `
 because under `vitepress dev` mermaid's `fastdom` default export broke every page with a diagram.
 `npm run dev-check` (`scripts/dev-optimize-check.mjs`) starts the dev server, loads a page with a
 Mermaid diagram and the architecture page in Chromium, and fails on a page error, so it needs
-Playwright's Chromium; a slow test runs it on the six adopter fixtures. `npm run lint:fsd` runs
+Playwright's Chromium; a slow test runs it on the eight adopter fixtures (the six claimed stacks
+and, since BDL-080 S3d, the Feature-Sliced frontends `vue-fsd` and `rn-fsd`). `npm run lint:fsd` runs
 Steiger over `.vitepress/theme` with the configuration in `steiger.config.js` (below). The viewer's dependencies are Cytoscape and
 elkjs 0.12, which the viewer calls directly in a Web Worker. BDL-077 removed `cytoscape-elk`,
 which carried a nested elkjs 0.9 of its own, and `web-worker`, the one ranged pin, whose only
@@ -318,14 +319,20 @@ shape: python 75 passed and 26 skipped, go 88 and 13, typescript 94 and 7, java 
 locally on Darwin arm64 (`beadloom-btkd.15`). On PR #94 (head `038305af`, job 113056037571,
 a GitHub-hosted Ubuntu runner, two workers) it ran 318 cases, 308 in `chromium` and 10 in
 `performance`: 318 passed and none skipped, in 25.4 minutes. It is not a required check. The
-`site-adopters` workflow builds the six fixtures and runs the suite on each, on pull requests
-that change what it tests, weekly on `main` and on demand. It runs in seven legs, one per
-claimed stack and one for the slow tests that build a project of their own, and
-`BEADLOOM_SLOW_PART` names a leg's part (`beadloom-m6k7.7`). One after another, the six suites
-took about 14 minutes each on the runner, and the job was cancelled at its 60-minute timeout
-during the third. The cases tagged `@adopter-sized` run on the first stack of each count of
-declared layers (python, go and typescript) and are left out on java, kotlin and swift, which
-declare none, like python, and would draw the same graph. What it tests is its
+`site-adopters` workflow builds the eight fixtures and runs the suite on each, on pull requests
+that change what it tests, weekly on `main` and on demand. It runs in nine legs, one per fixture
+and one for the slow tests that build a project of their own (`projects`), reported as the check
+runs `site-adopters (python)`, `(go)`, `(typescript)`, `(java)`, `(kotlin)`, `(swift)`,
+`(vue-fsd)`, `(rn-fsd)` and `(projects)`; none is a required check. `BEADLOOM_SLOW_PART` names a
+leg's part (`beadloom-m6k7.7`). Before the legs were split, the six suites of that time ran one
+after another, took about 14 minutes each on the runner, and the job was cancelled at its
+60-minute timeout during the third. The cases tagged `@adopter-sized` run on the first stack of
+each count of declared layers (python, go, typescript, and since BDL-080 S3d `vue-fsd`, the first
+with the six FSD layers `init` writes) and are left out on java, kotlin and swift, which declare
+none, like python, and on `rn-fsd`, which declares as many as `vue-fsd`; each would draw the same
+graph. At `8dbe844c` the shipped suite was not green on the two FSD portals: S3T measured 7
+failing cases on `vue-fsd` and 17 on `rn-fsd` (macOS, `Node.js 22`), viewer layout and
+selection cases that S4f (`beadloom-af99.13`) owns. What it tests is its
 `paths:` filter, and a self-check holds that filter to every file the slow tests read and every
 `src/beadloom` file their `init`, `reindex` and `docs site` steps enter, traced on each fixture in
 a fresh interpreter (`beadloom-ujzb.24`).

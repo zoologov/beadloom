@@ -773,7 +773,11 @@ Feature-Sliced Design gives a slice a shape and a way in rather than a size. Bot
   the importing file's folder by `js_specifiers.relative_import_candidates`, the completion the
   resolver uses. Any other specifier went through an alias the rule does not read, so it is
   matched by its longest trailing path that names a file in the folder: `@/features/auth` names
-  the folder itself, so its `index`. A file other than the slice's `index` is a finding, and so
+  the folder itself, so its `index`. Either way a candidate list is settled by
+  `exact_case.first_existing_file`, the resolver's own function (BDL-080 S3f): a candidate counts
+  only when every part of its path is listed in its exact case, so on a case-folding filesystem
+  the rule and the resolver cannot pick different files for one import. Measured by S3f on
+  macOS: an import of `@/entities/app` beside `App.vue` was 1 finding before and 0 after. A file other than the slice's `index` is a finding, and so
   is an import into a slice that has no `index`. An import whose file cannot be located is not
   judged. A glob cannot express "inside this slice but not its index", which is why this is a
   rule over resolved imports and not a `forbid_import` pattern. Steiger's

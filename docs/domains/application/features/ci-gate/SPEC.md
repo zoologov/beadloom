@@ -317,8 +317,13 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    `beadloom-btkd.1` it carries every refused value of the `activity:` block the same way
    (`_activity_setting_findings`, rule `activity-settings`, severity `error`, read by
    `application.activity_settings.read_activity_exclusions`): a mistyped `exlude:` would count
-   every generated line as work without a word. With either block refused the summary is
-   ``N unusable `site:` value(s)`` and/or ``N unusable `activity:` value(s)``, joined by `+`.
+   every generated line as work without a word. Since BDL-080 S3a (`beadloom-cwzc`) it carries
+   every refused entry of the `imports:` block too (`_import_alias_findings`, rule
+   `import-aliases`, severity `error`, read by
+   `application.import_aliases.read_import_aliases`): a mistyped alias folder would leave every
+   import under the alias unresolved without a word. With any of the three blocks refused the
+   summary is ``N unusable `site:` value(s)``, ``N unusable `activity:` value(s)`` and/or
+   ``N unusable `imports:` value(s)``, joined by `+`.
 11. **doctor** — graph integrity.
 12. **federate** — `federate --fail-on` when hub exports are supplied.
 

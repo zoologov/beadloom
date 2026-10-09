@@ -20,6 +20,8 @@ makes it.
 1. **The commands, their options and their exit codes.** Every `beadloom` command and subcommand,
    every option it accepts, and the exit code it returns for a given input. The reference is
    [`docs/services/cli.md`](../services/cli.md) and `beadloom <command> --help`.
+   Added since 8.0.0 (MINOR, BDL-080 S3c): the value `fsd` of `init --preset`, beside
+   `monolith`, `microservices` and `monorepo`.
 2. **The keys of `.beadloom/config.yml`.** Every key a command reads, and the values each key
    accepts. A key is documented in the reference of the node whose code reads it: `tests:` in the
    [test-mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md), `site:` in the
@@ -34,6 +36,15 @@ makes it.
    portal's favicon too (BDL-080 S4e); without it, or when the file is Beadloom's own square
    icon byte for byte, the favicon is Beadloom's (the owner accepted that rule on 2026-10-10,
    `beadloom-e1xo`): the theme-adaptive SVG and a PNG per colour scheme under `public/brand/`.
+   Key added since 8.0.0 (MINOR, BDL-080 S3a): `imports.aliases`, a mapping of an import alias
+   to a folder or file relative to the project root (`.` for the root), read by the reindex
+   ([reindex SPEC](../domains/application/features/reindex/SPEC.md#import-aliases)) for the
+   import resolver, whose
+   [SPEC](../domains/graph/features/import-resolver/SPEC.md#non-relative-jsts-specifiers) says
+   how an alias is matched.
+   An unknown key under `imports:`, an alias that is a pattern or a path, and a value that names
+   nothing in the project are refused by `config-check` and the Gate, with exit code 1; no
+   project declared the block before it existed, so no accepted configuration is refused.
 3. **The keys and the value vocabularies of the JSON outputs**: `ctx --json`, `status --json`,
    the debt report (`status --debt-report --json`) and `export`, whose artifact is JSON without
    an option. A vocabulary is the set of values a key can take. The activity level is one:
@@ -54,6 +65,13 @@ makes it.
 6. **The files generated for an adopter**: what `init`, `docs site`, `docs generate`,
    `setup-agentic-flow`, `setup-rules`, `setup-mcp` and `install-hooks` write into a project,
    their paths and what they mean to the project that receives them.
+   Added since 8.0.0 (MINOR, BDL-080 S3): for a Feature-Sliced frontend, `init` writes nine rules
+   into `.beadloom/_graph/rules.yml`, two of them of rule types new in this release,
+   `slice_public_api: {tags}` and `slice_shape: {tags, segments}` (the
+   [rule-engine SPEC](../domains/graph/features/rule-engine/SPEC.md) is their reference); a
+   `lint:fsd` script in `package.json`; and, for any project whose `babel.config.*`,
+   `.babelrc` or `vite.config.*` declares aliases, the `imports.aliases` block of
+   `.beadloom/config.yml`.
 
 **The promise.** Within one major version, nothing on this list is removed, renamed or changed
 in a way that breaks a reader that used it as documented. A release that does any of those is a

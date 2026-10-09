@@ -147,6 +147,68 @@ names its bead; the pull request is to be opened.
   (`app/trail/` as `trail`, outside every layer) and left `app/_layout.tsx` and `app/index.tsx`
   to the root service. Measured on the `rn-fsd` adopter fixture: `fsd-layers` judges 15 of 17
   `depends_on` edges, up from 12 of 15.
+- **The import resolver reads tsconfig `paths` and `baseUrl` (`beadloom-cwzc`).** A non-relative
+  JS/TS specifier is read through the `compilerOptions.paths` of the tsconfig or jsconfig that
+  governs the importing file (every config of the nearest folder holding one, so `create-vue`'s
+  `tsconfig.app.json` counts; JSON with comments; relative `extends` followed), then through
+  `imports.aliases:`, then under `baseUrl`. Only when none of them names a file does the old
+  reading of `@/` and `~/` as `src/` answer. An Expo app whose `@/*` names the project root got
+  no edge for those imports before.
+- **`imports.aliases` in `.beadloom/config.yml` (`beadloom-cwzc`).** A mapping of an import alias
+  to a folder or file relative to the project root, for the aliases Babel `module-resolver` and
+  Vite `resolve.alias` apply and no tsconfig carries; the longest alias a specifier is, or starts
+  with followed by `/`, wins. `beadloom init` writes the block from a text scan of
+  `babel.config.*`, `.babelrc` and `vite.config.*`, which it does not run, and prints the
+  aliases it wrote and those it would not (a regular expression, a value with no string
+  literal) for you to confirm. An unknown key, a pattern, a path as an alias and a folder that
+  names nothing are refused by name by `config-check` and the Gate (rule `import-aliases`).
+  Editing the block, or a tsconfig, re-resolves on the next incremental reindex. Measured on a
+  synthetic Vue 3 FSD tree: Vite aliases resolved 0 of 4 before and 4 of 4 after; on an
+  Expo-like tree, Babel aliases 2 of 9 before and 10 of 10 after.
+- **React Native's platform files resolve (`beadloom-cwzc`).** `./Button` names
+  `Button.ios.tsx`, `Button.android.tsx`, `Button.native.tsx` or `Button.web.tsx`, tried in that
+  order before the plain extension, for relative and aliased specifiers and for a folder's
+  `index`. A module that exists only in those forms was unresolved before.
+- **`.mjs` and `.cjs` files are read (`beadloom-cwzc`, closing `beadloom-zd4m`).** Both are
+  parsed as JavaScript: their symbols are indexed and their ES module imports become edges, where
+  before they were import targets only. The parser fingerprint changes, so the first reindex
+  after the upgrade is a full one.
+- **The `fsd` preset: `init` reads a Feature-Sliced frontend slice by slice (`beadloom-5t8d`).**
+  Detected before every other preset when three of `app`, `pages`, `widgets`, `features`,
+  `entities`, `shared` are folders under `src/` or at the root of a frontend, or chosen with
+  `init --preset fsd`. Each slice is a `component` tagged `fsd-<layer>`, `app` and `shared` are
+  containers of segment components, and folders beside the layers are nodes tagged
+  `fsd-legacy`. `init` writes nine rules: `fsd-layers` (titled `FSD architecture`, scoped to the
+  frontend) and `fsd-public-api` at `error`, `fsd-slice-shape` and a cohesion check per layer
+  (widgets 80 symbols, the others 60) at `warn`; a `lint:fsd` script running Steiger into
+  `package.json` unless one runs it already; and no import edge into the graph YAML, since the
+  reindex derives them from the code. When the rules it wrote find the code's own crossings,
+  `init` says the code fails them, not the scaffold, and exits 1.
+- **Two rule types, `slice_public_api` and `slice_shape` (`beadloom-5t8d`).** `slice_public_api:
+  {tags: [...]}` reports an import into a slice (a node carrying one of the tags whose source is
+  a folder) from outside it that lands on a file other than the slice's `index`, and an import
+  into a slice with no `index`. `slice_shape: {tags: [...], segments: [...]}` reports a folder at
+  a slice's top that is not one of the segments (`ui`, `model`, `lib`, `api`, `config` by
+  default) and a code file there that is not the `index`. Both default to `error`, are refused
+  at load when `tags` or `segments` is not a non-empty list of strings, and are inert, and say
+  so, when no node carries a tag or no carrier's source is a folder.
+- **An Expo module's TypeScript is linked to its native code (`beadloom-wbqd`).** The reindex
+  reads every `expo-module.config.json` (`apple.modules`, else `ios.modules`; `android.modules`;
+  `platforms` when it is a list) and draws a `uses` edge from the node owning the config to the
+  node owning the module's `ios/` and `android/` folders, marked `derived: expo-module` with the
+  config, the platform and the native classes. The edges are rebuilt on every reindex, and an
+  edit to a config alone is seen by the incremental one. `init` writes each local Expo module as
+  a component with `<name>-ios` and `<name>-android` parts, on every preset; before, the JVM walk
+  took `android/` as a Gradle module part of the root and the Swift in `ios/` was in no node.
+- **Two Feature-Sliced adopter fixtures, and two `site-adopters` legs (`beadloom-chdx`).**
+  `tests/fixtures/site/vue-fsd` (Vite, Vue 3, TypeScript, Pinia, `.vue` single-file components,
+  tsconfig `@/`, Vite aliases, legacy folders beside the layers) and `tests/fixtures/site/rn-fsd`
+  (Expo, React Native, Expo Router, one Expo module with Swift and Kotlin, platform files, Babel
+  aliases, `.mjs` and `.cjs`). `init` writes their nodes, tags and rules with no hand edit. The
+  workflow's matrix is `[python, go, typescript, java, kotlin, swift, vue-fsd, rn-fsd, projects]`,
+  reported as `site-adopters (vue-fsd)` and `site-adopters (rn-fsd)` beside the others; none is a
+  required check. Measured with a reference reader per import form: 49 of 49 imports of
+  `vue-fsd` and 33 of 33 of `rn-fsd` land on the node owning the file their bundler loads.
 
 ### Changed
 
@@ -232,6 +294,18 @@ names its bead; the pull request is to be opened.
   tab-indented file every line changed. It now writes in the indentation the file already has
   (two spaces for a file on one line), the way npm does, so the diff is the one script. The
   write is atomic, and the file keeps its permissions.
+
+### Known limitations
+
+- **CommonJS is not read (owner's ruling, 2026-10-10).** `require()` and `module.exports` yield
+  no edge and no symbol, so a `.cjs` or `.js` file written in CommonJS is an import target only
+  and its own dependencies draw nothing. In a Feature-Sliced frontend CommonJS lives in
+  configuration files, not in layer code.
+- **Not read by the resolver or by `init`:** a folder's `package.json` `main`/`exports`;
+  `.mts`, `.cts` and `.d.ts` targets; Babel `module-resolver`'s `root:` and regular-expression
+  aliases; tsconfig `references` to another folder, `include`/`exclude` and `rootDirs`; an Expo
+  module's `apple.podspecPath` and `android.path`; a repository that is itself one Expo module;
+  an FSD tree inside one package of a monorepo, and slice groups.
 
 ## [8.0.0] - 2026-10-08
 

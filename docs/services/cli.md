@@ -39,7 +39,7 @@ choose one:
 
 ```bash
 # Generate graph from code structure (auto-detects architecture)
-beadloom init --bootstrap [--preset {monolith,microservices,monorepo}] [--project DIR]
+beadloom init --bootstrap [--preset {monolith,microservices,monorepo,fsd}] [--project DIR]
 
 # Import existing documentation
 beadloom init --import DOCS_DIR [--project DIR]
@@ -52,6 +52,33 @@ beadloom init [--project DIR]
 ```
 
 `--bootstrap` scans source directories (src, lib, app, services, packages), classifies subdirectories using architecture-aware preset rules, infers edges from directory nesting, and generates `.beadloom/_graph/services.yml` + `.beadloom/config.yml`. Three stacks are read through their build layout rather than as folders (BDL-076): Go imports through `go.mod`/`go.work`, a Maven or Gradle tree as packages under `src/<set>/<java|kotlin>/`, and a Swift Package Manager project as the targets its `Package.swift` declares; an Xcode project is reported (`Not read: N .swift files outside any Package.swift target`) and not read. What each stack gets is in [Getting Started](../getting-started.md#what-init-reads-in-each-stack).
+
+**A Feature-Sliced frontend** (BDL-080 S3) is read slice by slice: a `component` per slice tagged
+`fsd-<layer>`, `app` and `shared` containers of segments, folders beside the layers tagged
+`fsd-legacy`, Expo Router's `app/` beside an FSD `src/` as one `app-routes` node, and each local
+Expo module with its `ios/` and `android/` parts. `init` writes nine FSD rules into `rules.yml`,
+writes no import edge into the graph YAML (the reindex derives them), and adds a `lint:fsd`
+script running Steiger to `package.json` in the file's own indentation. On every project it also
+reads the aliases `babel.config.*`, `.babelrc` and `vite.config.*` declare, by a text scan, and
+writes them under `imports.aliases:` in `.beadloom/config.yml`. The details are in the
+[agent-prime SPEC](../domains/onboarding/features/agent-prime/SPEC.md#a-feature-sliced-frontend-expo-modules-and-expo-router-bdl-080-s3).
+Two lines name what it did, each silent when there is nothing to say; on the `rn-fsd` fixture:
+
+```text
+Import aliases: 2 read from babel.config.js by a text scan, not by running it (@ -> src, @modules -> modules); written under imports.aliases: in .beadloom/config.yml - confirm them
+Steiger: wrote the script 'lint:fsd' ('steiger ./src') into package.json, the file-level half of the FSD rules; install it with `npm install -D steiger @feature-sliced/steiger-plugin` and add a steiger.config.js with the plugin's recommended set
+```
+
+When the rules `init` just wrote find the code's own crossings (a `layers`, `slice_public_api`
+or `slice_shape` error, and nothing else at `error`), `init` says so rather than calling it a
+defect in the scaffold: `Error: your code does not pass the rules this command wrote alongside
+it.`, one line per finding, and that each is a finding about the project. It still exits 1, as
+`beadloom ci`'s lint step would, so a scripted `init && ci` stops there. On the `vue-fsd`
+fixture, which plants a cross-import and a deep import, `init` exits 1 naming both.
+
+`--project .` names the root service after the current folder (BDL-080 S3e, BDL-UX #313); before,
+it named it `''` whenever no `pyproject.toml`, `package.json`, `go.mod` or `Cargo.toml` named the
+project, and `init` on a Java project exited 1 with two `domain-needs-parent` findings.
 
 Since BDL-078 `beadloom-76mk` a bootstrapping mode writes `tests: {flat_tests: true}` into `.beadloom/config.yml` for a project whose languages include `.py`, so a flat `tests/test_<module>.py` binds to the node owning the module it names, else to the one node its imports reach. Every entry point that indexes (`--yes`, `--bootstrap`, the wizard) then prints the reindex's `Tests:` line and, when any test file is bound to no node, names each with its placement:
 
@@ -69,8 +96,9 @@ Every bootstrapping mode also writes `/site/` into `.gitignore`, for the portal 
 - `monolith` -- top dirs are domains; subdirs map to features, entities, services
 - `microservices` -- top dirs are services; shared code becomes domains
 - `monorepo` -- packages/apps are services; manifest deps become edges
+- `fsd` -- a Feature-Sliced Design frontend: slices, segments and legacy folders as components, the FSD rules, Steiger's script (BDL-080 S3c)
 
-When `--preset` is omitted, Beadloom auto-detects: `services/` or `cmd/` -> microservices, `packages/` or `apps/` -> monorepo, otherwise -> monolith.
+When `--preset` is omitted, Beadloom auto-detects: `fsd` first, when at least three of `app`, `pages`, `widgets`, `features`, `entities`, `shared` are folders under `src/` or at the root and the project is a frontend (JS/TS/Vue code in a layer folder, or a `package.json` at the root or beside the layers); then a React Native, Expo or Flutter app -> monolith; `services/` or `cmd/` -> microservices, `packages/` or `apps/` -> monorepo, otherwise -> monolith.
 
 `--import` classifies .md files (ADR, feature, architecture, other) and generates `.beadloom/_graph/imported.yml`.
 
@@ -1398,6 +1426,12 @@ Since BDL-078 `beadloom-btkd.1` it does the same for the `activity:` block, unde
 not a pattern (`activity.exclude[i]`), each with its remedy, and exits 1 on them. The Gate's
 step reports them as the rule `activity-settings`. The patterns and their grammar, which is not
 `.gitignore`'s, are in [Getting Started](../getting-started.md#configuration).
+
+Since BDL-080 S3a it does the same for the `imports:` block, under ``The `imports:` block of
+.beadloom/config.yml (N):``: an unknown key, an `aliases:` that is not a mapping, an alias that
+is a pattern or a relative or absolute path, and a folder that names nothing in the project,
+each with its remedy, and exits 1 on them, because a mistyped folder leaves every import under
+the alias unresolved without a word. The Gate's step reports them as the rule `import-aliases`.
 
 Re-runs the same `setup-rules --refresh` generator in memory and diffs its output against on-disk content for `.beadloom/AGENTS.md`, the auto-managed sections of `.claude/CLAUDE.md`, and present IDE adapter files. For those three, only the auto-managed regions are compared — editing user-authored prose (the AGENTS.md `custom` block, CLAUDE.md content outside the `auto-start`/`auto-end` markers) never trips them. The composed artifacts are a separate check with its own rules, described below. Prints which file drifted, why, and the remediation; an absent target file is skipped unless the project adopted the flow, in which case it is `missing`. `--fix` regenerates via the refresh path (`config_sync.apply_config_fixes`), names every file it changed, declines any body Beadloom cannot prove it wrote, and re-checks. Delegates to `onboarding/config_sync.py:check_config_drift()`.
 

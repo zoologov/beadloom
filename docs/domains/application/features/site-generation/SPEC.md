@@ -1150,8 +1150,9 @@ the activity allow-list),
 `architecture_view/test_the_view_ranks_nodes_by_the_declared_layers.py`, and since BDL-080
 `architecture_view/test_the_data_file_carries_every_layer_rule.py` (`layer_rules`, placement,
 the derived scope, the union verdict, a scoped first rule, the rule's title) and
-`architecture_view/test_the_six_fixtures_keep_every_existing_layer_key.py` (the six adopter
-fixtures' data files, the new keys stripped, identical to the build before S1b);
+`architecture_view/test_the_six_fixtures_keep_every_existing_layer_key.py` (the data files of
+the six adopter fixtures that predate the FSD ones, `SIX_STACKS`, the new keys stripped,
+identical to the build before S1b; `vue-fsd` and `rn-fsd` have no build before to compare);
 and `tests/unit/application/site/` — `test_site_about.py`, `test_site_mermaid_guard.py`,
 `test_a_remote_becomes_the_web_address_of_its_repository.py` and
 `test_a_source_links_to_its_forge_or_not_at_all.py` (the remote and the forge routes), and
@@ -1188,8 +1189,14 @@ base (`test_the_pages_workflow_deploys_the_portal_and_keeps_a_hand_edit.py`,
 `test_project_text_on_a_page_leaves_no_dead_link.py`, and the slow adopter builds, skipped unless
 `BEADLOOM_RUN_SLOW=1` and run by the `site-adopters` workflow:
 `test_an_adopter_builds_its_portal_from_docs_site.py`,
-`test_an_adopter_portal_on_every_claimed_stack.py` (six fixtures under `tests/fixtures/site/`)
-and `test_the_browser_tests_pass_on_an_adopter_portal.py`. That workflow starts on a pull request
+`test_an_adopter_portal_on_every_claimed_stack.py` (eight fixtures under `tests/fixtures/site/`:
+python, go, typescript, java, kotlin, swift, and since BDL-080 S3d the Feature-Sliced frontends
+`vue-fsd` and `rn-fsd`, whose layers and rules `init` writes with no hand edit)
+and `test_the_browser_tests_pass_on_an_adopter_portal.py`. The two FSD fixtures have a fast test
+of their own, `test_an_fsd_adopter_fixture_is_judged_by_the_rules_init_writes.py` (the import
+forms each fixture carries, its planted findings, the Expo bridges). The `site-adopters` matrix
+has nine legs, `[python, go, typescript, java, kotlin, swift, vue-fsd, rn-fsd, projects]`,
+reported as the check runs `site-adopters (<part>)`. That workflow starts on a pull request
 only through its `paths:` filter, and `tests/self_check/config/test_every_slow_test_runs_in_a_ci_job.py`
 holds the filter to what the slow tests read and run: every slow test file, conftest and
 support module they import, and, since `beadloom-ujzb.24` (m6), every `src/beadloom` file the

@@ -4,7 +4,11 @@ Import analysis and `depends_on` edge generation via tree-sitter-based source co
 
 **Source:** `src/beadloom/graph/import_resolver.py`, with the manifest readers
 `src/beadloom/graph/go_modules.py`, `src/beadloom/graph/jvm_packages.py` and
-`src/beadloom/graph/swift_packages.py`
+`src/beadloom/graph/swift_packages.py`; since BDL-080 S3 the JavaScript side
+`src/beadloom/graph/js_specifiers.py`, `src/beadloom/graph/tsconfig_paths.py`,
+`src/beadloom/graph/exact_case.py`, `src/beadloom/graph/project_walk.py` and
+`src/beadloom/graph/expo_modules.py`; the fingerprint of all of them,
+`src/beadloom/graph/import_manifests.py`
 
 ---
 
@@ -19,7 +23,7 @@ Extract import statements from source files using tree-sitter grammars, resolve 
 | Language              | File Extensions            | Import Syntax Handled                      | Skipped Imports                                 |
 |-----------------------|----------------------------|--------------------------------------------|-------------------------------------------------|
 | Python                | `.py`                      | `import X`, `from X import Y`              | Relative imports (`from . import`, `from ..`)   |
-| TypeScript/JavaScript | `.ts`, `.tsx`, `.js`, `.jsx`| `import ... from 'path'`, `export ... from 'path'`, `import('literal')` | None at extraction; npm packages resolve to no node |
+| TypeScript/JavaScript | `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs` | `import ... from 'path'`, `export ... from 'path'`, `import('literal')` | CommonJS `require()` is not read (see Not handled); npm packages resolve to no node |
 | Vue component         | `.vue`                     | The TS/JS forms, inside each `<script>` / `<script setup>` block | As TypeScript/JavaScript                        |
 | Go                    | `.go`                      | `import "path"`, `import (...)` blocks     | Nothing skipped: every import is recorded, the standard library's resolved to none (BDL-078 `beadloom-jcng`); resolved through `go.mod` (see below) |
 | Rust                  | `.rs`                      | `use path::to::module`                     | Built-in crates (`std`, `core`, `alloc`), `self`, `super` |
@@ -41,6 +45,11 @@ _TS_ALIAS_MAP: dict[str, str] = {
     "~/": "src/",
 }
 ```
+
+Since BDL-080 S3a (`beadloom-cwzc`) `_TS_ALIAS_MAP` is the LAST reading of a non-relative
+JS/TS specifier: a specifier is read through it only when the project's tsconfig `paths`,
+its `imports.aliases:` and its `baseUrl` name no existing file for it (see
+[Non-relative JS/TS specifiers](#non-relative-jsts-specifiers)).
 
 ### Data Structures
 
@@ -91,6 +100,9 @@ walk cannot double-count a single statement.
 - `import_from_statement`: checks for `relative_import` child; if present, skips. Otherwise extracts the first `dotted_name` as the module path.
 
 **TypeScript/JavaScript** (`_extract_ts_imports`):
+- Reads `.ts`, `.tsx`, `.js`, `.jsx`, and since BDL-080 S3a (`beadloom-zd4m`) `.mjs` and
+  `.cjs`, which the code indexer parses with the JavaScript grammar (`_SCRIPT_EXTENSIONS`).
+  Only ES module syntax is read: CommonJS `require()` and `module.exports` yield nothing.
 - Walks every `import_statement` and `export_statement` node in the tree and
   extracts the string source via `_get_ts_import_source` (looks for `string` ->
   `string_fragment` children). A re-export (`export { X } from './x'`,
@@ -178,7 +190,7 @@ scan_path prefix, generates both `.py` and `__init__.py` variants).
 3. Return the first matching `ref_id`.
 
 **Strategy 3 -- Hierarchical source-prefix matching:**
-1. For TypeScript/JavaScript (`is_ts=True`): normalize the import path via `_normalize_ts_import`. Returns `None` for npm packages (non-aliased, non-relative paths), terminating resolution.
+1. For TypeScript/JavaScript (`is_ts=True`): normalize the import path via `_normalize_ts_import`. Returns `None` for npm packages (non-aliased, non-relative paths), terminating resolution. A JS/TS specifier reaches this step only when `_mapped_file` found no file for it through the project's declarations (BDL-080 S3a).
 2. For other languages: convert the dotted path to a directory path (replace `.` with `/`).
 3. Call `_find_node_by_source_prefix(dir_path, scan_paths, conn)`:
    - Prepend each scan_path root (trailing `/` normalised), plus the bare path.
@@ -204,33 +216,160 @@ def resolve_relative_import(
 ```
 
 A specifier is relative when it is `.`, `..`, or starts with `./` or `../`. In a `.ts`, `.tsx`,
-`.js`, `.jsx` or `.vue` importer it is resolved by `resolve_relative_import`, never by
-`resolve_import_to_node` (BDL-076 J1). `relative_import_candidates` joins the specifier to the
-importer's directory, normalises it, and yields, in order:
+`.js`, `.jsx`, `.mjs`, `.cjs` or `.vue` importer it is resolved by `resolve_relative_import`,
+never by `resolve_import_to_node` (BDL-076 J1). The two candidate functions live in
+`js_specifiers.py` since BDL-080 S3a and are re-exported from `import_resolver`.
+`relative_import_candidates` joins the specifier to the importer's directory, normalises it,
+and hands the target to `module_file_candidates`, which yields, in order:
 
 1. the path as written;
 2. for a written `.js`, the `.ts` then `.tsx` source; for a written `.jsx`, the `.tsx` source
    (TypeScript's ESM convention writes the extension the file has after compilation);
-3. the path plus `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.vue`;
-4. `<path>/index` plus the same extensions.
+3. for each of `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.vue` (`MODULE_EXTENSIONS`), the
+   path plus each React Native platform suffix and the extension (`.ios`, `.android`,
+   `.native`, `.web`, `PLATFORM_SUFFIXES`), then the path plus the plain extension:
+   `Button.ios.ts`, `Button.android.ts`, `Button.native.ts`, `Button.web.ts`, `Button.ts`,
+   `Button.ios.tsx`, and so on;
+4. `<path>/index` completed the same way.
+
+The platform suffixes arrived with BDL-080 S3a. React Native's bundler completes `./Button` to
+`Button.ios.tsx` on iOS and `Button.android.tsx` on Android, so a module that exists only in
+those forms was named by no candidate and every import of it was unresolved. The index is not
+built for one platform, so all four suffixes are tried, iOS first. The files of one module sit
+in one folder, so the node an import resolves to does not depend on which of them answers.
 
 A file therefore beats a folder of the same name. A specifier that climbs above the project root
-yields no candidate. The first candidate that is a file on disk is the target, and its node is
-`get_owning_ref_id` of that file. A `.mjs`, `.cjs` or `.vue` target only has to exist: it need
-not be parseable.
+yields no candidate. The first candidate that `exact_case.first_existing_file` accepts is the
+target (see [Exact case](#exact-case)), and its node is `get_owning_ref_id` of that file. A
+`.mjs`, `.cjs` or `.vue` target only has to exist: it need not be parseable.
 
 A specifier that names no file, or names a file no node owns, is written to `code_imports` with
 `resolved_ref_id` NULL, like any unresolved import. It is never dropped.
 
-**Not handled** (each is a decision, named in the docstring):
+### Non-relative JS/TS specifiers
 
-- `tsconfig` `paths`/`baseUrl` beyond the `@/` and `~/` aliases of `_TS_ALIAS_MAP`;
+A non-relative specifier in a JS/TS/Vue importer is read by `_mapped_file` through what the
+project declares, in the order its own tooling reads it (BDL-080 S3a, `beadloom-cwzc`):
+
+1. the `compilerOptions.paths` of the tsconfig governing the importer (`TsConfigs.mapped`);
+2. the aliases declared under `imports.aliases:` in `.beadloom/config.yml`
+   (`js_specifiers.aliased_targets`): the aliases Babel `module-resolver` or Vite
+   `resolve.alias` apply and no tsconfig carries;
+3. the governing `compilerOptions.baseUrl` (`TsConfigs.under_base_url`).
+
+Each mapped path is completed by `module_file_candidates`, the same rule as a relative one, and
+the first file `first_existing_file` accepts is the target; its owner is the node. When no
+declaration names an existing file, the specifier goes on to `resolve_import_to_node`, where the
+`@/` and `~/` prefixes of `_TS_ALIAS_MAP` still answer as before, and a bare package name
+resolves to no node.
+
+**Which tsconfig governs an importer** (`tsconfig_paths.py`, `TsConfigs`). Every
+`tsconfig.json`, `tsconfig.<name>.json` and `jsconfig.json` in the project is found by the
+project's one walk (see [The project walk](#the-project-walk)). An importer is governed by the
+configs of the nearest folder at or above it that holds any, and by all of them, because
+`create-vue` puts `paths` in `tsconfig.app.json` beside a `tsconfig.json` that only lists
+references. In that folder `tsconfig.json` is read first, then the others by name,
+`jsconfig.json` last.
+
+**How a config is read.** As JSON with comments and trailing commas (`read_jsonc`), which is what
+`tsc` accepts. `extends` is followed when it names a file by a relative path, as a string or a
+list, at most 16 steps deep; a package (`expo/tsconfig.base`) is not read, and the config that
+names it still is. A child's `paths` and `baseUrl` replace its parent's. `paths` targets are
+read from `baseUrl` when one is in force, else from the folder of the config that declared
+`paths`; a target that leaves the project is dropped. A key without `*` matches only itself and
+beats every pattern; of the patterns, the one with the longest prefix before `*` wins, and each
+of its targets is a candidate, in order.
+
+**How an alias matches** (`aliased_targets`). An alias matches the specifier that IS the alias
+or starts with it and a `/`, as Babel `module-resolver` and Vite `resolve.alias` read a string
+key: `@shared` matches `@shared/api` and not `@sharedx`. The longest alias that matches wins, so
+the order the project declared them in decides nothing. The application layer reads the block
+(`application/import_aliases.py`) and passes the `(alias, folder)` pairs in as `aliases=`,
+because the graph domain does not read `.beadloom/config.yml` blocks itself.
+
+Measured by S3a on two synthetic trees, before and after: a Vue 3 + TypeScript FSD tree
+resolved its Vite aliases 0/4 before and 4/4 after, and its `baseUrl` import 0/1 before and 1/1
+after, with `depends_on` 13 before and 18 after; an Expo-like React Native tree resolved its
+Babel aliases 2/9 before (both through the hard-coded `~/`) and 10/10 after, with `depends_on`
+3 before and 14 after. The six adopter fixtures of that time kept identical `code_imports` rows
+and `depends_on` edges (`test_the_six_fixtures_index_as_before_aliases_were_read.py`).
+
+### Exact case
+
+`exact_case.first_existing_file(candidates, project_root)` is the one completion of a candidate
+list (BDL-080 S3e, made the one completion in S3f). A candidate counts only when it is a file
+and every part of its project-relative path is a name its folder lists exactly
+(`is_named_in_its_case`). A filesystem that folds case (APFS and HFS+ as macOS formats them,
+NTFS) answers `is_file()` for `src/app.vue` when the folder holds `src/App.vue`; a
+case-sensitive one (Linux) does not. Before S3e, `./app` beside `src/App.vue` and
+`src/app/index.ts` therefore named `App.vue` on macOS and the folder index on Linux. Now it names
+the folder index on every filesystem. Vite agrees with that answer: its default
+`resolve.extensions` holds no `.vue`. The `slice_public_api` rule locates the file an import
+reached with the same function, so the rule and the resolver cannot name different files for
+one import.
+
+Folder listings are cached per folder and reused while the folder's `st_mtime_ns` is unchanged,
+up to 4096 folders before the cache starts over. Measured on one pass over this repository's
+447 relative JS imports (macOS, APFS): 7.8 to 8.5 ms without the check, about 170 ms listing
+every folder of every resolved path, 27 to 35 ms with the cache.
+
+### The project walk
+
+`project_walk.ProjectFiles(project_root)` is one walk of the project, made on first use, that
+both `TsConfigs` and `ExpoModules` read when they are handed it (BDL-080 S3f). `.folders` is
+every `(folder, file names)` pair walked, and `.named(wanted)` the paths of the files whose
+name `wanted` accepts. The walk does not enter a hidden folder, a folder reached through a
+symbolic link, or a folder named in `SKIPPED_DIRECTORIES`: `node_modules`, `dist`, `build`,
+`vendor`, `Pods`, `venv`, `.venv`, `target`. One run (`_read_import_tree`) and one change check
+(`manifests_changed`) each build one `ProjectFiles` and share it. Before S3f each reader walked
+the tree itself, without `venv`, `.venv` or `target` in its skip list. Measured on this
+repository, a no-change incremental reindex in process, median of 3 in two rounds: 388.3 and
+401.5 ms with two walks before, 333.5 and 338.0 ms with one walk after.
+
+### Expo module bridges
+
+An Expo module's TypeScript reaches its Swift and Kotlin through no import:
+`requireNativeModule('Pulse')` names the native module by a string. The file that says which
+native code answers is the module's `expo-module.config.json`, which Expo's autolinking reads,
+and `expo_modules.py` reads it too (BDL-080 S3b, `beadloom-wbqd`). `ExpoModules` finds every
+config through the project walk and reads, per config:
+
+- `apple.modules`, else `ios.modules`: the classes linked on iOS, whose code is in `ios/`;
+- `android.modules`: the classes linked on Android, in `android/`;
+- `platforms`, when it is a list: a platform it does not name (`apple` or `ios` for iOS,
+  `android` for Android) is not linked, whatever its block says.
+
+A platform is bridged (`NativeBridge(config, platform, folder, modules)`) when its block names
+at least one module and its folder exists. `refresh_bridge_edges` writes one `uses` edge from
+the node owning the config file to the node owning `<module>/ios/` or `<module>/android/`, with
+`extra = {"derived": "expo-module", "config": ..., "platform": "ios"|"android", "modules":
+[...]}`. It runs after `refresh_import_edges` on every full and incremental index, deleting the
+derived set first (`delete_bridge_edges`), so a platform the config stops naming stops being
+drawn. A bridge whose ends have no node, or whose two ends are one node, writes no edge. An
+edge the graph YAML declares on the same pair keeps the YAML row (`INSERT OR IGNORE`).
+
+Not read: `apple.podspecPath` and `android.path`, which can move the native code out of the two
+folders; app delegate subscribers and other hooks that are no module; a config inside
+`node_modules`. `init` writes the module and its two parts as nodes (see the
+[agent-prime SPEC](../../../onboarding/features/agent-prime/SPEC.md)); measured on the `rn-fsd`
+fixture, one module linked on two platforms draws 2 `uses` edges.
+
+### Not handled
+
+Each is a decision, named in the docstring of `js_specifiers.py` or `tsconfig_paths.py`:
+
 - a folder's `package.json` `main`/`exports`;
 - `.mts`, `.cts` and `.d.ts` targets;
 - query suffixes (`./x.vue?raw`);
-- CommonJS `require()`;
-- `.mjs` and `.cjs` files as importers: they are not in `supported_extensions()`, so they are
-  resolution targets only and their own imports are not read.
+- Babel `module-resolver`'s `root:` folders and regular-expression aliases;
+- in a tsconfig: `references` to a config in another folder, `include`/`exclude` (an importer
+  is governed by folder, not by the config's file list), `rootDirs`, and a config `extends`
+  names inside `node_modules`;
+- **CommonJS** (the owner's ruling for BDL-080, 2026-10-10): `require()` and `module.exports`
+  yield no edge and no symbol, so a `.cjs` or `.js` file written in CommonJS is an import
+  target only, and its own dependencies draw nothing. The reason: in a Feature-Sliced frontend
+  CommonJS lives in configuration files, not in layer code. Measured by S3T on scratch
+  variants of the FSD fixtures: `require()` in a `.js`, a `.ts` and a `.cjs` file stored 0 of 3.
 
 A `forbid_import` rule matches `code_imports.import_path`, so for a relative import it sees the
 raw specifier, not the resolved file.
@@ -282,6 +421,16 @@ is read as the class the import names: Java requires a public class's file to ca
 and Kotlin's conventions ask it of a file holding one class. `resolve_jvm_import` resolves only
 when one node owns every folder the import reaches, so an import naming no such file draws no
 edge rather than a guessed one. `init`'s quick import scan applies the same rule to clusters.
+
+**The JavaScript side of the fingerprint** (BDL-080 S3a and S3b). A non-relative JS/TS import is
+read through the project's tsconfig/jsconfig files and its `imports.aliases:`, and the Expo
+bridge edges through each `expo-module.config.json`. None is a source file, so all three join
+`import_manifests`' fingerprint, by path and text: `TsConfigs.manifests`, the alias pairs, and
+`ExpoModules.manifests`. They are read only when some stored import was written in a `.ts`,
+`.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs` or `.vue` file, so a project without one digests exactly
+what it digested before and an upgrade re-resolves nothing it need not. Editing a tsconfig, an
+alias or an Expo config alone therefore re-resolves every stored import and re-derives the
+bridges on the next incremental reindex.
 
 ### Internal Resolution Helpers
 
@@ -339,6 +488,7 @@ def reindex_file_imports(
     *,
     touched: Sequence[str],
     removed: Sequence[str],
+    aliases: Sequence[tuple[str, str]] = (),
 ) -> int
 ```
 
@@ -348,34 +498,49 @@ then resolves every other stored import again against the same tree, without par
 `refresh_import_edges`. A touched or removed file can change what an untouched file's import
 names (BDL-078 `beadloom-nh7h`), and so can a manifest: the incremental reindex asks
 `import_manifests.manifests_changed()` and, when only a `go.mod`, `go.work` or `Package.swift`
-changed, calls this with both lists empty (`beadloom-jcng`). The JVM package declarations are
-read on every run. The result equals a fresh index of the same tree. This is what an incremental
+changed, calls this with both lists empty (`beadloom-jcng`); so does a change to a tsconfig, an
+`imports.aliases:` entry or an Expo module config (BDL-080 S3a, S3b). The JVM package
+declarations are read on every run. The Expo bridge edges are rebuilt after the import edges
+(`refresh_bridge_edges`). The result equals a fresh index of the same tree. This is what an incremental
 reindex calls; without it every import rule read an index frozen at the last
 FULL rebuild, so `reindex && lint` passed a real boundary break (BDL-UX #142).
 
 ### Full Indexing Pipeline
 
 ```python
-def index_imports(project_root: Path, conn: sqlite3.Connection) -> int
+def index_imports(
+    project_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    aliases: Sequence[tuple[str, str]] = (),
+) -> int
 ```
+
+*aliases* are the `(alias, folder)` pairs of `imports.aliases:`, read by the reindex
+(`application/import_aliases.py`) with that block's refusals.
 
 1. Resolve scan paths via `resolve_scan_paths(project_root)` from config.
 2. Collect source files via `_collect_source_files(project_root)`, which uses `resolve_scan_paths` and `supported_extensions()` to enumerate files under each scan directory, then `scan_path_languages` over them.
 3. For each file:
    a. Call `extract_imports(file_path)`. Skip if empty.
    b. Read file content, compute SHA-256 hash, compute relative path.
-   c. Determine `is_ts` flag from file extension (`.ts`, `.tsx`, `.js`, `.jsx`, `.vue`).
+   c. Determine `is_ts` flag from file extension (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`,
+      `.vue`).
    d. For each `ImportInfo`: a relative specifier from a TS/JS/Vue importer goes to
-      `resolve_relative_import`; a Go import to `resolve_go_import`; a Java or Kotlin import to
+      `resolve_relative_import`; any other specifier from such an importer to `_mapped_file`
+      first, and to `resolve_import_to_node` only when that finds no file; a Go import to `resolve_go_import`; a Java or Kotlin import to
       `resolve_jvm_import`; a Swift import whose module a manifest declares to
       `resolve_swift_import`; every other import goes to `resolve_import_to_node` with the
       scan paths of the file's import language. One dispatch (`_resolve_import`) serves the
       full and the incremental path. The Go modules, the declared JVM packages, the Swift
-      packages and the source files are read once per run, as one `_ImportTree`.
+      packages, the tsconfig files, the aliases, the Expo module configs and the source files
+      are read once per run, as one `_ImportTree`; the tsconfig and Expo readers share one
+      `ProjectFiles` walk.
    e. Upsert into `code_imports` with `ON CONFLICT(file_path, line_number, import_path) DO UPDATE SET resolved_ref_id, file_hash`.
 4. Commit.
-5. Record the manifest fingerprint (`import_manifests.record_manifests`) and call
-   `refresh_import_edges(conn)` to regenerate `depends_on` edges.
+5. Record the manifest fingerprint (`import_manifests.record_manifests`), call
+   `refresh_import_edges(conn)` to regenerate `depends_on` edges, then
+   `refresh_bridge_edges(conn, tree.expo_modules)` to regenerate the Expo `uses` edges.
 6. Return the total count of imports indexed.
 
 ### Configuration
@@ -390,6 +555,24 @@ scan_paths:
 ```
 
 Default: `["src", "lib", "app"]`.
+
+The aliases a bundler applies and no tsconfig carries are declared under `imports:` (BDL-080
+S3a). `beadloom init` writes the block from a text scan of `babel.config.*`, `.babelrc` and
+`vite.config.*`, and prints what it read for the user to confirm:
+
+```yaml
+imports:
+  aliases:
+    "@shared": src/shared   # @shared/api -> src/shared/api
+    "~": src                # ~/features/auth -> src/features/auth
+```
+
+A value is a folder or file relative to the project root (`.` for the root); a trailing `/` on
+an alias is dropped, so `"@/"` declares `@`. An unknown key under `imports:`, an `aliases:` that
+is not a mapping, an alias that is a pattern or a relative or absolute path, and a value that is
+not a path to something in the project are each refused by name. A refused entry is dropped and
+the usable ones are kept. The refusals block `beadloom config-check` and the Gate's
+`config-check` step (rule `import-aliases`).
 
 ---
 
@@ -434,20 +617,73 @@ def resolve_swift_import(
 def create_import_edges(conn: sqlite3.Connection) -> int: ...
 def delete_derived_import_edges(conn: sqlite3.Connection) -> int: ...
 def refresh_import_edges(conn: sqlite3.Connection) -> int: ...
-def index_imports(project_root: Path, conn: sqlite3.Connection) -> int: ...
+def index_imports(
+    project_root: Path, conn: sqlite3.Connection, *, aliases: Sequence[tuple[str, str]] = ()
+) -> int: ...
 def reindex_file_imports(
     project_root: Path,
     conn: sqlite3.Connection,
     *,
     touched: Sequence[str],
     removed: Sequence[str],
+    aliases: Sequence[tuple[str, str]] = (),
 ) -> int: ...
+```
+
+`is_relative_specifier` and `relative_import_candidates` are defined in `js_specifiers.py` and
+re-exported from `import_resolver`, so their import path is unchanged.
+
+The JavaScript side (BDL-080 S3):
+
+```python
+# js_specifiers.py
+MODULE_EXTENSIONS: tuple[str, ...]   # .ts .tsx .js .jsx .mjs .cjs .vue
+PLATFORM_SUFFIXES: tuple[str, ...]   # .ios .android .native .web
+def module_file_candidates(target: str) -> list[str]: ...
+def aliased_targets(specifier: str, aliases: Sequence[tuple[str, str]]) -> tuple[str, ...]: ...
+
+# tsconfig_paths.py
+def read_jsonc(text: str) -> object | None: ...
+class TsConfigs:
+    def __init__(self, project_root: Path, files: ProjectFiles | None = None) -> None: ...
+    manifests: tuple[tuple[str, str], ...]          # cached property
+    def mapped(self, specifier: str, importer: str) -> tuple[str, ...]: ...
+    def under_base_url(self, specifier: str, importer: str) -> tuple[str, ...]: ...
+
+# exact_case.py
+def is_named_in_its_case(project_root: Path, relative: str) -> bool: ...
+def first_existing_file(candidates: Sequence[str], project_root: Path) -> str | None: ...
+
+# project_walk.py
+SKIPPED_DIRECTORIES: frozenset[str]
+class ProjectFiles:
+    def __init__(self, project_root: Path) -> None: ...
+    folders: tuple[tuple[str, tuple[str, ...]], ...]  # cached property
+    def named(self, wanted: Callable[[str], bool]) -> tuple[str, ...]: ...
+
+# expo_modules.py
+EXPO_MODULE_CONFIG = "expo-module.config.json"
+DERIVED_BY_EXPO_MODULE = "expo-module"
+@dataclass(frozen=True)
+class NativeBridge:
+    config: str
+    platform: str
+    folder: str
+    modules: tuple[str, ...]
+def bridges_of(project_root: Path, config_path: str, text: str) -> tuple[NativeBridge, ...]: ...
+class ExpoModules:
+    def __init__(self, project_root: Path, files: ProjectFiles | None = None) -> None: ...
+    manifests: tuple[tuple[str, str], ...]          # cached property
+    bridges: tuple[NativeBridge, ...]               # cached property
+def delete_bridge_edges(conn: sqlite3.Connection) -> int: ...
+def refresh_bridge_edges(conn: sqlite3.Connection, modules: ExpoModules) -> int: ...
 ```
 
 The manifest readers' public API, and that of `import_manifests.py` (BDL-078 `beadloom-jcng`:
 `manifests_fingerprint`, `resolves_through_manifests`, `record_manifests`, `manifests_changed`,
 `MANIFESTS_META_KEY`), is listed in the [graph domain README](../../README.md), under each
-module.
+module. Since BDL-080 S3 `record_manifests` takes `ts_configs`, `aliases` and `expo_modules`
+as required parameters, and `manifests_changed` takes `aliases=`.
 
 ### Public Classes
 
@@ -471,6 +707,9 @@ class ImportInfo:
 - Resolution strategies are tried in strict order: file ownership, then annotation lookup, then source-prefix matching.
 - The source-prefix walk never tries a scan path's root or anything above it.
 - A relative JS/TS specifier is never dropped: it resolves to the owner of an existing file or is stored with `resolved_ref_id` NULL.
+- A non-relative JS/TS specifier is read through tsconfig `paths`, then `imports.aliases:`, then `baseUrl`, and reaches `_TS_ALIAS_MAP` only when none of them names an existing file.
+- A JS/TS candidate file counts only when every part of its path is listed in its exact case, so a tree resolves the same on a case-folding filesystem as on Linux.
+- The derived `uses` edges of the Expo bridges are a pure function of the configs and the nodes: deleted and rebuilt on every index, marked `derived: expo-module`, never written into the graph YAML.
 - A `.vue` import's `line_number` is a line of the `.vue` file.
 - `_import_path_to_file_paths` always includes the bare (no-prefix) variant as the last set of candidates.
 - An import resolves to the same node however the index was built: fresh, a second full
@@ -483,11 +722,12 @@ class ImportInfo:
 
 - Requires tree-sitter grammar packages for each supported language (e.g. `tree-sitter-python`, `tree-sitter-typescript`). Returns empty list if the grammar is not installed.
 - Only processes files located under directories listed in `scan_paths`.
+- The walks for tsconfig files and Expo configs never enter a hidden folder, a symlinked folder, or `node_modules`, `dist`, `build`, `vendor`, `Pods`, `venv`, `.venv` or `target`.
 - Relative and standard-library imports are skipped (language-specific detection):
   - Python: `relative_import` AST node presence.
   - Rust: root identifier is `self` or `super`.
 - TypeScript/JavaScript relative imports are NOT skipped since BDL-076 J1; see Relative JS/TS Imports.
-- npm packages (non-aliased, non-relative TypeScript/JavaScript imports) are skipped by `_normalize_ts_import` returning `None`.
+- npm packages (non-relative TypeScript/JavaScript imports that no tsconfig `paths`, `imports.aliases:` entry, `baseUrl` or `_TS_ALIAS_MAP` prefix maps to a file) are stored unresolved: `_normalize_ts_import` returns `None` for them.
 - The `code_symbols` table must be populated for annotation-based resolution to work (Strategy 2).
 - The `nodes` table must be populated for source-prefix resolution to work (Strategy 3).
 - File content is read as UTF-8; files that raise `UnicodeDecodeError` are silently skipped.
@@ -533,6 +773,29 @@ class ImportInfo:
 - `one_jvm_package_in_two_folders.feature` (2 scenarios, `beadloom-ujzb.24`): an import of a class
   of a package declared in two folders draws its edge to the node holding the class's file, from
   `init` and from `reindex`, and a wildcard import of that package resolves to no folder.
+- `an_aliased_or_platform_import_names_its_file.feature` (8 scenarios, BDL-080 `beadloom-cwzc`):
+  a tsconfig `paths` entry and an `imports.aliases` entry resolve, `paths` wins over the
+  hard-coded `@/`, a module that exists only with platform suffixes resolves, a `.mjs` module's
+  own imports are recorded, an unresolved specifier stays recorded, and an incremental index
+  after a tsconfig or an alias change equals a fresh one.
+- `an_expo_module_bridges_its_typescript_to_its_native_parts.feature` (5 scenarios,
+  `beadloom-wbqd`): a module linked on both platforms uses its Swift and its Kotlin part, the
+  edge names its config and native modules, a platform the config does not link is not
+  bridged, a native folder no node of its own owns yields no edge, and a platform removed from
+  the config stops being bridged on the next reindex.
+- `a_name_resolves_by_its_exact_case.feature` (3 scenarios, BDL-080 S3e): `./app` beside
+  `App.vue` and `app/index.ts` names the folder index, by a relative and an aliased path, and
+  a specifier written in the file's own case still names the file.
+
+The JavaScript side has unit tests of its own: `tests/unit/graph/test_js_specifiers.py`,
+`tests/unit/graph/test_tsconfig_paths.py`, `tests/unit/graph/test_project_walk.py`,
+`tests/unit/graph/test_expo_modules.py`. Integration: `tests/integration/graph/test_expo_modules.py`,
+`tests/integration/application/reindex/test_a_tsconfig_and_the_aliases_are_inputs_of_the_imports.py`,
+`tests/integration/application/reindex/test_the_six_fixtures_index_as_before_aliases_were_read.py`,
+and `tests/integration/graph/import_resolver/test_every_import_of_an_fsd_fixture_lands_where_its_bundler_loads_it.py`,
+which reads every import of the `vue-fsd` and `rn-fsd` fixtures with a reference reader per
+form and checks each lands on the node owning the file its bundler loads (measured by S3T:
+49 of 49 on `vue-fsd`, 33 of 33 on `rn-fsd`).
 
 The manifest readers have unit tests of their own: `tests/unit/graph/test_go_modules.py`,
 `tests/unit/graph/test_jvm_packages.py` (with `TestAPackageDeclaredInTwoFolders`),

@@ -445,8 +445,9 @@ The panel shows a card for the selected node, one kind per mode.
   is published.
 
   A portal built from a commit that no remote-tracking branch holds, such as a local build
-  before a push, would link every node to a 404, since the forge has never seen that commit. Its
-  links name a branch the remote holds instead: the upstream of the branch the commit is on,
+  before a push, would link every node to a page that does not exist, since the forge has never
+  seen that commit. Its links name a branch the remote holds instead: the upstream of the
+  branch the commit is on,
   else `origin`'s branch of the same name, else `origin`'s default branch (`origin/HEAD`). With
   none of them they keep the commit. A path that exists only in the unpublished commit is still
   missing on the branch. The card says `built from an unpublished commit; links point at main`
