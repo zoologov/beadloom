@@ -567,6 +567,8 @@ pytest_add_cli_args_test_selection = [
     "tests/self_check/process/test_this_projects_instructions_agree_with_the_bd_seam.py",
     "tests/test_scaffold_findings_are_printed.py",
     "tests/integration/graph/rules/test_scenario_coverage_rule.py",
+    "tests/integration/graph/rules/test_scenario_coverage_selects_its_population_by_a_tag_prefix.py",
+    "tests/integration/graph/rules/test_a_size_check_reports_each_threshold_under_its_own_rule.py",
     "tests/test_site_dashboard.py",
     "tests/integration/graph/rules/test_source_root_minority.py",
     "tests/test_sync_unverifiable.py",
