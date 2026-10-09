@@ -61,9 +61,12 @@ class _Duty:
 
 
 #: The verifications this report can recognise in a pipeline, and the words a
-#: gate step performing one would carry. Python-named because the stack overlays
-#: Beadloom composes ship Python commands; a project verifying under another
-#: name is told the population is empty, with this limit named.
+#: gate step performing one would carry. Mostly Python-named because the stack
+#: overlays Beadloom composes ship Python commands; a project verifying under
+#: another name is told the population is empty, with this limit named. The FSD
+#: linter is Steiger, run directly or through the ``lint:fsd`` script ``beadloom
+#: init`` writes for a Feature-Sliced frontend (BDL-080 S2b): it judges slices
+#: file by file, which the gate's graph lint does not.
 DUTIES: tuple[_Duty, ...] = (
     _Duty(
         name="the test suite",
@@ -80,13 +83,23 @@ DUTIES: tuple[_Duty, ...] = (
         tools=frozenset({"mypy", "pyright"}),
         step_names=frozenset({"mypy", "types", "type-check", "typecheck"}),
     ),
+    _Duty(
+        name="the FSD linter",
+        tools=frozenset({"steiger", "lint:fsd"}),
+        step_names=frozenset({"steiger", "lint-fsd", "fsd-lint"}),
+    ),
 )
 
 #: Tokens that introduce a command without being one. ``uv run pytest`` and
 #: ``python -m pytest`` are the same verification, so the tool is the first
-#: token that is none of these.
+#: token that is none of these. A JavaScript package manager introduces a
+#: script the same way: ``npm run lint:fsd`` and ``yarn lint:fsd`` answer
+#: ``lint:fsd``, and ``npm ci`` answers ``ci``, which performs no duty.
 _RUNNER_TOKENS = frozenset(
-    {"uv", "uvx", "npx", "run", "poetry", "pipenv", "hatch", "pdm", "rye", "-m"}
+    {
+        "uv", "uvx", "npx", "npm", "pnpm", "yarn", "run",
+        "poetry", "pipenv", "hatch", "pdm", "rye", "-m",
+    }
 )
 
 #: Interpreters that run a module rather than being the verification.

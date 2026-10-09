@@ -94,19 +94,31 @@ def matches_import_target(target_as_path: str, glob: str) -> bool:
 
 @dataclass(frozen=True)
 class NodeMatcher:
-    """Matches graph nodes by ref_id, kind, and/or tag."""
+    """Matches graph nodes by ref_id, kind, tag and/or the beginning of a tag.
+
+    ``tag_prefix`` (BDL-080 S2b) selects a node carrying ANY tag that begins with
+    it, so one rule covers a family of tags: ``fsd-`` selects a slice of every
+    Feature-Sliced layer, where ``tag`` would need one rule per layer.
+    """
 
     ref_id: str | None = None
     kind: str | None = None
     tag: str | None = None
     exclude: tuple[str, ...] | None = None
+    tag_prefix: str | None = None
+
+    @property
+    def reads_tags(self) -> bool:
+        """Whether a node's tags decide the match, so an evaluator must load them."""
+        return self.tag is not None or self.tag_prefix is not None
 
     def matches(self, node_ref_id: str, node_kind: str, *, tags: set[str] | None = None) -> bool:
         """Return True if this matcher matches the given node.
 
         The *tags* parameter is optional for backward compatibility.
-        When *tags* is ``None`` and ``self.tag`` is set, the tag check
-        is skipped (i.e. old callers that do not pass tags are not broken).
+        When *tags* is ``None`` and ``self.tag`` or ``self.tag_prefix`` is set,
+        the tag check is skipped (i.e. old callers that do not pass tags are not
+        broken); a caller that judges by tags reads :attr:`reads_tags`.
 
         The *exclude* field, when set, causes ``matches()`` to return
         ``False`` for any ``node_ref_id`` listed in the tuple.
@@ -117,15 +129,22 @@ class NodeMatcher:
             return False
         if self.kind is not None and self.kind != node_kind:
             return False
-        return not (self.tag is not None and tags is not None and self.tag not in tags)
+        if tags is None:
+            return True
+        if self.tag is not None and self.tag not in tags:
+            return False
+        prefix = self.tag_prefix
+        return prefix is None or any(tag.startswith(prefix) for tag in tags)
 
     def describe(self) -> str:
         """How the matcher reads in a finding, so an author can see what selected nothing."""
-        parts = [
-            f"{field}={value}"
-            for field, value in (("ref_id", self.ref_id), ("kind", self.kind), ("tag", self.tag))
-            if value is not None
-        ]
+        fields = (
+            ("ref_id", self.ref_id),
+            ("kind", self.kind),
+            ("tag", self.tag),
+            ("tag_prefix", self.tag_prefix),
+        )
+        parts = [f"{field}={value}" for field, value in fields if value is not None]
         return ", ".join(parts) if parts else "everything"
 
 

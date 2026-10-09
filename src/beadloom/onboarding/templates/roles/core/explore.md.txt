@@ -51,6 +51,12 @@ The same derivations report two co-writers under one seed and none under another
 
 A derivation that omits what it could not read hands the next role a clean list, and a clean list is trusted and stopped at. `beadloom impact` reports the population it could not resolve; carry it into the `Unresolved` field verbatim rather than rounding it to "some".
 
+### A node past its size signal is a fact a row carries
+
+<!-- beadloom:carries=cohesion -->
+
+Every node carries one responsibility a phrase can name, and the project holds that with size checks: a `check` rule's `max_symbols` (`domain-size-limit`, a per-layer cohesion check on a Feature-Sliced frontend). When `beadloom lint` reports such a finding on a node in your table, write it on that row's `Why` cell with the rule's name and the count it printed. A change landing in a node already past its signal may have to split the node first, and a split widens the route. Report the finding; do not propose the split, because what to cut is the plan's decision.
+
 ### What you do NOT do
 
 - You do not choose the type. You produce the input the type decision is made from, and `/task-init` makes the decision.

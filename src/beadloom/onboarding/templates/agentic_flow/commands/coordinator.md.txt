@@ -97,6 +97,10 @@ Roles are defined canonically in `.claude/agents/{dev,test,review,tech-writer}.m
 | Reviewer | `review` | Code review, quality (read-only) |
 | Tech Writer | `tech-writer` | Doc updates |
 
+**Cohesion is a duty of the roles, not of the launch prompt.** Every node carries one responsibility a phrase can name, and a size check (a `check` rule's `max_symbols`) is its signal, never its target. The explorer marks a node already past its signal, the developer splits by responsibility rather than by count, and the reviewer rejects a monster and a shatter alike. Each role's core states its part, so a launch prompt does not have to.
+
+<!-- beadloom:duty=cohesion roles=dev,explore,review -->
+
 ---
 
 ## Mandatory bead structure

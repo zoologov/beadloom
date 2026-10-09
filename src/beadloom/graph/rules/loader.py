@@ -70,15 +70,21 @@ def _parse_node_matcher(
     When *allow_empty* is True an empty dict ``{}`` is accepted and produces
     a ``NodeMatcher(ref_id=None, kind=None, tag=None)`` that matches **any** node.
 
+    ``tag_prefix`` selects a node carrying any tag that begins with it (BDL-080 S2b).
+
     The optional ``exclude`` field accepts a string or list of strings and
     is normalized to a tuple of ref_ids to exclude from matching.
     """
     ref_id = data.get("ref_id")
     kind = data.get("kind")
     tag = data.get("tag")
+    tag_prefix = _parse_tag_prefix(data.get("tag_prefix"), context)
 
-    if ref_id is None and kind is None and tag is None and not allow_empty:
-        msg = f"{context}: node matcher must have at least one of 'ref_id', 'kind', or 'tag'"
+    if ref_id is None and kind is None and tag is None and tag_prefix is None and not allow_empty:
+        msg = (
+            f"{context}: node matcher must have at least one of "
+            "'ref_id', 'kind', 'tag', or 'tag_prefix'"
+        )
         raise ValueError(msg)
 
     ref_id_str: str | None = str(ref_id) if ref_id is not None else None
@@ -98,7 +104,23 @@ def _parse_node_matcher(
         else:
             exclude = (str(exclude_raw),)
 
-    return NodeMatcher(ref_id=ref_id_str, kind=kind_str, tag=tag_str, exclude=exclude)
+    return NodeMatcher(
+        ref_id=ref_id_str, kind=kind_str, tag=tag_str, exclude=exclude, tag_prefix=tag_prefix
+    )
+
+
+def _parse_tag_prefix(raw: object, context: str) -> str | None:
+    """A matcher's ``tag_prefix``, or the refusal (BDL-080 S2b).
+
+    Refused rather than coerced the way ``tag`` is: an empty prefix begins every
+    tag, so a typo would select every tagged node and say nothing.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw:
+        msg = f"{context}: 'tag_prefix' must be a non-empty string"
+        raise ValueError(msg)
+    return raw
 
 
 def _parse_deny_rule(

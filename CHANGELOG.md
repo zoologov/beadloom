@@ -63,6 +63,36 @@ names its bead; the pull request is to be opened.
 - **The rule-engine SPEC documents the new keys (`beadloom-we9t`):** `scope:` and `title:` on a
   `layers` rule, with their refusals and what a scope narrows, in the
   [rule reference](docs/domains/graph/features/rule-engine/SPEC.md#rulesyml-schema).
+- **`tag_prefix:` on a node matcher (`beadloom-5wh2`).** A matcher selects a node carrying any
+  tag that begins with the prefix, in every rule that takes a matcher (`check`, `require`,
+  `deny`, `forbid`, `scenario_coverage`), so one rule covers a family of tags such as `fsd-*`.
+  It combines with `kind`, `ref_id`, `tag` and `exclude`; an empty or non-string prefix is
+  refused at load, a prefix no tag begins with makes the rule inert and says so, and the
+  `rules` index stores it.
+- **The Gate names Steiger among what it did not run (`beadloom-5wh2`).** A pipeline step that
+  runs `steiger`, or the `lint:fsd` script, is listed under `Not run by this gate:` as the FSD
+  linter with its command and job. `npm`, `pnpm` and `yarn` are read as runners in front of a
+  script, the way `uv run` already was.
+- **The viewer is cut into Feature-Sliced slices, and the scaffold carries Steiger
+  (`beadloom-7jgr`).** The graph viewer's 43 files are ten slices under `shared`, `entities`,
+  `features` and `widgets`, each entered through its `index`, with a byte-identical dump of nine
+  views before and after. The scaffold's `package.json` gains `steiger` and the `lint:fsd`
+  script with Steiger's `recommended` set; over the cut it reports 13 errors, 12
+  `insignificant-slice` and 1 `inconsistent-naming`, left red for the owner's ruling and run by
+  no CI job yet.
+
+### Changed
+
+- **The `fsd` role overlay maps a slice to a `component` (`beadloom-5wh2`).** It used to map a
+  layer to a `domain`, a slice to a `feature` and a segment to a `component`. A slice is now a
+  `component` tagged with its layer and `part_of` the frontend service, and `shared` and `app`
+  are containers of segment components — the graph `beadloom init` writes. The overlay states
+  the slice's public API, its shape and its size signal, drops the deprecated `processes`
+  layer from the chain, and puts Steiger in the commands a bead completes with.
+- **Cohesion is a declared duty of the dev, explore and review roles (`beadloom-5wh2`).** The
+  coordinator declares it and each core carries it, so `config-check` reports a role that loses
+  it. The `ddd` overlay states it for Python packages, and the explorer writes a size finding
+  on the row of the node it names.
 
 ## [8.0.0] - 2026-10-08
 

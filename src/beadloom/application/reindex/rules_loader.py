@@ -32,6 +32,8 @@ def _serialize_node_matcher(matcher: object) -> dict[str, object]:
         result["kind"] = matcher.kind
     if matcher.tag is not None:
         result["tag"] = matcher.tag
+    if matcher.tag_prefix is not None:
+        result["tag_prefix"] = matcher.tag_prefix
     if matcher.exclude is not None:
         result["exclude"] = list(matcher.exclude)
     return result

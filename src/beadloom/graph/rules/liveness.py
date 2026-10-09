@@ -268,6 +268,11 @@ def _matcher_reason(matcher: NodeMatcher, label: str, facts: _GraphFacts) -> str
         return None
     if matcher.tag is not None:
         return f"its `{label}` tag '{matcher.tag}' is carried by no node"
+    if matcher.tag_prefix is not None:
+        return (
+            f"its `{label}` selects by tag_prefix, and no node carries a tag "
+            f"beginning with '{matcher.tag_prefix}'"
+        )
     if matcher.kind is not None:
         return (
             f"its `{label}` kind '{matcher.kind}' matches none of the "

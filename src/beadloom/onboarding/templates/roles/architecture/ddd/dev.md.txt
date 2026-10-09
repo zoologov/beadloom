@@ -19,3 +19,8 @@ Emit on every new/changed module so it maps to its graph node:
 - `# beadloom:component=<ref>` — a finer-grained component of a domain/service.
 A new module with no annotation (and no matching node `source`) is invisible to the graph and fails `module-coverage` (error) — classify it as a node with a doc.
 
+### Cohesion (DDD, Python packages)
+- A domain is a bounded context; a feature or component inside it holds one responsibility you can name in a phrase, and so does each module.
+- A module that outgrows one responsibility becomes a package in the SAME domain (`git mv`, then split by responsibility), its public names re-exported from its `__init__` so callers' imports keep working. Callers import from the package, not from the module that happens to hold a name today.
+- When a part of that package has a responsibility of its own, make it its own `component` node, `part_of` the domain: `domain-size-limit` counts the symbols a node OWNS, so a real part carved out relieves the parent. Moving a monster into a new folder without that is gaming the count, not cohesion.
+
