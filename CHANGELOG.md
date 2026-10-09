@@ -99,26 +99,33 @@ names its bead; the pull request is to be opened.
   `page`). Two panels, Rule findings and Pages, follow the status cards; a data file without the
   keys shows neither.
 
-- **The portal carries a logo, a footer and its forge's icon (`beadloom-af99.7`).** Three keys
+- **The portal carries a logo, a footer and its forge's icon (`beadloom-af99.7`,
+  `beadloom-af99.9`).** Three keys
   join the `site:` block of `.beadloom/config.yml`, each refused by name by `docs site`,
   `config-check` and the Gate when it holds a value the portal cannot use. `site.logo` names the
   project's own SVG or PNG by its path relative to the project root; `docs site` copies it to
   `public/logo.svg` or `public/logo.png` and the nav shows it beside the title, and a project
-  that declares none gets no nav logo. `site.powered_by` (default `true`) switches a footer on
-  every page: Beadloom's small icon and "Powered by Beadloom" on one line, "MIT" and a link to
-  Beadloom's repository drawn with the GitHub mark on the next; `false` removes it. `site.repo_icon`
-  names the icon beside the header's repository link, one of `github`, `gitlab`, `bitbucket`,
-  `codeberg`, `gitea` or `git`; without it the icon is read from the host of `site.repo_url`
-  (`github.com`, `gitlab.*`, `bitbucket.org`, `codeberg.org`, `gitea.*`, any other host `git`).
-  The favicon is Beadloom's gradient icon. The scaffold ships the four brand files under
-  `public/brand/`, an `.svg` file carries the generated marker as an XML comment, and the
-  identity module `.vitepress/site.generated.mjs` gains `logo` and `poweredBy`. `config-check`
-  names a declared `site:` block without `repo_url`, which leaves the header without a
-  repository link, and does not block on it. `.github/social-preview.svg` carries the traced
-  mark and the README's first line.
+  that declares none gets no nav logo. An SVG logo drawn in `currentColor` is drawn in the
+  title's colour, 32 pixels square, in the light and the dark theme. The logo is the portal's
+  favicon too, as it is; a project without one, or whose logo is Beadloom's own icon, gets
+  Beadloom's: a theme-adaptive SVG and a 32-pixel PNG for browsers that take no SVG favicon, such
+  as Safari, which `docs site` writes under `public/brand/`. `site.powered_by` (default `true`)
+  switches a footer on every page: Beadloom's small icon and "Powered by Beadloom" on one line,
+  without a link, and "MIT" and a link to Beadloom's repository drawn with the GitHub mark on the
+  next; `false` removes it. `site.repo_icon` names the icon beside the header's repository link,
+  one of `github`, `gitlab`, `bitbucket`, `codeberg`, `gitea`, `azuredevops` or `git`; without it
+  the icon is read from the host of `site.repo_url` (`github.com`, `gitlab.*`, `bitbucket.org`,
+  `codeberg.org`, `gitea.*`, the Azure DevOps hosts, any other host `git`). The scaffold ships
+  Beadloom's square icon under `public/brand/`, an `.svg` file carries the generated marker as an
+  XML comment, and the identity module `.vitepress/site.generated.mjs` gains `logo`,
+  `logoMonochrome`, `favicons` and `poweredBy`. `config-check` names a declared `site:` block
+  without `repo_url`, which leaves the header without a repository link, and does not block on
+  it.
 
 ### Changed
 
+- **Beadloom's mark is the square icon (`beadloom-af99.9`).** The lettered mark is retired, and
+  `.github/social-preview.svg` is the square icon's version, approved by the owner on 2026-10-09.
 - **Steiger passes on the scaffold, and this repository's CI runs it (`beadloom-af99.8`).** The
   scaffold's `steiger.config.js` switches `fsd/insignificant-slice` off and says why beside the
   switch: the theme is cut so that beads can run in parallel on disjoint graph nodes, not for

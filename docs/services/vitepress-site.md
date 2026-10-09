@@ -75,10 +75,12 @@ it holds `ui`, `model`, `lib` or `api` segments as it needs them. Each slice is 
 This node keeps what belongs to no slice: `theme/index.js`, the file VitePress looks for, which
 re-exports the `app` layer; `.vitepress/config.mjs`, which reads the identity and the nav
 `docs site` generates (`site.generated.mjs`, `config.generated.mjs`) and sets from them the nav
-logo, the header's repository link with its icon, the footer switch and the favicon;
-`public/brand/`, Beadloom's four brand files (the gradient mark, its monochrome form, the
-monochrome icon the footer draws and the gradient icon that is the favicon), which VitePress
-copies to the site root; `.vitepress/generated.mjs`,
+logo (marked to be drawn in the text's colour when it is drawn in `currentColor`), the header's
+repository link with its icon, the footer switch and the favicons the identity names;
+`public/brand/beadloom-icon.svg`, Beadloom's square icon, its only mark, which the footer draws
+and VitePress copies to the site root (Beadloom's favicon, an SVG and a PNG, is package data
+under `beadloom/site_favicon/` that `docs site` writes beside it, because a PNG cannot carry the
+scaffold's marker); `.vitepress/generated.mjs`,
 whose `importGenerated(url)` loads a generated module as `{}` with a warning when it is not there
 yet and throws any other load error; `package.json` (`engines.node: >=22`, every dependency
 pinned exactly) with its lockfile; and `scripts/`. The shipped config pre-bundles `mermaid` and

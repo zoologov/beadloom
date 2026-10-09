@@ -71,6 +71,7 @@ from beadloom.application.site.dashboard import (
     render_dashboard_md,
     serialize_dashboard_data,
 )
+from beadloom.application.site.favicon import uses_beadloom_favicon, write_beadloom_favicon
 from beadloom.application.site.landscape_map import (
     build_landscape_data,
     render_landscape_md,
@@ -684,11 +685,18 @@ def generate_site(
         render_nav_config(conn, project_root),
         written,
     )
-    _write(out_dir / ".vitepress" / "site.generated.mjs", render_site_module(identity), written)
-    # The project's own logo for the nav (BDL-080 S4d), copied as it is.
+    _write(
+        out_dir / ".vitepress" / "site.generated.mjs",
+        render_site_module(identity, project_root),
+        written,
+    )
+    # The project's own logo for the nav (BDL-080 S4d), copied as it is; it is
+    # the favicon too, unless the portal shows Beadloom's (S4e).
     logo = copy_logo(project_root, identity.logo, out_dir)
     if logo is not None:
         written.append(logo)
+    if uses_beadloom_favicon(project_root, identity.logo):
+        written.extend(write_beadloom_favicon(out_dir))
 
     # The scaffold last but one, the project's overrides last of all: a file
     # under .beadloom/site/ replaces whatever this run wrote at its path.

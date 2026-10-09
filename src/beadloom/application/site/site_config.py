@@ -60,6 +60,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit, urlunsplit
 
+from beadloom.application.site.favicon import favicons_of
 from beadloom.application.site.forge_routes import (
     KNOWN_FORGES,
     PLACEHOLDERS,
@@ -70,7 +71,12 @@ from beadloom.application.site.forge_routes import (
     stops_before_repository,
 )
 from beadloom.application.site.repository_icon import REPO_ICONS, repo_icon_of
-from beadloom.application.site.site_logo import logo_problem, logo_site_path, read_logo
+from beadloom.application.site.site_logo import (
+    is_monochrome,
+    logo_problem,
+    logo_site_path,
+    read_logo,
+)
 from beadloom.doc_sync.declarations import (
     Refusal,
     describe_value,
@@ -465,11 +471,13 @@ def unlinked_repository(project_root: Path) -> str:
     )
 
 
-def render_site_module(config: SiteConfig) -> str:
+def render_site_module(config: SiteConfig, project_root: Path) -> str:
     """``.vitepress/site.generated.mjs``: the identity the shipped ``config.mjs`` reads.
 
-    JSON is a JavaScript expression, so the values reach the config quoted by
-    the same encoder whatever they hold.
+    *project_root* is where ``config.logo`` is read from: the favicons and the
+    logo's colour follow the file (BDL-080 S4e). JSON is a JavaScript
+    expression, so the values reach the config quoted by the same encoder
+    whatever they hold.
     """
     identity = {
         "title": config.title,
@@ -478,6 +486,8 @@ def render_site_module(config: SiteConfig) -> str:
         "repoUrl": config.repo_url,
         "repoIcon": repo_icon_of(config.repo_url, config.forges, config.repo_icon),
         "logo": logo_site_path(config.logo),
+        "logoMonochrome": is_monochrome(project_root, config.logo),
+        "favicons": favicons_of(project_root, config.logo),
         "poweredBy": config.powered_by,
     }
     return (

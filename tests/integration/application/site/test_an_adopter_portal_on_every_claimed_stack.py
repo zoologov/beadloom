@@ -208,7 +208,11 @@ def test_the_portal_carries_the_projects_title_base_and_repository(
 def test_the_portal_shows_the_logo_and_the_footer_its_project_declares(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:
-    """BDL-080 S4d: the adopter's logo in the nav when declared; the footer unless switched off."""
+    """BDL-080 S4d: the adopter's logo in the nav when declared; the footer unless switched off.
+
+    S4e (``beadloom-af99.9``): the favicon is the adopter's logo when it declares one,
+    and Beadloom's icon with its PNG only when it does not.
+    """
     portal = _built(adopter_portals, stack)
     fixture = portal.fixture
     index = (portal.dist / "index.html").read_text(encoding="utf-8")
@@ -218,7 +222,11 @@ def test_the_portal_shows_the_logo_and_the_footer_its_project_declares(
     if fixture.logo:
         assert (portal.dist / "logo.svg").read_bytes() == (portal.root / fixture.logo).read_bytes()
     assert ('data-testid="powered-by"' in index) is fixture.powered_by
-    assert f'href="{fixture.base}brand/beadloom-icon-gradient.svg"' in index
+    beadloom_favicon = not fixture.logo
+    favicon = "brand/beadloom-favicon.svg" if beadloom_favicon else "logo.svg"
+    assert f'href="{fixture.base}{favicon}"' in index
+    assert ("beadloom-favicon" in index) is beadloom_favicon
+    assert (portal.dist / "brand" / "beadloom-favicon.png").is_file() is beadloom_favicon
 
 
 @pytest.mark.parametrize("stack", _stacks())

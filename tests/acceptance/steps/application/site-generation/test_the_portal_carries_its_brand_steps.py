@@ -1,9 +1,10 @@
 """Step implementations for `application/site-generation/the_portal_carries_its_brand.feature`.
 
-BDL-080 S4d (`beadloom-af99.7`). Against a real project directory, the real
-reindex and the real generator with the scaffold the installed package ships:
-the scenarios read what `docs site` leaves in the output directory, and run the
-real `config-check` command over the project.
+BDL-080 S4d (`beadloom-af99.7`), and S4e (`beadloom-af99.9`): the favicon follows the
+logo and a logo drawn in `currentColor` takes the text's colour. Against a real
+project directory, the real reindex and the real generator with the scaffold the
+installed package ships: the scenarios read what `docs site` leaves in the output
+directory, and run the real `config-check` command over the project.
 """
 
 from __future__ import annotations
@@ -33,6 +34,10 @@ _NOW = "2026-10-09T00:00:00+00:00"
 _PROJECT_DIR = "acme-orders"
 _IDENTITY = ".vitepress/site.generated.mjs"
 _CONFIG = ".vitepress/config.mjs"
+#: Beadloom's icon as the package ships it, the footer's and the only mark.
+_BEADLOOM_ICON = ("site_scaffold", "public", "brand", "beadloom-icon.svg")
+#: Where the package keeps Beadloom's favicon, the SVG and its PNG.
+_FAVICON_DIR = "site_favicon"
 
 #: A logo of the project's own, in each kind the portal takes; the bytes are compared.
 _LOGOS = {
@@ -90,6 +95,19 @@ def _config_check(world: dict[str, Any]) -> Any:
 def _declares_its_logo(world: dict[str, Any], rel: str) -> None:
     project = _project(world, [f"logo: {rel}"])
     world["logo"] = _hold(project, rel)
+
+
+@given(
+    parsers.parse('a project that holds Beadloom\'s icon at "{rel}" and declares it as its logo')
+)
+def _declares_beadloom_icon(world: dict[str, Any], rel: str) -> None:
+    project = _project(world, [f"logo: {rel}"])
+    path = project / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    icon = files("beadloom")
+    for part in _BEADLOOM_ICON:
+        icon = icon.joinpath(part)
+    path.write_bytes(icon.read_bytes())
 
 
 @given(parsers.parse('a project that holds the file "{rel}" and declares the logo "{logo}"'))
@@ -150,12 +168,43 @@ def _brand_file(world: dict[str, Any], rel: str) -> None:
     assert marker.body == shipped
 
 
-@then(parsers.parse('the portal\'s VitePress config names "{rel}" as the favicon'))
-def _favicon(world: dict[str, Any], rel: str) -> None:
+@then(parsers.parse('the portal holds no file "{rel}"'))
+def _no_file(world: dict[str, Any], rel: str) -> None:
+    assert not (world["site"] / rel).exists(), rel
+
+
+@then("the portal's VitePress config takes its favicons from the portal's identity")
+def _favicon_from_identity(world: dict[str, Any]) -> None:
     config = (world["site"] / _CONFIG).read_text(encoding="utf-8")
-    # The browser case (`e2e/brand.spec.js`) follows the link; this reads the config.
+    # The browser case (`e2e/brand.spec.js`) follows the links; this reads the config.
     assert 'rel: "icon"' in config, config
-    assert f'"{rel}"' in config, config
+    assert "site.favicons" in config, config
+    assert "brand/beadloom-" not in config, "the config names no brand file of its own"
+
+
+@then(parsers.parse('the portal\'s identity names the favicons "{listed}"'))
+def _favicons(world: dict[str, Any], listed: str) -> None:
+    expected = []
+    for item in listed.split(", "):
+        href, kind, *sizes = item.split(" ")
+        icon = {"href": href, "type": kind}
+        if sizes:
+            icon["sizes"] = sizes[0]
+        expected.append(icon)
+    assert _identity(world)["favicons"] == expected
+
+
+@then(parsers.parse('the portal holds Beadloom\'s favicon "{rel}", byte for byte'))
+def _beadloom_favicon(world: dict[str, Any], rel: str) -> None:
+    name = rel.rsplit("/", 1)[-1]
+    shipped = files("beadloom").joinpath(_FAVICON_DIR, name).read_bytes()
+    assert (world["site"] / rel).read_bytes() == shipped
+    assert world["site"] / rel in world["result"].written
+
+
+@then(parsers.parse("the portal's identity draws the logo {how}"))
+def _logo_drawn(world: dict[str, Any], how: str) -> None:
+    assert _identity(world)["logoMonochrome"] is (how == "in the text's colour")
 
 
 @then(parsers.re(r'the portal\'s repository link carries the "(?P<icon>[^"]+)" icon'))

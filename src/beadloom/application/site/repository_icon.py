@@ -11,8 +11,9 @@ nothing names its icon with ``site.repo_icon``, which takes one value of
 :data:`REPO_ICONS` and wins over the host.
 
 A host the project declares a forge kind for under ``site.forges`` draws that
-kind's icon, as it did before this bead, and so do the Azure DevOps hosts, which
-the ruling's list does not name and whose mark the portal drew since BDL-076.
+kind's icon, as it did before this bead, and so do the Azure DevOps hosts, whose
+mark the portal drew since BDL-076; ``site.repo_icon`` names it as
+``azuredevops`` since BDL-080 S4e.
 
 The values are simple-icons names, the set VitePress draws a social link from.
 """
@@ -32,11 +33,13 @@ if TYPE_CHECKING:
 #: Git's own mark, for a host nothing else names.
 GENERIC_ICON = "git"
 
-#: Every icon ``site.repo_icon`` may name.
-REPO_ICONS = ("github", "gitlab", "bitbucket", "codeberg", "gitea", GENERIC_ICON)
-
-#: The icon Azure DevOps' hosts draw; derived only, never declared.
+#: The icon Azure DevOps' hosts draw.
 _AZURE_ICON = "azuredevops"
+
+#: Every icon ``site.repo_icon`` may name. Azure DevOps joined the list in BDL-080
+#: S4e (``beadloom-af99.9``): its hosts drew the icon since BDL-076, and a
+#: self-hosted Azure DevOps Server, whose host says nothing, could not name it.
+REPO_ICONS = ("github", "gitlab", "bitbucket", "codeberg", "gitea", _AZURE_ICON, GENERIC_ICON)
 
 #: The icon each forge kind of ``site.forges`` draws.
 _KIND_ICONS = {

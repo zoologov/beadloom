@@ -1,0 +1,29 @@
+/* beadloom:component=site-app */
+/*
+ * The project's logo in the nav bar, when it is an SVG drawn in `currentColor`.
+ *
+ * VitePress draws the logo as an image, and an image cannot inherit the page's
+ * colour: such a logo would be black on the dark theme. `config.mjs` marks it
+ * `data-monochrome` and hands its address over as `--bl-nav-logo`; here the
+ * image's own drawing gets no room (the padding takes the whole box) and the box
+ * is painted in the text's colour through the file as a mask, as the footer
+ * draws Beadloom's icon. A logo in colours of its own is drawn as it is.
+ *
+ * 32 px: half the nav bar's height and twice the title's 16 px type, so a square
+ * mark reads beside the title rather than under it; VitePress's own 24 px suits a
+ * wordmark, not a square.
+ */
+
+:root {
+  --bl-nav-logo-size: 32px;
+}
+
+.VPNavBarTitle .title .logo[data-monochrome] {
+  box-sizing: border-box;
+  width: var(--bl-nav-logo-size);
+  height: var(--bl-nav-logo-size);
+  padding-left: var(--bl-nav-logo-size);
+  background-color: currentColor;
+  -webkit-mask: var(--bl-nav-logo) center / contain no-repeat;
+  mask: var(--bl-nav-logo) center / contain no-repeat;
+}

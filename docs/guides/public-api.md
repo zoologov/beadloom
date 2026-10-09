@@ -28,8 +28,10 @@ makes it.
    PNG logo relative to its root, shown in the portal's nav; `site.powered_by`, `true` or
    `false`, the "Powered by Beadloom" footer; and `site.repo_icon`, the icon beside the
    header's repository link. `site.repo_icon` takes a value vocabulary: `github`, `gitlab`,
-   `bitbucket`, `codeberg`, `gitea`, `git`. Without it the icon is read from the host of
-   `site.repo_url`, which can also give `azuredevops` for an Azure DevOps host.
+   `bitbucket`, `codeberg`, `gitea`, `azuredevops`, `git`. Without it the icon is read from the
+   host of `site.repo_url`, which gives `azuredevops` for an Azure DevOps host as it has since
+   8.0.0; BDL-080 S4e let `site.repo_icon` name it for a self-hosted server. `site.logo` is the
+   portal's favicon too (BDL-080 S4e); without it the favicon is Beadloom's.
 3. **The keys and the value vocabularies of the JSON outputs**: `ctx --json`, `status --json`,
    the debt report (`status --debt-report --json`) and `export`, whose artifact is JSON without
    an option. A vocabulary is the set of values a key can take. The activity level is one:

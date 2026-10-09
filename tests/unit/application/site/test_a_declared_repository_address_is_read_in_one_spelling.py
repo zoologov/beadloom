@@ -79,7 +79,7 @@ def test_a_link_from_any_spelling_is_the_forges_route(tmp_path: Path, written: s
 
 def test_the_generated_module_carries_the_address_as_read(tmp_path: Path) -> None:
     config, _ = read_site_config(_declared(tmp_path, "https://github.com/o/r.git/"))
-    module = render_site_module(config)
+    module = render_site_module(config, tmp_path)
     assert '"repoUrl": "https://github.com/o/r"' in module
 
 

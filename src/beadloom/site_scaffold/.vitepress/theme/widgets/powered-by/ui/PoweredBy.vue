@@ -1,12 +1,13 @@
 <script setup>
 // beadloom:component=site-powered-by
 // PoweredBy — the footer of every page. Line 1 is Beadloom's small icon and
-// "Powered by Beadloom", line 2 is "MIT" and a link to Beadloom's repository
+// "Powered by Beadloom", as text without a link (the owner's look of
+// 2026-10-09); line 2 is "MIT" and a link to Beadloom's repository
 // drawn with the GitHub mark the header draws, the same component at the same
-// size. The footer is
-// about Beadloom, not about the adopter, so its links are Beadloom's own on
-// every portal; it is the one place Beadloom's icon appears on an adopter's
-// portal, and `site.powered_by: false` removes it whole (`theme.poweredBy`).
+// size. The footer is about Beadloom, not about the adopter, so its link is
+// Beadloom's own on every portal; it is the one place Beadloom's icon appears on
+// an adopter's portal, and `site.powered_by: false` removes it whole
+// (`theme.poweredBy`).
 //
 // The icon is `public/brand/beadloom-icon.svg`, drawn as a mask over
 // `currentColor` so that it takes the text's colour in either theme: an SVG
@@ -19,7 +20,7 @@ import { computed } from "vue";
 import { useData, withBase } from "vitepress";
 import { VPSocialLink, useSidebar } from "vitepress/theme";
 
-/** Beadloom's repository: both lines of the footer link to it. */
+/** Beadloom's repository, which the second line links to. */
 const BEADLOOM_REPOSITORY = "https://github.com/zoologov/beadloom";
 const ICON = "/brand/beadloom-icon.svg";
 
@@ -34,7 +35,7 @@ const iconStyle = computed(() => ({ "--bl-powered-by-icon": `url("${withBase(ICO
   <footer v-if="shown" class="bl-powered-by" :class="{ 'has-sidebar': hasSidebar }" data-testid="powered-by">
     <p class="bl-powered-by-line" data-powered-by="name">
       <span class="bl-powered-by-icon" :style="iconStyle" aria-hidden="true" data-powered-by="icon"></span>
-      <a :href="BEADLOOM_REPOSITORY" target="_blank" rel="noopener">Powered by Beadloom</a>
+      <span data-powered-by="text">Powered by Beadloom</span>
     </p>
     <p class="bl-powered-by-line" data-powered-by="licence">
       <span>MIT</span>
@@ -60,16 +61,6 @@ const iconStyle = computed(() => ({ "--bl-powered-by-icon": `url("${withBase(ICO
   justify-content: center;
   gap: 6px;
   margin: 0;
-}
-
-.bl-powered-by-line a:not(.VPSocialLink) {
-  text-decoration-line: underline;
-  text-underline-offset: 2px;
-  transition: color 0.25s;
-}
-
-.bl-powered-by-line a:not(.VPSocialLink):hover {
-  color: var(--vp-c-text-1);
 }
 
 .bl-powered-by-icon {

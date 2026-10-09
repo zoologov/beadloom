@@ -14,6 +14,12 @@ shape (a relative path with an SVG or PNG suffix) where the ``site:`` block is
 read, and the file itself (inside the project, and there) against the project
 root. A refusal names ``site.logo`` either way, and stops ``docs site`` before it
 writes anything, as every refusal of the block does.
+
+BDL-080 S4e (``beadloom-af99.9``): an SVG logo drawn in ``currentColor`` is
+meant to take the colour of the text around it, which an image cannot inherit:
+drawn as an image it is black, and invisible on the dark theme. Such a logo is
+named monochrome (:func:`is_monochrome`), and the portal draws it in the text's
+colour; every other logo is drawn as it is.
 """
 
 from __future__ import annotations
@@ -29,6 +35,9 @@ if TYPE_CHECKING:
 
 #: The kinds of file a logo may be, by suffix (lower-case).
 LOGO_SUFFIXES = (".svg", ".png")
+
+#: How an SVG says it is drawn in the colour of the text around it.
+_TEXT_COLOUR = b"currentColor"
 
 #: The logo's name in the portal, without its suffix, under ``public/``.
 _LOGO_STEM = "logo"
@@ -82,6 +91,16 @@ def logo_site_path(logo: str) -> str:
     if not logo:
         return ""
     return f"/{_LOGO_STEM}{PurePosixPath(logo).suffix.lower()}"
+
+
+def is_monochrome(project_root: Path, logo: str) -> bool:
+    """Whether *logo* is an SVG drawn in ``currentColor``, the text's colour.
+
+    ``False`` for a PNG and without a logo.
+    """
+    if PurePosixPath(logo).suffix.lower() != ".svg":
+        return False
+    return _TEXT_COLOUR in (project_root / logo).read_bytes()
 
 
 def copy_logo(project_root: Path, logo: str, out_dir: Path) -> Path | None:

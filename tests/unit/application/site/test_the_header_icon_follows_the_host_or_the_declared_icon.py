@@ -57,5 +57,14 @@ def test_a_forge_declared_by_template_is_read_by_its_host() -> None:
     )
 
 
-def test_the_vocabulary_is_the_six_icons_the_ruling_names() -> None:
-    assert sorted(REPO_ICONS) == ["bitbucket", "codeberg", "git", "gitea", "github", "gitlab"]
+def test_the_vocabulary_is_the_six_icons_the_ruling_names_and_azure_devops() -> None:
+    # Azure DevOps joined in BDL-080 S4e (`beadloom-af99.9`), by the owner's look.
+    assert sorted(REPO_ICONS) == [
+        "azuredevops",
+        "bitbucket",
+        "codeberg",
+        "git",
+        "gitea",
+        "github",
+        "gitlab",
+    ]

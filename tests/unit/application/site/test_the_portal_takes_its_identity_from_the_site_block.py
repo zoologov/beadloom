@@ -168,7 +168,7 @@ def test_the_generated_module_carries_the_identity_and_nothing_else(tmp_path: Pa
         base="/orders/",
         repo_url="https://gitlab.com/acme/orders",
     )
-    value = _module_value(render_site_module(config))
+    value = _module_value(render_site_module(config, tmp_path))
     assert value == {
         "title": 'Acme "Orders"',
         "description": "Orders",
@@ -176,6 +176,11 @@ def test_the_generated_module_carries_the_identity_and_nothing_else(tmp_path: Pa
         "repoUrl": "https://gitlab.com/acme/orders",
         "repoIcon": "gitlab",
         "logo": "",
+        "logoMonochrome": False,
+        "favicons": [
+            {"href": "/brand/beadloom-favicon.svg", "type": "image/svg+xml"},
+            {"href": "/brand/beadloom-favicon.png", "type": "image/png", "sizes": "32x32"},
+        ],
         "poweredBy": True,
     }
 
@@ -195,6 +200,8 @@ def test_the_generated_module_carries_the_identity_and_nothing_else(tmp_path: Pa
     ],
     ids=["github", "gitlab", "bitbucket", "codeberg", "azure", "self-hosted", "none"],
 )
-def test_the_repository_icon_follows_the_forge_the_link_points_at(url: str, icon: str) -> None:
+def test_the_repository_icon_follows_the_forge_the_link_points_at(
+    url: str, icon: str, tmp_path: Path
+) -> None:
     config = SiteConfig(title="t", description="d", base="/", repo_url=url)
-    assert _module_value(render_site_module(config))["repoIcon"] == icon
+    assert _module_value(render_site_module(config, tmp_path))["repoIcon"] == icon

@@ -107,7 +107,9 @@ One feature node covers the cooperating modules below (all annotated
   routed to `/ru/`, only when `README.ru.md` exists. After the content it writes
   `.vitepress/site.generated.mjs` (`site_config.render_site_module`), copies the project's logo
   when `site.logo` names one (`site_logo.copy_logo`, to `public/logo.svg` or `public/logo.png`),
-  and then the scaffold
+  writes Beadloom's favicon into `public/brand/` when the portal shows it
+  (`favicon.uses_beadloom_favicon`, `favicon.write_beadloom_favicon`, BDL-080 S4e), and then the
+  scaffold
   (`scaffold.write_scaffold`, which copies `.beadloom/site/` last); `SiteResult.scaffold` is the
   `ScaffoldReport` of that write.
 - **site_config.py** — the portal's identity, the `site:` block (BDL-076 B1, B4 and
@@ -130,9 +132,10 @@ One feature node covers the cooperating modules below (all annotated
   The value itself is never repeated in a refusal, because it may hold a credential.
   `powered_by` must be a boolean, and `repo_icon` one of `REPO_ICONS`. `logo` is read twice
   (`site_logo`): its shape where the block is read, and the file against the project root after.
-  `render_site_module(config)` writes `.vitepress/site.generated.mjs` as JSON, with `repoIcon`
-  from `repo_icon_of` and, since BDL-080 S4d, `logo` (the copy's address before the base, `""`
-  without one) and `poweredBy`. `unlinked_repository(project_root)` returns the sentence
+  `render_site_module(config, project_root)` writes `.vitepress/site.generated.mjs` as JSON, with
+  `repoIcon` from `repo_icon_of` and, since BDL-080 S4d, `logo` (the copy's address before the
+  base, `""` without one) and `poweredBy`; since S4e, `logoMonochrome` (`site_logo.is_monochrome`)
+  and `favicons` (`favicon.favicons_of`), both read from the logo file under `project_root`. `unlinked_repository(project_root)` returns the sentence
   `config-check` prints, without blocking, when a declared `site:` block has no `repo_url`, and
   `""` otherwise. The refusals
   reach three readers: `docs site`, `beadloom config-check` and the Gate's `config-check` step
@@ -145,13 +148,27 @@ One feature node covers the cooperating modules below (all annotated
   `codeberg.org` `codeberg`, `gitea.com` and a host whose first label is `gitea` `gitea`,
   `dev.azure.com` and `*.visualstudio.com` `azuredevops`; else `git` (`GENERIC_ICON`).
   `REPO_ICONS` is the vocabulary `site.repo_icon` accepts: `github`, `gitlab`, `bitbucket`,
-  `codeberg`, `gitea`, `git`. Before this bead `codeberg.org` drew Gitea's mark.
+  `codeberg`, `gitea`, `azuredevops` (since BDL-080 S4e), `git`. Before S4d `codeberg.org` drew
+  Gitea's mark.
 - **site_logo.py** — the project's logo in the nav (BDL-080 S4d). `read_logo(value, where)` keeps
   a non-empty relative path with a `.svg` or `.png` suffix (`LOGO_SUFFIXES`) in posix form and
   refuses anything else by name; `logo_problem(project_root, logo, where)` refuses a path that
   resolves outside the project root or holds no file; `logo_site_path(logo)` is `/logo.svg` or
   `/logo.png` (`""` without a logo); `copy_logo(project_root, logo, out_dir)` copies the file
   byte for byte into `out_dir/public/` and returns the copy, or `None` without a logo.
+  `is_monochrome(project_root, logo)` (BDL-080 S4e) is whether the logo is an SVG that holds
+  `currentColor`, which the nav then draws in the text's colour; `False` for a PNG and without a
+  logo.
+- **favicon.py** — the portal's favicon (BDL-080 S4e, `beadloom-af99.9`, the owner's look of
+  2026-10-09). `uses_beadloom_favicon(project_root, logo)` is true without a logo and for a logo
+  that is Beadloom's icon byte for byte (`site_scaffold/public/brand/beadloom-icon.svg`).
+  `favicons_of(project_root, logo)` is then Beadloom's two, `/brand/beadloom-favicon.svg`
+  (`image/svg+xml`) and `/brand/beadloom-favicon.png` (`image/png`, `sizes` `32x32`), and
+  otherwise the logo's copy alone with its type. `write_beadloom_favicon(out_dir)` copies both
+  files from the package data `beadloom/site_favicon/` into `public/brand/`: not scaffold files,
+  because a PNG cannot carry the scaffold's text marker. `LIGHT_GLYPH` (`#3c3c43`) is the colour
+  the PNG carries, the SVG's light scheme; `FAVICON_PNG_SIZE` is 32. The PNG is generated from the
+  SVG by `tests/support/render_favicon_png.mjs`.
 - **forge_routes.py** — the routes a forge serves a path under (BDL-076 `beadloom-ujzb.8`).
   `Forge(kind, tree, blob, raw)` holds three URL templates over `{url}`, `{ref}`, `{path}`;
   `link(route, url, ref, path)` fills one, URL-encoding the revision and the path.
@@ -958,7 +975,7 @@ Module `src/beadloom/application/site/site_config.py`:
   powered_by=True, repo_icon="")`; `SiteConfigError(refusals)`
 - `read_site_config(project_root)` -> `tuple[SiteConfig, tuple[Refusal, ...]]`;
   `site_config_of(project_root)` -> `SiteConfig` (raises on any refusal)
-- `canonical_repo_url(url)` -> `str`; `render_site_module(config)` -> `str`;
+- `canonical_repo_url(url)` -> `str`; `render_site_module(config, project_root)` -> `str`;
   `unlinked_repository(project_root)` -> `str`
 
 Module `src/beadloom/application/site/repository_icon.py`:
@@ -967,7 +984,13 @@ Module `src/beadloom/application/site/repository_icon.py`:
 Module `src/beadloom/application/site/site_logo.py`:
 - `read_logo(value, where)` -> `tuple[object, tuple[Refusal, ...]]`;
   `logo_problem(project_root, logo, where)` -> `Refusal | None`; `logo_site_path(logo)` -> `str`;
-  `copy_logo(project_root, logo, out_dir)` -> `Path | None`; `LOGO_SUFFIXES`
+  `copy_logo(project_root, logo, out_dir)` -> `Path | None`; `is_monochrome(project_root, logo)`
+  -> `bool`; `LOGO_SUFFIXES`
+
+Module `src/beadloom/application/site/favicon.py`:
+- `uses_beadloom_favicon(project_root, logo)` -> `bool`; `favicons_of(project_root, logo)` ->
+  `list[dict[str, str]]`; `write_beadloom_favicon(out_dir)` -> `list[Path]`; `LIGHT_GLYPH`;
+  `FAVICON_PNG_SIZE`
 
 Module `src/beadloom/application/site/forge_routes.py`:
 - `Forge(kind, tree, blob, raw)` with `link(route, url, ref, path)` and `route_segments`;
@@ -1112,6 +1135,7 @@ Slice 2 (BDL-076 B1–B4, `beadloom-ujzb.8`, `.11`–`.13`, `.18`, `.20`, `.21`)
 `test_the_site_block_declares_a_forge_per_host.py`,
 `test_the_header_icon_follows_the_host_or_the_declared_icon.py` and
 `test_the_project_logo_is_checked_and_copied.py` (BDL-080 S4d),
+`test_beadloom_favicon_png_is_the_light_scheme_glyph.py` (BDL-080 S4e),
 `test_a_declared_repository_address_is_read_in_one_spelling.py`, which since
 `beadloom-ujzb.23` also holds the `repo_url` refusals by forge shape,
 `test_a_self_hosted_forge_links_by_the_kind_the_project_declares.py`,

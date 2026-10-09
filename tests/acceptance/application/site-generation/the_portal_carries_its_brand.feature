@@ -4,9 +4,14 @@
 # The nav shows the ADOPTER's logo, declared as `site.logo` and copied into the portal;
 # a project that declares none gets no nav logo. Beadloom's own icon appears in one
 # place only, a footer that says "Powered by Beadloom" and that `site.powered_by: false`
-# removes. The favicon is Beadloom's gradient icon. The icon beside the header's
-# repository link is the adopter's forge, read from the host of `site.repo_url`, and
-# `site.repo_icon` names it where the host says nothing.
+# removes. The icon beside the header's repository link is the adopter's forge, read from
+# the host of `site.repo_url`, and `site.repo_icon` names it where the host says nothing.
+#
+# BDL-080 S4e (`beadloom-af99.9`), the owner's look at S4d on 2026-10-09: the square icon
+# is Beadloom's only mark. The favicon is the project's logo when it declares one of its
+# own, as it is; without one it is Beadloom's icon, theme-adaptive, with a PNG for the
+# browsers that take no SVG favicon. A logo drawn in `currentColor` is drawn in the
+# text's colour in the nav, since an image cannot inherit the page's colour.
 #
 # The project below is not this repository: its layers are `application`, `domain`
 # and `infrastructure`, and it keeps its logo under `art/`.
@@ -37,12 +42,54 @@ Feature: the portal shows the project's logo, a footer that can be switched off 
     When the site is generated for the project
     Then the portal's identity switches the footer off
 
-  Scenario: the portal ships the favicon and the footer's icon as Beadloom's brand files
+  Scenario: the portal ships the footer's icon as Beadloom's only brand file
     Given a project that declares the site block "title: Acme Orders"
     When the site is generated for the project
-    Then the portal holds the brand file "public/brand/beadloom-icon-gradient.svg"
-    And the portal holds the brand file "public/brand/beadloom-icon.svg"
-    And the portal's VitePress config names "brand/beadloom-icon-gradient.svg" as the favicon
+    Then the portal holds the brand file "public/brand/beadloom-icon.svg"
+    And the portal holds no file "public/brand/beadloom-icon-gradient.svg"
+    And the portal holds no file "public/brand/beadloom-mark.svg"
+    And the portal holds no file "public/brand/beadloom-mark-mono.svg"
+    And the portal's VitePress config takes its favicons from the portal's identity
+
+  @bead:beadloom-af99.9
+  Scenario: a project without a logo gets Beadloom's favicon, theme-adaptive, and its PNG
+    Given a project that declares the site block "title: Acme Orders"
+    When the site is generated for the project
+    Then the portal's identity names the favicons "/brand/beadloom-favicon.svg image/svg+xml, /brand/beadloom-favicon.png image/png 32x32"
+    And the portal holds Beadloom's favicon "public/brand/beadloom-favicon.svg", byte for byte
+    And the portal holds Beadloom's favicon "public/brand/beadloom-favicon.png", byte for byte
+
+  @bead:beadloom-af99.9
+  Scenario Outline: a logo of the project's own is its favicon, as it is
+    Given a project that holds the file "art/orders-logo.<kind>" and declares it as its logo
+    When the site is generated for the project
+    Then the portal's identity names the favicons "/logo.<kind> <type>"
+    And the portal holds no file "public/brand/beadloom-favicon.svg"
+    And the portal holds no file "public/brand/beadloom-favicon.png"
+
+    Examples:
+      | kind | type          |
+      | svg  | image/svg+xml |
+      | png  | image/png     |
+
+  @bead:beadloom-af99.9
+  Scenario: a logo that is Beadloom's own icon takes Beadloom's favicon
+    Given a project that holds Beadloom's icon at "art/beadloom.svg" and declares it as its logo
+    When the site is generated for the project
+    Then the portal's identity names the favicons "/brand/beadloom-favicon.svg image/svg+xml, /brand/beadloom-favicon.png image/png 32x32"
+    And the portal's identity draws the logo in the text's colour
+
+  @bead:beadloom-af99.9
+  Scenario: a logo in colours of its own is drawn as it is
+    Given a project that holds the file "art/orders-logo.svg" and declares it as its logo
+    When the site is generated for the project
+    Then the portal's identity draws the logo as it is
+
+  @bead:beadloom-af99.9
+  Scenario: without a logo nothing is drawn in the text's colour
+    Given a project that declares the site block "title: Acme Orders"
+    When the site is generated for the project
+    Then the portal's identity draws the logo as it is
 
   Scenario Outline: the header's repository icon follows the host of the repository
     Given a project that declares the site block "repo_url: <url>"
@@ -73,6 +120,12 @@ Feature: the portal shows the project's logo, a footer that can be switched off 
       | codeberg  |
       | gitea     |
       | git       |
+
+  @bead:beadloom-af99.9
+  Scenario: repo_icon names Azure DevOps for a self-hosted Azure DevOps Server
+    Given a project that declares the site block "repo_url: https://tfs.acme.example/sales/_git/orders" and "repo_icon: azuredevops"
+    When the site is generated for the project
+    Then the portal's repository link carries the "azuredevops" icon
 
   Scenario: a project that declares no repository gets no header link, and config-check names it
     Given a project that declares the site block "title: Acme Orders"

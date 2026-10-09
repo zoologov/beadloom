@@ -5,7 +5,8 @@
 // below it into VitePress and holds no behaviour of its own. It mounts the
 // Mermaid diagram viewer on every page, the "Powered by Beadloom" footer at the
 // bottom of every page (which hides itself when the project switched it off),
-// and registers, by name, the components
+// draws the project's logo in the nav in the text's colour when it is drawn in
+// `currentColor` (`styles/nav-logo.css`), and registers, by name, the components
 // the generated Markdown mounts: the architecture and landscape pages and the
 // dashboard's panels. Each is SSR-safe under the `<ClientOnly>` the generated
 // page puts around it, where the static summary is the fallback.
@@ -30,6 +31,7 @@ import {
 } from "../widgets/dashboard/index.js";
 import { DiagramViewer } from "../widgets/diagram-viewer/index.js";
 import { PoweredBy } from "../widgets/powered-by/index.js";
+import "./styles/nav-logo.css";
 
 /** The components the generated pages mount by name. */
 const GLOBAL_COMPONENTS = {
