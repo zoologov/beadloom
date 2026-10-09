@@ -33,7 +33,7 @@
 | `beadloom-af99.4` | S1R2 | ✓ done (ISSUES) | re-review of the fix |
 | `beadloom-af99.5` | S1R3 | ✓ done (OK) | the card-tags regression fix re-read |
 | `beadloom-we9t` | S1W | ✓ done | docs |
-| `beadloom-af99.6` | S1g | in progress | the reduced-motion case counts frames by the viewer, not by sampling (CI site-e2e) |
+| `beadloom-af99.6` | S1g | in progress | cause: the runner, not S1e (same node `application`, same move at 8.0.0; the old case red 5/5 at 6x CPU throttling on both commits, green 5/5 at 4x); fix: the navigation model counts the frames its move is drawn over, the handle's `move()` reads it, the case judges 1 frame reduced and > 1 otherwise: 5/5 green at 4x (7-8 frames), 6x (3), 20x (2); committed, NOT pushed: the pre-push Gate is red on 4 stale pairs the fix makes (docs not edited, as directed) |
 | `beadloom-z30s` | S1P | in progress | PR, merge on green |
 
 ## Notes

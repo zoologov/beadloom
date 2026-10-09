@@ -496,6 +496,7 @@ onMounted(() => {
     hoveredEdges: () => canvas.hoveredEdges.value,
     map: () => canvas.map(),
     revealNodes: (ids, options) => canvas.revealNow("test", ids, options),
+    move: () => navigation.lastMove(),
   });
 });
 onBeforeUnmount(() => disposeHandle());

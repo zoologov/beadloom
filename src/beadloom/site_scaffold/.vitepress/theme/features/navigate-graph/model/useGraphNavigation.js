@@ -79,7 +79,7 @@ const NO_INSET = Object.freeze({ right: 0 });
  * selection. `getInset()` says how many pixels at the canvas's right edge are
  * covered, and all three leave them out. `fitZoom({ drawing })` is the zoom
  * `fit()` would take now, without moving the view, measured once per `drawing`
- * when one is named.
+ * when one is named. `lastMove()` is the last framing move, as `frame` made it.
  */
 export function useGraphNavigation(getCy, { getInset = () => NO_INSET } = {}) {
   // The centre of the uncovered part of the canvas, in rendered pixels.
@@ -159,6 +159,15 @@ export function useGraphNavigation(getCy, { getInset = () => NO_INSET } = {}) {
   }
 
   /**
+   * The last framing move: `{ animated, from, to, frames, done }`, the zoom it
+   * left and the zoom it ends at, how many of Cytoscape's frames drew it (one
+   * per step of an animated move, one for a move made at once), and `done` once
+   * it has ended. It is counted where the move is made: a reader of the zoom
+   * outside starts too late to see a move that a slow machine draws in two frames.
+   */
+  let move = null;
+
+  /**
    * Frame `box`, `{ x1, y1, x2, y2 }` in the graph's coordinates, at no less than
    * `leastZoom`; where it does not fit at that zoom, centre on `focus`, a box too.
    * Animated when `animate` is true and the reader has not asked for reduced motion.
@@ -174,8 +183,27 @@ export function useGraphNavigation(getCy, { getInset = () => NO_INSET } = {}) {
     const centreOfOpen = openCentre(cy, inset);
     const pan = { x: centreOfOpen.x - zoom * ((on.x1 + on.x2) / 2), y: centreOfOpen.y - zoom * ((on.y1 + on.y2) / 2) };
     cy.stop(true, true);
-    if (animate && !reducedMotion()) cy.animate({ zoom, pan }, { duration: FRAME_MS, easing: "ease-in-out-cubic" });
-    else cy.viewport({ zoom, pan });
+    const from = cy.zoom();
+    if (animate && !reducedMotion()) {
+      const counted = { animated: true, from, to: zoom, frames: 0, done: false };
+      move = counted;
+      cy.animate(
+        { zoom, pan },
+        {
+          duration: FRAME_MS,
+          easing: "ease-in-out-cubic",
+          step: () => {
+            counted.frames += 1;
+          },
+          complete: () => {
+            counted.done = true;
+          },
+        }
+      );
+      return;
+    }
+    cy.viewport({ zoom, pan });
+    move = { animated: false, from, to: zoom, frames: 1, done: true };
   }
 
   function centre(id) {
@@ -196,6 +224,7 @@ export function useGraphNavigation(getCy, { getInset = () => NO_INSET } = {}) {
     fit,
     fitZoom,
     frame,
+    lastMove: () => (move ? { ...move } : null),
     centre,
   };
 }
