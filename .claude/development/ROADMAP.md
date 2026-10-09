@@ -69,6 +69,15 @@ Beadloom for more (item 4). Each adoption is a work item of its own: `init`, the
 the owner, `lint --strict` over the FSD rules, the portal published, the findings filed as
 BDL-UX issues. What those two find is what ranks the rest of this list.
 
+### 1b. `beadloom-mnuu` — pages and routes are first-class nodes (P1, not started; right after BDL-080 — owner, 2026-10-09)
+
+The graph is built from code, so a site's or an app's screens — generated Markdown, Expo Router
+`app/` files, a Vue Router config — are islands or absent: on this portal only two pages have
+code, and the dashboard, docs, about and 130 node pages are invisible in the site's box. A node
+kind `page` with a reader per framework and edges to the components a page mounts, drawn in the
+FSD `pages` layer. Serves all three projects. **Needs `/task-init`.** (BDL-080 S4 does the cheap
+half first: a page map on the dashboard and the site service's doc listing its pages.)
+
 ### 1a. `beadloom-ba9w` — Debt to zero (P1, not started; right after BDL-080, before the rules epic — owner, 2026-10-08)
 
 Owner, 2026-10-08, reading the 8.0.0 dashboard (Lint 70 warnings, Debt 42.5 high, Doctor 262
