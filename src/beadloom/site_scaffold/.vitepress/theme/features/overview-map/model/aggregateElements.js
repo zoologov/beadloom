@@ -8,7 +8,9 @@
 // any other runs along the medoid of its edges' routes between its two boxes
 // (`shared/geometry/aggregateRoutes.js`). Either is drawn by the same segments as any routed
 // edge; its counts, its arrowheads and its look are in its data, for the
-// stylesheet and the pills (`features/edge-pills/model/pillOverlay.js`). A node's own line (`shared/map-levels/levels.js`,
+// stylesheet and the pills (`features/edge-pills/model/pillOverlay.js`): the style
+// its edges are drawn in most, a violation's whenever one of them is one, and
+// whether they are drawn in more than one (`SEVERAL_STYLES`), which draws it solid. A node's own line (`shared/map-levels/levels.js`,
 // `ownLinesOf`) is an element of the same kind, along the medoid of its edges'
 // drawn routes.
 //
@@ -23,7 +25,7 @@
 
 import { freshId } from "../../../shared/ids/index.js";
 import { aggregateRouteOf, pathOf, pathOutside, segmentsOf } from "../../../shared/geometry/index.js";
-import { AGGREGATE, MAP_SCALE, OWN_LINE, STUB_AT, boxesHolding } from "../../../shared/map-levels/index.js";
+import { AGGREGATE, MAP_SCALE, OWN_LINE, SEVERAL_STYLES, STUB_AT, boxesHolding } from "../../../shared/map-levels/index.js";
 import { giveData } from "../../../shared/canvas-marks/index.js";
 
 /** The style key an aggregated edge takes when one of its edges is a violation: it must not be lost. */
@@ -62,15 +64,19 @@ function countLabelOf(forward, backward) {
   return [forward, backward].filter(Boolean).join(" + ");
 }
 
-/** The look an aggregated edge takes: a violation's when one of its edges is one, else its edges' most common. */
-function styleKeyOf(edges) {
+/**
+ * The look an aggregated edge takes, `{ styleKey, several }`: a violation's when
+ * one of its edges is one, else its edges' most common; `several` when its edges
+ * are drawn in more than one style.
+ */
+function lookOf(edges) {
   const counts = new Map();
   for (const edge of edges) {
     const key = edge.data("styleKey");
     counts.set(key, (counts.get(key) || 0) + 1);
   }
-  if (counts.has(LOUDEST_STYLE)) return LOUDEST_STYLE;
-  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const styleKey = counts.has(LOUDEST_STYLE) ? LOUDEST_STYLE : [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return { styleKey, several: counts.size > 1 };
 }
 
 /**
@@ -142,6 +148,7 @@ export function aggregateElements(cy, { tree, geometry, nodes, edges, taken, dra
   function dress(element, pair, { path, scale, grownNow, stub }) {
     const members = [...pair.forward, ...pair.backward].map((id) => edges.get(id));
     const said = pair.said || { forward: pair.forward.length, backward: pair.backward.length };
+    const look = lookOf(members);
     const data = {
       forward: pair.forward.length,
       backward: pair.backward.length,
@@ -149,14 +156,14 @@ export function aggregateElements(cy, { tree, geometry, nodes, edges, taken, dra
       countLabel: countLabelOf(said.forward, said.backward),
       saidWeight: said.forward + said.backward,
       [OWN_LINE]: isOwnLine(pair),
-      styleKey: styleKeyOf(members),
+      styleKey: look.styleKey,
       [MAP_SCALE]: scale,
     };
     const [a, b] = pair.ends;
     // Drawn up to where it enters an end drawn larger than its layout: on its last run, for a planned line.
     const shown = path && (pathOutside(path, grownNow.get(a) || null, grownNow.get(b) || null) || path);
     const route = shown ? segmentsOf(shown, nodes.get(a).position(), nodes.get(b).position()) : null;
-    giveData(element, { ...data, [SAID]: pair.said || undefined, route: route || undefined, [STUB_AT]: stub });
+    giveData(element, { ...data, [SAID]: pair.said || undefined, route: route || undefined, [STUB_AT]: stub, [SEVERAL_STYLES]: look.several || undefined });
   }
 
   return {

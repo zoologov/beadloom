@@ -394,6 +394,44 @@ test.describe("on this portal's architecture graph", () => {
 
       expect({ moved, pillsMoved, outward: outward.map((route) => route.key) }).toEqual({ moved: [], pillsMoved: [], outward: [] });
     });
+    test(`opening any top-level box at the whole-graph fit moves no line and no pill of the other top-level nodes${layout.name}`, async ({ page, request }) => {
+      // The owner's ruling: a pill keeps its place when a sibling box opens. Every
+      // top-level box is opened in turn, each alone, and closed again.
+      const data = await layout.data(request);
+      const tree = treeOf(data);
+      requireShape(tree.topBoxes.length > 1, "no two boxes at the top of the containment tree");
+      await openLayout(page, layout, data);
+      const top = new Set(tree.topBoxes.concat(Object.keys(tree.parents).filter((id) => tree.parents[id] === tree.wrapper)));
+      const drawnNow = async () => {
+        const lines = (await viewer(page, "aggregatedEdges")).filter((e) => e.drawn && e.ends.every((end) => top.has(end)));
+        const pairOf = Object.fromEntries(lines.map((e) => [e.id, e.ends.join("|")]));
+        const pills = (await viewer(page, "pills")).pills.filter((p) => pairOf[p.id]);
+        return {
+          lines: Object.fromEntries(lines.map((e) => [e.ends.join("|"), JSON.stringify([e.points, e.label])])),
+          pills: Object.fromEntries(pills.map((p) => [pairOf[p.id], `${p.text} at ${p.x1.toFixed(2)},${p.y1.toFixed(2)}`])),
+        };
+      };
+      const before = await drawnNow();
+      const moved = [];
+      for (const box of tree.topBoxes) {
+        await page.evaluate((id) => window.__beadloomViewer.revealNodes([id], { edges: false }), box);
+        await expect.poll(() => viewer(page, "openBoxes")).toContain(box);
+        await twoFrames(page);
+        const after = await drawnNow();
+        const ofOthers = (pair) => !pair.split("|").includes(box);
+        for (const kind of ["lines", "pills"]) {
+          for (const pair of Object.keys(before[kind]).filter(ofOthers)) {
+            if (after[kind][pair] !== before[kind][pair]) moved.push(`${box} opened: the ${kind === "lines" ? "line" : "pill"} of ${pair}, ${before[kind][pair]} -> ${after[kind][pair]}`);
+          }
+        }
+        await page.evaluate(() => window.__beadloomViewer.revealNodes([]));
+        await expect.poll(() => viewer(page, "openBoxes")).not.toContain(box);
+        await twoFrames(page);
+      }
+      measured(`${tree.topBoxes.length} top-level box(es) opened in turn; ${Object.keys(before.lines).length} line(s) and ${Object.keys(before.pills).length} pill(s) between top-level nodes; ${moved.length} moved`);
+
+      expect(moved).toEqual([]);
+    });
   }
 
   test('a node in a box opened by zooming carries "+N" for exactly its edges out of the box, and hovering it draws exactly those', async ({ page, request }) => {

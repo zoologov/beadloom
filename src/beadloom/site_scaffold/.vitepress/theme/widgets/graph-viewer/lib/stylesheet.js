@@ -41,8 +41,9 @@
 // top-level node's while the map titles it, is drawn at the size its data names,
 // inside its box or above it on a plate with a border (`shared/map-levels/mapMarks.js`); a
 // top-level node too small for its title is drawn at the size its data names,
-// around its laid-out box (`shared/geometry/grownBoxes.js`); an aggregated edge is a solid
-// line with an arrowhead at each end edges arrive at, its count on a pill drawn
+// around its laid-out box (`shared/geometry/grownBoxes.js`); an aggregated edge is drawn in
+// its edges' style, dash included, and solid where they are drawn in more than one
+// (`SEVERAL_STYLES`), with an arrowhead at each end edges arrive at, its count on a pill drawn
 // over the canvas (`features/edge-pills/model/pillOverlay.js`). Every size that keeps one size on screen
 // whatever the zoom multiplies by the map's scale, which every mark of the map
 // and every line keeps in its data.
@@ -76,6 +77,7 @@ import {
   MAP_MARKS,
   MAP_TITLE,
   PROJECT_BOX,
+  SEVERAL_STYLES,
   STUB_AT,
   boxMarkInsetOf,
   boxMarkOf,
@@ -281,17 +283,22 @@ function geometryRules() {
   ];
 }
 
+/** The arrowhead an aggregated line is drawn with, whatever the style of the edges it carries. */
+const AGGREGATE_ARROW = "triangle";
+
 /**
  * A line's style as Cytoscape draws its dash: a dotted line is a pattern of dots
- * in pixels on screen, shifted to end a dash inside its head (`dashOffsetOf`).
+ * in pixels on screen, shifted to end a dash inside its head (`dashOffsetOf`),
+ * an aggregated line's head as it is drawn (`AGGREGATE_ARROW`).
  */
 function dashStyle(look) {
   const pattern = dashOf(look);
   if (!pattern.length) return { "line-style": "solid" };
+  const arrowOf = (edge) => (edge.data(AGGREGATE) ? AGGREGATE_ARROW : look.arrow);
   return {
     "line-style": "dashed",
     "line-dash-pattern": (edge) => dashOnScreen(pattern, edge),
-    "line-dash-offset": (edge) => dashOffsetOf(edge, dashOnScreen(pattern, edge), look.arrow),
+    "line-dash-offset": (edge) => dashOffsetOf(edge, dashOnScreen(pattern, edge), arrowOf(edge)),
   };
 }
 
@@ -456,12 +463,13 @@ function mapRules(tokens) {
     {
       selector: `edge[${AGGREGATE}]`,
       style: {
-        "line-style": "solid",
-        "source-arrow-shape": (edge) => (headEndsOf(edge).source ? "triangle" : "none"),
-        "target-arrow-shape": (edge) => (headEndsOf(edge).target ? "triangle" : "none"),
+        "source-arrow-shape": (edge) => (headEndsOf(edge).source ? AGGREGATE_ARROW : "none"),
+        "target-arrow-shape": (edge) => (headEndsOf(edge).target ? AGGREGATE_ARROW : "none"),
         "z-index": 5,
       },
     },
+    // A line of several styles is solid, in the style it carries most; one of one style keeps that style's dash.
+    { selector: `edge[${AGGREGATE}][?${SEVERAL_STYLES}]`, style: { "line-style": "solid" } },
   ];
 }
 

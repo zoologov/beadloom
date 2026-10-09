@@ -15,6 +15,7 @@ export {
   MAP_SCALE,
   OWN_LINE,
   PROJECT_BOX,
+  SEVERAL_STYLES,
   STACK_LANES,
   STUB_AT,
   boxTreeOf,

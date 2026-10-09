@@ -48,7 +48,7 @@ import {
 } from "../../../entities/graph-edges/index.js";
 import { mixRgb } from "../../../shared/theme-tokens/index.js";
 import { crossesAny } from "../../../shared/geometry/index.js";
-import { AGGREGATE, COLLAPSED, MAP_TITLE, scaleOf } from "../../../shared/map-levels/index.js";
+import { AGGREGATE, COLLAPSED, MAP_TITLE, SEVERAL_STYLES, scaleOf } from "../../../shared/map-levels/index.js";
 import { HIGHLIGHTED_EDGES, HOVERED, overlayCanvas } from "../../../shared/canvas-marks/index.js";
 
 /** How many of the last frames' drawing times are kept. */
@@ -222,7 +222,8 @@ export function followedOverlay(cy, container, { tokens }) {
       heads,
       label,
       arrow: aggregated ? AGGREGATE_ARROW : EDGE_STYLES[styleKey]?.arrow || AGGREGATE_ARROW,
-      dash: aggregated ? [] : dashOf(EDGE_STYLES[styleKey] || {}),
+      // Followed as it is drawn at rest: an aggregated line of several styles solid, any other in its style's dash.
+      dash: aggregated && edge.data(SEVERAL_STYLES) ? [] : dashOf(EDGE_STYLES[styleKey] || {}),
       colour: palette[styleKey]?.full || look.text1,
     };
   }

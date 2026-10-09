@@ -17,9 +17,11 @@
 // `crowded`). What a line says is its data's `countLabel` (`widgets/graph-viewer/model/canvasMap.js`):
 // during a selection, how many of the walk's edges it carries. The pills of the
 // lines between two top-level nodes are placed among what the top level draws
-// alone, so opening a box, whose nodes and their lines are drawn then, moves
-// none of them. Every other pill is placed around them, except those of a
-// node's own lines under the pointer or selected, which are placed first.
+// alone, every box at the top taken as the room it takes closed, its title's
+// plate included, whether it is open now or not: opening a box, whose nodes and
+// their lines are drawn then and whose title then stands inside it, moves none
+// of them. Every other pill is placed around them, except those of a node's own
+// lines under the pointer or selected, which are placed first.
 //
 // A closed box large enough on screen says how many edges come into it and go
 // out of it — the ones the budget leaves out included — in a line of small text
@@ -71,6 +73,12 @@ function headBoxOf(tip, before, length) {
   return { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
 }
 
+/** The ends of `edge` that carry an arrowhead with every box at the top closed: its stub at an open box is a head there. */
+function headEndsClosed(edge) {
+  if (!edge.data(AGGREGATE)) return { source: false, target: true };
+  return { source: edge.data("backward") > 0, target: edge.data("forward") > 0 };
+}
+
 /** What a tally says. */
 export const tallyTextOf = ({ incoming, outgoing }) => `in ${incoming}${TALLY_JOIN}out ${outgoing}`;
 
@@ -91,10 +99,14 @@ export function pillOverlay(cy, container, { tokens, map }) {
   /** Whether a line says its count even when it is one: a line of the node under the pointer, a node's own line, a line of a walk. */
   const saysOne = (edge) => edge.hasClass(IN_FRONT) || edge.hasClass("is-walk-edge") || Boolean(edge.data(OWN_LINE));
 
-  /** The rectangles of the arrowheads of `edge`, drawn along `points`, in the graph's coordinates. */
-  function headBoxesOf(edge, points) {
+  /**
+   * The rectangles of the arrowheads of `edge`, drawn along `points`, in the
+   * graph's coordinates; with `closed`, the ones it carries with every box at the
+   * top closed, its end at a box opened now as a stub too (`STUB_AT`).
+   */
+  function headBoxesOf(edge, points, closed = false) {
     const boxes = [];
-    const heads = headEndsOf(edge);
+    const heads = closed ? headEndsClosed(edge) : headEndsOf(edge);
     const n = points.length;
     if (heads.target) boxes.push(headBoxOf(points[n - 1], points[n - 2], headLengthOf(edge)));
     if (heads.source) boxes.push(headBoxOf(points[0], points[1], headLengthOf(edge)));
@@ -108,11 +120,11 @@ export function pillOverlay(cy, container, { tokens, map }) {
    * The lines asked to say their count that are not at the top — a node's own
    * lines, under the pointer or selected — are placed first, among everything
    * drawn. Then the lines at the top, between two top-level nodes as the overview
-   * draws them at every level, among what is at the top alone: its nodes, an open
-   * one as the box it is when closed, its titles, its lines and their arrowheads.
-   * Nothing a box opened draws inside it or out of it, such as its nodes' lines
-   * to the box that holds everything, moves them. Every other line's pill is
-   * placed last, around them all.
+   * draws them at every level, among what is at the top alone: its leaves and
+   * their titles, every box at the top as the room it takes closed, open or not
+   * (`closedRoomsOf`), its lines and their arrowheads. Nothing a box opened draws
+   * inside it or out of it, such as its nodes' lines to the box that holds
+   * everything, moves them. Every other line's pill is placed last, around them all.
    */
   function placesNow(look) {
     const drawn = cy.edges().filter((edge) => edge.visible() && edge.data("route"));
@@ -123,9 +135,11 @@ export function pillOverlay(cy, container, { tokens, map }) {
     const scale = map()?.scale() || 1;
     const atTop = (element) => map()?.ofTopLevel(element) ?? true;
     const wrapper = map()?.tree.wrapper ?? null;
-    // What the top level draws (routes and what no pill covers), an open box at the top as the room it takes
-    // closed, and what is drawn below the top; the box that holds everything takes no room.
-    const [topRoutes, belowRoutes, topRooms, openTops, belowRooms] = [[], [], [], [], []];
+    const isTopBox = (node) => Boolean(map()?.isTopBox(node.id()));
+    // What the top level draws (routes and what no pill covers) and what is drawn below the top; of the top,
+    // what stays as it is whichever boxes are open, and every box at the top as the room it takes closed.
+    // The box that holds everything takes no room.
+    const [topRoutes, belowRoutes, topRooms, belowRooms, topFixed, closedTops] = [[], [], [], [], [], []];
     const pointsOf = new Map();
     drawn.forEach((edge) => {
       const points = routePointsOf(edge);
@@ -133,20 +147,24 @@ export function pillOverlay(cy, container, { tokens, map }) {
       const ofTop = atTop(edge);
       (ofTop ? topRoutes : belowRoutes).push({ id: edge.id(), points });
       (ofTop ? topRooms : belowRooms).push(...headBoxesOf(edge, points));
+      if (ofTop) topFixed.push(...headBoxesOf(edge, points, true));
     });
     cy.nodes().forEach((node) => {
       if (!node.visible() || node.id() === wrapper) return;
       const ofTop = atTop(node);
-      if (node.isParent()) {
-        if (ofTop) openTops.push(node.boundingBox(SHAPE));
-        return;
-      }
-      (ofTop ? topRooms : belowRooms).push(node.boundingBox(SHAPE));
+      if (ofTop && isTopBox(node)) closedTops.push(...map().closedRoomsOf(node.id()));
+      if (node.isParent()) return;
+      const shape = node.boundingBox(SHAPE);
+      (ofTop ? topRooms : belowRooms).push(shape);
+      if (ofTop && !isTopBox(node)) topFixed.push(shape);
     });
     cy.nodes(`[${MAP_TITLE}]`).forEach((node) => {
-      if (node.visible()) (atTop(node) ? topRooms : belowRooms).push(node.boundingBox(TITLE));
+      if (!node.visible()) return;
+      const title = node.boundingBox(TITLE);
+      (atTop(node) ? topRooms : belowRooms).push(title);
+      if (atTop(node) && !isTopBox(node)) topFixed.push(title);
     });
-    const top = { drawn: [topRoutes], blocked: [topRooms, openTops] };
+    const top = { drawn: [topRoutes], blocked: [topFixed, closedTops] };
     const everything = { drawn: [topRoutes, belowRoutes], blocked: [topRooms, belowRooms] };
     const always = new Set(ones);
     const asked = (edges) =>

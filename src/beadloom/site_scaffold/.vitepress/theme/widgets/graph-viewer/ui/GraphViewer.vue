@@ -146,11 +146,6 @@ const unlayered = computed(() => {
 });
 const options = computed(() => mode.filterOptions(graph.value, layers.value));
 const statuses = computed(() => statusesOf(nodes.value));
-const legendKeys = computed(() =>
-  legendKeysOf(
-    edges.value.filter((edge) => nodeById.value.has(edge.src) && nodeById.value.has(edge.dst))
-  )
-);
 // `{ nodes, contracts }`: the node ids the filters show and, on the landscape,
 // the contracts they show (null where the mode filters no contract).
 const visible = computed(() =>
@@ -280,6 +275,9 @@ const canvas = useGraphCanvas(container, {
     focusCanvas();
   },
 });
+// The legend names the styles the lines on the canvas are drawn in at the level drawn now, the map's
+// aggregated lines among them, not every kind the data file holds.
+const legendKeys = computed(() => legendKeysOf(canvas.drawnStyles.value));
 // Until ELK has placed the nodes, every one stands at one point: the canvas is not shown.
 const unplaced = computed(() => canvas.layingOut.value || Boolean(canvas.layoutError.value));
 // The graph could not be laid out: there is nothing to zoom, filter or walk.

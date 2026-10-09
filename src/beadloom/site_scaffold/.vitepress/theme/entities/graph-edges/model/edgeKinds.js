@@ -11,8 +11,11 @@
 // drawn dashed in the full danger colour, whatever else it is. A dash pattern is
 // in pixels on screen, so it reads the same at every zoom.
 //
-// The legend is derived from the edges that are drawn (`legendKeysOf`), so it
-// cannot list a kind the canvas does not show.
+// The legend is derived from the lines drawn at the level on the canvas now
+// (`legendKeysOf`), the map's aggregated lines among them by the style they are
+// drawn in, so it names every style the canvas shows there and no other. A line
+// of the map's that carries edges of one style is drawn in that style's dash; one
+// that carries several is drawn solid, in the style it carries most.
 //
 // A contract edge of the landscape is drawn by its look — healthy, drifting,
 // broken or neutral — rather than by its kind, because on that map the health
@@ -159,14 +162,7 @@ export function styleKeyOf(edge) {
   return isViolation(edge) ? VIOLATION_KEY : edge.kind;
 }
 
-/** The legend keys a set of edges calls for, sorted: each drawn kind, plus `violation`. */
-export function legendKeysOf(edges) {
-  const keys = new Set();
-  for (const edge of edges) {
-    if (!isDrawnKind(edge.kind)) continue;
-    const key = styleKeyOf(edge);
-    keys.add(key === VIOLATION_KEY ? edge.kind : key);
-    if (key === VIOLATION_KEY) keys.add(VIOLATION_KEY);
-  }
-  return [...keys].sort();
+/** The legend keys of the lines drawn now, from the style key each is drawn in: each style once, sorted. */
+export function legendKeysOf(styleKeys) {
+  return [...new Set([...styleKeys].filter((key) => Object.hasOwn(EDGE_STYLES, key)))].sort();
 }

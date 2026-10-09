@@ -166,6 +166,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     routePointsOf: drawnRouteOf,
     // The plan asks whether a title fits its box on one line: whether to break it is the plan's to decide.
     titleOf: (id, at, hidden) => looks.lookOf(id, at, hidden, null, false),
+    linesOf: looks.linesOf,
     projectTitleOf: (at) => looks.projectTitleAt(at),
     // A box is drawn at least as tall as it was laid out, and its status mark takes room by the height it is drawn at.
     leastBoxOf: looks.leastBoxOf,
@@ -176,7 +177,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     scaleAt,
     budget: options.budget,
   });
-  const titles = titleDresser(looks, planner, tree);
+  const titles = titleDresser(looks, planner, tree, geometry);
 
   /** The view now, as the levels read it: the fit measured once per drawing (`drawing`). */
   const viewNow = () => ({ zoom: cy.zoom(), fitZoom: fitZoom({ drawing }), extent: cy.extent() });
@@ -315,10 +316,18 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   /** Whether `id` is at the top: the box that holds everything, or a node right under it. */
   const atTop = (id) => id === tree.wrapper || tree.parent.get(id) === tree.wrapper;
 
+  /**
+   * Whether an edge of the file joins a box at the top to the box that holds
+   * everything: drawn by a line of its own only while that box is open, as what
+   * the box draws out of it.
+   */
+  const opensWithItsBox = (edge) =>
+    [edge.source, edge.target].includes(tree.wrapper) && [edge.source, edge.target].some((end) => end !== tree.wrapper && tree.boxes.has(end));
+
   /** Whether `element`, whose id is `id`, is of the top level (`ofTopLevel`). */
   function isOfTopLevel(element, id) {
     const fileEdge = edgeById.get(element.isEdge() ? id : loopEdgeOfEnd.get(id));
-    if (fileEdge) return atTop(fileEdge.source) && atTop(fileEdge.target);
+    if (fileEdge) return atTop(fileEdge.source) && atTop(fileEdge.target) && !opensWithItsBox(fileEdge);
     if (element.isEdge()) return Boolean(lines.entryOf(id)?.pair.ends.every(atTop));
     return nodes.has(id) && atTop(id);
   }
@@ -432,7 +441,9 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     /**
      * Whether `element` is of the top level, drawn alike at every level: a node
      * at the top or the box that holds everything, a line whose ends both are —
-     * the overview's own lines among them — and a loop of such a line, its end too.
+     * the overview's own lines among them — and a loop of such a line, its end too;
+     * but not a box's own edge to the box that holds everything, drawn only while
+     * the box is open.
      */
     ofTopLevel(element) {
       const id = element.id();
@@ -461,6 +472,14 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     version: () => version,
     /** What the overview's last plan was (`features/overview-map/model/overviewPlan.js`): `{ ms, unit, routed, failed, grown, plates }`. */
     plan: () => planner.report(),
+    /** Whether `id` is a box at the top: right under the box that holds everything, or a root when none does. */
+    isTopBox: (id) => tree.boxes.has(id) && planner.isTop(id),
+    /**
+     * The room top-level box `id` takes drawn closed at the map's scale now, open
+     * now or not: `[{ x1, y1, x2, y2 }]` in layout units, its box and its title's
+     * plate (`features/overview-map/model/mapTitles.js`, `closedRoomsOf`).
+     */
+    closedRoomsOf: (id) => titles.closedRoomsOf(id, scaleNow()),
     /**
      * The room box `id` holds besides its children as drawn, or null: for the box
      * that holds everything, the most the nodes drawn larger than their layout at

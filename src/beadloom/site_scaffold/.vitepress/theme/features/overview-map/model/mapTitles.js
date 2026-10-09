@@ -9,7 +9,8 @@
 // only when the zoom crosses a step.
 //
 // A title is tried at a few sizes inside its box and otherwise stands above it
-// on a plate (`shared/map-levels/mapMarks.js`); which, is in the node's data (`mapTitle`),
+// on a plate (`shared/map-levels/mapMarks.js`), broken onto two lines where the overview's plan
+// breaks it (`overviewPlan.js`); which, is in the node's data (`mapTitle`),
 // worked out again at each step of the scale. A top-level node that is not a box
 // takes the map's title only while its own label would read smaller, and so does
 // the box that holds everything, on a plate above it where the overview's plan
@@ -21,6 +22,12 @@
 // no edge of the file is drawn as itself into it, whose end the box would cover.
 // The box is worked out again at each step of the scale: it keeps about its size
 // on screen, as its title does, down to its laid-out box.
+//
+// The room a top-level node takes drawn closed — its box, drawn larger where the
+// plan draws it so, and its title's plate — is worked out from the plan whether
+// the node is drawn open or not (`closedRoomsOf`): the pills of the lines between
+// top-level nodes are placed around it, so a box opened moves none of them
+// (`features/edge-pills`).
 //
 // The plan asks how a title would be drawn before it decides anything, and the
 // map dresses its nodes with what the plan decided, so the titles come in two
@@ -37,6 +44,7 @@ import {
   MAP_TITLE,
   brokenLabelOf,
   mapTitleOf,
+  plateOf,
   statusMarkInsetOf,
   statusMarkOf,
   titleBoxOf,
@@ -64,7 +72,7 @@ function titleMeasurer(cy) {
 
 /**
  * How the titles of `cy`'s nodes would be drawn, `nodes` by id, in the box tree
- * `tree` laid out as `geometry`: `{ measure, lookOf, projectTitleAt,
+ * `tree` laid out as `geometry`: `{ measure, lookOf, linesOf, projectTitleAt,
  * leastBoxOf, breakable }`, what the overview's plan is made with.
  */
 export function titleLooks(cy, { nodes, tree, geometry }) {
@@ -123,18 +131,27 @@ export function titleLooks(cy, { nodes, tree, geometry }) {
   const leastBoxOf = (id, px, at, hidden, broken = false) =>
     titleBoxOf(linesOf(id, hidden, broken), px, at, measure, (height) => reservedOf(id, at, Math.max(height, geometry.boxes[id].y2 - geometry.boxes[id].y1)));
 
-  return { measure, lookOf, projectTitleAt, leastBoxOf, breakable: (id) => Boolean(brokenLabelFor(id)) };
+  return { measure, lookOf, linesOf, projectTitleAt, leastBoxOf, breakable: (id) => Boolean(brokenLabelFor(id)) };
 }
 
 /**
  * The titles and grown boxes the map dresses its nodes with, as `looks`
  * (`titleLooks`) draws them and the overview's `planner` decided them, in the
- * box tree `tree`: `{ grownBoxesNow, dressTitle, dressBox }`.
+ * box tree `tree` laid out as `geometry`: `{ grownBoxesNow, dressTitle,
+ * dressBox, closedRoomsOf }`.
  */
-export function titleDresser(looks, planner, tree) {
+export function titleDresser(looks, planner, tree, geometry) {
   const hiddenOf = (hiddenAt, id) => hiddenAt.get(id) || 0;
-  /** The title node `id` is drawn with: broken where the overview's plan breaks it. */
-  const lookOf = (id, at, hidden, drawn = null) => looks.lookOf(id, at, hidden, drawn, planner.isBroken(id));
+  /**
+   * The title node `id` is drawn with: broken where the overview's plan breaks
+   * it, on its plate too, where the title stands on one.
+   */
+  function lookOf(id, at, hidden, drawn = null) {
+    const title = looks.lookOf(id, at, hidden, drawn, planner.isBroken(id));
+    if (!title || title.inside || !planner.isBroken(id)) return title;
+    const lines = looks.linesOf(id, hidden, true);
+    return { ...title, lines, width: Math.max(...lines.map((line) => looks.measure(line, title.px))) * at };
+  }
 
   /** The scale node `id`'s marks are laid out at now: the map's, `scale`, or the overview plan's when the view is zoomed out past it. */
   function titleScaleOf(id, scale) {
@@ -191,5 +208,25 @@ export function titleDresser(looks, planner, tree) {
     giveData(node, { [MAP_BOX]: box ? { width: box.x2 - box.x1, height: box.y2 - box.y1 } : undefined });
   }
 
-  return { grownBoxesNow, dressTitle, dressBox };
+  /**
+   * The room top-level node `id` takes drawn closed at the map's `scale`, open
+   * now or not, in layout units: its box and its border, drawn larger where the
+   * plan draws it so, and the plate its title stands on, where it stands on one.
+   * The count of its lines left out is the overview's, which no box opened and no
+   * budget lifted for the pointer changes.
+   */
+  function closedRoomsOf(id, scale) {
+    const at = titleScaleOf(id, scale);
+    const hidden = planner.hiddenOf(id);
+    const laid = geometry.boxes[id];
+    const grown = planner.isGrown(id) ? planner.drawnBoxAt(id, at, hidden) : null;
+    const box = grown || laid;
+    const border = GEOMETRY.boxBorder;
+    const rooms = [{ x1: box.x1 - border, y1: box.y1 - border, x2: box.x2 + border, y2: box.y2 + border }];
+    const title = lookOf(id, at, hidden, grown);
+    if (title && !title.inside) rooms.push(plateOf(laid, planner.plateSideOf(id), title.lines || looks.linesOf(id, hidden), title.px, at, looks.measure));
+    return rooms;
+  }
+
+  return { grownBoxesNow, dressTitle, dressBox, closedRoomsOf };
 }

@@ -70,6 +70,13 @@ export const LAYER_BOX = "layerBox";
 
 /** The data an aggregated edge is told apart by. */
 export const AGGREGATE = "aggregate";
+
+/**
+ * The data an aggregated edge carries when its edges are drawn in more than one
+ * style: it is drawn solid, in the style it carries most. A line of one style
+ * keeps that style's dash, as the legend's sample of it is drawn.
+ */
+export const SEVERAL_STYLES = "severalStyles";
 /** The data a drawn end carries: how many of its aggregated edges the budget leaves out. */
 export const HIDDEN_EDGES = "hiddenEdges";
 /** The data every mark of the map carries: the factor that keeps its size on screen. */

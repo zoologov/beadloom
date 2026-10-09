@@ -27,7 +27,9 @@
 // rest. Whenever the level changes, what the filters show and what the selection
 // marks are marked again on what is drawn now, so a box opened later shows its
 // children marked as everything else is. A loop's end (`shared/map-levels/loopLines.js`) is no
-// node of the file: it is shown with its box and marked with nothing.
+// node of the file: it is shown with its box and marked with nothing. After every
+// drawing it notes the styles the lines on the canvas are drawn in (`drawnStyles`),
+// the map's aggregated lines among them, which the legend is made of.
 
 import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { loadCytoscape } from "../../../shared/cytoscape/index.js";
@@ -80,7 +82,7 @@ async function undrawnUntil(instance, promise) {
 }
 
 /**
- * `{ cy, ready, layingOut, layout, bundles, hoveredEdges, layoutError, followed,
+ * `{ cy, ready, layingOut, layout, bundles, hoveredEdges, drawnStyles, layoutError, followed,
  * labelled, frames, droppedHeads, pills, tallies, outward, map, mount, setStyle, reveal,
  * showOnly, markSelection, resize }` over the container in `containerRef`.
  *
@@ -98,6 +100,7 @@ async function undrawnUntil(instance, promise) {
  * source, ms }` (`shared/elk`, `layOut`), or null; `bundles` is its routes with
  * the fans bundled, `{ paths, trunks, buses, ms }` (`canvasLayout.js`), or null;
  * `hoveredEdges` the ids of the edges along the line under the pointer;
+ * `drawnStyles` the style keys the lines shown now are drawn in, sorted;
  * `layoutError` is the error a failed run gave, or null; `followed()` the lines
  * drawn on top, `labelled()` the ones whose label is drawn and `frames()` what
  * drawing them cost (`features/follow-edge/model/followedOverlay.js`); `droppedHeads()` the line ends that
@@ -111,6 +114,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   const layout = shallowRef(null);
   const bundles = shallowRef(null);
   const hoveredEdges = shallowRef([]);
+  const drawnStyles = shallowRef([]);
   const layoutError = shallowRef(null);
   let shared = null;
   let followed = null;
@@ -213,6 +217,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     layout.value = null;
     bundles.value = null;
     hoveredEdges.value = [];
+    drawnStyles.value = [];
     containerRef.value?.removeEventListener("mouseleave", clearHover);
     shared = null;
     pointerQueued = false;
@@ -327,6 +332,16 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   }
 
   /**
+   * Note the style keys the lines shown on `instance` are drawn in, when they
+   * differ from the ones noted: a line hidden by the filters or left outside a
+   * selection is not shown, a dimmed one is.
+   */
+  function noteDrawnStyles(instance) {
+    const keys = [...new Set(instance.edges().filter((edge) => edge.visible()).map((edge) => edge.data("styleKey")).filter(Boolean))].sort();
+    if (keys.join("\n") !== drawnStyles.value.join("\n")) drawnStyles.value = keys;
+  }
+
+  /**
    * Draw the level wanted now, and mark the filters and the selection on it;
    * every box sized to ELK's again unless `boxes` is false, as for a change that
    * draws no node and hides none, which keeps the boxes open now open.
@@ -342,6 +357,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     });
     if (boxes) fitBoxes();
     refreshOverlay();
+    noteDrawnStyles(instance);
   }
 
   /** Draw the nodes in `ids` as themselves for `source`, from the next drawing on. */
@@ -482,6 +498,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     layout,
     bundles,
     hoveredEdges,
+    drawnStyles,
     layoutError,
     followed: () => followed?.followed() || { edges: [], passes: [] },
     labelled: () => followed?.labelled() || [],
