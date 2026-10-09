@@ -241,14 +241,19 @@ def _walked(folder: Path, *, top_level: bool) -> bool:
     return not (name in _CLUSTER_SKIP or (top_level and name in _SKIP_DIRS))
 
 
-def unread_swift(project_root: Path, layout: SwiftLayout) -> UnreadSwift:
+def unread_swift(
+    project_root: Path, layout: SwiftLayout, *, read: Collection[str] = ()
+) -> UnreadSwift:
     """Every Swift file of *project_root* outside *layout*'s targets, and each Xcode project.
 
     The tree is walked as the project scan reads it: hidden folders, build output
     and other people's code (``Pods``, ``Carthage``, ``DerivedData``) are skipped at
     any depth, the scan's skipped top folders (``tests``, ``docs`` ...) at the top.
+    *read* names project-relative folders another reading accounts for, whose Swift is
+    read there (an Expo module's ``ios/``, BDL-080 S3b).
     """
     targets = [root.directory for root in layout.roots]
+    targets.extend(read)
     files: list[str] = []
     xcode: list[str] = []
     pending = [project_root]

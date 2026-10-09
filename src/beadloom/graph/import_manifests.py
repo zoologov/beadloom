@@ -26,6 +26,12 @@ aliases declared under ``imports.aliases:`` in ``.beadloom/config.yml``. Both ar
 fingerprint, read only when some stored import was written in JavaScript, TypeScript or a
 Vue component, and only then: a project without one records what it recorded before, so
 an upgrade re-resolves nothing it need not.
+
+**The Expo modules** (BDL-080 ``beadloom-wbqd``). The ``uses`` edge from an Expo module to
+its native code is read from its ``expo-module.config.json``
+(:mod:`beadloom.graph.expo_modules`), which is no source file either. Every config joins the
+JavaScript side, by path and text, and only when one exists: a project with none digests
+what it digested before.
 """
 
 # beadloom:domain=graph
@@ -37,6 +43,7 @@ import hashlib
 import json
 from typing import TYPE_CHECKING
 
+from beadloom.graph.expo_modules import ExpoModules
 from beadloom.graph.go_modules import GoModules
 from beadloom.graph.swift_packages import SwiftPackages
 from beadloom.graph.tsconfig_paths import TsConfigs
@@ -84,7 +91,7 @@ def resolves_through_manifests(conn: sqlite3.Connection) -> bool:
 
 def _readings(
     native: tuple[GoModules, SwiftPackages] | None,
-    ts_configs: TsConfigs | None,
+    script: tuple[TsConfigs, ExpoModules] | None,
     aliases: Sequence[tuple[str, str]],
 ) -> str:
     """The digest of the families read: Go and Swift manifests, then the JavaScript side.
@@ -96,10 +103,12 @@ def _readings(
     if native is not None:
         go_modules, swift_packages = native
         manifests.extend([*go_modules.manifests, *swift_packages.manifests])
-    if ts_configs is not None:
+    if script is not None:
+        ts_configs, expo_modules = script
         manifests.extend(ts_configs.manifests)
         if aliases:
             manifests.append([_ALIASES_ENTRY, [list(pair) for pair in aliases]])
+        manifests.extend(expo_modules.manifests)
     return _digest(manifests)
 
 
@@ -109,8 +118,11 @@ def record_manifests(
     swift_packages: SwiftPackages,
     ts_configs: TsConfigs,
     aliases: Sequence[tuple[str, str]],
+    expo_modules: ExpoModules,
 ) -> None:
     """Store the fingerprint of the reading the stored imports were just resolved through.
+
+    *expo_modules* is the reading the Expo bridge edges were derived from in the same run.
 
     Each family is digested only when a stored import was written in its languages: the
     walks for ``go.mod``, ``Package.swift`` and tsconfig files cost a walk of the project
@@ -122,7 +134,7 @@ def record_manifests(
         return
     current = _readings(
         (go_modules, swift_packages) if native else None,
-        ts_configs if script else None,
+        (ts_configs, expo_modules) if script else None,
         aliases,
     )
     set_meta(conn, MANIFESTS_META_KEY, current)
@@ -147,7 +159,7 @@ def manifests_changed(
         return False
     current = _readings(
         (GoModules(project_root), SwiftPackages(project_root)) if native else None,
-        TsConfigs(project_root) if script else None,
+        (TsConfigs(project_root), ExpoModules(project_root)) if script else None,
         aliases,
     )
     return get_meta(conn, MANIFESTS_META_KEY) != current

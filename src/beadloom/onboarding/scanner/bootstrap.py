@@ -22,6 +22,12 @@ from beadloom.onboarding.scanner.agents_md import (
 from beadloom.onboarding.scanner.alias_scan import scan_bundler_aliases
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
 from beadloom.onboarding.scanner.entry_points import _discover_entry_points
+from beadloom.onboarding.scanner.expo_layout import (
+    ExpoModuleUnit,
+    NativePart,
+    expo_nodes,
+    read_expo_layout,
+)
 from beadloom.onboarding.scanner.fsd_layout import FsdLayout, FsdUnit, fsd_nodes, read_fsd_layout
 from beadloom.onboarding.scanner.import_scan import _quick_import_scan
 from beadloom.onboarding.scanner.jvm_layout import cluster_packages, read_jvm_layout
@@ -97,13 +103,17 @@ def bootstrap_project(
     # TypeScript service beside a module or a package keeps its node and its scan
     # path (R2 finding 2). Without such a tree both lists below are the scan's,
     # as they were.
-    jvm = read_jvm_layout(project_root)
-    swift = read_swift_layout(project_root)
     # A Feature-Sliced frontend is read slice by slice (BDL-080 S3c): the FSD root
     # leaves the directory clustering like a module does, and its slices, segments
     # and legacy folders are written by `fsd_nodes` below.
     fsd = read_fsd_layout(project_root, skip=portals) if preset is FSD else FsdLayout()
-    module_claims = jvm.claimed | swift.claimed
+    # A local Expo module is its TypeScript and its native parts (BDL-080 S3b): its
+    # folder leaves the clustering, and the JVM walk, which took its `android/` as a
+    # Gradle module part of the root; `expo_nodes` below writes it.
+    expo = read_expo_layout(project_root, skip=(*portals, *fsd.claimed))
+    jvm = read_jvm_layout(project_root, skip=expo.claimed)
+    swift = read_swift_layout(project_root)
+    module_claims = jvm.claimed | swift.claimed | expo.claimed
     claimed = module_claims | fsd.claimed
     source_dirs = [d for d in scan["source_dirs"] if not is_claimed(d, claimed)]
     clusters = _cluster_with_children(
@@ -116,7 +126,7 @@ def bootstrap_project(
     # The scan paths leave out only what the layouts READ (a module's `src`, a
     # target's folder): the rest of a module's folder is scanned like any other,
     # and a code file no scan path can hold is named (the re-review's finding m3).
-    read = jvm.read_folders | swift.read_folders
+    read = jvm.read_folders | swift.read_folders | expo.claimed
     unclaimed = unclaimed_code(
         project_root, [d for d in scan["source_dirs"] if not is_claimed(d, read)], read
     )
@@ -233,6 +243,18 @@ def bootstrap_project(
     )
     nodes.extend(fsd_graph.nodes)
     edges.extend(fsd_graph.edges)
+
+    # Each local Expo module and its native parts. The `uses` edge from a module to a
+    # part is no import, and is not written here: the reindex derives it from the
+    # module's `expo-module.config.json` on every run (`graph.expo_modules`).
+    expo_graph = expo_nodes(
+        expo,
+        ref_ids,
+        root_ref_id,
+        lambda unit: _expo_summary(unit, project_root, all_entry_points),
+    )
+    nodes.extend(expo_graph.nodes)
+    edges.extend(expo_graph.edges)
 
     # Fallback: no clusters found, create minimal nodes from scan.
     if not nodes and source_dirs:
@@ -398,12 +420,14 @@ def bootstrap_project(
                 *unclaimed.folders,
                 *jvm.production_roots,
                 *swift.production_roots,
+                *expo.scan_paths,
             ]
         )
         or ["src"],
         # The project scan counts no `.swift` file, so a Swift package's language
-        # comes from its targets.
-        "languages": sorted({*scan["languages"], *swift.languages}) or ["python"],
+        # comes from its targets, and an Expo module's from its native parts.
+        "languages": sorted({*scan["languages"], *swift.languages, *expo.languages})
+        or ["python"],
         "sync": {"hook_mode": "warn"},
         "preset": preset.name,
     }
@@ -472,7 +496,7 @@ def bootstrap_project(
         "ignore_skipped_reason": ignore.skipped_reason,
         "portal_ignore": portal_ignore,
         # Swift this run saw and did not read, said rather than left silent (R2 F7).
-        "unread_swift": unread_swift(project_root, swift),
+        "unread_swift": unread_swift(project_root, swift, read=expo.claimed),
         # Code beside a module: scanned, or named when no scan path can hold it (m3).
         "beside_modules": beside_modules,
         # Top-level folders holding the portal `docs site` wrote, not scanned (m4).
@@ -481,7 +505,23 @@ def bootstrap_project(
         "import_aliases": aliases,
         # The `lint:fsd` script written, or the one kept (BDL-080 S3c).
         "steiger_script": steiger,
+        # The local Expo modules written with their native parts (BDL-080 S3b).
+        "expo_modules": expo,
     }
+
+
+def _expo_summary(
+    unit: ExpoModuleUnit | NativePart, project_root: Path, entry_points: list[dict[str, str]]
+) -> str:
+    """The contextual summary of an Expo module or one of its native parts."""
+    return _build_contextual_summary(
+        project_root / unit.directory,
+        unit.directory.rsplit("/", 1)[-1],
+        "component",
+        list(unit.files),
+        project_root,
+        entry_points=entry_points,
+    )
 
 
 def _fsd_summary(unit: FsdUnit, project_root: Path, entry_points: list[dict[str, str]]) -> str:

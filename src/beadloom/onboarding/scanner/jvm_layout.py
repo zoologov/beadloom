@@ -227,8 +227,12 @@ def _mirrored_root(test_root: SourceRoot, production: tuple[SourceRoot, ...]) ->
 # --- Reading the tree --------------------------------------------------------
 
 
-def read_jvm_layout(project_root: Path) -> JvmLayout:
-    """Walk *project_root* for JVM modules and record every source root and its code."""
+def read_jvm_layout(project_root: Path, *, skip: Collection[str] = ()) -> JvmLayout:
+    """Walk *project_root* for JVM modules and record every source root and its code.
+
+    *skip* names project-relative folders another reading accounts for: the walk does not
+    enter them (an Expo module's ``android/`` is a part of the module, BDL-080 S3b).
+    """
     roots: list[SourceRoot] = []
     pending = [project_root]
     while pending:
@@ -239,6 +243,7 @@ def read_jvm_layout(project_root: Path) -> JvmLayout:
             child
             for child in sorted(folder.iterdir(), reverse=True)
             if _is_walked(child, top_level=folder == project_root)
+            and child.relative_to(project_root).as_posix() not in skip
         )
     declarations = tuple(
         (file, package)

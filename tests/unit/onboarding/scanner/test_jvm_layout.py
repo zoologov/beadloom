@@ -479,3 +479,19 @@ class TestKotlinsRecommendedLayout:
             "app": "src/main/kotlin/app",
             "network": "src/main/kotlin/network",
         }
+
+
+class TestAFolderAnotherLayoutReads:
+    """BDL-080 S3b: an Expo module's ``android/`` is a part of the module, not a JVM module."""
+
+    def test_a_skipped_folder_is_not_walked(self, tmp_path: Path) -> None:
+        for rel_path in (
+            "modules/pulse/android/src/main/java/expo/modules/pulse/PulseModule.kt",
+            "server/src/main/java/org/acme/Api.java",
+        ):
+            path = tmp_path / rel_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("// code\n", encoding="utf-8")
+
+        assert read_jvm_layout(tmp_path).modules == ("modules/pulse/android", "server")
+        assert read_jvm_layout(tmp_path, skip=("modules/pulse",)).modules == ("server",)

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config, script_blocks
+from beadloom.graph.expo_modules import ExpoModules, refresh_bridge_edges
 from beadloom.graph.go_modules import GoModules
 from beadloom.graph.import_manifests import record_manifests
 from beadloom.graph.js_specifiers import (
@@ -1324,6 +1325,7 @@ class _ImportTree:
     jvm_packages: JvmPackages
     ts_configs: TsConfigs
     aliases: tuple[tuple[str, str], ...]
+    expo_modules: ExpoModules
 
 
 def _read_import_tree(
@@ -1341,13 +1343,19 @@ def _read_import_tree(
         jvm_packages=read_jvm_packages(project_root, files),
         ts_configs=TsConfigs(project_root),
         aliases=tuple(aliases),
+        expo_modules=ExpoModules(project_root),
     )
 
 
 def _record_manifests(conn: sqlite3.Connection, tree: _ImportTree) -> None:
     """Record the fingerprint of every declaration *tree*'s answers were read through."""
     record_manifests(
-        conn, tree.go_modules, tree.swift_packages, tree.ts_configs, tree.aliases
+        conn,
+        tree.go_modules,
+        tree.swift_packages,
+        tree.ts_configs,
+        tree.aliases,
+        tree.expo_modules,
     )
 
 
@@ -1468,7 +1476,8 @@ def index_imports(
     """Scan all source files and index their imports into the code_imports table.
 
     Scans directories listed in ``scan_paths`` from config.yml.
-    After indexing, creates ``depends_on`` edges from resolved imports.
+    After indexing, creates ``depends_on`` edges from resolved imports, and the ``uses``
+    edges an Expo module's config declares (:mod:`beadloom.graph.expo_modules`).
     *aliases* are the ``(alias, folder)`` pairs of ``imports.aliases:``; the
     application layer reads them, with the refusals of that block.
     Returns the count of imports indexed.
@@ -1479,8 +1488,9 @@ def index_imports(
     conn.commit()
     _record_manifests(conn, tree)
 
-    # Create depends_on edges from resolved imports.
+    # Create depends_on edges from resolved imports, and the bridges no import carries.
     refresh_import_edges(conn)
+    refresh_bridge_edges(conn, tree.expo_modules)
 
     return total
 
@@ -1510,7 +1520,7 @@ def reindex_file_imports(
     The result equals a fresh index of the tree, and the fingerprint of the
     manifests it was read through is recorded. The derived
     ``depends_on`` edge set is rebuilt afterwards, so an import that disappeared
-    stops being a dependency instead of lingering.
+    stops being a dependency instead of lingering, and so is the Expo bridge set.
 
     Returns the number of imports indexed for the touched files.
     """
@@ -1530,6 +1540,7 @@ def reindex_file_imports(
     conn.commit()
     _record_manifests(conn, tree)
     refresh_import_edges(conn)
+    refresh_bridge_edges(conn, tree.expo_modules)
     return total
 
 
