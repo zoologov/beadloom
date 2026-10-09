@@ -56,13 +56,6 @@ pytest.importorskip("tree_sitter_typescript")
 #: The two FSD fixtures, in the order they are claimed.
 _FSD_STACKS = [stack for stack, fixture in FIXTURES_BY_STACK.items() if fixture.layers_by_init]
 
-#: The gap this bead measured and did not close: a product change, for the coordinator.
-_ROUTES_GAP = (
-    "beadloom-chdx gap: init writes no node for Expo Router's app/ beside an FSD src/ - "
-    "it clusters app/trail/ as a node named after the route and leaves app/_layout.tsx "
-    "and app/index.tsx with no owner, so two of the three route imports draw no edge"
-)
-
 
 @dataclass
 class Adopted:
@@ -225,10 +218,15 @@ def test_the_expo_module_joins_its_typescript_to_its_swift_and_kotlin_sides(
     assert bridges == EXPO_BRIDGES["rn-fsd"]
 
 
-@pytest.mark.xfail(reason=_ROUTES_GAP, strict=True)
 def test_expo_routers_routes_are_one_node_that_owns_every_route_file(
     adopted: Callable[[str], Adopted],
 ) -> None:
+    """S3d measured the gap (``beadloom-chdx``); S3e closed it (``beadloom-af99.12``).
+
+    ``init`` clustered ``app/trail/`` as a node named after the route and left
+    ``app/_layout.tsx`` and ``app/index.tsx`` to the root service. The routes are now
+    one segment of the ``app`` layer.
+    """
     fixture = adopted("rn-fsd")
     sources = set(fixture.sources().values())
 

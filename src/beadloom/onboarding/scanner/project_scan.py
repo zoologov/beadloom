@@ -429,5 +429,7 @@ def _detect_project_name(project_root: Path) -> str:
         if match:
             return match.group(1)
 
-    # Fallback: directory name.
-    return project_root.name
+    # Fallback: the name of the folder the path names. Resolved first, because
+    # `Path('.').name` is '' and `init --project .` wrote a root service named ''
+    # that no domain could be part of (BDL-080 S3e).
+    return project_root.resolve().name

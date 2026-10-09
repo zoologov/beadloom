@@ -18,10 +18,19 @@ So the units a graph is written from are:
   by omission that it is not there; Steiger's config ignores such folders, and a graph
   is not a linter.
 
+- **the routes** of Expo Router, when the layers are under ``src/`` and the project
+  depends on the router (:mod:`~beadloom.onboarding.scanner.expo_router`): ``app/`` at the
+  root is ONE segment of the ``app`` layer, ``app-routes``, part of the ``app`` container
+  (of the root when the layer has none). FSD's guidance for Expo Router reads the routes
+  as the top layer, so the layer rule judges them; until BDL-080 S3e the clustering made a
+  node of each route folder (``app/trail/`` as ``trail``, outside every layer) and left
+  ``app/_layout.tsx`` to the root. One node, not one per route: routes as nodes is
+  ``beadloom-mnuu``.
+
 What the layout *claims* leaves the directory clustering, the way a JVM module or a
-Swift target does: the whole ``src/`` when the layers are under it, else the layer and
-legacy folders at the root. Code elsewhere (an Expo Router ``app/`` beside ``src/``) is
-clustered as before.
+Swift target does: the whole ``src/`` and the routes folder when the layers are under
+``src/``, else the layer and legacy folders at the root. Code elsewhere is clustered as
+before.
 
 Not read: slice groups (a folder of slices inside a layer is read as one slice, and the
 shape rule names its folders), and an FSD tree inside one package of a monorepo.
@@ -44,6 +53,7 @@ from beadloom.onboarding.scanner.constants import (
     _is_in_skip_dir,
     _sanitize_ref_id,
 )
+from beadloom.onboarding.scanner.expo_router import expo_router_routes
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection
@@ -53,6 +63,10 @@ if TYPE_CHECKING:
 
 #: The two layers that hold segments instead of slices.
 SEGMENTED_LAYERS: frozenset[str] = frozenset({"app", "shared"})
+
+#: The layer Expo Router's routes belong to, and the name their one unit asks for.
+ROUTES_LAYER = "app"
+ROUTES_UNIT = "app-routes"
 
 #: The tag a folder beside the layers is written with: outside every layer of the rule.
 FSD_LEGACY_TAG = "fsd-legacy"
@@ -90,11 +104,13 @@ class FsdLayout:
     """The FSD tree of a project: where its layers are, and the units it is written from.
 
     *root* is the project-relative folder holding the layers, ``""`` for the project
-    root, ``None`` when the project is not in the FSD layout.
+    root, ``None`` when the project is not in the FSD layout. *routes* is Expo Router's
+    routes folder beside the root, written as one unit of the ``app`` layer, else ``None``.
     """
 
     root: str | None = None
     units: tuple[FsdUnit, ...] = ()
+    routes: str | None = None
 
     @property
     def claimed(self) -> frozenset[str]:
@@ -102,7 +118,7 @@ class FsdLayout:
         if self.root is None:
             return frozenset()
         if self.root:
-            return frozenset({self.root})
+            return frozenset({self.root, *([self.routes] if self.routes else [])})
         return frozenset(unit.directory.split("/", 1)[0] for unit in self.units)
 
 
@@ -193,7 +209,25 @@ def read_fsd_layout(project_root: Path, *, skip: Collection[str] = ()) -> FsdLay
             units.append(
                 FsdUnit(_sanitize_ref_id(folder.name), directory, None, LEGACY, None, files)
             )
-    return FsdLayout(root=root, units=tuple(units))
+    routes = _routes_unit(project_root, units) if root else None
+    if routes is None:
+        return FsdLayout(root=root, units=tuple(units))
+    return FsdLayout(root=root, units=(*units, routes), routes=routes.directory)
+
+
+def _routes_unit(project_root: Path, units: list[FsdUnit]) -> FsdUnit | None:
+    """Expo Router's routes as one segment of the ``app`` layer, or ``None``.
+
+    Called only when the layers are under a folder: with the layers at the root,
+    ``app/`` IS the ``app`` layer and its folders are its segments.
+    """
+    folder = expo_router_routes(project_root)
+    files = _code_files(project_root, project_root / folder) if folder is not None else ()
+    if folder is None or not files:
+        return None
+    has_container = any(u.role == CONTAINER and u.layer == ROUTES_LAYER for u in units)
+    parent = ROUTES_LAYER if has_container else None
+    return FsdUnit(ROUTES_UNIT, folder, ROUTES_LAYER, SEGMENT, parent, files)
 
 
 def fsd_tag(unit: FsdUnit) -> str:

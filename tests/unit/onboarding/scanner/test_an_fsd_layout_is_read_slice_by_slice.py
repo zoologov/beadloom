@@ -147,3 +147,69 @@ def test_a_project_without_the_layout_reads_empty(tmp_path: Path) -> None:
     assert layout.root is None
     assert layout.units == ()
     assert layout.claimed == frozenset()
+
+
+def _expo_router_app(root: Path) -> None:
+    """The tree of :func:`_tree` with Expo Router's routes at the root, beside ``src/``."""
+    _tree(root)
+    _write(root, "app/_layout.tsx", "app/index.tsx", "app/trail/[id].tsx")
+    (root / "package.json").write_text(
+        '{"dependencies": {"expo": "52.0.0", "expo-router": "4.0.9"}}', encoding="utf-8"
+    )
+
+
+def test_expo_routers_routes_are_one_segment_of_the_app_layer(tmp_path: Path) -> None:
+    # BDL-080 S3e: FSD's guidance for Expo Router keeps the routes in `app/` at the root
+    # and reads them as the top layer. Before, `app/trail/` was clustered as a node named
+    # after the route and `app/_layout.tsx` had no owner.
+    _expo_router_app(tmp_path)
+
+    layout = read_fsd_layout(tmp_path)
+    units = _by_directory(layout)
+    routes = next(unit for unit in layout.units if unit.directory == "app")
+
+    assert units["app"] == ("app-routes", "app", "segment", "app")
+    assert routes.files == ("app/_layout.tsx", "app/index.tsx", "app/trail/[id].tsx")
+    assert "app/trail" not in units
+    assert layout.routes == "app"
+    assert layout.claimed == frozenset({"src", "app"})
+
+
+def test_the_routes_are_part_of_the_root_when_the_app_layer_has_no_container(
+    tmp_path: Path,
+) -> None:
+    _expo_router_app(tmp_path)
+    for path in sorted((tmp_path / "src" / "app").rglob("*"), reverse=True):
+        path.unlink() if path.is_file() else path.rmdir()
+    (tmp_path / "src" / "app").rmdir()
+
+    units = _by_directory(read_fsd_layout(tmp_path))
+
+    assert units["app"] == ("app-routes", "app", "segment", None)
+
+
+def test_an_app_folder_in_a_project_without_the_router_is_left_to_the_clustering(
+    tmp_path: Path,
+) -> None:
+    _expo_router_app(tmp_path)
+    (tmp_path / "package.json").write_text('{"dependencies": {"vue": "3.5.0"}}', encoding="utf-8")
+
+    layout = read_fsd_layout(tmp_path)
+
+    assert "app" not in _by_directory(layout)
+    assert layout.routes is None
+    assert layout.claimed == frozenset({"src"})
+
+
+def test_layers_at_the_root_read_app_as_the_layer_even_with_the_router(tmp_path: Path) -> None:
+    # With the layers at the root, `app/` IS the FSD app layer: its folders are segments.
+    _write(tmp_path, "pages/home/index.ts", "features/auth/index.ts", "app/_layout.tsx")
+    _write(tmp_path, "shared/lib/index.ts")
+    (tmp_path / "package.json").write_text(
+        '{"dependencies": {"expo-router": "4.0.9"}}', encoding="utf-8"
+    )
+
+    layout = read_fsd_layout(tmp_path)
+
+    assert _by_directory(layout)["app"] == ("app", "app", "container", None)
+    assert layout.routes is None

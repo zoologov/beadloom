@@ -43,13 +43,10 @@ pytestmark = pytest.mark.slow
 #: (``beadloom-ujzb.15``, B6) and SwiftPM (``beadloom-ujzb.16``, B7). All three are
 #: fixed and their marks are gone; a new defect adds its mark through ``_stacks``.
 #:
-#: BDL-080 S3d measured one: Expo Router's ``app/`` beside an FSD ``src/`` is no node
-#: (``init`` clusters ``app/trail/`` as a node named after the route), so the routes
-#: are not a module, their imports draw no edge, and the edge ``app/trail/`` draws is
-#: not one the adopter's module list backs. The coordinator decides the fix.
-_EXPO_ROUTER_ROUTES = {
-    "rn-fsd": "beadloom-chdx gap: init writes no node for Expo Router's app/ beside an FSD src/"
-}
+#: BDL-080 S3d (``beadloom-chdx``) measured a fourth on rn-fsd: Expo Router's ``app/``
+#: beside an FSD ``src/`` was no node, so three cases here were strict xfails. S3e
+#: (``beadloom-af99.12``) made the routes one segment of the ``app`` layer and removed
+#: the marks.
 
 
 def _stacks(xfails: dict[str, str] | None = None) -> list[Any]:
@@ -98,7 +95,7 @@ def test_the_portal_builds_from_docs_site(
     assert (portal.dist / "index.html").is_file()
 
 
-@pytest.mark.parametrize("stack", _stacks(_EXPO_ROUTER_ROUTES))
+@pytest.mark.parametrize("stack", _stacks())
 def test_every_module_of_the_project_is_a_node(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:
@@ -109,7 +106,7 @@ def test_every_module_of_the_project_is_a_node(
     assert missing == []
 
 
-@pytest.mark.parametrize("stack", _stacks(_EXPO_ROUTER_ROUTES))
+@pytest.mark.parametrize("stack", _stacks())
 def test_every_import_between_modules_is_a_depends_on_edge(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:
@@ -125,7 +122,7 @@ def test_every_import_between_modules_is_a_depends_on_edge(
     assert missing == []
 
 
-@pytest.mark.parametrize("stack", _stacks(_EXPO_ROUTER_ROUTES))
+@pytest.mark.parametrize("stack", _stacks())
 def test_no_depends_on_edge_joins_modules_the_code_does_not_join(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:

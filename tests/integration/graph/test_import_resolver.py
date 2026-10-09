@@ -126,6 +126,28 @@ class TestResolveRelativeImport:
         _write(tmp_path, "src/other/x.ts")
         assert resolve_relative_import("../other/x", "src/app/a.ts", tmp_path, conn) is None
 
+    def test_a_folder_index_beats_a_file_whose_name_differs_only_in_case(
+        self, tmp_path: Path, conn: sqlite3.Connection
+    ) -> None:
+        # BDL-080 S3e: on a case-insensitive filesystem (macOS) `src/app.vue` answered
+        # `is_file()` for `src/App.vue`, and the `.vue` candidate precedes the folder
+        # index, so `./app` resolved to App.vue on macOS and to `app/index.ts` on Linux.
+        # Only a name the directory lists exactly is a candidate that exists.
+        _write(tmp_path, "src/App.vue", "<template><main/></template>\n")
+        _write(tmp_path, "src/app/index.ts")
+        assert resolve_relative_import("./app", "src/main.ts", tmp_path, conn) == "app"
+
+    def test_a_name_written_in_its_own_case_still_names_its_file(
+        self, tmp_path: Path, conn: sqlite3.Connection
+    ) -> None:
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES "
+            "('shell', 'feature', '', 'src/App.vue')"
+        )
+        _write(tmp_path, "src/App.vue", "<template><main/></template>\n")
+        _write(tmp_path, "src/app/index.ts")
+        assert resolve_relative_import("./App", "src/main.ts", tmp_path, conn) == "shell"
+
 
 def _imports(conn: sqlite3.Connection) -> set[tuple[str, str, str | None]]:
     rows = conn.execute(

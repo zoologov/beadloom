@@ -136,6 +136,17 @@ names its bead; the pull request is to be opened.
   `logoMonochrome`, `favicons` and `poweredBy`. `config-check` names a declared `site:` block
   without `repo_url`, which leaves the header without a repository link, and does not block on
   it.
+- **`init` reads Expo Router's routes beside a Feature-Sliced `src/` as one segment of the `app`
+  layer (`beadloom-af99.12`).** When the layers are under `src/` and `package.json` names
+  `expo-router` among its `dependencies`, `app/` at the project root is written as ONE component,
+  `app-routes`, with source `app/`, tag `fsd-app` and `part_of` the `app` container (the root
+  service when the layer has none), so the layer rule judges the route files as the top layer.
+  The dependency decides, not a file: the router is what reads `app/` as routes, and it makes
+  `_layout` optional. `devDependencies`, the config plugin's `root` option and `src/app/` as the
+  routes folder are not read. Before, `init` clustered each route folder as a node of its own
+  (`app/trail/` as `trail`, outside every layer) and left `app/_layout.tsx` and `app/index.tsx`
+  to the root service. Measured on the `rn-fsd` adopter fixture: `fsd-layers` judges 15 of 17
+  `depends_on` edges, up from 12 of 15.
 
 ### Changed
 
@@ -193,6 +204,21 @@ names its bead; the pull request is to be opened.
   coordinator declares it and each core carries it, so `config-check` reports a role that loses
   it. The `ddd` overlay states it for Python packages, and the explorer writes a size finding
   on the row of the node it names.
+
+### Fixed
+
+- **A JS/TS specifier names a file by its exact case, on every filesystem (`beadloom-af99.12`).**
+  On a filesystem that folds case (macOS) `./app` beside `src/App.vue` and `src/app/index.ts`
+  resolved to `App.vue`: `src/app.vue` answered for `App.vue`, and the `.vue` candidate precedes
+  the folder index. On Linux the same import resolved to the folder index, so one tree was
+  indexed two ways. A candidate now counts only when each part of its path is a name its folder
+  lists exactly, which is also what Vite loads, since its default `resolve.extensions` holds no
+  `.vue`.
+- **`init --project .` names the root service after the folder (`beadloom-af99.12`).** A
+  project whose manifest names nothing took its name from the path, and `Path('.').name` is
+  empty, so the root service was written as `''` and `init` exited 1 with `domain-needs-parent`
+  on every domain. Found on scratch copies of the Java, Kotlin and Swift adopter fixtures
+  (`beadloom-hvnv`); an absolute path, or no `--project` at all, was not affected.
 
 ## [8.0.0] - 2026-10-08
 

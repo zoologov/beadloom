@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config, script_blocks
+from beadloom.graph.exact_case import is_named_in_its_case
 from beadloom.graph.expo_modules import ExpoModules, refresh_bridge_edges
 from beadloom.graph.go_modules import GoModules
 from beadloom.graph.import_manifests import record_manifests
@@ -828,9 +829,17 @@ def _normalize_ts_import(import_path: str) -> str | None:
 
 
 def _first_existing(candidates: Sequence[str], project_root: Path) -> str | None:
-    """The first of *candidates* that is a file under *project_root*, or ``None``."""
+    """The first of *candidates* that is a file under *project_root*, named in its case.
+
+    ``None`` when no candidate is. A candidate counts only when every part of its path
+    is a name its folder lists exactly (BDL-080 S3e): on a filesystem that folds case
+    (macOS, Windows) ``src/app.vue`` answers ``is_file()`` for ``src/App.vue``, and as
+    the ``.vue`` candidate precedes the folder index, ``./app`` beside ``App.vue`` and
+    ``app/index.ts`` resolved to App.vue there and to the index on Linux. The bundler
+    agrees with Linux: Vite's default ``resolve.extensions`` holds no ``.vue``.
+    """
     for candidate in candidates:
-        if (project_root / candidate).is_file():
+        if (project_root / candidate).is_file() and is_named_in_its_case(project_root, candidate):
             return candidate
     return None
 
