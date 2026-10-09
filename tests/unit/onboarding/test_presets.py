@@ -137,10 +137,10 @@ class TestDetectPreset:
 
 
 class TestPresetsRegistry:
-    """PRESETS dict contains all three presets."""
+    """PRESETS dict contains all four presets."""
 
     def test_all_presets_registered(self) -> None:
-        assert set(PRESETS.keys()) == {"monolith", "microservices", "monorepo"}
+        assert set(PRESETS.keys()) == {"monolith", "microservices", "monorepo", "fsd"}
 
     def test_preset_names_match_keys(self) -> None:
         for key, preset in PRESETS.items():

@@ -286,6 +286,9 @@ def interactive_init(
         aliases = bs_result.get("import_aliases")
         if aliases is not None and aliases.sentence():
             console.print(f"  {escape(aliases.sentence())}", soft_wrap=True)
+        steiger = bs_result.get("steiger_script")
+        if steiger is not None and steiger.sentence():
+            console.print(f"  {escape(steiger.sentence())}", soft_wrap=True)
         beside = bs_result.get("beside_modules")
         for sentence in beside.sentences() if beside is not None else []:
             console.print(f"  {escape(sentence)}", soft_wrap=True)

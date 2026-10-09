@@ -40,7 +40,7 @@
 | `beadloom-5wh2` | S2B | ready | cohesion rule, overlays |
 | `beadloom-cwzc` | S3A | ✓ done | tsconfig `paths`/`baseUrl` (JSON with comments; nearest folder's configs, relative `extends`), `imports.aliases:` (refused like `activity:`; `init` writes a text scan of `babel.config.*`/`vite.config.*` and says so), `.ios .android .native .web` before each extension, `.mjs`/`.cjs` parsed (closes `beadloom-zd4m`); tsconfig + aliases in the manifest fingerprint. Synthetic Vue tree: Vite aliases 0/4 -> 4/4, baseUrl 0/1 -> 1/1, edges 13 -> 18; synthetic Expo tree: relative 4/7 -> 8/8, tsconfig `@/` 0/2 -> 2/2, Babel aliases 2/9 -> 10/10, edges 3 -> 14. Six fixtures identical (imports, edges, file index) |
 | `beadloom-wbqd` | S3B | ready | Expo module bridge |
-| `beadloom-5t8d` | S3C | in progress | init fsd preset, FSD rules |
+| `beadloom-5t8d` | S3C | ✓ done | `fsd` preset first (src/ or root, >= 3 layers); slices `component` `fsd-<layer>` part_of the root, app/shared containers of segments, legacy folders `fsd-legacy`; rules.yml: `fsd-layers` (scope, title), `slice_public_api`, `slice_shape`, six `fsd-cohesion-*` checks (no `tag_prefix`); `lint:fsd` written; no import edge frozen into the YAML; init names the code as what fails. Synthetic tree: 3 of 3 planted violations found |
 | `beadloom-chdx` | S3D | ready | two fixtures, matrix 8 |
 | `beadloom-5pxv` | S4A | ready | lint totals, debt inside |
 | `beadloom-bjrw` | S4B | ready | legend from the canvas |

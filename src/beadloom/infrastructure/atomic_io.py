@@ -65,3 +65,32 @@ def write_yaml_atomic(path: Path, data: Any, **dump_kwargs: Any) -> None:
         with contextlib.suppress(FileNotFoundError):
             tmp_path.unlink()
         raise
+
+
+def write_text_atomic(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` atomically: a temp file, ``fsync``, then one rename.
+
+    For a graph YAML whose comments are part of what is written: ``init``'s rules
+    for a Feature-Sliced frontend carry the reason for each rule beside it
+    (BDL-080 S3c), and :func:`yaml.dump` writes no comment. On any error the temp
+    file is removed and ``path`` is left untouched.
+
+    The commit steps repeat :func:`write_yaml_atomic`'s rather than being shared
+    with it on purpose: that body's own calls are the measured shape `beadloom
+    impact` seeds on (``tests/test_the_derivations_hold_as_shapes.py``), and moving
+    them into a helper re-answers every impact target at once.
+    """
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent)
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        tmp_path.replace(path)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            tmp_path.unlink()
+        raise

@@ -22,6 +22,7 @@ from beadloom.onboarding.scanner.agents_md import (
 from beadloom.onboarding.scanner.alias_scan import scan_bundler_aliases
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
 from beadloom.onboarding.scanner.entry_points import _discover_entry_points
+from beadloom.onboarding.scanner.fsd_layout import FsdLayout, FsdUnit, fsd_nodes, read_fsd_layout
 from beadloom.onboarding.scanner.import_scan import _quick_import_scan
 from beadloom.onboarding.scanner.jvm_layout import cluster_packages, read_jvm_layout
 from beadloom.onboarding.scanner.parent_edges import missing_parent_edges, parented_by
@@ -37,7 +38,8 @@ from beadloom.onboarding.scanner.project_scan import (
 )
 from beadloom.onboarding.scanner.readme import _ingest_readme
 from beadloom.onboarding.scanner.ref_ids import RefIdAllocator
-from beadloom.onboarding.scanner.rules_gen import generate_rules
+from beadloom.onboarding.scanner.rules_gen import generate_fsd_rules, generate_rules
+from beadloom.onboarding.scanner.steiger_script import SteigerScript, ensure_steiger_script
 from beadloom.onboarding.scanner.summary import _build_contextual_summary
 from beadloom.onboarding.scanner.swift_layout import (
     cluster_targets,
@@ -73,7 +75,7 @@ def bootstrap_project(
 
     Returns summary dict with generated file counts.
     """
-    from beadloom.onboarding.presets import PRESETS, detect_preset
+    from beadloom.onboarding.presets import FSD, PRESETS, detect_preset
 
     beadloom_dir = project_root / ".beadloom"
     graph_dir = beadloom_dir / "_graph"
@@ -97,7 +99,12 @@ def bootstrap_project(
     # as they were.
     jvm = read_jvm_layout(project_root)
     swift = read_swift_layout(project_root)
-    claimed = jvm.claimed | swift.claimed
+    # A Feature-Sliced frontend is read slice by slice (BDL-080 S3c): the FSD root
+    # leaves the directory clustering like a module does, and its slices, segments
+    # and legacy folders are written by `fsd_nodes` below.
+    fsd = read_fsd_layout(project_root, skip=portals) if preset is FSD else FsdLayout()
+    module_claims = jvm.claimed | swift.claimed
+    claimed = module_claims | fsd.claimed
     source_dirs = [d for d in scan["source_dirs"] if not is_claimed(d, claimed)]
     clusters = _cluster_with_children(
         project_root,
@@ -114,11 +121,13 @@ def bootstrap_project(
         project_root, [d for d in scan["source_dirs"] if not is_claimed(d, read)], read
     )
     beside_modules = CodeBesideModules(
-        scanned=tuple(folder for folder in unclaimed.folders if is_claimed(folder, claimed)),
+        scanned=tuple(
+            folder for folder in unclaimed.folders if is_claimed(folder, module_claims)
+        ),
         unread=unclaimed.loose_files,
     )
 
-    nodes: list[dict[str, str]] = []
+    nodes: list[dict[str, Any]] = []
     edges: list[dict[str, str]] = []
 
     # The ref_id of every node this function writes is handed out by one object,
@@ -214,6 +223,17 @@ def bootstrap_project(
                     }
                 )
 
+    # The FSD tree: a node per slice, segment, container and legacy folder, each
+    # `part_of` the frontend service, the root node of a single-app repository.
+    fsd_graph = fsd_nodes(
+        fsd,
+        ref_ids,
+        root_ref_id,
+        lambda unit: _fsd_summary(unit, project_root, all_entry_points),
+    )
+    nodes.extend(fsd_graph.nodes)
+    edges.extend(fsd_graph.edges)
+
     # Fallback: no clusters found, create minimal nodes from scan.
     if not nodes and source_dirs:
         for sd in source_dirs:
@@ -246,9 +266,18 @@ def bootstrap_project(
                         }
                     )
 
-    # Quick import scan for additional depends_on edges.
-    import_edges = _quick_import_scan(project_root, clusters, cluster_refs, jvm=jvm, swift=swift)
-    edges.extend(import_edges)
+    # Quick import scan for additional depends_on edges — except on an FSD frontend
+    # (BDL-080 S3c). An edge written here is DECLARED: it stays in the YAML when the
+    # import it was read from is gone, and the FSD rules judge depends_on edges at
+    # `error`. Measured on the synthetic FSD tree: with the edges written, a
+    # cross-import removed from the code kept `fsd-layers` red. The reindex derives
+    # the same edges from the code on every run, through tsconfig `paths` and
+    # `imports.aliases` (17 of 17 identical on that tree), and drops them when the
+    # import goes.
+    if fsd.root is None:
+        edges.extend(
+            _quick_import_scan(project_root, clusters, cluster_refs, jvm=jvm, swift=swift)
+        )
 
     # Create root node + part_of edges from top-level nodes.
     if nodes:
@@ -346,9 +375,17 @@ def bootstrap_project(
     # Generate rules.yml (only if it doesn't already exist).
     rules_path = graph_dir / "rules.yml"
     if nodes and not rules_path.exists():
-        rules_count = generate_rules(nodes, edges, project_name, rules_path)
+        rules_count = (
+            generate_fsd_rules(root_ref_id, rules_path)
+            if fsd.root is not None
+            else generate_rules(nodes, edges, project_name, rules_path)
+        )
     else:
         rules_count = 0
+    # The file-level half of the FSD rules: Steiger, given a script when none runs it.
+    steiger = (
+        ensure_steiger_script(project_root, fsd.root) if fsd.root is not None else SteigerScript()
+    )
 
     # Check for docs.
     docs_dir = project_root / "docs"
@@ -442,4 +479,19 @@ def bootstrap_project(
         "generated_portals": portals,
         # The aliases read from the bundler's config by a text scan (BDL-080).
         "import_aliases": aliases,
+        # The `lint:fsd` script written, or the one kept (BDL-080 S3c).
+        "steiger_script": steiger,
     }
+
+
+def _fsd_summary(unit: FsdUnit, project_root: Path, entry_points: list[dict[str, str]]) -> str:
+    """The contextual summary of one FSD unit, built as a cluster's is."""
+    folder = unit.directory.rsplit("/", 1)[-1]
+    return _build_contextual_summary(
+        project_root / unit.directory,
+        folder,
+        "component",
+        list(unit.files),
+        project_root,
+        entry_points=entry_points,
+    )

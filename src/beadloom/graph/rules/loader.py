@@ -20,6 +20,7 @@ from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
     DEFAULT_DOC_AREA_MIN_SUPPORT,
     DEFAULT_DOC_AREA_THRESHOLD,
+    DEFAULT_SLICE_SEGMENTS,
     SUPPORTED_SCHEMA_VERSIONS,
     VALID_EDGE_KINDS,
     VALID_NODE_KINDS,
@@ -42,6 +43,8 @@ from beadloom.graph.rules.types import (
     Rule,
     ScenarioBindingRule,
     ScenarioCoverageRule,
+    SlicePublicApiRule,
+    SliceShapeRule,
     SummaryFactsRule,
     TestBindingRule,
     TestImportBoundaryRule,
@@ -1081,6 +1084,69 @@ def _parse_scenario_binding_rule(
     )
 
 
+def _parse_name_list(name: str, field: str, raw: object, what: str) -> tuple[str, ...]:
+    """A non-empty list of non-empty strings, or the refusal naming *field* and *what*."""
+    if (
+        not isinstance(raw, list)
+        or not raw
+        or not all(isinstance(item, str) and item.strip() for item in raw)
+    ):
+        msg = f"Rule '{name}': '{field}' must be a non-empty list of {what}"
+        raise ValueError(msg)
+    return tuple(item.strip() for item in raw)
+
+
+def _parse_slice_public_api_rule(
+    name: str,
+    description: str,
+    data: dict[str, object],
+    *,
+    severity: str = "error",
+) -> SlicePublicApiRule:
+    """Parse the 'slice_public_api' block of a rule (BDL-080 S3c).
+
+    YAML example::
+
+        - name: fsd-public-api
+          slice_public_api:
+            tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
+    """
+    tags = _parse_name_list(
+        name, "slice_public_api.tags", data.get("tags"), "tags, the tags a slice carries"
+    )
+    return SlicePublicApiRule(name=name, description=description, tags=tags, severity=severity)
+
+
+def _parse_slice_shape_rule(
+    name: str,
+    description: str,
+    data: dict[str, object],
+    *,
+    severity: str = "error",
+) -> SliceShapeRule:
+    """Parse the 'slice_shape' block of a rule (BDL-080 S3c).
+
+    YAML example::
+
+        - name: fsd-slice-shape
+          slice_shape:
+            tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
+            segments: [ui, model, lib, api, config]
+    """
+    tags = _parse_name_list(
+        name, "slice_shape.tags", data.get("tags"), "tags, the tags a slice carries"
+    )
+    segments_raw = data.get("segments")
+    segments = (
+        DEFAULT_SLICE_SEGMENTS
+        if segments_raw is None
+        else _parse_name_list(name, "slice_shape.segments", segments_raw, "folder names")
+    )
+    return SliceShapeRule(
+        name=name, description=description, tags=tags, segments=segments, severity=severity
+    )
+
+
 class _MappingParser(Protocol):
     """Read one rule type's mapping into its typed rule, severity already resolved."""
 
@@ -1116,6 +1182,8 @@ _MAPPING_PARSERS: dict[str, _MappingParser] = {
     "test_binding": _parse_test_binding_rule,
     "test_import_boundary": _parse_test_import_boundary_rule,
     "scenario_binding": _parse_scenario_binding_rule,
+    "slice_public_api": _parse_slice_public_api_rule,
+    "slice_shape": _parse_slice_shape_rule,
 }
 
 #: Every key a rule may declare to select its type. A rule declares exactly one.

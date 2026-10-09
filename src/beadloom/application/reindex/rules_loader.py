@@ -43,8 +43,9 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
     Supports all v3 rule types: DenyRule, RequireRule, CycleRule,
     ImportBoundaryRule, ForbidEdgeRule, LayerRule, CardinalityRule,
     UnregisteredFeatureCandidateRule, ModuleCoverageRule, ScenarioCoverageRule,
-    DocAreaCoherenceRule, SummaryFactsRule, and the three suite rules
-    (TestBindingRule, TestImportBoundaryRule, ScenarioBindingRule).
+    DocAreaCoherenceRule, SummaryFactsRule, the three suite rules
+    (TestBindingRule, TestImportBoundaryRule, ScenarioBindingRule) and the two FSD
+    slice rules (SlicePublicApiRule, SliceShapeRule).
     """
     from beadloom.graph.rule_engine import (
         CardinalityRule,
@@ -62,6 +63,8 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
     )
     from beadloom.graph.rules import (
         ScenarioBindingRule,
+        SlicePublicApiRule,
+        SliceShapeRule,
         TestBindingRule,
         TestImportBoundaryRule,
     )
@@ -226,6 +229,15 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
 
     if isinstance(rule, (TestBindingRule, TestImportBoundaryRule, ScenarioBindingRule)):
         return _serialize_suite_rule(rule)
+
+    if isinstance(rule, SlicePublicApiRule):
+        # The whole rule: which tags make a node a slice (BDL-080 S3c).
+        return ("slice_public_api", {"tags": list(rule.tags)})
+
+    if isinstance(rule, SliceShapeRule):
+        # The segments are stored even when defaulted, so a reader of the `rules`
+        # table sees the shape that runs rather than having to know the default.
+        return ("slice_shape", {"tags": list(rule.tags), "segments": list(rule.segments)})
 
     # Should never happen with known Rule types, but guard against future additions.
     msg = f"Unknown rule type: {type(rule).__name__}"

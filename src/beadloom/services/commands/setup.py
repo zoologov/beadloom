@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from beadloom.onboarding.role_map import RoleMapReport
     from beadloom.onboarding.scanner.alias_scan import AliasScan
     from beadloom.onboarding.scanner.project_scan import CodeBesideModules
+    from beadloom.onboarding.scanner.steiger_script import SteigerScript
     from beadloom.onboarding.scanner.swift_layout import UnreadSwift
 
 # beadloom:service=mcp-server
@@ -1271,6 +1272,8 @@ def _verdict_on_the_generated_graph(
     click.echo(WITHDRAWN_COMPLETION_CLAIM, err=True)
     if step.summary == RULES_CONFIG_ERROR:
         _report_rules_that_would_not_load(step)
+    elif _only_the_code_fails(step):
+        _report_rules_the_code_fails(step, rules_are_this_run_s="rules.yml" in written)
     else:
         _report_rules_the_graph_fails(
             step,
@@ -1290,6 +1293,66 @@ def _verdict_on_the_generated_graph(
         err=True,
     )
     sys.exit(1)
+
+
+def _kinds_that_judge_the_code() -> frozenset[str]:
+    """The finding kinds that judge the project's code rather than the graph `init` wrote.
+
+    A layer finding is about an import edge, a slice finding about an import or a
+    folder: the code, which `init` read and did not write. Until the FSD preset
+    (BDL-080 S3c) `init` wrote only structural `require` rules, so every red at this
+    point was the scaffold's; the FSD rules exist to find the code's crossings.
+    """
+    from beadloom.graph.rules import SLICE_PUBLIC_API_RULE_TYPE, SLICE_SHAPE_RULE_TYPE
+    from beadloom.graph.rules.types import LAYER_EDGE_RULE_TYPE
+
+    return frozenset({LAYER_EDGE_RULE_TYPE, SLICE_PUBLIC_API_RULE_TYPE, SLICE_SHAPE_RULE_TYPE})
+
+
+def _only_the_code_fails(step: GateStep) -> bool:
+    """Whether every error-severity finding of *step* judges the code, not the scaffold."""
+    errors = [finding for finding in step.findings if finding.get("severity") == "error"]
+    code_kinds = _kinds_that_judge_the_code()
+    return bool(errors) and all(finding.get("kind") in code_kinds for finding in errors)
+
+
+def _code_finding_line(finding: Mapping[str, object]) -> str:
+    """One finding as a line: the rule, then its file and line or the node it names."""
+    locations = finding.get("locations")
+    where = ""
+    if isinstance(locations, list) and locations and isinstance(locations[0], dict):
+        first = locations[0]
+        where = f"{first.get('file')}" + (f":{first['line']}" if "line" in first else "")
+    return f"{finding['rule']}: {where or finding.get('node') or ''}".rstrip(": ")
+
+
+def _report_rules_the_code_fails(step: GateStep, *, rules_are_this_run_s: bool) -> None:
+    """Name each finding the rules make about the CODE, and say it is the project's.
+
+    The FSD rules judge imports and folders (BDL-080 S3c). A project carrying a
+    cross-import inside a layer is the case those rules exist for, and the
+    graph-attribution table above would call it "a defect in Beadloom's bootstrap"
+    and ask for a bug report. The exit code stays what the Gate's lint step says:
+    `beadloom ci` fails on these findings, and a scripted `init && ci` stops here.
+    """
+    click.echo(
+        f"Error: your code does not pass {_RULES_HALF[rules_are_this_run_s]}.", err=True
+    )
+    lines = sorted(
+        {
+            _code_finding_line(finding)
+            for finding in step.findings
+            if finding.get("severity") == "error"
+        }
+    )
+    for line in lines:
+        click.echo(f"  {line}", err=True)
+    click.echo(
+        "These rules judge the code's imports and folders, which this command read and "
+        "did not write: each line is a finding about the project, not a defect in the "
+        "scaffold. `beadloom lint` lists them with the fix for each.",
+        err=True,
+    )
 
 
 def _graph_file_of_each_node(project_root: Path) -> dict[str, str]:
@@ -1492,6 +1555,16 @@ def _echo_import_aliases(scan: AliasScan | None, *, prefix: str) -> None:
         click.echo(f"{prefix}{sentence}")
 
 
+def _echo_steiger_script(script: SteigerScript | None, *, prefix: str) -> None:
+    """Name the ``lint:fsd`` script init wrote for an FSD frontend, or the one it kept.
+
+    Silent for every project that is not in the FSD layout (BDL-080 S3c).
+    """
+    sentence = script.sentence() if script is not None else ""
+    if sentence:
+        click.echo(f"{prefix}{sentence}")
+
+
 def _holds_generated_portal(folder: Path) -> bool:
     """Whether *folder* holds the portal ``beadloom docs site`` wrote (the re-review's m4).
 
@@ -1584,7 +1657,7 @@ _UNBOUND_FILE_INDENT = "    "
 @click.option("--bootstrap", is_flag=True, help="Bootstrap: generate graph from code.")
 @click.option(
     "--preset",
-    type=click.Choice(["monolith", "microservices", "monorepo"]),
+    type=click.Choice(["monolith", "microservices", "monorepo", "fsd"]),
     default=None,
     help="Architecture preset (auto-detected if omitted).",
 )
@@ -1675,6 +1748,7 @@ def init(
             )
             _echo_unread_swift(bs.get("unread_swift"), prefix="  ")
             _echo_import_aliases(bs.get("import_aliases"), prefix="  ")
+            _echo_steiger_script(bs.get("steiger_script"), prefix="  ")
             _echo_beside_modules(bs.get("beside_modules"), prefix="  ")
             _echo_unscanned_portals(bs.get("generated_portals"), prefix="  ")
             _echo_portal_ignore(bs.get("portal_ignore"), prefix="  ")
@@ -1761,6 +1835,7 @@ def init(
             )
         _echo_unread_swift(result.get("unread_swift"), prefix="\u2713 ")
         _echo_import_aliases(result.get("import_aliases"), prefix="\u2713 ")
+        _echo_steiger_script(result.get("steiger_script"), prefix="\u2713 ")
         _echo_beside_modules(result.get("beside_modules"), prefix="\u2713 ")
         _echo_unscanned_portals(result.get("generated_portals"), prefix="\u2713 ")
         _echo_portal_ignore(result.get("portal_ignore"), prefix="\u2713 ")

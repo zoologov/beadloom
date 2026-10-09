@@ -35,7 +35,8 @@ class TestTheSpecTableIsCheckedAgainstTheLoader:
     #: why this claim needed a test of its own (BDL-UX #196).
     _CARDINALS: ClassVar[dict[int, str]] = {
         9: "Nine", 10: "Ten", 11: "Eleven", 12: "Twelve",
-        13: "Thirteen", 14: "Fourteen", 15: "Fifteen",
+        13: "Thirteen", 14: "Fourteen", 15: "Fifteen", 16: "Sixteen",
+        17: "Seventeen",
     }
 
     def _keywords_in_table(self) -> set[str]:

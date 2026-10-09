@@ -1,8 +1,8 @@
 """Architecture presets for bootstrap graph generation.
 
 Each preset defines rules for mapping directory structures to graph node
-kinds and edges.  Three built-in presets cover the most common architectures:
-monolith, microservices, and monorepo.
+kinds and edges.  Four built-in presets cover the most common architectures:
+monolith, microservices, monorepo, and a Feature-Sliced Design frontend (``fsd``).
 """
 
 # beadloom:domain=onboarding
@@ -124,17 +124,60 @@ MONOREPO = Preset(
     infer_deps_from_manifests=True,
 )
 
+#: Feature-Sliced Design's six layers, top to bottom: a layer imports only the layers
+#: below it (BDL-080 S3c, RFC D4).
+FSD_LAYERS: tuple[str, ...] = ("app", "pages", "widgets", "features", "entities", "shared")
+
+#: How many of the six layer folders make a project FSD. Fewer is a coincidence of
+#: names: a monolith has an ``app/`` and a ``shared/`` often enough.
+_FSD_MIN_LAYERS = 3
+
+#: Where the layer folders are looked for, in order. ``src`` first, because an Expo
+#: project keeps its router in an ``app/`` at the root and its FSD layers under ``src/``.
+_FSD_ROOTS: tuple[str, ...] = ("src", "")
+
+FSD = Preset(
+    name="fsd",
+    description=(
+        "Feature-Sliced Design frontend: a slice is a component tagged with its layer, "
+        "app and shared hold segments, folders beside the layers are legacy nodes."
+    ),
+    dir_rules=(),
+    # A folder outside the FSD root (an Expo Router `app/` at the project root) is a
+    # part of the frontend, not a bounded context.
+    default_kind="component",
+    infer_part_of=True,
+    infer_deps_from_manifests=False,
+)
+
 PRESETS: dict[str, Preset] = {
     "monolith": MONOLITH,
     "microservices": MICROSERVICES,
     "monorepo": MONOREPO,
+    "fsd": FSD,
 }
+
+
+def fsd_root(project_root: Path) -> str | None:
+    """The project-relative folder holding the FSD layers, ``""`` for the root, or ``None``.
+
+    A folder is the FSD root when at least three of :data:`FSD_LAYERS` are folders in it.
+    ``src/`` is read before the root (see :data:`_FSD_ROOTS`).
+    """
+    for root in _FSD_ROOTS:
+        folder = project_root / root if root else project_root
+        present = [layer for layer in FSD_LAYERS if (folder / layer).is_dir()]
+        if len(present) >= _FSD_MIN_LAYERS:
+            return root
+    return None
 
 
 def detect_preset(project_root: Path) -> Preset:
     """Auto-detect the best preset for a project.
 
     Heuristic (evaluated in order):
+    0. At least three Feature-Sliced Design layer folders at the root or under
+       ``src/`` -> fsd (:func:`fsd_root`)
     1. Mobile app indicators (React Native / Expo / Flutter) -> monolith
     2. ``services/`` or ``cmd/`` directory -> microservices
     3. ``packages/`` or ``apps/`` directory -> monorepo
@@ -143,7 +186,14 @@ def detect_preset(project_root: Path) -> Preset:
     Mobile apps often have a ``services/`` directory containing internal API
     modules, not independent microservices.  We check for mobile indicators
     first so these projects are not misclassified as microservices.
+
+    FSD comes before all of them: a React Native project in the FSD layout is
+    mobile AND layered, and read as a monolith its layers became domains and its
+    slices their children, with no layer rule to judge them (BDL-080 S3c).
     """
+    if fsd_root(project_root) is not None:
+        return FSD
+
     # --- Mobile app detection (must come before services/cmd check) ---
     pkg_json = project_root / "package.json"
     if pkg_json.exists():

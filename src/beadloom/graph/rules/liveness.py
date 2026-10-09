@@ -66,6 +66,10 @@ Rule type                        Inert when
                                  :mod:`.test_import_boundary`
 ``scenario_binding``             the ``features`` glob matches 0 files. Counted here,
                                  reported by :mod:`.scenario_binding`
+``slice_public_api``             no node carries any of its ``tags``, or no such node's
+                                 source is a folder on disk
+                                 (:func:`~beadloom.graph.rules.slices.slice_rule_inert_reason`)
+``slice_shape``                  the same two reasons as ``slice_public_api``
 ===============================  =========================================================
 
 Two deliberate boundaries, named rather than left to be discovered:
@@ -113,6 +117,7 @@ from beadloom.graph.rules.layers import (
 )
 from beadloom.graph.rules.loader import validate_rules
 from beadloom.graph.rules.node_tags import node_tags
+from beadloom.graph.rules.slices import slice_rule_inert_reason
 from beadloom.graph.rules.types import (
     CardinalityRule,
     CycleRule,
@@ -125,6 +130,8 @@ from beadloom.graph.rules.types import (
     RequireRule,
     ScenarioBindingRule,
     ScenarioCoverageRule,
+    SlicePublicApiRule,
+    SliceShapeRule,
     SummaryFactsRule,
     TestBindingRule,
     TestImportBoundaryRule,
@@ -520,6 +527,9 @@ def _reasons_for_rule(
         return _summary_facts_reasons(conn, project_root)
     if isinstance(rule, (TestBindingRule, TestImportBoundaryRule, ScenarioBindingRule)):
         return _suite_rule_reasons(rule, conn, project_root)
+    if isinstance(rule, (SlicePublicApiRule, SliceShapeRule)):
+        reason = slice_rule_inert_reason(rule, conn, project_root)
+        return [reason] if reason is not None else []
     # An unknown-ref_id diagnosis the loader can make about a rule kind this
     # module does not model yet is still worth printing: `validate_rules`
     # computes it, and dropping its return value is how #172 stayed open.

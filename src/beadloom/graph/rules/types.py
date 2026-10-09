@@ -617,6 +617,71 @@ class ScenarioBindingRule:
     severity: str = "warn"
 
 
+#: The standard segments of a Feature-Sliced Design slice, in FSD's own order: what a
+#: slice's top may hold besides its ``index`` (BDL-080 S3c).
+DEFAULT_SLICE_SEGMENTS: tuple[str, ...] = ("ui", "model", "lib", "api", "config")
+
+
+@dataclass(frozen=True)
+class SlicePublicApiRule:
+    """An import into a slice from outside it lands on the slice's ``index`` (BDL-080 S3c).
+
+    Feature-Sliced Design enters a slice through its public API, the ``index`` file at
+    the top of its folder; Steiger's ``public-api`` rule reports reaching past it. A
+    *slice* is a node carrying one of ``tags`` whose ``source`` is a folder.
+
+    **Over resolved imports, not import paths.** ``forbid_import`` matches globs
+    against import paths, and no glob says "inside this slice but not its index":
+    ``@/features/auth`` and ``@/features/auth/model/session`` differ by a suffix only an
+    alias table can interpret. So the rule reads ``code_imports``, where the reindex has
+    already decided which node each import reached, and asks only where inside that
+    slice's folder the imported file is: a relative specifier is completed from the
+    importing file's folder, any other is matched against the slice's folder by its
+    longest trailing path that names a file there. A file other than the slice's
+    ``index`` is a finding; so is an import into a slice that has no ``index`` at all,
+    which has no public API to enter. An import from inside the slice is not judged.
+
+    YAML::
+
+        - name: fsd-public-api
+          severity: error
+          slice_public_api:
+            tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
+    """
+
+    name: str
+    description: str
+    tags: tuple[str, ...]
+    severity: str = "error"
+
+
+@dataclass(frozen=True)
+class SliceShapeRule:
+    """A slice's top holds its segments and its ``index`` (BDL-080 S3c).
+
+    FSD gives a slice its shape rather than a size: the standard segments
+    (:data:`DEFAULT_SLICE_SEGMENTS`) and a public API in ``index``. For each slice — a
+    node carrying one of ``tags`` whose ``source`` is a folder on disk — a folder at
+    its top whose name is not in ``segments`` is a finding, and so is a code file
+    there that is not its ``index``. Hidden entries and files that are not code
+    (``README.md``) are not judged.
+
+    YAML::
+
+        - name: fsd-slice-shape
+          severity: warn
+          slice_shape:
+            tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
+            segments: [ui, model, lib, api, config]   # optional; these five by default
+    """
+
+    name: str
+    description: str
+    tags: tuple[str, ...]
+    segments: tuple[str, ...] = DEFAULT_SLICE_SEGMENTS
+    severity: str = "error"
+
+
 Rule = (
     DenyRule
     | RequireRule
@@ -633,6 +698,8 @@ Rule = (
     | TestBindingRule
     | TestImportBoundaryRule
     | ScenarioBindingRule
+    | SlicePublicApiRule
+    | SliceShapeRule
 )
 
 
