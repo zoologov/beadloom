@@ -11,7 +11,7 @@ anybody else's by evidence rather than by path.
 
 **The marker.** Every file written here carries one line naming the version that
 wrote it and the SHA-256 of the rest of the file — a comment in JavaScript, Vue
-and CSS, a ``"//"`` key on the second line of a JSON file. Only the formats in
+CSS and SVG, a ``"//"`` key on the second line of a JSON file. Only the formats in
 :data:`MARKABLE_SUFFIXES` can carry it, and a shipped file of any other kind is
 a packaging defect, refused here and caught by a test before it ships.
 
@@ -69,6 +69,9 @@ _COMMENT_SYNTAX = {
     ".mjs": ("// ", ""),
     ".vue": ("<!-- ", " -->"),
     ".css": ("/* ", " */"),
+    # The brand files under `public/brand/` (BDL-080 S4d): an XML comment above
+    # the `<svg>` element, which none of them opens with a declaration.
+    ".svg": ("<!-- ", " -->"),
 }
 _JSON = ".json"
 

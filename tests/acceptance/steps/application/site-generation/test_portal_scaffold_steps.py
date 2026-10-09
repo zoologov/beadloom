@@ -19,6 +19,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from beadloom.application.site.generate import SiteResult, generate_site
 from beadloom.application.site.scaffold import read_marker
 from beadloom.application.site.site_config import SiteConfigError
+from tests.support.adopter_portals import without_the_footer_link
 from tests.support.scaffold_node_ids import node_ids_named, scaffold_node_ids
 from tests.support.tiered_project import write_zoned_import_project
 
@@ -179,7 +180,8 @@ def _no_leak(world: dict[str, Any]) -> None:
     for path in world["site"].rglob("*"):
         if not path.is_file():
             continue
-        text = path.read_text(encoding="utf-8", errors="replace")
+        # The footer's link to Beadloom's repository is the one mention allowed (BDL-080 S4d).
+        text = without_the_footer_link(path.read_text(encoding="utf-8", errors="replace"))
         leaks.extend((path.name, token) for token in _OUR_IDENTITY if token in text)
     assert leaks == []
 

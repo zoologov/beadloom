@@ -30,6 +30,8 @@ _E2E = "src/beadloom/site_scaffold/e2e"
 
 #: Each spec and the slice whose behaviour it drives.
 SPEC_SLICE = {
+    # The footer, the favicon, the nav logo and the header's repository icon (BDL-080 S4d).
+    "brand.spec.js": "site-powered-by",
     # Trunks and buses drawn over ELK's routes (BDL-077 E3).
     "bundles.spec.js": "site-graph-viewer",
     "card.spec.js": "site-node-card",

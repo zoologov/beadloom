@@ -109,9 +109,17 @@ def test_a_file_without_the_marker_has_none() -> None:
 
 
 def test_a_suffix_that_cannot_hold_a_marker_is_refused() -> None:
-    assert ".svg" not in MARKABLE_SUFFIXES
+    assert ".png" not in MARKABLE_SUFFIXES
     with pytest.raises(ScaffoldError):
-        mark("logo.svg", "<svg/>", _V1)
+        mark("logo.png", "PNG", _V1)
+
+
+def test_an_svg_carries_the_marker_in_an_xml_comment_above_its_element() -> None:
+    marked = mark("public/brand/icon.svg", "<svg/>\n", _V1)
+    assert marked.startswith("<!-- beadloom:generated ")
+    assert marked.split("\n")[1] == "<svg/>"
+    marker = read_marker(marked)
+    assert marker is not None and marker.intact
 
 
 # --- the first run -----------------------------------------------------------------

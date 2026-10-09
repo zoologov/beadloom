@@ -57,6 +57,7 @@ it holds `ui`, `model`, `lib` or `api` segments as it needs them. Each slice is 
 | `widgets` | [`site-node-card`](vitepress-site/node-card.md) | The architecture card: everything the data file says about one node. |
 | `widgets` | [`site-dashboard`](vitepress-site/dashboard.md) | The dashboard's panels. |
 | `widgets` | [`site-diagram-viewer`](vitepress-site/diagram-viewer.md) | Pan, zoom and full screen over Mermaid diagrams. |
+| `widgets` | [`site-powered-by`](vitepress-site/powered-by.md) | The footer of every page, "Powered by Beadloom", which `site.powered_by: false` removes. |
 | `features` | [`site-filter-graph`](vitepress-site/filter-graph.md) | Which nodes the viewer shows: the architecture's filters and the landscape's. |
 | `features` | [`site-select-neighbourhood`](vitepress-site/select-neighbourhood.md) | A selected node's neighbourhood: depth, direction, dim or hide. |
 | `features` | [`site-impact-view`](vitepress-site/impact-view.md) | The impact mode: everything that depends on the selected node, and its summary. |
@@ -73,7 +74,11 @@ it holds `ui`, `model`, `lib` or `api` segments as it needs them. Each slice is 
 
 This node keeps what belongs to no slice: `theme/index.js`, the file VitePress looks for, which
 re-exports the `app` layer; `.vitepress/config.mjs`, which reads the identity and the nav
-`docs site` generates (`site.generated.mjs`, `config.generated.mjs`); `.vitepress/generated.mjs`,
+`docs site` generates (`site.generated.mjs`, `config.generated.mjs`) and sets from them the nav
+logo, the header's repository link with its icon, the footer switch and the favicon;
+`public/brand/`, Beadloom's four brand files (the gradient mark, its monochrome form, the
+monochrome icon the footer draws and the gradient icon that is the favicon), which VitePress
+copies to the site root; `.vitepress/generated.mjs`,
 whose `importGenerated(url)` loads a generated module as `{}` with a warning when it is not there
 yet and throws any other load error; `package.json` (`engines.node: >=22`, every dependency
 pinned exactly) with its lockfile; and `scripts/`. The shipped config pre-bundles `mermaid` and
@@ -118,10 +123,11 @@ portal written by `docs site` carries them in its `e2e/`. `.beadloom/config.yml`
 `src/beadloom/site_scaffold/e2e` as a test root and names the `playwright` pattern group. This
 node declares the whole directory, and each spec is also declared in the `tests:` list of the one
 slice it drives, which is where it binds: a test file binds to one node, and a node does not
-inherit its ancestors' tests. The thirty-one specs bind to sixteen slices, fourteen of them to
-`site-graph-viewer`. No spec drives
-`site-app`, `site-dashboard`, `site-dashboard-data` or `site-landscape-data`, so those four report
-no bound tests.
+inherit its ancestors' tests. The thirty-three specs bind to eighteen slices, fourteen of them to
+`site-graph-viewer`. Eleven of the twenty-nine slices declare no spec, so they report no bound
+tests: `site-app`, `site-dashboard-data`, `site-landscape-data`, and the slices the viewer's cut
+moved its code into (`site-edge-pills`, `site-follow-edge`, `site-overview-map` and the five
+`site-shared-*` segments), whose behaviour the specs of `site-graph-viewer` drive.
 
 The tests drive the built portal: `e2e/support/serve.mjs` runs `vitepress build` and then
 `vitepress preview`, and refuses to start before `beadloom docs site` has written the content.

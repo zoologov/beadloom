@@ -46,7 +46,8 @@ writes the portal's scaffold (see [The portal for your project](#the-portal-for-
 | `landscape-diagram.md` | **B — 🌟 landscape map** | The same contract graph as a Mermaid diagram with pan, zoom and full screen. |
 | `docs/**` + `docs/index.md` | **C — published validated docs** | The real `docs/` tree, each document as [project text](#project-text-on-the-portal), with per-doc freshness/reference badges. `docs/index.md` is a descriptive Documentation **Overview** (intro + per-section descriptions), not a flat link wall. |
 | `.vitepress/config.generated.mjs` | — | Nav/sidebar config imported by the shipped `config.mjs`. The top nav is empty; the left sidebar is a single ordered EN tree (see [Information architecture](#information-architecture)). |
-| `.vitepress/site.generated.mjs` | — | The portal's identity from the [`site:` block](#configuration-reference-site): title, description, base, repository link and its icon. |
+| `.vitepress/site.generated.mjs` | — | The portal's identity from the [`site:` block](#configuration-reference-site): title, description, base, repository link and its icon, the nav logo's address and the footer switch. |
+| `public/logo.svg` or `public/logo.png` | — | The project's own logo, copied byte for byte from `site.logo`, only when the project declares one. |
 
 ### Showcase A — interactive ECharts metrics dashboard
 
@@ -581,8 +582,8 @@ Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0
 ### The marker, upgrades and hand edits
 
 Every scaffold file carries one marker line: the beadloom version that wrote it and a SHA-256
-of the rest of the file — a comment in `.js`, `.mjs`, `.vue` and `.css`, a `"//"` key on the
-second line of a `.json` file. The marker is how beadloom tells its own files from yours, so
+of the rest of the file — a comment in `.js`, `.mjs`, `.vue`, `.css` and `.svg`, a `"//"` key on
+the second line of a `.json` file. The marker is how beadloom tells its own files from yours, so
 each run does this:
 
 | The file in the portal | What the run does |
@@ -614,7 +615,8 @@ yours to keep in step with later beadloom versions.
 
 - the graph and the index (run `beadloom reindex` first);
 - `README.md`, `README.ru.md` and `docs/**`, as [project text](#project-text-on-the-portal);
-- the [`site:` block](#configuration-reference-site) of `.beadloom/config.yml`;
+- the [`site:` block](#configuration-reference-site) of `.beadloom/config.yml`, and the logo
+  file `site.logo` names;
 - the `origin` remote, only for the card's source links when no `site.repo_url` is declared,
   and for the [base warning](#the-base-path-and-github-pages). Nothing else from the remote is
   published.
@@ -700,6 +702,7 @@ site:
   description: Orders, payments and stock
   base: /orders/
   repo_url: https://github.com/acme/orders
+  logo: docs/assets/orders-logo.svg
 ```
 
 | Key | Default | What it sets | Refused when |
@@ -709,6 +712,9 @@ site:
 | `base` | `/` | the path the portal is served under; VitePress prefixes every link and asset with it | it does not start and end with `/`, or it holds a GitHub Actions expression opener (a workflow would evaluate it) |
 | `repo_url` | none: no repository link | the repository link in the nav bar, the repository the card's source links and the project text's file links go to | it is not an `http` or `https` address with a host; it carries a user, a password, a query or a fragment, which the portal would publish; on a host whose forge is known, it stops before a repository (a host or an owner alone, an Azure DevOps project with no `_git/<repository>`) or runs past the repository into one of the forge's pages (`…/tree/main`, `…/pulls` on GitHub) |
 | `forges` | none: only public forge hosts are recognised | the forge serving each host, below | see below |
+| `repo_icon` | read from the host of `repo_url`, below | the icon beside the repository link in the nav bar | it is not one of `github`, `gitlab`, `bitbucket`, `codeberg`, `gitea`, `git` |
+| `logo` | none: no logo in the nav bar | the project's logo in the nav bar, beside the title: an SVG or a PNG named by its path relative to the project root, copied into the portal as `public/logo.svg` or `public/logo.png` | it is not a non-empty string; it is an absolute path; its suffix is not `.svg` or `.png`; it resolves outside the project root; no file is there |
+| `powered_by` | `true` | the footer of every page, below | it is not `true` or `false` |
 
 `repo_url` is stored in one spelling: the scheme and the host lower-cased, a trailing `/` and one
 `.git` removed, the port and the case of the path kept. A key the block does not read is refused
@@ -732,6 +738,43 @@ Error: the `site:` block of .beadloom/config.yml cannot be used:
   - site.base: `site.base` is `orders`, and a base path starts and ends with `/`
     -> write `base:` as the path the portal is served under, e.g. `/orders/`
 ```
+
+### The nav bar and the footer
+
+The nav bar shows the project's own logo when `logo` names one, and nothing in its place when it
+does not. The favicon is Beadloom's gradient icon, `public/brand/beadloom-icon-gradient.svg`.
+
+Without `repo_url` the nav bar has no repository link, and `beadloom config-check` says so on a
+project that declares a `site:` block, without blocking:
+
+```text
+  ! site.repo_url: `site.repo_url` is not declared, so the portal's header has no repository link
+    -> declare `repo_url:` under `site:` to link the repository from the header
+```
+
+The icon beside the repository link is read from the host of `repo_url`, and `repo_icon` names it
+where the host says nothing, as a self-hosted instance's host often does:
+
+| Host of `repo_url` | Icon |
+|--------------------|------|
+| `github.com` | `github` |
+| `gitlab.com`, or a host whose first label is `gitlab` (`gitlab.acme.example`) | `gitlab` |
+| `bitbucket.org` | `bitbucket` |
+| `codeberg.org` | `codeberg` |
+| `gitea.com`, or a host whose first label is `gitea` | `gitea` |
+| a host declared under `forges` as a kind | that kind's icon (`azure` draws `azuredevops`) |
+| `dev.azure.com`, `*.visualstudio.com` | `azuredevops` |
+| any other host | `git` |
+
+A declared `repo_icon` wins over every row; it takes one of `github`, `gitlab`, `bitbucket`,
+`codeberg`, `gitea` and `git`.
+
+Every page ends with a footer about Beadloom rather than about the project. Its first line is
+Beadloom's small icon and "Powered by Beadloom", linking to Beadloom's repository; its second
+line is "MIT" and a link to that repository drawn with the GitHub mark. `powered_by: false`
+removes the footer whole. The footer is the one place Beadloom's icon appears on the portal.
+Beadloom's brand files ship under `public/brand/`: the gradient mark and its monochrome form, the
+monochrome icon the footer draws, and the gradient icon that is the favicon.
 
 ### `forges`: a self-hosted forge
 

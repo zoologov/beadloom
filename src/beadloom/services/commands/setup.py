@@ -627,9 +627,18 @@ def _echo_site_config_refusals(project_root: Path) -> bool:
     reason ``docs site`` refuses it: a mistyped base path deploys the portal
     under the wrong one without a word.
     """
-    from beadloom.application.site.site_config import read_site_config
+    from beadloom.application.site.site_config import read_site_config, unlinked_repository
 
     _, refusals = read_site_config(project_root)
+    # BDL-080 S4d: a declared portal without `repo_url` has no header link, and
+    # that is named rather than left silent. It does not block.
+    unlinked = unlinked_repository(project_root)
+    if unlinked:
+        click.echo(f"  ! site.repo_url: {unlinked}", err=True)
+        click.echo(
+            "    -> declare `repo_url:` under `site:` to link the repository from the header",
+            err=True,
+        )
     return _echo_block_refusals("site", refusals)
 
 

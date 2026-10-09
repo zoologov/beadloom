@@ -10,7 +10,8 @@ layer rule are described in [the site's page](../vitepress-site.md).
 ## Overview
 
 The theme VitePress runs. It extends the default theme, mounts the Mermaid diagram viewer on every
-page in the `doc-footer-before` slot, and registers by name the components the generated Markdown
+page in the `doc-footer-before` slot and the "Powered by Beadloom" footer in the `layout-bottom`
+slot, and registers by name the components the generated Markdown
 mounts: `ArchitectureMap`, `LandscapeMap`, `DiagramViewer` and the seven dashboard panels. It holds
 no behaviour of its own.
 
@@ -24,4 +25,4 @@ re-exports this layer's default export.
 ## Depends on
 
 - `site-architecture-page`, `site-landscape-page` (pages).
-- `site-dashboard`, `site-diagram-viewer` (widgets).
+- `site-dashboard`, `site-diagram-viewer`, `site-powered-by` (widgets).

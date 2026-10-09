@@ -281,3 +281,6 @@ site:
   description: "Living knowledge base: metrics dashboard, interactive architecture, and validated docs."
   base: /beadloom/
   repo_url: https://github.com/zoologov/beadloom
+  # BDL-080 S4d: this portal's nav shows the Beadloom mark, one of the brand
+  # files the scaffold ships under public/brand/.
+  logo: src/beadloom/site_scaffold/public/brand/beadloom-mark.svg

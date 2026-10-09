@@ -24,6 +24,12 @@ makes it.
    accepts. A key is documented in the reference of the node whose code reads it: `tests:` in the
    [test-mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md), `site:` in the
    [site-generation SPEC](../domains/application/features/site-generation/SPEC.md).
+   Keys added since 8.0.0 (MINOR, BDL-080 S4d): `site.logo`, the path of the project's SVG or
+   PNG logo relative to its root, shown in the portal's nav; `site.powered_by`, `true` or
+   `false`, the "Powered by Beadloom" footer; and `site.repo_icon`, the icon beside the
+   header's repository link. `site.repo_icon` takes a value vocabulary: `github`, `gitlab`,
+   `bitbucket`, `codeberg`, `gitea`, `git`. Without it the icon is read from the host of
+   `site.repo_url`, which can also give `azuredevops` for an Azure DevOps host.
 3. **The keys and the value vocabularies of the JSON outputs**: `ctx --json`, `status --json`,
    the debt report (`status --debt-report --json`) and `export`, whose artifact is JSON without
    an option. A vocabulary is the set of values a key can take. The activity level is one:

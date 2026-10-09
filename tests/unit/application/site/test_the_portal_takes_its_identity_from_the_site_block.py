@@ -175,6 +175,8 @@ def test_the_generated_module_carries_the_identity_and_nothing_else(tmp_path: Pa
         "base": "/orders/",
         "repoUrl": "https://gitlab.com/acme/orders",
         "repoIcon": "gitlab",
+        "logo": "",
+        "poweredBy": True,
     }
 
 
@@ -184,7 +186,9 @@ def test_the_generated_module_carries_the_identity_and_nothing_else(tmp_path: Pa
         ("https://github.com/acme/orders", "github"),
         ("https://gitlab.com/acme/orders", "gitlab"),
         ("https://bitbucket.org/acme/orders", "bitbucket"),
-        ("https://codeberg.org/acme/orders", "gitea"),
+        # Codeberg's own mark, by the owner's ruling of 2026-10-09 (BDL-080 S4d);
+        # it was Gitea's, the software Codeberg runs, before.
+        ("https://codeberg.org/acme/orders", "codeberg"),
         ("https://dev.azure.com/acme/orders/_git/orders", "azuredevops"),
         ("https://git.acme.example/orders", "git"),
         ("", ""),

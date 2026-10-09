@@ -43,10 +43,31 @@ def test_config_check_names_the_unknown_key_and_blocks(tmp_path: Path) -> None:
 
 
 def test_config_check_passes_a_block_it_can_use(tmp_path: Path) -> None:
-    root = _project(tmp_path, "site:\n  title: Acme Orders\n  base: /orders/\n")
+    root = _project(
+        tmp_path,
+        "site:\n  title: Acme Orders\n  base: /orders/\n"
+        "  repo_url: https://gitlab.com/acme/orders\n  powered_by: false\n  repo_icon: gitlab\n",
+    )
     result = CliRunner().invoke(main, ["config-check", "--project", str(root)])
     assert result.exit_code == 0, result.output
     assert "site." not in result.output
+
+
+def test_config_check_names_a_portal_without_a_repository_link(tmp_path: Path) -> None:
+    """BDL-080 S4d: no `repo_url`, no header link, and config-check says so without blocking."""
+    root = _project(tmp_path, "site:\n  title: Acme Orders\n  repo_icon: gitlab\n")
+    result = CliRunner().invoke(main, ["config-check", "--project", str(root)])
+    assert result.exit_code == 0, result.output
+    assert "site.repo_url" in result.output
+    assert "no repository link" in result.output
+    assert "nothing draws it" in result.output
+
+
+def test_config_check_names_nothing_for_a_project_without_a_site_block(tmp_path: Path) -> None:
+    root = _project(tmp_path, "")
+    result = CliRunner().invoke(main, ["config-check", "--project", str(root)])
+    assert result.exit_code == 0, result.output
+    assert "site.repo_url" not in result.output
 
 
 def test_the_gate_blocks_on_the_same_refusal(tmp_path: Path) -> None:

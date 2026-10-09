@@ -21,6 +21,7 @@ which module imports which. A test compares the published data file with that.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import time
@@ -49,6 +50,13 @@ STORED_SUFFIX = ".fixture"
 #: The oldest Node the scaffold's ``engines.node`` accepts.
 NODE_MAJOR = 22
 
+#: The logo an adopter adds after ``init``: a lantern of its own, nothing of Beadloom's.
+ADOPTER_LOGO = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" '
+    'aria-label="Lantern Notes"><rect x="7" y="4" width="10" height="16" rx="3" '
+    'fill="#e9a23b"/></svg>\n'
+)
+
 #: A forge's route to a path at a commit, written from the forge's published URL
 #: form and not read from the product's table.
 GITHUB_TREE = "{url}/tree/{ref}/{path}"
@@ -66,7 +74,9 @@ class AdopterFixture:
     read from the fixture's code. ``tags`` maps a source directory to the tags the
     adopter declares on its node after ``init``; ``layers`` names the layer rule's
     layers top to bottom, each tagged ``tier-<name>``; ``rules`` are further rules
-    the adopter adds, as ``rules.yml`` writes them.
+    the adopter adds, as ``rules.yml`` writes them. ``logo`` is the path of a logo
+    the adopter adds and declares as ``site.logo`` (BDL-080 S4d), and
+    ``powered_by`` is ``site.powered_by``, declared only when it is ``False``.
     """
 
     stack: str
@@ -82,6 +92,8 @@ class AdopterFixture:
     layers: tuple[str, ...] = ()
     tags: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     rules: tuple[Mapping[str, Any], ...] = ()
+    logo: str = ""
+    powered_by: bool = True
 
     @property
     def source(self) -> Path:
@@ -187,6 +199,8 @@ TYPESCRIPT = AdopterFixture(
         ("src/reports/digest", "src/notes/store"),
     ),
     layers=("interface", "data", "core"),
+    # The one fixture with a nav logo of its own; the others show none (BDL-080 S4d).
+    logo="art/lantern-notes.svg",
     tags={
         "src/accounts": ("tier-data",),
         "src/notes/api": ("tier-interface",),
@@ -241,6 +255,8 @@ SWIFT = AdopterFixture(
     repo_url="https://bitbucket.org/trail-beacons/beacon-kit",
     origin="git@bitbucket.org:trail-beacons/beacon-kit.git",
     tree_route=BITBUCKET_TREE,
+    # The one fixture that switches the "Powered by Beadloom" footer off (BDL-080 S4d).
+    powered_by=False,
     modules=("Sources/BeaconApp", "Sources/BeaconCore", "Sources/BeaconNetwork"),
     imports=(
         ("Sources/BeaconApp", "Sources/BeaconCore"),
@@ -340,6 +356,13 @@ def _declare(root: Path, fixture: AdopterFixture) -> None:
     site["repo_url"] = fixture.repo_url
     if fixture.forges:
         site["forges"] = dict(fixture.forges)
+    if fixture.logo:
+        logo = root / fixture.logo
+        logo.parent.mkdir(parents=True, exist_ok=True)
+        logo.write_text(ADOPTER_LOGO, encoding="utf-8")
+        site["logo"] = fixture.logo
+    if not fixture.powered_by:
+        site["powered_by"] = False
     config = root / ".beadloom" / "config.yml"
     config.write_text(
         config.read_text(encoding="utf-8") + yaml.safe_dump({"site": site}, sort_keys=False),
@@ -410,6 +433,19 @@ def build_portal(fixture: AdopterFixture, workdir: Path, npm: str) -> BuiltPorta
     if built.steps["npm ci"].returncode == 0:
         built.steps["vitepress build"] = _run([npm, "run", "docs:build"], built.site)
     return built
+
+
+#: Beadloom's own repository, which the "Powered by Beadloom" footer links on every
+#: portal by the owner's ruling of 2026-10-09 (BDL-080 S4d, ``beadloom-af99.7``). It is
+#: the one mention of this repository a portal may carry, and only as this address:
+#: a path under it, or any other text of this repository's identity, is still a leak.
+BEADLOOM_REPOSITORY = "https://github.com/zoologov/beadloom"
+_FOOTER_LINK = re.compile(re.escape(BEADLOOM_REPOSITORY) + r"(?![\w./-])")
+
+
+def without_the_footer_link(text: str) -> str:
+    """*text* without the footer's link to Beadloom's repository, the one mention allowed."""
+    return _FOOTER_LINK.sub("", text)
 
 
 def this_repositorys_identity() -> tuple[str, ...]:

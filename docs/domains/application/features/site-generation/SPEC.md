@@ -105,17 +105,20 @@ One feature node covers the cooperating modules below (all annotated
   `project_text.render_project_text` with one `PortalLinks` (`about.portal_links_for`,
   carrying the base and the published files). `ru/index.md` is written, and `README.ru.md`
   routed to `/ru/`, only when `README.ru.md` exists. After the content it writes
-  `.vitepress/site.generated.mjs` (`site_config.render_site_module`) and then the scaffold
+  `.vitepress/site.generated.mjs` (`site_config.render_site_module`), copies the project's logo
+  when `site.logo` names one (`site_logo.copy_logo`, to `public/logo.svg` or `public/logo.png`),
+  and then the scaffold
   (`scaffold.write_scaffold`, which copies `.beadloom/site/` last); `SiteResult.scaffold` is the
   `ScaffoldReport` of that write.
 - **site_config.py** — the portal's identity, the `site:` block (BDL-076 B1, B4 and
   `beadloom-ujzb.20`). `read_site_config(project_root)` returns `(SiteConfig, refusals)` with a
   refused value replaced by its default, and `site_config_of(project_root)` raises
-  `SiteConfigError` on any refusal. `SiteConfig(title, description, base, repo_url, forges)`;
-  defaults: the project directory's name,
+  `SiteConfigError` on any refusal. `SiteConfig(title, description, base, repo_url, forges, logo,
+  powered_by, repo_icon)`; defaults: the project directory's name,
   `The architecture of <title>: its graph, its documentation and its health`, `/`, no
-  repository. The keys are one table, `_FIELDS` (`title`, `description`, `base`, `repo_url`,
-  `forges`); an unknown key is refused by name with the keys the block reads. `base` must start
+  repository, no logo, the footer on, the icon read from the host. The keys are one table,
+  `_FIELDS` (`title`, `description`, `base`, `repo_url`, `forges`, and since BDL-080 S4d
+  `logo`, `powered_by`, `repo_icon`); an unknown key is refused by name with the keys the block reads. `base` must start
   and end with `/` and hold no GitHub Actions expression opener. `repo_url` must be an `http(s)` address with a host and no credential, query or fragment; it is stored in one
   spelling by `canonical_repo_url` (scheme and host lower-cased, port and path case kept,
   trailing `/` and one `.git` removed). On a host with a known forge it is refused by name in
@@ -125,10 +128,30 @@ One feature node covers the cooperating modules below (all annotated
   (`forge_routes.runs_past_repository`). On any other host nothing says which segment of the
   path is a route, and nothing is refused.
   The value itself is never repeated in a refusal, because it may hold a credential.
-  `repo_icon_of(repo_url, forges)` names the icon VitePress draws, and
-  `render_site_module(config)` writes `.vitepress/site.generated.mjs` as JSON. The refusals
+  `powered_by` must be a boolean, and `repo_icon` one of `REPO_ICONS`. `logo` is read twice
+  (`site_logo`): its shape where the block is read, and the file against the project root after.
+  `render_site_module(config)` writes `.vitepress/site.generated.mjs` as JSON, with `repoIcon`
+  from `repo_icon_of` and, since BDL-080 S4d, `logo` (the copy's address before the base, `""`
+  without one) and `poweredBy`. `unlinked_repository(project_root)` returns the sentence
+  `config-check` prints, without blocking, when a declared `site:` block has no `repo_url`, and
+  `""` otherwise. The refusals
   reach three readers: `docs site`, `beadloom config-check` and the Gate's `config-check` step
   (rule `site-config`).
+- **repository_icon.py** — the icon beside the header's repository link (BDL-080 S4d,
+  `beadloom-af99.7`, the owner's ruling of 2026-10-09). `repo_icon_of(repo_url, forges=None,
+  declared="")` is `""` without a repository; else the declared `site.repo_icon`; else the kind
+  of a forge the project declares for the host; else the host: `github.com` `github`,
+  `gitlab.com` and a host whose first label is `gitlab` `gitlab`, `bitbucket.org` `bitbucket`,
+  `codeberg.org` `codeberg`, `gitea.com` and a host whose first label is `gitea` `gitea`,
+  `dev.azure.com` and `*.visualstudio.com` `azuredevops`; else `git` (`GENERIC_ICON`).
+  `REPO_ICONS` is the vocabulary `site.repo_icon` accepts: `github`, `gitlab`, `bitbucket`,
+  `codeberg`, `gitea`, `git`. Before this bead `codeberg.org` drew Gitea's mark.
+- **site_logo.py** — the project's logo in the nav (BDL-080 S4d). `read_logo(value, where)` keeps
+  a non-empty relative path with a `.svg` or `.png` suffix (`LOGO_SUFFIXES`) in posix form and
+  refuses anything else by name; `logo_problem(project_root, logo, where)` refuses a path that
+  resolves outside the project root or holds no file; `logo_site_path(logo)` is `/logo.svg` or
+  `/logo.png` (`""` without a logo); `copy_logo(project_root, logo, out_dir)` copies the file
+  byte for byte into `out_dir/public/` and returns the copy, or `None` without a logo.
 - **forge_routes.py** — the routes a forge serves a path under (BDL-076 `beadloom-ujzb.8`).
   `Forge(kind, tree, blob, raw)` holds three URL templates over `{url}`, `{ref}`, `{path}`;
   `link(route, url, ref, path)` fills one, URL-encoding the revision and the path.
@@ -159,7 +182,8 @@ One feature node covers the cooperating modules below (all annotated
   `beadloom-ujzb.18`). The scaffold is package data under `beadloom/site_scaffold/`, laid out as
   it sits in a portal. `write_scaffold(out_dir, *, project_root, version)` writes each shipped
   file with a marker line (`beadloom:generated version=<v> sha256=<hash of the rest>`, a comment
-  in `.js`/`.mjs`/`.vue`/`.css`, a `"//"` key on the second line of a `.json`): an absent file is
+  in `.js`/`.mjs`/`.vue`/`.css`/`.svg`, a `"//"` key on the second line of a `.json`): an absent
+  file is
   written; a file with an intact marker is rewritten when the shipped body or the version
   differs; a file with no marker, or whose body no longer matches its marker, is never
   overwritten and is reported as a `KeptFile` with its remedy. A file with an intact marker that
@@ -804,6 +828,8 @@ carries it.
 - Nothing that ships in the scaffold names a node, bead or path of this repository: graph
   annotations are stripped at write time, and a self-check reads every node id and the tracker.
 - A `site:` value the portal cannot use stops `docs site` before any file is written.
+- Beadloom's own repository appears in a portal only as the footer's link to it (BDL-080 S4d).
+  The footer's component ships either way; `site.powered_by: false` keeps it from rendering.
 - `activity` in the data file carries only the keys in `CARD_ACTIVITY_KEYS`.
 - `layers`, `layer_order`, `layer` and `layer_rank` describe the first `layers` rule by name,
   inside its `scope:`; every other rule reaches the file through `layer_rules`, `layer_rule`
@@ -928,12 +954,20 @@ Module `src/beadloom/application/site/about.py`:
   `str` — the README as the About page body, through `render_project_text`
 
 Module `src/beadloom/application/site/site_config.py`:
-- `SITE_KEY` — `"site"`; `SiteConfig(title, description, base, repo_url, forges)`;
-  `SiteConfigError(refusals)`
+- `SITE_KEY` — `"site"`; `SiteConfig(title, description, base, repo_url, forges, logo="",
+  powered_by=True, repo_icon="")`; `SiteConfigError(refusals)`
 - `read_site_config(project_root)` -> `tuple[SiteConfig, tuple[Refusal, ...]]`;
   `site_config_of(project_root)` -> `SiteConfig` (raises on any refusal)
-- `canonical_repo_url(url)` -> `str`; `repo_icon_of(repo_url, forges=None)` -> `str`;
-  `render_site_module(config)` -> `str`
+- `canonical_repo_url(url)` -> `str`; `render_site_module(config)` -> `str`;
+  `unlinked_repository(project_root)` -> `str`
+
+Module `src/beadloom/application/site/repository_icon.py`:
+- `repo_icon_of(repo_url, forges=None, declared="")` -> `str`; `REPO_ICONS`; `GENERIC_ICON`
+
+Module `src/beadloom/application/site/site_logo.py`:
+- `read_logo(value, where)` -> `tuple[object, tuple[Refusal, ...]]`;
+  `logo_problem(project_root, logo, where)` -> `Refusal | None`; `logo_site_path(logo)` -> `str`;
+  `copy_logo(project_root, logo, out_dir)` -> `Path | None`; `LOGO_SUFFIXES`
 
 Module `src/beadloom/application/site/forge_routes.py`:
 - `Forge(kind, tree, blob, raw)` with `link(route, url, ref, path)` and `route_segments`;
@@ -1076,6 +1110,8 @@ Slice 2 (BDL-076 B1–B4, `beadloom-ujzb.8`, `.11`–`.13`, `.18`, `.20`, `.21`)
 `tests/unit/application/site/`: the `site:` block and the forges
 (`test_the_portal_takes_its_identity_from_the_site_block.py`,
 `test_the_site_block_declares_a_forge_per_host.py`,
+`test_the_header_icon_follows_the_host_or_the_declared_icon.py` and
+`test_the_project_logo_is_checked_and_copied.py` (BDL-080 S4d),
 `test_a_declared_repository_address_is_read_in_one_spelling.py`, which since
 `beadloom-ujzb.23` also holds the `repo_url` refusals by forge shape,
 `test_a_self_hosted_forge_links_by_the_kind_the_project_declares.py`,

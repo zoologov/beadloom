@@ -62,7 +62,8 @@ def test_the_source_still_names_every_node_the_graph_binds_to_it(ids: frozenset[
     annotated = "\n".join(
         path.read_text(encoding="utf-8")
         for path in sorted(source.rglob("*"))
-        if path.is_file() and "node_modules" not in path.parts
+        # Finder's `.DS_Store` is binary, never shipped, and appears on a macOS checkout.
+        if path.is_file() and not {"node_modules", ".DS_Store"} & set(path.parts)
     )
     named = {ref for ref in ids if f"beadloom:component={ref}\n" in annotated}
     assert sorted(ids - named) == []

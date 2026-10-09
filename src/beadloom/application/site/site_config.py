@@ -12,14 +12,26 @@ repository it links to are the project's, declared as::
       description: Orders, payments and stock
       base: /orders/
       repo_url: https://git.acme.example/sales/orders
+      repo_icon: gitlab
       forges:
         git.acme.example: gitlab
+      logo: docs/assets/orders-logo.svg
+      powered_by: true
 
 Every key is optional. The title defaults to the project directory's name and
 the base to ``/``. The repository link has no default, by the owner's ruling
 (BDL-076 CONTEXT, 2026-09-30): a project's name comes from its configuration and
 never from its git remote, and nothing from the remote is published except each
 node's ``source_url``. A project that declares no ``repo_url`` gets no link.
+
+The nav and the footer (BDL-080 S4d, ``beadloom-af99.7``, the owner's rulings of
+2026-10-09): ``logo`` is the project's own logo, an SVG or a PNG named relative to
+the project root and copied into the portal
+(:mod:`beadloom.application.site.site_logo`); without it the nav shows no logo.
+``powered_by`` switches the footer that says "Powered by Beadloom", on unless it
+is ``false``. ``repo_icon`` names the icon beside the repository link where the
+host of ``repo_url`` says nothing
+(:mod:`beadloom.application.site.repository_icon`).
 
 ``forges`` maps a host to the forge that serves it (``beadloom-ujzb.8``): a kind
 — ``github``, ``gitlab``, ``gitea``, ``bitbucket``, ``azure`` — whose routes are
@@ -57,6 +69,8 @@ from beadloom.application.site.forge_routes import (
     runs_past_repository,
     stops_before_repository,
 )
+from beadloom.application.site.repository_icon import REPO_ICONS, repo_icon_of
+from beadloom.application.site.site_logo import logo_problem, logo_site_path, read_logo
 from beadloom.doc_sync.declarations import (
     Refusal,
     describe_value,
@@ -72,17 +86,6 @@ if TYPE_CHECKING:
 SITE_KEY = "site"
 
 _WEB_SCHEMES = frozenset({"http", "https"})
-
-#: The simple-icons name VitePress draws for each forge ``forge_of`` recognises;
-#: any other host gets git's own mark.
-_FORGE_ICONS = {
-    "github": "github",
-    "gitlab": "gitlab",
-    "bitbucket": "bitbucket",
-    "gitea": "gitea",
-    "azure": "azuredevops",
-}
-_GENERIC_ICON = "git"
 
 #: A host name as ``site.forges`` is keyed by: labels of letters, digits and
 #: hyphens, no scheme, port, user or path.
@@ -109,7 +112,10 @@ class SiteConfig:
     """The portal's identity, with every default applied.
 
     ``repo_url`` is ``""`` when the project declares none; ``forges`` maps each
-    host the project declares a forge for, lower-case, to that forge.
+    host the project declares a forge for, lower-case, to that forge. ``logo``
+    is the project's logo relative to its root, ``""`` without one;
+    ``powered_by`` switches the footer; ``repo_icon`` is the declared icon,
+    ``""`` when the host decides it.
     """
 
     title: str
@@ -117,6 +123,9 @@ class SiteConfig:
     base: str
     repo_url: str
     forges: Mapping[str, Forge] = field(default_factory=dict, hash=False)
+    logo: str = ""
+    powered_by: bool = True
+    repo_icon: str = ""
 
 
 def _text(value: object, where: str) -> Refusal | None:
@@ -293,6 +302,30 @@ def _is_host(host: object) -> bool:
     return isinstance(host, str) and _HOST_RE.match(host) is not None
 
 
+def _powered_by(value: object, where: str) -> Refusal | None:
+    """``true`` or ``false``, or the refusal that says what was written instead."""
+    if isinstance(value, bool):
+        return None
+    return Refusal(
+        where=where,
+        why=f"`{where}` is {describe_value(value)}, not `true` or `false`",
+        remediation="write `powered_by: false` to remove the footer, or leave the key out",
+    )
+
+
+def _repo_icon(value: object, where: str) -> Refusal | None:
+    """One icon of :data:`REPO_ICONS`, or the refusal that lists them."""
+    if isinstance(value, str) and value in REPO_ICONS:
+        return None
+    shown = f"`{value}`" if isinstance(value, str) else describe_value(value)
+    icons = ", ".join(f"`{icon}`" for icon in sorted(REPO_ICONS))
+    return Refusal(
+        where=where,
+        why=f"`{where}` is {shown}, which is not an icon the portal draws; the icons are {icons}",
+        remediation=f"write `repo_icon:` as one of {icons}, or leave it out to read the host",
+    )
+
+
 def _checked(
     check: Callable[[object, str], Refusal | None],
 ) -> Callable[[object, str], tuple[object, tuple[Refusal, ...]]]:
@@ -313,6 +346,9 @@ _FIELDS: dict[str, Callable[[object, str], tuple[object, tuple[Refusal, ...]]]] 
     "base": _checked(_base),
     "repo_url": _repo_url,
     "forges": _forges,
+    "logo": read_logo,
+    "powered_by": _checked(_powered_by),
+    "repo_icon": _checked(_repo_icon),
 }
 
 
@@ -370,12 +406,21 @@ def read_site_config(project_root: Path) -> tuple[SiteConfig, tuple[Refusal, ...
         if past is not None:
             found.append(past)
             del usable["repo_url"]
+    logo = usable.get("logo")
+    if isinstance(logo, str):
+        missing = logo_problem(project_root, logo, f"{SITE_KEY}.logo")
+        if missing is not None:
+            found.append(missing)
+            del usable["logo"]
     config = SiteConfig(
         title=_text_of(usable, "title", defaults.title),
         description=_text_of(usable, "description", defaults.description),
         base=_text_of(usable, "base", defaults.base),
         repo_url=_text_of(usable, "repo_url", defaults.repo_url),
         forges=declared_forges,
+        logo=_text_of(usable, "logo", defaults.logo),
+        powered_by=usable.get("powered_by") is not False,
+        repo_icon=_text_of(usable, "repo_icon", defaults.repo_icon),
     )
     return config, tuple(found)
 
@@ -396,16 +441,28 @@ def site_config_of(project_root: Path) -> SiteConfig:
     return config
 
 
-def repo_icon_of(repo_url: str, forges: Mapping[str, Forge] | None = None) -> str:
-    """The icon the portal draws beside its repository link; ``""`` when there is no link.
+def unlinked_repository(project_root: Path) -> str:
+    """Why a declared portal's header has no repository link, or ``""``.
 
-    A host the project declares a forge kind for gets that kind's icon; one it
-    describes by template gets git's own mark.
+    ``""`` too when the project declares no ``site:`` block, or one that is not
+    a mapping, which is refused elsewhere. Not a refusal itself: a portal without
+    the link is a portal ``docs site`` can write. ``config-check`` prints it so
+    the absence is a statement rather than a silence (the owner's ruling of
+    2026-10-09).
     """
-    if not repo_url:
+    declaration = read_declaration(project_root, SITE_KEY)
+    block = declaration.value if declaration.present else None
+    if not isinstance(block, dict) or "repo_url" in block:
         return ""
-    forge = forge_for(repo_url, forges)
-    return _FORGE_ICONS.get(forge.kind if forge else "", _GENERIC_ICON)
+    unused = (
+        f"; `{SITE_KEY}.repo_icon` is declared and nothing draws it"
+        if "repo_icon" in block
+        else ""
+    )
+    return (
+        f"`{SITE_KEY}.repo_url` is not declared, so the portal's header has no repository "
+        f"link{unused}"
+    )
 
 
 def render_site_module(config: SiteConfig) -> str:
@@ -419,7 +476,9 @@ def render_site_module(config: SiteConfig) -> str:
         "description": config.description,
         "base": config.base,
         "repoUrl": config.repo_url,
-        "repoIcon": repo_icon_of(config.repo_url, config.forges),
+        "repoIcon": repo_icon_of(config.repo_url, config.forges, config.repo_icon),
+        "logo": logo_site_path(config.logo),
+        "poweredBy": config.powered_by,
     }
     return (
         "// GENERATED by `beadloom docs site` from the `site:` block of .beadloom/config.yml.\n"

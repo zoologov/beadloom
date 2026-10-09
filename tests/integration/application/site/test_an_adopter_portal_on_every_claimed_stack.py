@@ -26,7 +26,11 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from tests.support.adopter_portals import FIXTURES_BY_STACK, this_repositorys_identity
+from tests.support.adopter_portals import (
+    FIXTURES_BY_STACK,
+    this_repositorys_identity,
+    without_the_footer_link,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -204,6 +208,23 @@ def test_the_portal_carries_the_projects_title_base_and_repository(
 
 
 @pytest.mark.parametrize("stack", _stacks())
+def test_the_portal_shows_the_logo_and_the_footer_its_project_declares(
+    adopter_portals: Callable[[str], BuiltPortal], stack: str
+) -> None:
+    """BDL-080 S4d: the adopter's logo in the nav when declared; the footer unless switched off."""
+    portal = _built(adopter_portals, stack)
+    fixture = portal.fixture
+    index = (portal.dist / "index.html").read_text(encoding="utf-8")
+
+    logo = f'src="{fixture.base}logo.svg"'
+    assert (logo in index) is bool(fixture.logo)
+    if fixture.logo:
+        assert (portal.dist / "logo.svg").read_bytes() == (portal.root / fixture.logo).read_bytes()
+    assert ('data-testid="powered-by"' in index) is fixture.powered_by
+    assert f'href="{fixture.base}brand/beadloom-icon-gradient.svg"' in index
+
+
+@pytest.mark.parametrize("stack", _stacks())
 def test_no_text_of_this_repository_reaches_the_portal(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:
@@ -215,7 +236,7 @@ def test_no_text_of_this_repository_reaches_the_portal(
         for path in portal.dist.rglob("*")
         if path.suffix in {".html", ".js", ".json", ".css"}
         for token in ours
-        if token in path.read_text(encoding="utf-8", errors="replace")
+        if token in without_the_footer_link(path.read_text(encoding="utf-8", errors="replace"))
     )
 
     assert leaks == []

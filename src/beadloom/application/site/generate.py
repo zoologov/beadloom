@@ -104,6 +104,7 @@ from beadloom.application.site.published_docs import (
 from beadloom.application.site.repository_link import RepositoryLink, repository_of
 from beadloom.application.site.scaffold import ScaffoldReport, write_scaffold
 from beadloom.application.site.site_config import render_site_module, site_config_of
+from beadloom.application.site.site_logo import copy_logo
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
 
 if TYPE_CHECKING:
@@ -684,6 +685,10 @@ def generate_site(
         written,
     )
     _write(out_dir / ".vitepress" / "site.generated.mjs", render_site_module(identity), written)
+    # The project's own logo for the nav (BDL-080 S4d), copied as it is.
+    logo = copy_logo(project_root, identity.logo, out_dir)
+    if logo is not None:
+        written.append(logo)
 
     # The scaffold last but one, the project's overrides last of all: a file
     # under .beadloom/site/ replaces whatever this run wrote at its path.
