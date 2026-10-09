@@ -40,8 +40,9 @@ The decisions D1–D8 below, each with the alternative it rejects.
   node declarations land before any later viewer bead is launched.
 - FSD best practice is read from Steiger's `recommended` set (the official FSD linter, which one
   of the owner's projects already runs): `forbidden-imports` (no cross-import inside a layer, no
-  upward import), `public-api` (a slice is entered through its `index`), `insignificant-slice`,
-  `no-layer-public-api`. Beadloom judges the graph and shows the portal; Steiger stays the
+  upward import), `no-public-api-sidestep` (a slice is entered through its `index`; `public-api` only reports
+  a slice with no `index`), `insignificant-slice` (off in this repository by the owner's ruling
+  of 2026-10-09: the cut exists for parallel beads, not reuse), `no-layer-public-api`. Beadloom judges the graph and shows the portal; Steiger stays the
   file-level linter where a project has it.
 
 ### Affected Areas
