@@ -23,6 +23,7 @@ from beadloom.application.debt_report import (
 )
 from beadloom.application.doctor import Severity, run_checks
 from beadloom.application.site.dashboard._common import _UNHEALTHY_VERDICTS
+from beadloom.application.site.lint_reach import lint_reach_of
 from beadloom.application.site.metrics_history import MetricsPoint, read_history
 from beadloom.infrastructure.repository import count_stale_pairs
 
@@ -48,11 +49,16 @@ def _lint_metrics(result: LintResult) -> dict[str, object]:
     # Stable keys so the diffed output is byte-identical run to run.
     by_severity.setdefault("error", 0)
     by_severity.setdefault("warn", 0)
+    # The population the totals were counted over (BDL-080 S4a): how many nodes
+    # carry a finding, and the findings bound to none, which the dashboard lists.
+    reach = lint_reach_of(result)
     return {
         "violations": len(result.violations),
         "errors": result.error_count,
         "warnings": result.warning_count,
         "by_severity": dict(sorted(by_severity.items())),
+        "nodes_with_findings": reach.nodes_with_findings,
+        "nodeless": [finding.as_dict() for finding in reach.nodeless],
     }
 
 

@@ -117,6 +117,9 @@ class TestSiteGenerationCluster:
         markdown-it-attrs reads a brace as the start of attributes: twenty-four.
         BDL-080 S1b (``beadloom-kgh6``) added ``layer_rules_view.py``, every
         declared layer rule as the architecture view draws it: twenty-five.
+        BDL-080 S4a (``beadloom-5pxv``) added ``lint_reach.py``, lint's totals and
+        the findings bound to no node, and ``page_map.py``, the pages a run wrote:
+        twenty-seven.
         The test keeps its historical name so its collected id is unchanged.
         """
         app_dir = self_check_snapshot / "src" / "beadloom" / "application"
@@ -124,7 +127,7 @@ class TestSiteGenerationCluster:
         assert (site_dir / "__init__.py").is_file()
         names = {p.name for p in site_dir.glob("*.py")} - {"__init__.py"}
         assert "generate.py" in names
-        assert len(names) == 25, names
+        assert len(names) == 27, names
         assert (site_dir / "dashboard").is_dir()
         assert sorted(p.name for p in app_dir.glob("site*.py")) == []
 

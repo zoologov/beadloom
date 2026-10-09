@@ -30,11 +30,16 @@ Honest degradation, as in the rest of the data file:
   ``""`` when there is none to give (BDL-076 R1 finding M1).
 - ``findings`` and ``debt`` are omitted entirely when the site run did not
   compute them, never reported as clean.
+- ``debt.inside`` is carried by a node that holds another, and only there: the
+  debt of its ``part_of`` descendants, beside the node's own score, so a box's
+  card names both populations (BDL-080 S4a, BDL-UX #306). A leaf's debt is
+  unchanged.
 """
 
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -90,6 +95,56 @@ class NodeVerdicts:
 
 
 @dataclass(frozen=True)
+class DebtInside:
+    """The debt of a box's ``part_of`` descendants, its own score not included.
+
+    ``nodes`` counts the descendants that carry debt, ``score`` sums their own
+    scores, and ``by_reason`` counts, per reason, the descendants carrying it.
+    """
+
+    nodes: int
+    score: float
+    by_reason: Mapping[str, int]
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "nodes": self.nodes,
+            "score": self.score,
+            "by_reason": dict(sorted(self.by_reason.items())),
+        }
+
+
+def debt_inside(debt: Mapping[str, NodeDebt], parent: Mapping[str, str]) -> dict[str, DebtInside]:
+    """Every box's :class:`DebtInside`, keyed by the box; a leaf has no entry.
+
+    *parent* maps a node to its ``part_of`` container. A box is a node another
+    node is part of, a node ``part_of`` itself not counted. Each indebted node is
+    added to every container above it; a ``part_of`` cycle is walked once.
+    """
+    owed: dict[str, list[NodeDebt]] = {box: [] for part, box in parent.items() if part != box}
+    for ref_id, node_debt in debt.items():
+        seen = {ref_id}
+        box = parent.get(ref_id)
+        while box is not None and box not in seen:
+            owed[box].append(node_debt)
+            seen.add(box)
+            box = parent.get(box)
+    return {box: _inside(parts) for box, parts in owed.items()}
+
+
+def _inside(parts: Sequence[NodeDebt]) -> DebtInside:
+    by_reason: dict[str, int] = {}
+    for part in parts:
+        for reason in set(part.reasons):
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+    return DebtInside(
+        nodes=len(parts),
+        score=math.fsum(part.score for part in parts),
+        by_reason=dict(sorted(by_reason.items())),
+    )
+
+
+@dataclass(frozen=True)
 class CardSources:
     """The whole-graph reads the card needs, taken once per build."""
 
@@ -100,6 +155,8 @@ class CardSources:
     verdicts: NodeVerdicts
     #: The repository a node's source links into.
     repository: RepositoryLink = field(default_factory=RepositoryLink)
+    #: Each box's debt inside it, empty when debt was not computed.
+    debt_inside: Mapping[str, DebtInside] = field(default_factory=dict)
 
 
 def card_sources(
@@ -108,10 +165,16 @@ def card_sources(
     tags: Mapping[str, Collection[str]],
     verdicts: NodeVerdicts | None,
     repository: RepositoryLink | None = None,
+    parent: Mapping[str, str] | None = None,
 ) -> CardSources:
-    """Read the per-build inputs of the card: the test placements and owners, once."""
+    """Read the per-build inputs of the card: the test placements and owners, once.
+
+    *parent* maps each node to its ``part_of`` container; a box's debt inside
+    it is rolled up over it.
+    """
     tests = read_test_files(conn) or []
     nodes = {str(row[0]) for row in conn.execute("SELECT ref_id FROM nodes").fetchall()}
+    verdicts = verdicts or NodeVerdicts()
     return CardSources(
         tags=tags,
         placements={test.path: test.placement for test in tests},
@@ -120,8 +183,11 @@ def card_sources(
             for test in tests
             if test.ref_id is not None and test.ref_id in nodes
         },
-        verdicts=verdicts or NodeVerdicts(),
+        verdicts=verdicts,
         repository=repository or RepositoryLink(),
+        debt_inside=(
+            debt_inside(verdicts.debt, parent or {}) if verdicts.debt is not None else {}
+        ),
     )
 
 
@@ -157,11 +223,15 @@ def card_fields(
         ]
     if verdicts.debt is not None:
         debt = verdicts.debt.get(ref_id)
-        card["debt"] = (
+        own: dict[str, object] = (
             {"score": debt.score, "reasons": list(debt.reasons)}
             if debt is not None
             else {"score": 0.0, "reasons": []}
         )
+        inside = sources.debt_inside.get(ref_id)
+        if inside is not None:
+            own["inside"] = inside.as_dict()
+        card["debt"] = own
     return card
 
 

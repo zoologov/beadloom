@@ -111,12 +111,18 @@ def _widgets_section(*, ai_techwriter: bool) -> list[str]:
     The AI tech-writer panel is mounted only for a project that records its
     runs (BDL-076 B1): on any other project's portal it would be a panel about
     a harness the project does not have.
+
+    ``RuleFindings`` and ``PageMap`` follow the cards (BDL-080 S4a): they name
+    the populations the cards' numbers were counted over — lint's totals with
+    the findings bound to no node, and the pages this run wrote.
     """
     panel = ["  <AiTechwriterActivity />"] if ai_techwriter else []
     return [
         "<ClientOnly>",
         "  <AlertBanner />",
         "  <StatusCards />",
+        "  <RuleFindings />",
+        "  <PageMap />",
         "  <HealthGauges />",
         "  <CategoryChart />",
         "  <TrendCharts />",

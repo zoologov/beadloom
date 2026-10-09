@@ -112,6 +112,8 @@ for (const [name, empty] of Object.entries(EMPTIED)) {
     const data = await architectureData(request);
     const node = richest(data);
     empty(node);
+    // A file written before lint's reach was carried: "none" stands alone.
+    delete data.lint;
     await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
 
     await openArchitecture(page, `?focus=${node.id}`);
@@ -339,4 +341,122 @@ test("the card shows the source without a link when the data file gives none", a
 
   await expect(field(page, "source").locator("code")).toHaveText(node.source);
   await expect(field(page, "source").locator("a")).toHaveCount(0);
+});
+
+// Every count on the card names what it was counted over. "none" under Rule
+// findings is said against lint's totals for the project, so it is not read as
+// "lint never ran"; the box holding the whole project lists the findings lint
+// binds to no node; a box's debt is its own and what is inside.
+
+/** `count` followed by `one` when it is 1, and by `many` otherwise. */
+const countOf = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+
+const REACHES = [
+  { lint: { errors: 0, warnings: 70, nodes_with_findings: 28 }, says: "0 errors, 70 warnings on 28 nodes" },
+  { lint: { errors: 1, warnings: 1, nodes_with_findings: 1 }, says: "1 error, 1 warning on 1 node" },
+];
+
+for (const { lint, says } of REACHES) {
+  test(`a card with no finding reads "none — this project: ${says}"`, async ({ page, request }) => {
+    const data = await architectureData(request);
+    const node = richest(data);
+    Object.assign(node, { findings: [], lint_clean: true });
+    data.lint = { ...lint, nodeless: [] };
+    await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+
+    await openArchitecture(page, `?focus=${node.id}`);
+
+    expect(await fieldValue(page, "findings")).toBe(`none — this project: ${says}`);
+  });
+}
+
+test("the card says the project's lint totals as they are in the data file", async ({ page, request }) => {
+  const data = await architectureData(request);
+  requireShape(data.lint, "the data file carries no lint totals; it was written before they were carried");
+  const node = richestWithFindings(data);
+  const { errors, warnings, nodes_with_findings: nodes } = data.lint;
+  const reach = `this project: ${countOf(errors, "error", "errors")}, ${countOf(warnings, "warning", "warnings")} on ${countOf(nodes, "node", "nodes")}`;
+
+  await openArchitecture(page, `?focus=${node.id}`);
+
+  await expect(field(page, "findings")).toContainText(reach);
+});
+
+/** The one node that holds every other, as the viewer draws the project's box; null when there is none. */
+function projectBoxOf(data) {
+  const ids = new Set(data.nodes.map((n) => n.id));
+  const roots = data.nodes.filter((n) => !n.parent || n.parent === n.id || !ids.has(n.parent));
+  if (roots.length !== 1) return null;
+  const [root] = roots;
+  return data.nodes.some((n) => n.parent === root.id && n !== root) ? root : null;
+}
+
+const NODELESS = [
+  { rule: "scenario-coverage", severity: "warn", message: "names no scenario", file: "docs/PRD.md", line: 12 },
+  { rule: "inert-rule", severity: "error", message: "cannot fire", file: "", line: null },
+];
+
+test("the project box's card lists the findings bound to no node, and a leaf's card does not", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const box = projectBoxOf(data);
+  requireShape(box, "no single node holds every other, so the project has no box of its own");
+  const leaf = data.nodes.filter((n) => !data.nodes.some((m) => m.parent === n.id)).sort((a, b) => a.id.localeCompare(b.id))[0];
+  data.lint = { errors: 1, warnings: 1, nodes_with_findings: 0, nodeless: NODELESS };
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+
+  await openArchitecture(page, `?focus=${box.id}`);
+  const listed = field(page, "findings").locator("[data-card-nodeless] li");
+  await expect(listed).toHaveCount(NODELESS.length);
+  await expect(field(page, "findings").locator("h5")).toHaveText("2 findings bound to no node");
+  await expect(listed.nth(0)).toContainText("scenario-coverage");
+  await expect(listed.nth(0)).toContainText("docs/PRD.md:12");
+  await expect(listed.nth(1)).toContainText("cannot fire");
+
+  await openArchitecture(page, `?focus=${leaf.id}`);
+  await expect(field(page, "findings").locator("[data-card-nodeless]")).toHaveCount(0);
+});
+
+/** A box's debt inside it, as the card says it. */
+function insideSaid(inside) {
+  const said = `${inside.score} on ${countOf(inside.nodes, "node", "nodes")}`;
+  const reasons = Object.entries(inside.by_reason).map(([reason, count]) => `${reason} ${count}`);
+  return reasons.length ? `${said}: ${reasons.join(", ")}` : said;
+}
+
+test("a box's card says its own debt and the debt inside it, by reason, in Debt and in Inside", async ({
+  page,
+  request,
+}) => {
+  const data = await architectureData(request);
+  const box = [...data.nodes]
+    .filter((n) => n.debt?.inside && n.debt.inside.nodes > 0)
+    .sort((a, b) => b.debt.inside.nodes - a.debt.inside.nodes || a.id.localeCompare(b.id))[0];
+  requireShape(box, "no box holds a node that carries debt");
+
+  await openArchitecture(page, `?focus=${box.id}`);
+
+  const debt = field(page, "debt");
+  await expect(debt.locator("[data-debt='own']")).toHaveText(new RegExp(`^own ${box.debt.score}\\b`));
+  await expect(debt.locator("[data-debt='inside']")).toHaveText(`inside ${insideSaid(box.debt.inside)}`);
+  await expect(field(page, "contents").locator("[data-contents-debt]")).toHaveText(
+    `debt ${insideSaid(box.debt.inside)}`
+  );
+});
+
+test("a leaf's card says its debt on one line, as before", async ({ page, request }) => {
+  const data = await architectureData(request);
+  const leaf = data.nodes
+    .filter((n) => n.debt && !n.debt.inside && n.debt.score > 0)
+    .sort((a, b) => a.id.localeCompare(b.id))[0];
+  requireShape(leaf, "no leaf carries debt");
+
+  await openArchitecture(page, `?focus=${leaf.id}`);
+
+  await expect(field(page, "debt").locator("[data-debt]")).toHaveCount(0);
+  expect(await fieldValue(page, "debt")).toBe(
+    leaf.debt.reasons.length ? `${leaf.debt.score} (${leaf.debt.reasons.join(", ")})` : `${leaf.debt.score}`
+  );
 });

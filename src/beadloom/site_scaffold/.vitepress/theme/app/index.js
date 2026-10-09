@@ -20,7 +20,9 @@ import {
   AlertBanner,
   CategoryChart,
   HealthGauges,
+  PageMap,
   Recommendations,
+  RuleFindings,
   StatusCards,
   TrendCharts,
 } from "../widgets/dashboard/index.js";
@@ -31,6 +33,8 @@ const GLOBAL_COMPONENTS = {
   DiagramViewer,
   AlertBanner,
   StatusCards,
+  RuleFindings,
+  PageMap,
   HealthGauges,
   CategoryChart,
   TrendCharts,

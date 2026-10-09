@@ -13,6 +13,11 @@
 // what it holds and where its edges to the outside go: how many to and from each
 // node its lines on the map join it to.
 //
+// Every count names what it was counted over. The findings name lint's reach
+// over the whole project, so "none" is not read as "lint never ran"; the box
+// that holds the whole project lists the findings lint binds to no node; a box's
+// debt is said twice, its own and the debt of the nodes inside it, by reason.
+//
 // Every value comes from the data file. A field the file holds nothing for says
 // "none"; a field a version 1 file does not carry at all says "not recorded",
 // because the two are different answers. A click on an edge's other end asks the
@@ -23,6 +28,7 @@ import { withBase } from "vitepress";
 import { boxEdgesOf, edgeGroupsOf } from "../../../entities/graph-edge/index.js";
 import { layerOfNode, ownsLayer } from "../../../entities/layer/index.js";
 import { shellQuote } from "../../../shared/lib/index.js";
+import { boxTreeOf } from "../../../shared/map-levels/index.js";
 import { CopyCommand } from "../../../shared/ui/index.js";
 
 const props = defineProps({
@@ -31,6 +37,9 @@ const props = defineProps({
   layers: { type: Array, default: () => [] },
   // Each node's box, `{ id: parent | null }`: a box's card says what it holds.
   parents: { type: Object, default: null },
+  // Lint's reach over the whole project, the data file's top-level `lint`, or
+  // null for a file written before it was carried.
+  lint: { type: Object, default: null },
 });
 const emit = defineEmits(["select", "close"]);
 
@@ -85,6 +94,32 @@ const activityLine = computed(() => {
   return level ? `${said}, ${level}` : said;
 });
 
+// Lint's totals for the project: "this project: 0 errors, 70 warnings on 28 nodes".
+const reach = computed(() => {
+  const lint = props.lint;
+  if (!lint) return "";
+  const totals = `${countOf(lint.errors, "error", "errors")}, ${countOf(lint.warnings, "warning", "warnings")}`;
+  return `this project: ${totals} on ${countOf(lint.nodes_with_findings, "node", "nodes")}`;
+});
+// The findings bound to no node, listed on the card of the box that holds the
+// whole project and on no other.
+const nodeless = computed(() => {
+  const found = props.lint?.nodeless || [];
+  if (!found.length || !props.parents) return [];
+  const tree = boxTreeOf(Object.keys(props.parents).map((id) => ({ id, parent: props.parents[id] })));
+  return tree.wrapper === props.node.id ? found : [];
+});
+const placeOf = (finding) => (finding.file ? `${finding.file}${finding.line ? `:${finding.line}` : ""}` : "");
+
+// A box's debt inside it: "3.5 on 2 nodes: stale_doc 1, undocumented 2".
+const debtInside = computed(() => {
+  const inside = props.node.debt?.inside;
+  if (!inside) return "";
+  const said = `${inside.score} on ${countOf(inside.nodes, "node", "nodes")}`;
+  const reasons = Object.entries(inside.by_reason || {}).map(([reason, count]) => `${reason} ${count}`);
+  return reasons.length ? `${said}: ${reasons.join(", ")}` : said;
+});
+
 const placements = computed(() =>
   Object.entries(props.node.tests?.placement || {}).sort(([a], [b]) => a.localeCompare(b))
 );
@@ -126,6 +161,10 @@ const placements = computed(() =>
       <dd data-card-field="debt">
         <template v-if="node.debt === undefined">{{ NOT_RECORDED }}</template>
         <template v-else-if="!node.debt">{{ NONE }}</template>
+        <template v-else-if="node.debt.inside">
+          <span class="bl-card-debt" data-debt="own">own {{ node.debt.score }}<template v-if="(node.debt.reasons || []).length"> ({{ node.debt.reasons.join(", ") }})</template></span>
+          <span class="bl-card-debt" data-debt="inside">inside {{ debtInside }}</span>
+        </template>
         <template v-else>
           {{ node.debt.score }}<template v-if="(node.debt.reasons || []).length"> ({{ node.debt.reasons.join(", ") }})</template>
         </template>
@@ -183,6 +222,7 @@ const placements = computed(() =>
       <p class="bl-card-line" :data-contents-inside="contents.inside">
         {{ contents.inside }} {{ contents.inside === 1 ? "node" : "nodes" }}
       </p>
+      <p v-if="debtInside" class="bl-card-line" data-contents-debt>debt {{ debtInside }}</p>
       <h5>{{ sumOf(contents.out) }} {{ sumOf(contents.out) === 1 ? "edge" : "edges" }} out</h5>
       <p v-if="!contents.out.length" class="bl-card-none">{{ NONE }}</p>
       <ul v-else>
@@ -228,14 +268,27 @@ const placements = computed(() =>
       <p v-if="node.findings === undefined" class="bl-card-none">
         {{ node.lint_clean === undefined ? NOT_RECORDED : node.lint_clean ? NONE : "violation" }}
       </p>
-      <p v-else-if="!node.findings.length" class="bl-card-none">{{ NONE }}</p>
-      <ul v-else>
-        <li v-for="(finding, index) in node.findings" :key="index">
-          <code>{{ finding.rule }}</code>
-          <span class="bl-card-severity" :class="{ 'bl-card-warn': finding.severity === 'error' }">{{ finding.severity }}</span>
-          {{ finding.message }}
-        </li>
-      </ul>
+      <p v-else-if="!node.findings.length" class="bl-card-none">{{ NONE }}<template v-if="reach"> — {{ reach }}</template></p>
+      <template v-else>
+        <ul>
+          <li v-for="(finding, index) in node.findings" :key="index">
+            <code>{{ finding.rule }}</code>
+            <span class="bl-card-severity" :class="{ 'bl-card-warn': finding.severity === 'error' }">{{ finding.severity }}</span>
+            {{ finding.message }}
+          </li>
+        </ul>
+        <p v-if="reach" class="bl-card-note">{{ reach }}</p>
+      </template>
+      <template v-if="nodeless.length">
+        <h5>{{ countOf(nodeless.length, "finding", "findings") }} bound to no node</h5>
+        <ul data-card-nodeless>
+          <li v-for="(finding, index) in nodeless" :key="index">
+            <code>{{ finding.rule }}</code>
+            <span class="bl-card-severity" :class="{ 'bl-card-warn': finding.severity === 'error' }">{{ finding.severity }}</span>
+            {{ finding.message }}<span v-if="placeOf(finding)" class="bl-card-note"> ({{ placeOf(finding) }})</span>
+          </li>
+        </ul>
+      </template>
     </section>
 
     <section data-card-field="page">
@@ -301,6 +354,9 @@ const placements = computed(() =>
 }
 .bl-card-summary {
   color: var(--vp-c-text-2);
+}
+.bl-card-debt {
+  display: block;
 }
 .bl-card-note {
   color: var(--vp-c-text-3);

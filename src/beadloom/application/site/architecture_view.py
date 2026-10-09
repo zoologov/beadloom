@@ -22,7 +22,8 @@ Schema version 2 (BDL-076 A1) keeps every version-1 key and adds the node card
 (:mod:`beadloom.application.site.architecture_card`) and, at the top level, the
 run's provenance (``generated_at``, ``beadloom_version``) and the declared
 ``layers`` with their ``layer_order``, from which the viewer builds its palette
-instead of a vocabulary of its own. ``touches_code`` stays out: it
+instead of a vocabulary of its own, and lint's reach over the whole project
+(``lint``, BDL-080 S4a) that a card's findings are read against. ``touches_code`` stays out: it
 points at files, not at nodes. Nothing derived from the git remote is published
 at the top level: the card needs it only as each node's finished ``source_url``,
 and a remote can carry a credential (BDL-076 re-review finding m3).
@@ -70,6 +71,7 @@ if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Collection, Mapping
 
+    from beadloom.application.site.lint_reach import LintReach
     from beadloom.application.site.repository_link import RepositoryLink
 
 logger = logging.getLogger(__name__)
@@ -505,6 +507,7 @@ def build_architecture_view_data(
     verdicts: NodeVerdicts | None = None,
     generated_at: str = "",
     repository: RepositoryLink | None = None,
+    lint: LintReach | None = None,
 ) -> dict[str, object]:
     """Build the deterministic interactive-architecture data model.
 
@@ -527,12 +530,16 @@ def build_architecture_view_data(
             caller resolves it; ``None`` gives every node an empty link rather
             than one nobody stated. It reaches the file only as each node's
             ``source_url``.
+        lint: Lint's totals and node-less findings for the whole project
+            (BDL-080 S4a). Carried as the top-level ``lint`` when given, and
+            omitted rather than reported clean when lint did not run.
 
     Returns:
         A JSON-safe dict with ``schema_version`` 2, ``scope``, ``nodes``,
         ``edges``, ``generated_at``, ``beadloom_version``, ``layers`` and
         ``layer_order`` (the first layer rule by name), ``layer_rules`` (every
-        layer rule with its scope, BDL-080 S1b), every section sorted for
+        layer rule with its scope, BDL-080 S1b), ``lint`` when *lint* is given,
+        every section sorted for
         byte-stable serialization. Each node carries its ``layer_rank`` (the
         partition index for the layered-lanes layout), its ``layer_rule`` and
         ``layer_rule_rank``, and each ``depends_on`` edge a ``violation`` flag
@@ -540,18 +547,21 @@ def build_architecture_view_data(
     """
     strata = _strata(conn)
     edges, depends_on, depended_on_by, uses, used_by = _arch_edges(conn, strata)
+    parent = _parent_map(conn)
     inputs = _BuildInputs(
         pages=pages or {},
-        parent=_parent_map(conn),
+        parent=parent,
         strata=strata,
         relations=_Relations(depends_on, depended_on_by, uses, used_by),
-        card=card_sources(conn, tags=strata.tags, verdicts=verdicts, repository=repository),
+        card=card_sources(
+            conn, tags=strata.tags, verdicts=verdicts, repository=repository, parent=parent
+        ),
         published_doc_slugs=published_doc_slugs,
     )
     rows = conn.execute(
         "SELECT ref_id, kind, summary, source, lifecycle, extra FROM nodes ORDER BY ref_id"
     ).fetchall()
-    return {
+    data: dict[str, object] = {
         "schema_version": ARCHITECTURE_SCHEMA_VERSION,
         "scope": "architecture",
         "generated_at": generated_at,
@@ -562,6 +572,9 @@ def build_architecture_view_data(
         "nodes": [_node_dict(conn, row, inputs) for row in rows],
         "edges": edges,
     }
+    if lint is not None:
+        data["lint"] = lint.as_dict()
+    return data
 
 
 def serialize_architecture_view(data: dict[str, object]) -> str:

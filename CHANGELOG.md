@@ -80,6 +80,25 @@ names its bead; the pull request is to be opened.
   script with Steiger's `recommended` set; over the cut it reports 13 errors, 12
   `insignificant-slice` and 1 `inconsistent-naming`, left red for the owner's ruling and run by
   no CI job yet.
+- **The portal names lint's reach and the findings bound to no node (`beadloom-5pxv`).**
+  `architecture.data.json` gains a top-level `lint` with `errors`, `warnings`,
+  `nodes_with_findings` and `nodeless`, a list of findings each with `rule`, `severity`, `message`,
+  `file` (`""` when the finding names none) and `line` (`null` when it names none); the key is
+  omitted when lint did not run. `severity` takes lint's values, `error` and `warn`. A card with
+  no finding reads `none — this project: 0 errors, 69 warnings on 27 nodes`, and the card of the
+  box that holds the whole project lists the findings bound to no node.
+- **A box's debt names the debt inside it (`beadloom-5pxv`).** A node that holds another gains
+  `debt.inside` with `nodes` (its `part_of` descendants that carry debt), `score` (the sum of
+  their own scores) and `by_reason` (per reason of the debt report, how many of them carry it).
+  A leaf's `debt` is unchanged. The card reads `own 0` and `inside 79.5 on 53 nodes: dormant 13,
+  …`, and the box's Inside section repeats the second line.
+- **The dashboard names what its numbers were counted over (`beadloom-5pxv`).** In
+  `dashboard.data.json`, `lint` gains `nodes_with_findings` and `nodeless`, as above, and a
+  top-level `pages` lists the pages the run wrote: `count`, `sections` (each with `name`, `count`
+  and `pages`; names `about`, `dashboard`, `architecture`, `nodes`, `landscape`, `docs`, an empty
+  section listed with 0) and `languages` (each About page's `language`, `en` or `ru`, and
+  `page`). Two panels, Rule findings and Pages, follow the status cards; a data file without the
+  keys shows neither.
 
 ### Changed
 

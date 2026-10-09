@@ -30,6 +30,7 @@ from beadloom.application.site.architecture_view import (
     render_architecture_view_md,
 )
 from beadloom.application.site.generate import generate_site
+from beadloom.application.site.lint_reach import LintReach, NodelessFinding
 from beadloom.application.site.node_pages import node_page_urls, render_all_pages
 from beadloom.application.site.repository_link import RepositoryLink
 from tests.support.in_memory_graph import add_edge, add_node, open_graph
@@ -631,7 +632,47 @@ def test_debt_is_the_debt_report_for_the_node(shop: sqlite3.Connection) -> None:
     nodes = _nodes(build_architecture_view_data(shop, verdicts=_verdicts()))
 
     assert nodes["pricing"]["debt"] == {"score": 6.0, "reasons": ["undocumented"]}
-    assert nodes["orders"]["debt"] == {"score": 0.0, "reasons": []}
+    # A box's own score and reasons are unchanged; what is inside it joins them.
+    debt = nodes["orders"]["debt"]
+    assert isinstance(debt, dict)
+    assert {key: debt[key] for key in ("score", "reasons")} == {"score": 0.0, "reasons": []}
+
+
+def test_a_box_carries_the_debt_inside_it_and_a_leaf_does_not(
+    shop: sqlite3.Connection,
+) -> None:
+    """BDL-080 S4a (`beadloom-5pxv`): a box's debt names its parts' debt beside its own."""
+    nodes = _nodes(build_architecture_view_data(shop, verdicts=_verdicts()))
+
+    inside = {"nodes": 1, "score": 6.0, "by_reason": {"undocumented": 1}}
+    assert nodes["orders"]["debt"] == {"score": 0.0, "reasons": [], "inside": inside}
+    # `shop` holds `orders`, which holds `pricing`: the whole subtree counts.
+    shop_debt = nodes["shop"]["debt"]
+    assert isinstance(shop_debt, dict)
+    assert shop_debt["inside"] == inside
+    assert set(nodes["pricing"]["debt"]) == {"score", "reasons"}
+    storefront_debt = nodes["storefront"]["debt"]
+    assert isinstance(storefront_debt, dict)
+    assert "inside" not in storefront_debt
+
+
+def test_lints_reach_is_carried_at_the_top_level_only_when_lint_ran(
+    shop: sqlite3.Connection,
+) -> None:
+    """BDL-080 S4a (`beadloom-5pxv`): the totals a card's `none` is read against."""
+    reach = LintReach(
+        errors=1,
+        warnings=2,
+        nodes_with_findings=1,
+        nodeless=(
+            NodelessFinding(rule="inert", severity="warn", message="m", file="", line=None),
+        ),
+    )
+
+    assert "lint" not in build_architecture_view_data(shop, verdicts=_verdicts())
+    data = build_architecture_view_data(shop, verdicts=_verdicts(), lint=reach)
+    assert data["lint"] == reach.as_dict()
+    assert set(data) == V1_TOP_KEYS | V2_TOP_KEYS | {"lint"}
 
 
 # ---------------------------------------------------------------------------

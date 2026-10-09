@@ -9,10 +9,14 @@
 // state; the page composes the two widgets, because a widget does not import
 // another.
 //
+// The card is handed lint's reach over the whole project from the data file the
+// viewer reads, so a card's findings are said against it.
+//
 // A node page passes `focus`, its own node, with a depth and a height: the
 // viewer opens with that node selected and its neighbourhood marked, and the
 // reader moves on from there.
 
+import { useArchitectureData } from "../../../entities/architecture-data/index.js";
 import { GraphViewer } from "../../../widgets/graph-viewer/index.js";
 import { NodeCard } from "../../../widgets/node-card/index.js";
 
@@ -21,6 +25,8 @@ defineProps({
   depth: { type: [Number, String], default: undefined },
   height: { type: String, default: undefined },
 });
+
+const { data } = useArchitectureData();
 </script>
 
 <template>
@@ -31,6 +37,7 @@ defineProps({
         :edges="edges"
         :layers="layers"
         :parents="parents"
+        :lint="data?.lint || null"
         @select="select"
         @close="close"
       />
