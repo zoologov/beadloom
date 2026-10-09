@@ -4,7 +4,7 @@ Two causes of an index whose imports depended on how it was built were fixed on 
 projects: an import was resolved against the previous run's file list, and an importer that
 did not change was never resolved again when its target vanished; and a manifest
 (``go.mod``, ``go.work``, ``Package.swift``) that changed alone re-resolved nothing. The
-cases here hold the same property on the six adopter fixtures, as an adopter's project is
+cases here hold the same property on the adopter fixtures, as an adopter's project is
 laid out: after ``init``, the tree is edited and indexed incrementally, and every row of
 ``code_imports`` and every ``depends_on`` edge is compared with a fresh index of a copy of
 the edited tree.
@@ -45,9 +45,9 @@ _MANIFEST_EDITS: dict[str, tuple[str, str, str]] = {
 _INDEX_FILES = ("beadloom.db", "beadloom.db-wal", "beadloom.db-shm", "beadloom.db-journal")
 
 
-def _beadloom(root: Path, *args: str) -> None:
+def _beadloom(root: Path, *args: str, expected: int = 0) -> None:
     result = CliRunner().invoke(main, [*args, "--project", str(root)])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == expected, result.output
 
 
 def _initialised(stack: str, workdir: Path) -> Path:
@@ -56,7 +56,8 @@ def _initialised(stack: str, workdir: Path) -> Path:
     shutil.copytree(FIXTURES_BY_STACK[stack].source, root)
     for stored in sorted(root.rglob(f"*{STORED_SUFFIX}")):
         stored.rename(stored.with_name(stored.name.removesuffix(STORED_SUFFIX)))
-    _beadloom(root, "init", "--yes")
+    # An FSD fixture whose code breaks the rules init writes ends init with 1 (BDL-080 S3d).
+    _beadloom(root, "init", "--yes", expected=FIXTURES_BY_STACK[stack].init_exit)
     return root
 
 

@@ -1,9 +1,11 @@
 """An adopter on each claimed stack builds its portal and sees its own architecture.
 
 BDL-076 B3 (``beadloom-hmqn``). The PRD claims the portal for Python, Go, JS/TS,
-Java, Kotlin and Swift. Each stack's fixture (``tests/fixtures/site/<stack>/``) is
-copied, committed with an ``origin``, initialised with ``beadloom init``, given
-its portal identity, and built with ``npm ci`` and ``vitepress build``.
+Java, Kotlin and Swift, and BDL-080 S3d (``beadloom-chdx``) the two Feature-Sliced
+frontends on Vue 3 and on React Native. Each stack's fixture
+(``tests/fixtures/site/<stack>/``) is copied, committed with an ``origin``,
+initialised with ``beadloom init``, given its portal identity, and built with ``npm ci``
+and ``vitepress build``.
 
 A build that passes is half the claim. The other half is what the adopter sees:
 the modules as nodes, the imports between them as ``depends_on`` edges and no
@@ -15,8 +17,8 @@ Where the product does not meet an expectation today, the test is a strict
 ``xfail`` naming the bead that holds the defect, so it fails the day the defect
 is fixed and the mark is still there.
 
-Marked ``slow``: six portal builds, about three minutes on a warm npm cache. The
-advisory CI job ``site-adopters`` runs it.
+Marked ``slow``: eight portal builds, about half a minute each on a warm npm cache. The
+advisory CI job ``site-adopters`` runs it, one stack per leg.
 """
 
 from __future__ import annotations
@@ -40,6 +42,14 @@ pytestmark = pytest.mark.slow
 #: xfail naming its bead: Go (``beadloom-ujzb.14``, B5), Maven/Gradle
 #: (``beadloom-ujzb.15``, B6) and SwiftPM (``beadloom-ujzb.16``, B7). All three are
 #: fixed and their marks are gone; a new defect adds its mark through ``_stacks``.
+#:
+#: BDL-080 S3d measured one: Expo Router's ``app/`` beside an FSD ``src/`` is no node
+#: (``init`` clusters ``app/trail/`` as a node named after the route), so the routes
+#: are not a module, their imports draw no edge, and the edge ``app/trail/`` draws is
+#: not one the adopter's module list backs. The coordinator decides the fix.
+_EXPO_ROUTER_ROUTES = {
+    "rn-fsd": "beadloom-chdx gap: init writes no node for Expo Router's app/ beside an FSD src/"
+}
 
 
 def _stacks(xfails: dict[str, str] | None = None) -> list[Any]:
@@ -88,7 +98,7 @@ def test_the_portal_builds_from_docs_site(
     assert (portal.dist / "index.html").is_file()
 
 
-@pytest.mark.parametrize("stack", _stacks())
+@pytest.mark.parametrize("stack", _stacks(_EXPO_ROUTER_ROUTES))
 def test_every_module_of_the_project_is_a_node(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:
@@ -99,7 +109,7 @@ def test_every_module_of_the_project_is_a_node(
     assert missing == []
 
 
-@pytest.mark.parametrize("stack", _stacks())
+@pytest.mark.parametrize("stack", _stacks(_EXPO_ROUTER_ROUTES))
 def test_every_import_between_modules_is_a_depends_on_edge(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:
@@ -115,7 +125,7 @@ def test_every_import_between_modules_is_a_depends_on_edge(
     assert missing == []
 
 
-@pytest.mark.parametrize("stack", _stacks())
+@pytest.mark.parametrize("stack", _stacks(_EXPO_ROUTER_ROUTES))
 def test_no_depends_on_edge_joins_modules_the_code_does_not_join(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:

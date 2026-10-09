@@ -1,8 +1,10 @@
 # The portal on projects that are not this one (BDL-076 B3), apart from the
 # pipeline every pull request runs.
 #
-# One small fixture per claimed stack (Python, Go, JS/TS, Java, Kotlin, Swift)
-# under tests/fixtures/site/ is committed, initialised with `beadloom init`,
+# One small fixture per claimed stack (Python, Go, JS/TS, Java, Kotlin, Swift,
+# and since BDL-080 S3d two Feature-Sliced frontends: Vue 3 + TypeScript as
+# vue-fsd, Expo + React Native + TypeScript as rn-fsd) under tests/fixtures/site/
+# is committed, initialised with `beadloom init`,
 # built with `beadloom docs site`, `npm ci` and `vitepress build`, and read the
 # way its adopter would read it; the shipped Playwright suite then runs on each
 # portal as its adopter runs it, with `npm run test:e2e`, and a case whose shape
@@ -21,7 +23,7 @@
 # adopter-sized graph run on the first stack of each count of declared layers
 # only (test_the_browser_tests_pass_on_an_adopter_portal.py).
 #
-# WHEN IT RUNS (beadloom-ujzb.20, owner ruling of 2026-10-01). It builds six
+# WHEN IT RUNS (beadloom-ujzb.20, owner ruling of 2026-10-01). It builds eight
 # portals and runs the browser suite on each, so it no longer runs on every pull
 # request:
 #
@@ -119,8 +121,11 @@ jobs:
       matrix:
         # The parts of the slow tests: every claimed stack, then `projects`
         # (tests/support/adopter_portals.py SLOW_PARTS, which a self-check holds
-        # this list to).
-        part: [python, go, typescript, java, kotlin, swift, projects]
+        # this list to). Eight stacks and `projects` are nine legs, reported as
+        # the check runs "site-adopters (<part>)": site-adopters (python) ...
+        # site-adopters (vue-fsd), site-adopters (rn-fsd), site-adopters (projects).
+        # None of them is a required status check (the header says why).
+        part: [python, go, typescript, java, kotlin, swift, vue-fsd, rn-fsd, projects]
     steps:
       - uses: actions/checkout@v5
 

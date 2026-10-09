@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android", "web"],
+  "apple": { "modules": ["TrailHapticsModule"] },
+  "android": { "modules": ["expo.modules.trailhaptics.TrailHapticsModule"] }
+}

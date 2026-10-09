@@ -10,6 +10,10 @@ each must index exactly as before: every stored import with its answer, every
 indexed on a copy of each fixture with the code before this bead (``ef2c35b6``), on
 2026-10-09; the same measurement after the change was identical for all six, file index
 included.
+
+BDL-080 S3d (``beadloom-chdx``) added two fixtures that declare all of them; they have no
+"before" and are measured by
+``tests/integration/application/site/test_an_fsd_adopter_fixture_is_judged_by_the_rules_init_writes.py``.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ import pytest
 from click.testing import CliRunner
 
 from beadloom.services.cli import main
-from tests.support.adopter_portals import FIXTURES_BY_STACK, STORED_SUFFIX
+from tests.support.adopter_portals import FIXTURES_BY_STACK, SIX_STACKS, STORED_SUFFIX
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -201,10 +205,10 @@ def _indexed(stack: str, workdir: Path) -> Path:
 
 
 def test_every_stack_is_measured() -> None:
-    assert set(IMPORTS) == set(EDGES) == set(FILES) == set(FIXTURES_BY_STACK)
+    assert set(IMPORTS) == set(EDGES) == set(FILES) == set(SIX_STACKS)
 
 
-@pytest.mark.parametrize("stack", sorted(FIXTURES_BY_STACK))
+@pytest.mark.parametrize("stack", sorted(SIX_STACKS))
 def test_the_fixture_indexes_exactly_as_before(stack: str, tmp_path: Path) -> None:
     root = _indexed(stack, tmp_path)
     with sqlite3.connect(root / ".beadloom" / "beadloom.db") as conn:
