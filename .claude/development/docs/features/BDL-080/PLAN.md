@@ -54,18 +54,18 @@ Epic: `beadloom-af99`.
 | S1R | `beadloom-m7xq` | review: S1, bead id only | P0 | S1T |
 | S1W | `beadloom-we9t` | tech-writer: S1 docs, Gate green | P0 | S1R |
 | S1P | `beadloom-z30s` | coordinator: S1 PR, merge on green | P0 | S1W |
-| S2a | — | dev: the cut — ten slices as nodes, four moves, byte-identical dump | P0 | S1P |
-| S2b | — | dev: cohesion — `tag_prefix`, `check` per FSD tag calibrated, `fsd` and `ddd` overlays, explore/dev protocols | P0 | S2a |
-| S2T/R/W/P | — | as S1 | P0 | chain |
-| S3a | — | dev: resolver — tsconfig paths/baseUrl, `imports.aliases`, platform suffixes, `.mjs/.cjs` | P0 | - |
-| S3b | — | dev: Expo module bridge edges (`expo-module.config.json` → `uses`) | P1 | S3a |
-| S3c | — | dev: `init` fsd preset, legacy as nodes, rules_gen with `layers`+`scope`, `slice_public_api`, `slice_shape`, cohesion `check` | P0 | S3a |
-| S3d | — | dev: fixtures `vue-fsd` and `rn-fsd`, `FIXTURES_BY_STACK`, matrix 8 legs | P0 | S3b, S3c |
-| S3T/R/W/P | — | as S1 | P0 | chain |
-| S4a | — | dev: `lint` totals and nodeless findings, debt inside — data file and card | P1 | S1P |
-| S4b | — | dev: legend from the canvas; one-kind aggregated dash | P1 | S1P |
-| S4c | — | dev: the Source link on an unpushed build; `source_ref`; the warning | P1 | S1P |
-| S4T/R/W/P | — | as S1 | P1 | chain |
+| S2a | `beadloom-7jgr` | dev: the cut — ten slices as nodes, four moves, byte-identical dump | P0 | S1P |
+| S2b | `beadloom-5wh2` | dev: cohesion — `tag_prefix`, `check` per FSD tag calibrated, `fsd` and `ddd` overlays, explore/dev protocols | P0 | S2a |
+| S2T/R/W/P | `beadloom-tnya` `beadloom-cp4u` `beadloom-s6mb` `beadloom-jkqc` | as S1 | P0 | chain |
+| S3a | `beadloom-cwzc` | dev: resolver — tsconfig paths/baseUrl, `imports.aliases`, platform suffixes, `.mjs/.cjs` | P0 | - |
+| S3b | `beadloom-wbqd` | dev: Expo module bridge edges (`expo-module.config.json` → `uses`) | P1 | S3a |
+| S3c | `beadloom-5t8d` | dev: `init` fsd preset, legacy as nodes, rules_gen with `layers`+`scope`, `slice_public_api`, `slice_shape`, cohesion `check` | P0 | S3a |
+| S3d | `beadloom-chdx` | dev: fixtures `vue-fsd` and `rn-fsd`, `FIXTURES_BY_STACK`, matrix 8 legs | P0 | S3b, S3c |
+| S3T/R/W/P | `beadloom-hvnv` `beadloom-jtki` `beadloom-ql96` `beadloom-iapw` | as S1 | P0 | chain |
+| S4a | `beadloom-5pxv` | dev: `lint` totals and nodeless findings, debt inside — data file and card | P1 | S1P |
+| S4b | `beadloom-bjrw` | dev: legend from the canvas; one-kind aggregated dash | P1 | S1P |
+| S4c | `beadloom-e1xo` | dev: the Source link on an unpushed build; `source_ref`; the warning | P1 | S1P |
+| S4T/R/W/P | `beadloom-brgd` `beadloom-xkrn` `beadloom-n644` `beadloom-3dqv` | as S1 | P1 | chain |
 | REL | — | the MINOR release (its own /task-init, by BDL-079's recipe) | P1 | S2P, S3P, S4P |
 
 The sub-beads are created as one plan per slice when that slice starts (the tracker ids fill

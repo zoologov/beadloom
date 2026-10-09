@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** S1 — `beadloom-lsev` (S1T); then R, W, PR.
+**Bead:** S2a `beadloom-7jgr` (the cut) · S3a `beadloom-cwzc` (the resolver) · S4a/b/c (`beadloom-5pxv`, `beadloom-bjrw`, `beadloom-e1xo`) — as `beadloom waves` allows.
 **Goal:** the site a service, every layer rule drawn (S1); then S2, S3, S4.
 **Done when:** every PRD goal's *Done when* holds; four PRs merged; a MINOR release.
 
@@ -15,7 +15,7 @@
 
 - [x] PRD, RFC, CONTEXT, PLAN approved (2026-10-08)
 - [x] S1a, S1b, S1c, S1d landed
-- [ ] S1 test, S1e (owner's look), review, docs, PR
+- [x] S1 test, S1e (owner's look), reviews, docs, PR #96 merged 2026-10-09
 - [ ] S2, S3, S4
 
 ## Results
@@ -33,10 +33,34 @@
 | `beadloom-af99.4` | S1R2 | ✓ done (ISSUES) | re-review of the fix |
 | `beadloom-af99.5` | S1R3 | ✓ done (OK) | the card-tags regression fix re-read |
 | `beadloom-we9t` | S1W | ✓ done | docs |
-| `beadloom-af99.6` | S1g | in progress | cause: the runner, not S1e (same node `application`, same move at 8.0.0; the old case red 5/5 at 6x CPU throttling on both commits, green 5/5 at 4x); fix: the navigation model counts the frames its move is drawn over, the handle's `move()` reads it, the case judges 1 frame reduced and > 1 otherwise: 5/5 green at 4x (7-8 frames), 6x (3), 20x (2); committed as `e5fd94cb`; tech-writer pass: `navigate-graph.md` gains `lastMove()`, `graph-viewer.md` the handle's `move`, the two hash-only pairs attested after reading; stale 4 -> 0, `beadloom ci` rc 0; pushed, CI to read |
-| `beadloom-z30s` | S1P | in progress | PR, merge on green |
+| `beadloom-af99.6` | S1g | ✓ done | cause: the runner, not S1e (same node `application`, same move at 8.0.0; the old case red 5/5 at 6x CPU throttling on both commits, green 5/5 at 4x); fix: the navigation model counts the frames its move is drawn over, the handle's `move()` reads it, the case judges 1 frame reduced and > 1 otherwise: 5/5 green at 4x (7-8 frames), 6x (3), 20x (2); committed as `e5fd94cb`; tech-writer pass: `navigate-graph.md` gains `lastMove()`, `graph-viewer.md` the handle's `move`, the two hash-only pairs attested after reading; stale 4 -> 0, `beadloom ci` rc 0; pushed, CI to read |
+| `beadloom-z30s` | S1P | ✓ done | PR, merge on green |
+
+| `beadloom-7jgr` | S2A | in progress | the cut |
+| `beadloom-5wh2` | S2B | ready | cohesion rule, overlays |
+| `beadloom-cwzc` | S3A | in progress | resolver: aliases, suffixes |
+| `beadloom-wbqd` | S3B | ready | Expo module bridge |
+| `beadloom-5t8d` | S3C | ready | init fsd preset, FSD rules |
+| `beadloom-chdx` | S3D | ready | two fixtures, matrix 8 |
+| `beadloom-5pxv` | S4A | ready | lint totals, debt inside |
+| `beadloom-bjrw` | S4B | ready | legend from the canvas |
+| `beadloom-e1xo` | S4C | ready | Source link |
+| `beadloom-tnya` | S2T | blocked | |
+| `beadloom-cp4u` | S2R | blocked | |
+| `beadloom-s6mb` | S2W | blocked | |
+| `beadloom-jkqc` | S2P | blocked | |
+| `beadloom-hvnv` | S3T | blocked | |
+| `beadloom-jtki` | S3R | blocked | |
+| `beadloom-ql96` | S3W | blocked | |
+| `beadloom-iapw` | S3P | blocked | |
+| `beadloom-brgd` | S4T | blocked | |
+| `beadloom-xkrn` | S4R | blocked | |
+| `beadloom-n644` | S4W | blocked | |
+| `beadloom-3dqv` | S4P | blocked | |
 
 ## Notes
+
+- **S1 shipped (2026-10-09):** PR #96 squash-merged into `main` as `977b0614` after CI 18 of 18 (site-e2e green on `4ae5ae73` after S1g: the reduced-motion case counts the viewer's own frames). The branch `features/BDL-080` reset onto `main`; S2, S3, S4 beads created as one plan.
 
 - **PR #96 (2026-10-09):** pushed at `08ac23fb`; CI 19 of 20 green incl. the six stacks; site-e2e advisory red on one timing case (`levels.spec.js:303`, 1 zoom sample where > 2 expected on a 37-minute runner) -> `beadloom-af99.6` before the merge.
 
