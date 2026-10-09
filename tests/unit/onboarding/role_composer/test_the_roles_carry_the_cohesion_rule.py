@@ -89,6 +89,19 @@ class TestTheFsdOverlayMapsASliceToAComponent:
         assert "slice_public_api" in text
         assert "max_symbols" in text
 
+    @pytest.mark.parametrize("role", ["dev", "review"])
+    def test_an_import_past_a_slices_index_is_named_by_steigers_sidestep_check(
+        self, role: str
+    ) -> None:
+        """BDL-080 S2d: in steiger-plugin 0.8.0 the check for an import past another
+        slice's index is ``fsd/no-public-api-sidestep``; ``fsd/public-api`` reports a
+        slice that HAS no index. The overlay named the second for the first."""
+        text = compose_role(role, architecture="fsd", stack=["vuejs"])
+
+        assert "`no-public-api-sidestep`" in text
+        assert "Steiger's `public-api` file by file" not in text
+        assert "(`slice_public_api`; Steiger `public-api`)" not in text
+
     def test_steiger_is_among_the_commands_a_bead_completes_with(self) -> None:
         text = compose_role("dev", architecture="fsd", stack=["vuejs"])
 

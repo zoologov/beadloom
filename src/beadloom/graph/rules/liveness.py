@@ -259,21 +259,25 @@ def _matcher_reason(matcher: NodeMatcher, label: str, facts: _GraphFacts) -> str
     """Why *matcher* selects nothing, or None when it selects at least one node.
 
     The unknown-``ref_id`` case is named specifically because it is the one the
-    loader can diagnose exactly; the rest fall back to naming the tag or kind
-    that no node carries.
+    loader can diagnose exactly. A tag, a prefix or a kind is named only when NO
+    node carries it (BDL-080 S2d): a matcher that sets several of them and is inert
+    because of the second would otherwise be blamed on the first, which a node
+    does carry. When every field is carried by some node and none carries them
+    together, the reason says the matcher matches none of the nodes.
     """
     if matcher.ref_id is not None and matcher.ref_id not in facts.ref_ids:
         return f"its `{label}` names ref_id '{matcher.ref_id}', which is not in the graph"
     if facts.matched(matcher):
         return None
-    if matcher.tag is not None:
+    if matcher.tag is not None and not facts.matched(NodeMatcher(tag=matcher.tag)):
         return f"its `{label}` tag '{matcher.tag}' is carried by no node"
-    if matcher.tag_prefix is not None:
+    prefix = matcher.tag_prefix
+    if prefix is not None and not facts.matched(NodeMatcher(tag_prefix=prefix)):
         return (
             f"its `{label}` selects by tag_prefix, and no node carries a tag "
-            f"beginning with '{matcher.tag_prefix}'"
+            f"beginning with '{prefix}'"
         )
-    if matcher.kind is not None:
+    if matcher.kind is not None and not facts.matched(NodeMatcher(kind=matcher.kind)):
         return (
             f"its `{label}` kind '{matcher.kind}' matches none of the "
             f"{len(facts.nodes)} nodes in the graph"

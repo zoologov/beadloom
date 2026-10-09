@@ -62,6 +62,8 @@
 - **site-fsd-cohesion-features** (cardinality): A slice of the site's features layer owns at most 60 symbols
 - **site-fsd-cohesion-entities** (cardinality): A slice of the site's entities layer owns at most 60 symbols
 - **site-fsd-cohesion-shared** (cardinality): A segment of the site's shared layer owns at most 60 symbols
+- **site-fsd-public-api** (slice_public_api): An import into a slice of the site from outside it lands on the slice's index
+- **site-fsd-slice-shape** (slice_shape): A slice of the site holds its standard segments and its index at its top
 - **domain-size-limit** (cardinality): Domains should not have too many symbols
 - **module-coverage** (module_coverage): Every src module must be a tracked node (feature/component/…) or explicitly exempt
 - **tui-no-direct-infra** (forbid_import): TUI must not import infrastructure directly

@@ -62,6 +62,25 @@ def _size_check(world: dict[str, Any], prefix: str, limit: int) -> None:
     )
 
 
+@given(
+    parsers.parse(
+        'one size check over the components tagged "{tag}" whose tag begins with '
+        '"{prefix}", at most {limit:d} symbols'
+    )
+)
+def _size_check_by_tag_and_prefix(
+    world: dict[str, Any], tag: str, prefix: str, limit: int
+) -> None:
+    world["rule"] = (
+        "  - name: ui-cohesion\n"
+        '    description: "a slice owns few symbols"\n'
+        "    severity: warn\n"
+        "    check:\n"
+        f"      for: {{ kind: component, tag: {tag}, tag_prefix: {prefix} }}\n"
+        f"      max_symbols: {limit}\n"
+    )
+
+
 @when("the project is linted")
 def _lint(world: dict[str, Any]) -> None:
     nodes = [(ref_id, "component", tags) for ref_id, (tags, _) in _GRAPH.items()]
@@ -114,3 +133,10 @@ def _inert(world: dict[str, Any], rule: str, prefix: str) -> None:
         if v.rule_name == rule and "cannot fire" in v.message
     ]
     assert any(f"tag beginning with '{prefix}'" in m for m in messages), messages
+
+
+@then(parsers.parse('no finding of "{rule}" says the tag "{tag}" is carried by no node'))
+def _tag_not_blamed(world: dict[str, Any], rule: str, tag: str) -> None:
+    messages = [v.message for v in world["result"].violations if v.rule_name == rule]
+    assert messages, "the rule was not reported at all, so its wording proves nothing"
+    assert not any(f"tag '{tag}' is carried by no node" in m for m in messages), messages

@@ -24,3 +24,13 @@ Feature: one size check covers every layer whose tag begins with a prefix
     And one size check over the components whose tag begins with "fsd-", at most 3 symbols
     When the project is linted
     Then "ui-cohesion" is reported as checking nothing because no node carries a tag beginning with "fsd-"
+
+  # BDL-080 S2d: a matcher may set a tag and a prefix together, and the reason a rule
+  # checks nothing names the field no node carries, not the first one written.
+  @bead:beadloom-af99.10
+  Scenario: a rule with a carried tag and an uncarried prefix names the prefix
+    Given a frontend with slices tagged "ui-widgets" and "ui-features" beside a backend
+    And one size check over the components tagged "ui-widgets" whose tag begins with "fsd-", at most 3 symbols
+    When the project is linted
+    Then "ui-cohesion" is reported as checking nothing because no node carries a tag beginning with "fsd-"
+    And no finding of "ui-cohesion" says the tag "ui-widgets" is carried by no node

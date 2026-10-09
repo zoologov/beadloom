@@ -119,3 +119,20 @@ def test_each_rule_carries_the_owners_wording(tmp_path: Path) -> None:
         "public-api",
     ):
         assert phrase in text, phrase
+
+
+def test_an_import_past_a_slices_index_is_named_by_steigers_sidestep_check(
+    tmp_path: Path,
+) -> None:
+    """BDL-080 S2d: the public-API rule cites ``no-public-api-sidestep``, the Steiger
+    check that reports an import past another slice's index; ``public-api`` is the one
+    that reports a slice with no index at all."""
+    _, path = _written(tmp_path)
+    text = " ".join(
+        line.strip().removeprefix("#").strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("#")
+    )
+
+    assert "(Steiger: no-public-api-sidestep;" in text
+    assert "(Steiger: public-api)" not in text

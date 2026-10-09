@@ -72,3 +72,15 @@ Feature: docs site writes a portal that carries the project's identity and keeps
     And the project records AI tech-writer runs
     When the site is generated for the project
     Then the dashboard page mounts the AI tech-writer panel
+
+  # BDL-080 S2d (`beadloom-af99.10`): 8.0.0's viewer had `entities/graph-edge`; the cut
+  # renamed it `graph-edges`. An upgraded portal lost the old files and kept their
+  # folders, so a tree an earlier version wrote outlived the version.
+  @bead:beadloom-af99.10
+  Scenario: a folder an earlier version wrote and this one no longer ships is retired with its files
+    Given a project that declares no site
+    And the site has been generated once
+    And the portal holds a slice folder an earlier version of the scaffold wrote
+    When the site is generated for the project
+    Then the earlier version's slice folder is gone from the portal
+    And the generation reports that folder among the folders it retired

@@ -27,7 +27,11 @@ a packaging defect, refused here and caught by a test before it ships.
 A file that carries an intact marker and that the installed version no longer
 ships is removed, so a browser test retired upstream does not keep running
 against a viewer that changed under it. Content ``docs site`` generates each run
-carries no marker and is never touched here.
+carries no marker and is never touched here. A folder those removals leave empty
+is removed with them (BDL-080 S2d): a slice the scaffold renamed would otherwise
+outlive the version that wrote it as an empty tree. Only a folder a retired file
+sat in, or one above it, is a candidate, so a folder the project made is never
+touched, and one that still holds anything stays.
 
 **This repository's annotations** (``beadloom-ujzb.18``). The scaffold's source
 carries ``beadloom:component=<ref>`` lines so that the graph of the repository
@@ -51,7 +55,7 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from importlib.resources import files
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -143,6 +147,8 @@ class ScaffoldReport:
     updated: tuple[str, ...] = ()
     unchanged: tuple[str, ...] = ()
     retired: tuple[str, ...] = ()
+    #: Folders the retired files left empty, removed with them (BDL-080 S2d).
+    retired_folders: tuple[str, ...] = ()
     kept: tuple[KeptFile, ...] = ()
     overridden: tuple[str, ...] = ()
 
@@ -341,6 +347,28 @@ def _retire(out_dir: Path, keep: set[str]) -> list[str]:
     return retired
 
 
+def _retire_emptied_folders(out_dir: Path, retired: list[str]) -> list[str]:
+    """Remove every folder the retired files leave empty, deepest first, sorted for the report.
+
+    The candidates are the folders the retired files sat in and the folders above them,
+    never the portal's root: a folder no retired file sat in is the project's, and a
+    folder that still holds anything, a file beadloom did not write included, stays.
+    """
+    candidates = {
+        parent
+        for rel in retired
+        for parent in PurePosixPath(rel).parents
+        if parent != PurePosixPath()
+    }
+    removed: list[str] = []
+    for rel in sorted(candidates, key=lambda folder: len(folder.parts), reverse=True):
+        folder = out_dir / rel
+        if folder.is_dir() and not folder.is_symlink() and not any(folder.iterdir()):
+            folder.rmdir()
+            removed.append(rel.as_posix())
+    return sorted(removed)
+
+
 def write_scaffold(
     out_dir: Path,
     *,
@@ -363,6 +391,7 @@ def write_scaffold(
         if rel not in overrides:
             _place(rel, mark(rel, body, version), out_dir, tally)
     retired = _retire(out_dir, set(shipped) | set(overrides)) if out_dir.is_dir() else []
+    retired_folders = _retire_emptied_folders(out_dir, retired)
     for rel, path in overrides.items():
         target = out_dir / rel
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -373,6 +402,7 @@ def write_scaffold(
         updated=tuple(tally.updated),
         unchanged=tuple(tally.unchanged),
         retired=tuple(retired),
+        retired_folders=tuple(retired_folders),
         kept=tuple(tally.kept),
         overridden=tuple(overrides),
     )

@@ -220,7 +220,8 @@ def _echo_scaffold_report(report: ScaffoldReport, out: Path) -> None:
     click.echo(
         f"Scaffold (beadloom {report.version}): {len(report.written)} written, "
         f"{len(report.updated)} updated, {len(report.unchanged)} unchanged, "
-        f"{len(report.retired)} retired, {len(report.overridden)} copied from .beadloom/site/"
+        f"{len(report.retired)} retired, {len(report.retired_folders)} empty folders retired, "
+        f"{len(report.overridden)} copied from .beadloom/site/"
     )
     if not report.kept:
         return

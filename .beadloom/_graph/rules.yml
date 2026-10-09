@@ -265,8 +265,10 @@ rules:
   # its reason, never dodged by re-tagging a node.
   #
   # Calibrated on the index after the viewer was cut into slices (S2a, f85ae435),
-  # measured on 2026-10-09 over the 28 fsd-tagged components: widgets own at most
-  # 65 (site-graph-viewer; then site-dashboard 17), every other layer at most 56
+  # measured on 2026-10-09 over the 28 fsd-tagged components of that commit.
+  # Re-measured at d99dfd0e (S2d, 2026-10-09) in a clean room, after S4 landed,
+  # over 29 (S4d added the site-powered-by widget): widgets own at most 65
+  # (site-graph-viewer; then site-dashboard 19), every other layer at most 56
   # (site-shared-map-levels; then site-graph-edges and site-shared-bundling 53,
   # site-shared-geometry 49, the site-shared container 41), pages at most 5, app 1.
   # So 80 for widgets -- the one layer that composes, and ~23% over its largest --
@@ -313,6 +315,38 @@ rules:
     check:
       for: { kind: component, tag: fsd-shared }
       max_symbols: 60
+
+  # THE GRAPH'S HALF OF THE SITE'S PUBLIC-API AND SHAPE RULES (BDL-080 S2d), the two
+  # rule types `beadloom init` writes for an FSD frontend (S3c), declared here over
+  # the same four sliced layers it writes them for; `app` and `shared` hold segments,
+  # not slices. Steiger, run as `npm run lint:fsd` in CI's site-build, judges the
+  # public API file by file (`no-public-api-sidestep` for an import past an index,
+  # `public-api` for a slice with none); its nearest checks of a slice's shape are
+  # `segments-by-purpose` and `no-segmentless-slices`.
+  #
+  # No `scope:`: a slice rule does not read one (a `scope:` naming a node that does
+  # not exist was accepted in silence, measured 2026-10-09), so writing it here would
+  # be a setting that looks configured and does nothing. The tags confine the rules
+  # instead: only the site's components carry an fsd-* tag (29 of 29).
+  #
+  # Measured at d99dfd0e on 2026-10-09: 22 slices whose source is a folder, 55
+  # imports into a slice from outside it, 0 findings from either rule. The cut left
+  # every cross-slice import on an index and every slice in its segments; nothing is
+  # baselined. Public API is an error, like the layer rule; shape is a warn, the
+  # severity `init` writes, because a folder past the standard segments is a signal
+  # to look at, not a wrong import.
+  - name: site-fsd-public-api
+    description: "An import into a slice of the site from outside it lands on the slice's index"
+    severity: error
+    slice_public_api:
+      tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
+
+  - name: site-fsd-slice-shape
+    description: "A slice of the site holds its standard segments and its index at its top"
+    severity: warn
+    slice_shape:
+      tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
+      segments: [ui, model, lib, api, config]
 
   # Recalibrated 200 -> 280 (BDL-059 S3). Cohesion-driven decomposition split the
   # monster FILES (rule_engine.py 2249, federation.py 1000) into cohesive

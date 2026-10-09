@@ -17,7 +17,7 @@ app → pages → widgets → features → entities → shared
 - The layer rule is a `layers` rule over the six `fsd-*` tags with `scope:` the frontend service. Read it in `.beadloom/_graph/rules.yml`, never from memory.
 
 ### A slice is entered through its public API
-- Another slice reaches yours through its `index` (its public API) and nowhere else. An import that lands past another slice's `index` is a finding: `slice_public_api` in the graph, Steiger's `public-api` file by file. Inside your own slice, import relatively rather than through your own `index`.
+- Another slice reaches yours through its `index` (its public API) and nowhere else. An import that lands past another slice's `index` is a finding: `slice_public_api` in the graph, Steiger's `no-public-api-sidestep` file by file (its `public-api` reports a slice that has no `index` at all). Inside your own slice, import relatively rather than through your own `index`.
 - A slice's top holds its segments and its `index` and nothing else (`slice_shape`).
 
 ### Cohesion (FSD)

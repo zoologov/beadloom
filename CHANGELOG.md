@@ -148,6 +148,29 @@ names its bead; the pull request is to be opened.
   are containers of segment components — the graph `beadloom init` writes. The overlay states
   the slice's public API, its shape and its size signal, drops the deprecated `processes`
   layer from the chain, and puts Steiger in the commands a bead completes with.
+- **The `fsd` overlays and the rules `init` writes name Steiger's `no-public-api-sidestep`
+  (`beadloom-af99.10`).** They cited `public-api` for an import that lands past another slice's
+  `index`. In `@feature-sliced/steiger-plugin` 0.8.0 that import is reported by
+  `fsd/no-public-api-sidestep`, while `fsd/public-api` reports a slice that has no `index` at
+  all; the dev and review overlays and the comment above `fsd-public-api` in the `rules.yml`
+  that `init` writes now name both for what each reports. The same comment cites the largest
+  widget of Beadloom's portal as 65 symbols, the number measured, where it said 66.
+- **`docs site` retires the folders its retired files leave empty (`beadloom-af99.10`).** A
+  portal written by 8.0.0 and rewritten after the `entities` slices were renamed lost the old
+  files and kept `entities/graph-edge`, `graph-node` and `layer` as empty trees. A folder a
+  retired file sat in, or one above it, is now removed when nothing is left in it; a folder the
+  project made, or one that still holds a file beadloom did not write, stays. The scaffold line
+  gains the count: `N retired, M empty folders retired, N copied from .beadloom/site/`.
+- **This repository's portal is judged by `slice_public_api` and `slice_shape`
+  (`beadloom-af99.10`).** `.beadloom/_graph/rules.yml` declares `site-fsd-public-api` (error)
+  and `site-fsd-slice-shape` (warn) over the four sliced layers, the rules `init` writes for an
+  FSD frontend. On this repository they judge 22 slices and 55 imports into a slice from
+  outside it, and report nothing.
+- **A rule that cannot fire names the matcher field no node carries (`beadloom-af99.10`).** A
+  matcher that set both `tag` and `tag_prefix` and was inert because of the prefix was reported
+  as "tag '<tag>' is carried by no node" while a node carried it. A `tag`, a `tag_prefix` or a
+  `kind` is now named only when no node carries it; fields that some node carries each, and
+  none together, read "matches none of the N nodes in the graph".
 - **Cohesion is a declared duty of the dev, explore and review roles (`beadloom-5wh2`).** The
   coordinator declares it and each core carries it, so `config-check` reports a role that loses
   it. The `ddd` overlay states it for Python packages, and the explorer writes a size finding

@@ -174,6 +174,83 @@ def test_a_file_the_new_version_no_longer_ships_is_retired(project: Path, shippe
     assert not (project / "site/e2e/viewer.spec.js").exists()
 
 
+# BDL-080 S2d (``beadloom-af99.10``): the 8.0.0 viewer's ``entities/graph-edge`` became
+# ``entities/graph-edges``; an upgraded portal lost the files and kept the folders.
+_OLD_EDGE = ".vitepress/theme/entities/graph-edge/model/edge.js"
+_NEW_EDGE = ".vitepress/theme/entities/graph-edges/model/edge.js"
+
+
+def _move_the_edge_slice(shipped: Path) -> None:
+    (shipped / _OLD_EDGE).parent.mkdir(parents=True, exist_ok=True)
+    (shipped / _OLD_EDGE).write_text("export const edge = 1;\n", encoding="utf-8")
+
+
+def _ship_it_moved(shipped: Path) -> None:
+    (shipped / _OLD_EDGE).unlink()
+    (shipped / _OLD_EDGE).parent.rmdir()
+    (shipped / _OLD_EDGE).parent.parent.rmdir()
+    (shipped / _NEW_EDGE).parent.mkdir(parents=True)
+    (shipped / _NEW_EDGE).write_text("export const edge = 1;\n", encoding="utf-8")
+
+
+def test_a_folder_its_retired_files_leave_empty_is_retired_with_them(
+    project: Path, shipped: Path
+) -> None:
+    _move_the_edge_slice(shipped)
+    _write(project, shipped)
+    _ship_it_moved(shipped)
+
+    report = _write(project, shipped, version=_V2)
+
+    assert report.retired == (_OLD_EDGE,)
+    assert report.retired_folders == (
+        ".vitepress/theme/entities/graph-edge",
+        ".vitepress/theme/entities/graph-edge/model",
+    )
+    assert not (project / "site/.vitepress/theme/entities/graph-edge").exists()
+    assert (project / "site" / _NEW_EDGE).is_file()
+
+
+def test_a_folder_that_still_holds_a_file_beadloom_did_not_write_is_kept(
+    project: Path, shipped: Path
+) -> None:
+    _move_the_edge_slice(shipped)
+    _write(project, shipped)
+    notes = project / "site/.vitepress/theme/entities/graph-edge/NOTES.txt"
+    notes.write_text("ours\n", encoding="utf-8")
+    _ship_it_moved(shipped)
+
+    report = _write(project, shipped, version=_V2)
+
+    assert report.retired_folders == (".vitepress/theme/entities/graph-edge/model",)
+    assert notes.is_file()
+
+
+def test_an_empty_folder_no_retired_file_sat_in_is_left_alone(
+    project: Path, shipped: Path
+) -> None:
+    _move_the_edge_slice(shipped)
+    _write(project, shipped)
+    drafts = project / "site/drafts"
+    drafts.mkdir()
+    _ship_it_moved(shipped)
+
+    report = _write(project, shipped, version=_V2)
+
+    assert drafts.is_dir()
+    assert "drafts" not in report.retired_folders
+
+
+def test_a_run_that_retires_nothing_retires_no_folder(project: Path, shipped: Path) -> None:
+    _write(project, shipped)
+    (project / "site/drafts").mkdir()
+
+    report = _write(project, shipped, version=_V2)
+
+    assert report.retired_folders == ()
+    assert (project / "site/drafts").is_dir()
+
+
 def test_a_retired_path_that_was_edited_by_hand_is_left_alone(
     project: Path, shipped: Path
 ) -> None:

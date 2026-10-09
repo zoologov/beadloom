@@ -83,8 +83,10 @@ def generate_rules(
 #: The cohesion signal per FSD layer: the most symbols one slice (or one segment of
 #: ``app`` and ``shared``) owns before ``check`` reports it. Measured on Beadloom's own
 #: portal after its viewer was cut into FSD slices (BDL-080 S2, RFC D3): the largest
-#: widget owns 66 symbols, so widgets get 80 and every other layer 60. A signal, not a
+#: widget owns 65 symbols, so widgets get 80 and every other layer 60. A signal, not a
 #: target: shape comes first, and a project recalibrates these with a stated reason.
+#: The number is the one that portal's ``rules.yml`` states beside the same limits,
+#: with the commit it was measured at; a self-check holds the two to one number.
 FSD_COHESION_LIMITS: dict[str, int] = {
     "app": 60,
     "pages": 60,
@@ -101,11 +103,11 @@ _FSD_HEADER = """\
 # The rules `beadloom init` wrote for a Feature-Sliced Design frontend (preset `fsd`).
 #
 # Steiger, the official FSD linter, is the reference for them: its `recommended` set
-# judges files (forbidden-imports, public-api, insignificant-slice,
-# no-layer-public-api), and these rules judge the graph the portal draws. Run both:
-# `npm run lint:fsd` is Steiger. Folders beside the layers are nodes tagged
-# `fsd-legacy` and stand outside every rule below, so the graph shows them without
-# judging them.
+# judges files (forbidden-imports, public-api, no-public-api-sidestep,
+# insignificant-slice, no-layer-public-api), and these rules judge the graph the
+# portal draws. Run both: `npm run lint:fsd` is Steiger. Folders beside the layers
+# are nodes tagged `fsd-legacy` and stand outside every rule below, so the graph
+# shows them without judging them.
 version: 3
 rules:
 """
@@ -130,8 +132,9 @@ _FSD_LAYERS_RULE = """\
 
 _FSD_PUBLIC_API_RULE = """\
   # A slice is entered through its public API, the index at its top. An import that
-  # reaches past another slice's index is a finding (Steiger: public-api), judged on
-  # the imports the reindex resolved, aliases included.
+  # reaches past another slice's index is a finding (Steiger: no-public-api-sidestep;
+  # its public-api reports a slice with no index), judged on the imports the reindex
+  # resolved, aliases included.
   - name: fsd-public-api
     description: "An import into a slice from outside it lands on the slice's index"
     severity: error
@@ -155,7 +158,7 @@ _FSD_SHAPE_RULE = """\
 _FSD_COHESION_COMMENT = """\
   # The rule judges shape first and keeps a calibrated symbol-count signal second -- a
   # signal, not a target: the symbols one slice (or one segment of app and shared)
-  # owns. Calibrated on Beadloom's own FSD portal, whose largest widget owns 66
+  # owns. Calibrated on Beadloom's own FSD portal, whose largest widget owns 65
   # symbols: 80 for widgets, 60 for every other layer. A slice past it is a candidate
   # for a split by responsibility; a limit is recalibrated here with its reason.
 """
