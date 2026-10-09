@@ -40,7 +40,7 @@
 | `beadloom-5wh2` | S2B | ready | cohesion rule, overlays |
 | `beadloom-cwzc` | S3A | ✓ done | tsconfig `paths`/`baseUrl` (JSON with comments; nearest folder's configs, relative `extends`), `imports.aliases:` (refused like `activity:`; `init` writes a text scan of `babel.config.*`/`vite.config.*` and says so), `.ios .android .native .web` before each extension, `.mjs`/`.cjs` parsed (closes `beadloom-zd4m`); tsconfig + aliases in the manifest fingerprint. Synthetic Vue tree: Vite aliases 0/4 -> 4/4, baseUrl 0/1 -> 1/1, edges 13 -> 18; synthetic Expo tree: relative 4/7 -> 8/8, tsconfig `@/` 0/2 -> 2/2, Babel aliases 2/9 -> 10/10, edges 3 -> 14. Six fixtures identical (imports, edges, file index) |
 | `beadloom-wbqd` | S3B | ready | Expo module bridge |
-| `beadloom-5t8d` | S3C | ready | init fsd preset, FSD rules |
+| `beadloom-5t8d` | S3C | in progress | init fsd preset, FSD rules |
 | `beadloom-chdx` | S3D | ready | two fixtures, matrix 8 |
 | `beadloom-5pxv` | S4A | ready | lint totals, debt inside |
 | `beadloom-bjrw` | S4B | ready | legend from the canvas |
@@ -59,6 +59,8 @@
 | `beadloom-3dqv` | S4P | blocked | |
 
 ## Notes
+
+- **S3a closed (2026-10-09):** `a2bbd888` — tsconfig `paths`/`baseUrl`, `imports.aliases:` (read through config-declarations; init writes what a text scan of babel/vite configs finds and says so), platform suffixes, `.mjs`/`.cjs` parsed (closes `beadloom-zd4m`); on the synthetic trees: Vue aliases 0/4 -> 4/4, edges 13 -> 18; Expo aliases 2/9 -> 10/10, relative 4/7 -> 8/8, edges 3 -> 14; the six fixtures index identically (a case holds it); 90 tests. Follow-ups: init's quick scan reads no aliases (S3c); import_resolver.py ~1,470 lines (debt epic). S3c launched beside S2a.
 
 - **S1 shipped (2026-10-09):** PR #96 squash-merged into `main` as `977b0614` after CI 18 of 18 (site-e2e green on `4ae5ae73` after S1g: the reduced-motion case counts the viewer's own frames). The branch `features/BDL-080` reset onto `main`; S2, S3, S4 beads created as one plan.
 
