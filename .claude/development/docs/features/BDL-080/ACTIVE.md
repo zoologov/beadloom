@@ -38,7 +38,7 @@
 
 | `beadloom-7jgr` | S2A | in progress | the cut |
 | `beadloom-5wh2` | S2B | ready | cohesion rule, overlays |
-| `beadloom-cwzc` | S3A | in progress | resolver: aliases, suffixes |
+| `beadloom-cwzc` | S3A | ✓ done | tsconfig `paths`/`baseUrl` (JSON with comments; nearest folder's configs, relative `extends`), `imports.aliases:` (refused like `activity:`; `init` writes a text scan of `babel.config.*`/`vite.config.*` and says so), `.ios .android .native .web` before each extension, `.mjs`/`.cjs` parsed (closes `beadloom-zd4m`); tsconfig + aliases in the manifest fingerprint. Synthetic Vue tree: Vite aliases 0/4 -> 4/4, baseUrl 0/1 -> 1/1, edges 13 -> 18; synthetic Expo tree: relative 4/7 -> 8/8, tsconfig `@/` 0/2 -> 2/2, Babel aliases 2/9 -> 10/10, edges 3 -> 14. Six fixtures identical (imports, edges, file index) |
 | `beadloom-wbqd` | S3B | ready | Expo module bridge |
 | `beadloom-5t8d` | S3C | ready | init fsd preset, FSD rules |
 | `beadloom-chdx` | S3D | ready | two fixtures, matrix 8 |

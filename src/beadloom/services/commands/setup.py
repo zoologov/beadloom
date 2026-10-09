@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     )
     from beadloom.onboarding.ignore_block import PortalIgnoreResult
     from beadloom.onboarding.role_map import RoleMapReport
+    from beadloom.onboarding.scanner.alias_scan import AliasScan
     from beadloom.onboarding.scanner.project_scan import CodeBesideModules
     from beadloom.onboarding.scanner.swift_layout import UnreadSwift
 
@@ -590,8 +591,9 @@ def config_check(*, fix: bool, project: Path | None) -> None:
 
     site_refused = _echo_site_config_refusals(project_root)
     activity_refused = _echo_activity_setting_refusals(project_root)
+    imports_refused = _echo_import_alias_refusals(project_root)
 
-    if not blocking and not site_refused and not activity_refused:
+    if not blocking and not site_refused and not activity_refused and not imports_refused:
         # A warning is a real finding and is printed above; it does not block,
         # because a green project going red on upgrade is how a check gets
         # switched off wholesale.
@@ -641,6 +643,19 @@ def _echo_activity_setting_refusals(project_root: Path) -> bool:
 
     _, refusals = read_activity_exclusions(project_root)
     return _echo_block_refusals("activity", refusals)
+
+
+def _echo_import_alias_refusals(project_root: Path) -> bool:
+    """Print every entry of the ``imports:`` block the resolver cannot use; ``True`` if any.
+
+    BDL-080 ``beadloom-cwzc``. It blocks for the reason the ``activity:`` block does: a
+    mistyped folder leaves every import under the alias unresolved without a word, and no
+    project declared the block before it existed.
+    """
+    from beadloom.application.import_aliases import read_import_aliases
+
+    _, refusals = read_import_aliases(project_root)
+    return _echo_block_refusals("imports", refusals)
 
 
 def _echo_block_refusals(block: str, refusals: Sequence[Refusal]) -> bool:
@@ -1466,6 +1481,17 @@ def _echo_unread_swift(unread: UnreadSwift | None, *, prefix: str) -> None:
         click.echo(f"{prefix}{sentence}")
 
 
+def _echo_import_aliases(scan: AliasScan | None, *, prefix: str) -> None:
+    """Name the aliases init read from the bundler's config by a text scan (BDL-080).
+
+    Silent when no ``babel.config.*`` or ``vite.config.*`` was read, so every other
+    project prints what it printed before.
+    """
+    sentence = scan.sentence() if scan is not None else ""
+    if sentence:
+        click.echo(f"{prefix}{sentence}")
+
+
 def _holds_generated_portal(folder: Path) -> bool:
     """Whether *folder* holds the portal ``beadloom docs site`` wrote (the re-review's m4).
 
@@ -1648,6 +1674,7 @@ def init(
                 f"{bs['edges_generated']} edges (preset: {bs['preset']})"
             )
             _echo_unread_swift(bs.get("unread_swift"), prefix="  ")
+            _echo_import_aliases(bs.get("import_aliases"), prefix="  ")
             _echo_beside_modules(bs.get("beside_modules"), prefix="  ")
             _echo_unscanned_portals(bs.get("generated_portals"), prefix="  ")
             _echo_portal_ignore(bs.get("portal_ignore"), prefix="  ")
@@ -1733,6 +1760,7 @@ def init(
                 "appended to .gitignore (yours to edit; never rewritten)"
             )
         _echo_unread_swift(result.get("unread_swift"), prefix="\u2713 ")
+        _echo_import_aliases(result.get("import_aliases"), prefix="\u2713 ")
         _echo_beside_modules(result.get("beside_modules"), prefix="\u2713 ")
         _echo_unscanned_portals(result.get("generated_portals"), prefix="\u2713 ")
         _echo_portal_ignore(result.get("portal_ignore"), prefix="\u2713 ")

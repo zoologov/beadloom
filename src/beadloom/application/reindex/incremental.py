@@ -15,6 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom.application.import_aliases import import_aliases
 from beadloom.application.reindex.change_detection import (
     _compute_parser_fingerprint,
     _diff_files,
@@ -57,7 +58,7 @@ from beadloom.infrastructure.health import take_snapshot
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Sequence
     from pathlib import Path
 
 
@@ -137,8 +138,10 @@ def incremental_reindex(
     changed, added, deleted = _diff_files(current_files, stored_files)
 
     # A go.mod, go.work or Package.swift is not a source file, and an import
-    # resolved through it changes its answer when it changes (beadloom-jcng).
-    manifests_moved = manifests_changed(project_root, conn)
+    # resolved through it changes its answer when it changes (beadloom-jcng); nor
+    # is a tsconfig or the `imports.aliases:` block (beadloom-cwzc).
+    aliases = import_aliases(project_root)
+    manifests_moved = manifests_changed(project_root, conn, aliases=aliases)
 
     # Test files are not in file_index (they must not become code), so a
     # test-only change is seen by comparing the test index against the disk.
@@ -267,6 +270,7 @@ def incremental_reindex(
         added,
         deleted,
         manifests_moved=manifests_moved,
+        aliases=aliases,
     )
 
     # Re-extract routes after code changes and update nodes.extra.
@@ -352,6 +356,7 @@ def _refresh_imports(
     deleted: Iterable[str],
     *,
     manifests_moved: bool,
+    aliases: Sequence[tuple[str, str]],
 ) -> None:
     """Re-extract imports for the code files this run touched.
 
@@ -368,4 +373,6 @@ def _refresh_imports(
     if not touched and not removed and not manifests_moved:
         return
 
-    reindex_file_imports(project_root, conn, touched=touched, removed=removed)
+    reindex_file_imports(
+        project_root, conn, touched=touched, removed=removed, aliases=aliases
+    )

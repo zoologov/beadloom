@@ -19,6 +19,7 @@ from beadloom.onboarding.scanner.agents_md import (
     setup_mcp_auto,
     setup_rules_auto,
 )
+from beadloom.onboarding.scanner.alias_scan import scan_bundler_aliases
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
 from beadloom.onboarding.scanner.entry_points import _discover_entry_points
 from beadloom.onboarding.scanner.import_scan import _quick_import_scan
@@ -387,6 +388,12 @@ def bootstrap_project(
         tests["flat_tests"] = True
     if tests:
         config["tests"] = tests
+    # The aliases a bundler applies and no tsconfig carries, read from the text of
+    # `babel.config.*` / `vite.config.*` and written for the user to confirm; the
+    # resolver reads tsconfig `paths` itself (BDL-080 `beadloom-cwzc`).
+    aliases = scan_bundler_aliases(project_root)
+    if aliases.aliases:
+        config["imports"] = {"aliases": dict(aliases.aliases)}
     write_yaml_atomic(
         beadloom_dir / "config.yml",
         config,
@@ -433,4 +440,6 @@ def bootstrap_project(
         "beside_modules": beside_modules,
         # Top-level folders holding the portal `docs site` wrote, not scanned (m4).
         "generated_portals": portals,
+        # The aliases read from the bundler's config by a text scan (BDL-080).
+        "import_aliases": aliases,
     }

@@ -283,6 +283,9 @@ def interactive_init(
         unread = bs_result.get("unread_swift")
         if unread is not None and unread.sentence():
             console.print(f"  {escape(unread.sentence())}", soft_wrap=True)
+        aliases = bs_result.get("import_aliases")
+        if aliases is not None and aliases.sentence():
+            console.print(f"  {escape(aliases.sentence())}", soft_wrap=True)
         beside = bs_result.get("beside_modules")
         for sentence in beside.sentences() if beside is not None else []:
             console.print(f"  {escape(sentence)}", soft_wrap=True)

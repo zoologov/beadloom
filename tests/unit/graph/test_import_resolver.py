@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _EXTENSIONS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue")
+_PLATFORMS = (".ios", ".android", ".native", ".web")
 
 
 @pytest.fixture(autouse=True)
@@ -41,11 +42,21 @@ class TestIsRelativeSpecifier:
 
 class TestRelativeImportCandidates:
     def test_extensionless_tries_each_extension_then_each_index(self) -> None:
+        # Each extension is tried with React Native's platform suffixes first
+        # (BDL-080 `beadloom-cwzc`): `dates.ios.ts` before `dates.ts`.
         candidates = relative_import_candidates("../shared/dates", "src/app/main.ts")
         assert candidates == [
             "src/shared/dates",
-            *(f"src/shared/dates{ext}" for ext in _EXTENSIONS),
-            *(f"src/shared/dates/index{ext}" for ext in _EXTENSIONS),
+            *(
+                f"src/shared/dates{platform}{ext}"
+                for ext in _EXTENSIONS
+                for platform in (*_PLATFORMS, "")
+            ),
+            *(
+                f"src/shared/dates/index{platform}{ext}"
+                for ext in _EXTENSIONS
+                for platform in (*_PLATFORMS, "")
+            ),
         ]
 
     def test_written_js_extension_tries_the_file_then_its_typescript_source(self) -> None:
@@ -71,7 +82,8 @@ class TestRelativeImportCandidates:
 
     def test_importer_at_the_project_root(self) -> None:
         candidates = relative_import_candidates("./util", "main.ts")
-        assert candidates[:2] == ["util", "util.ts"]
+        assert candidates[:2] == ["util", "util.ios.ts"]
+        assert "util.ts" in candidates
         assert "util/index.ts" in candidates
 
     def test_a_specifier_that_leaves_the_project_names_nothing(self) -> None:
@@ -158,3 +170,18 @@ class TestExtractVueImports:
         vue = tmp_path / "Badge.vue"
         vue.write_text("<template><b>import x from './y'</b></template>\n")
         assert extract_imports(vue) == []
+
+
+@pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
+class TestExtractModuleScripts:
+    """BDL-080 `beadloom-cwzc`, closing `beadloom-zd4m`: `.mjs`/`.cjs` are parsed as JavaScript."""
+
+    def test_an_mjs_module_s_imports_are_read(self, tmp_path: Path) -> None:
+        mjs = tmp_path / "config.mjs"
+        mjs.write_text("import { a } from './a.js';\nexport { b } from '@shared/b';\n")
+        assert [imp.import_path for imp in extract_imports(mjs)] == ["./a.js", "@shared/b"]
+
+    def test_a_cjs_module_s_dynamic_import_is_read(self, tmp_path: Path) -> None:
+        cjs = tmp_path / "loader.cjs"
+        cjs.write_text("module.exports = () => import('./lazy.mjs');\n")
+        assert [imp.import_path for imp in extract_imports(cjs)] == ["./lazy.mjs"]
