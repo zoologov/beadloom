@@ -206,9 +206,11 @@ def generate_fsd_rules(frontend: str, rules_path: Path) -> int:
     ``FSD architecture`` for the portal, ``slice_public_api``, ``slice_shape`` and one
     cohesion ``check`` per layer (:data:`FSD_COHESION_LIMITS`). Written as text, so
     the owner's reason for each rule stands beside it in the file an adopter edits.
+    The count is read back from the text written, so it cannot drift from it.
     """
-    write_text_atomic(rules_path, fsd_rules_text(frontend))
-    return 3 + len(FSD_COHESION_LIMITS)
+    text = fsd_rules_text(frontend)
+    write_text_atomic(rules_path, text)
+    return len(yaml.safe_load(text)["rules"])
 
 
 #: The authoring keys whose label in the agent instructions is not the key

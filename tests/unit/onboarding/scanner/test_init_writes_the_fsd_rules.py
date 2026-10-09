@@ -17,6 +17,7 @@ from beadloom.graph.rules.types import (
     SlicePublicApiRule,
     SliceShapeRule,
 )
+from beadloom.onboarding.scanner import rules_gen
 from beadloom.onboarding.scanner.rules_gen import (
     FSD_COHESION_LIMITS,
     generate_fsd_rules,
@@ -24,6 +25,8 @@ from beadloom.onboarding.scanner.rules_gen import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    import pytest
 
 SLICE_TAGS = ("fsd-pages", "fsd-widgets", "fsd-features", "fsd-entities")
 
@@ -96,6 +99,18 @@ def test_the_count_is_the_number_of_rules_written(tmp_path: Path) -> None:
     count, path = _written(tmp_path)
 
     assert count == len(load_rules(path)) == 9
+
+
+def test_the_count_follows_the_text_not_a_constant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # BDL-080 S3f (beadloom-af99.14), the S3 review's nit 6: the count was `3 + len(...)`,
+    # so a rule taken out of the text left the number init prints unchanged.
+    monkeypatch.setattr(rules_gen, "_FSD_SHAPE_RULE", "")
+
+    count, path = _written(tmp_path)
+
+    assert count == len(load_rules(path)) == 2 + len(FSD_COHESION_LIMITS)
 
 
 def test_each_rule_carries_the_owners_wording(tmp_path: Path) -> None:

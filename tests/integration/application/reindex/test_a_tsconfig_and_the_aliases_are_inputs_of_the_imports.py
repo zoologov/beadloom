@@ -16,8 +16,11 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.application.reindex import incremental_reindex, reindex
+from beadloom.graph.import_manifests import manifests_changed
+from beadloom.infrastructure.db import open_db
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 pytest.importorskip("tree_sitter_typescript")
@@ -86,3 +89,28 @@ def test_a_project_with_no_script_import_reads_no_tsconfig(
 
     monkeypatch.setattr("beadloom.graph.import_manifests.TsConfigs", _walked)
     assert incremental_reindex(root).nothing_changed is True
+
+
+def test_the_readers_share_one_walk_of_the_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # BDL-080 S3f (beadloom-af99.14), the S3 review's minor 5: the tsconfig reader and the
+    # Expo module reader each walked the project, so a run of a project with JavaScript
+    # imports listed its root twice before deciding nothing had changed.
+    root = _project(tmp_path / "web", _ALIASES, _SCRIPT)
+    reindex(root)
+    conn = open_db(root / ".beadloom" / "beadloom.db")
+    listed: list[Path] = []
+    original = type(root).iterdir
+
+    def _counting(self: Path) -> Iterator[Path]:  # a spy on the walk
+        listed.append(self)
+        return original(self)
+
+    monkeypatch.setattr(type(root), "iterdir", _counting)
+    try:
+        manifests_changed(root, conn, aliases=(("#ui", "src/ui"),))
+    finally:
+        conn.close()
+
+    assert listed.count(root) == 1

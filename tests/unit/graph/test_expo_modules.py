@@ -143,3 +143,13 @@ class TestTheWalk:
             ("modules/lock/expo-module.config.json", '{"ios": {}}'),
             ("modules/pulse/expo-module.config.json", "{}"),
         )
+
+
+@pytest.mark.parametrize("skipped", ["venv/lib/x", ".venv/lib/x", "target/debug/x"])
+def test_a_config_in_a_virtualenv_or_a_build_folder_is_not_read(
+    tmp_path: Path, skipped: str
+) -> None:
+    # BDL-080 S3f (beadloom-af99.14): the walk skipped neither venv/ nor target/.
+    _module(tmp_path, skipped, {"apple": {"modules": ["M"]}}, native=("ios",))
+
+    assert ExpoModules(tmp_path).manifests == ()

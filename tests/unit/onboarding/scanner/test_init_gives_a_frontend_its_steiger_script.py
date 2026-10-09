@@ -9,8 +9,12 @@ and what is left to install.
 from __future__ import annotations
 
 import json
+import stat
 from typing import TYPE_CHECKING
 
+import pytest
+
+from beadloom.onboarding.scanner import steiger_script
 from beadloom.onboarding.scanner.steiger_script import ensure_steiger_script
 
 if TYPE_CHECKING:
@@ -97,3 +101,53 @@ def test_an_unreadable_package_json_is_named_and_not_rewritten(tmp_path: Path) -
     assert not result.written
     assert (tmp_path / "package.json").read_text(encoding="utf-8") == "{ not json"
     assert "package.json" in result.sentence()
+
+
+# BDL-080 S3f (beadloom-af99.14), the S3 review's minor 2: the file keeps its own indent,
+# is written whole or not at all, and keeps its permissions.
+
+
+@pytest.mark.parametrize("indent", ["\t", "    ", "  "])
+def test_the_file_keeps_its_own_indentation(tmp_path: Path, indent: str) -> None:
+    data = {"name": "web", "scripts": {"dev": "vite"}, "dependencies": {"vue": "3.5.0"}}
+    (tmp_path / "package.json").write_text(json.dumps(data, indent=indent) + "\n", "utf-8")
+
+    ensure_steiger_script(tmp_path, "src")
+
+    expected = {**data, "scripts": {"dev": "vite", "lint:fsd": "steiger ./src"}}
+    written = (tmp_path / "package.json").read_text(encoding="utf-8")
+    assert written == json.dumps(expected, indent=indent, ensure_ascii=False) + "\n"
+
+
+def test_a_one_line_file_is_written_with_two_spaces(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text('{"name": "web"}', encoding="utf-8")
+
+    ensure_steiger_script(tmp_path, "src")
+
+    expected = {"name": "web", "scripts": {"lint:fsd": "steiger ./src"}}
+    written = (tmp_path / "package.json").read_text(encoding="utf-8")
+    assert written == json.dumps(expected, indent=2) + "\n"
+
+
+def test_the_file_is_written_through_the_atomic_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _package(tmp_path, {"name": "web"})
+    written: list[Path] = []
+    monkeypatch.setattr(
+        steiger_script, "write_text_atomic", lambda path, text: written.append(path)
+    )
+
+    ensure_steiger_script(tmp_path, "src")
+
+    assert written == [tmp_path / "package.json"]
+
+
+def test_the_file_keeps_its_permissions(tmp_path: Path) -> None:
+    _package(tmp_path, {"name": "web"})
+    path = tmp_path / "package.json"
+    path.chmod(0o644)
+
+    ensure_steiger_script(tmp_path, "src")
+
+    assert stat.S_IMODE(path.stat().st_mode) == 0o644

@@ -25,6 +25,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
 #: How many folder listings are kept before the cache starts over; a bound, not a tuning.
@@ -63,3 +64,23 @@ def is_named_in_its_case(project_root: Path, relative: str) -> bool:
             return False
         folder = folder / part
     return True
+
+
+def first_existing_file(candidates: Sequence[str], project_root: Path) -> str | None:
+    """The first of *candidates* that is a file under *project_root*, named in its case.
+
+    ``None`` when no candidate is. A candidate counts only when every part of its path
+    is a name its folder lists exactly (BDL-080 S3e): on a filesystem that folds case
+    (macOS, Windows) ``src/app.vue`` answers ``is_file()`` for ``src/App.vue``, and as
+    the ``.vue`` candidate precedes the folder index, ``./app`` beside ``App.vue`` and
+    ``app/index.ts`` resolved to App.vue there and to the index on Linux. The bundler
+    agrees with Linux: Vite's default ``resolve.extensions`` holds no ``.vue``.
+
+    The one completion of a candidate list: the resolver names its file with it, and the
+    ``slice_public_api`` rule locates the file an import reached with it, so the two cannot
+    name different files for one import (BDL-080 S3f).
+    """
+    for candidate in candidates:
+        if (project_root / candidate).is_file() and is_named_in_its_case(project_root, candidate):
+            return candidate
+    return None

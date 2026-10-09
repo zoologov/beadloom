@@ -239,7 +239,7 @@ def bootstrap_project(
         fsd,
         ref_ids,
         root_ref_id,
-        lambda unit: _fsd_summary(unit, project_root, all_entry_points),
+        lambda unit: _unit_summary(unit, project_root, all_entry_points),
     )
     nodes.extend(fsd_graph.nodes)
     edges.extend(fsd_graph.edges)
@@ -251,7 +251,7 @@ def bootstrap_project(
         expo,
         ref_ids,
         root_ref_id,
-        lambda unit: _expo_summary(unit, project_root, all_entry_points),
+        lambda unit: _unit_summary(unit, project_root, all_entry_points),
     )
     nodes.extend(expo_graph.nodes)
     edges.extend(expo_graph.edges)
@@ -510,26 +510,19 @@ def bootstrap_project(
     }
 
 
-def _expo_summary(
-    unit: ExpoModuleUnit | NativePart, project_root: Path, entry_points: list[dict[str, str]]
+def _unit_summary(
+    unit: FsdUnit | ExpoModuleUnit | NativePart,
+    project_root: Path,
+    entry_points: list[dict[str, str]],
 ) -> str:
-    """The contextual summary of an Expo module or one of its native parts."""
+    """The contextual summary of a unit a layout writes as a component, built as a cluster's is.
+
+    One body for every layout's unit (an FSD slice, segment, container or legacy folder;
+    an Expo module or one of its native parts), named after the last folder of its path.
+    """
     return _build_contextual_summary(
         project_root / unit.directory,
         unit.directory.rsplit("/", 1)[-1],
-        "component",
-        list(unit.files),
-        project_root,
-        entry_points=entry_points,
-    )
-
-
-def _fsd_summary(unit: FsdUnit, project_root: Path, entry_points: list[dict[str, str]]) -> str:
-    """The contextual summary of one FSD unit, built as a cluster's is."""
-    folder = unit.directory.rsplit("/", 1)[-1]
-    return _build_contextual_summary(
-        project_root / unit.directory,
-        folder,
         "component",
         list(unit.files),
         project_root,

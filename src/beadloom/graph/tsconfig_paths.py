@@ -7,7 +7,8 @@ whatever the project declared, so an Expo app whose ``@/*`` names the project ro
 edge for any of those imports.
 
 **Which configs are read.** Every ``tsconfig.json``, ``tsconfig.<name>.json`` and
-``jsconfig.json`` in the project, found by one walk that skips hidden folders and the
+``jsconfig.json`` in the project, found by the project's one walk
+(:class:`~beadloom.graph.project_walk.ProjectFiles`), which skips hidden folders and the
 folders that hold other people's code or build output. An importing file is governed by
 the configs of the nearest folder at or above it that holds any: all of them, because
 ``create-vue`` puts ``paths`` in ``tsconfig.app.json`` beside a ``tsconfig.json`` that
@@ -41,6 +42,8 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+from beadloom.graph.project_walk import ProjectFiles
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -49,9 +52,6 @@ _TSCONFIG = "tsconfig.json"
 _TSCONFIG_PREFIX = "tsconfig."
 _JSCONFIG = "jsconfig.json"
 _JSON = ".json"
-
-#: Folders the walk for configs never enters, beside every hidden one.
-_SKIPPED_DIRECTORIES = frozenset({"node_modules", "dist", "build", "vendor", "Pods"})
 
 #: The deepest ``extends`` chain followed; a longer one is a cycle in all but name.
 _MAX_EXTENDS = 16
@@ -178,36 +178,23 @@ def _matched(specifier: str, paths: tuple[tuple[str, tuple[str, ...]], ...]) -> 
 
 
 class TsConfigs:
-    """The tsconfig/jsconfig files of one project, read once on first use."""
+    """The tsconfig/jsconfig files of one project, read once on first use.
 
-    def __init__(self, project_root: Path) -> None:
+    *files* is the project's walk, shared with the other readers of one run; without it
+    the configs are found by a walk of their own.
+    """
+
+    def __init__(self, project_root: Path, files: ProjectFiles | None = None) -> None:
         self._root = project_root
+        self._files = files if files is not None else ProjectFiles(project_root)
 
     @cached_property
     def _found(self) -> dict[str, list[str]]:
         """Every config's project-relative path, keyed by its folder, in reading order."""
-        found: dict[str, list[str]] = {}
-        pending = [self._root]
-        while pending:
-            current = pending.pop()
-            try:
-                children = sorted(current.iterdir())
-            except OSError:
-                continue
-            for child in children:
-                if child.is_dir():
-                    if not (
-                        child.is_symlink()
-                        or child.name.startswith(".")
-                        or child.name in _SKIPPED_DIRECTORIES
-                    ):
-                        pending.append(child)
-                elif _is_config(child.name):
-                    folder = current.relative_to(self._root).as_posix()
-                    found.setdefault("" if folder == "." else folder, []).append(child.name)
         return {
-            folder: [posixpath.join(folder, n) for n in sorted(names, key=_config_order)]
-            for folder, names in found.items()
+            folder: [posixpath.join(folder, n) for n in sorted(configs, key=_config_order)]
+            for folder, names in self._files.folders
+            if (configs := [name for name in names if _is_config(name)])
         }
 
     @cached_property

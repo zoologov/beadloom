@@ -219,6 +219,19 @@ names its bead; the pull request is to be opened.
   empty, so the root service was written as `''` and `init` exited 1 with `domain-needs-parent`
   on every domain. Found on scratch copies of the Java, Kotlin and Swift adopter fixtures
   (`beadloom-hvnv`); an absolute path, or no `--project` at all, was not affected.
+- **The `fsd` preset is chosen only for a frontend (`beadloom-af99.14`).** It was chosen from
+  folder names alone and tried before every other preset, so a Python tree holding
+  `src/app`, `src/entities` and `src/shared` was detected as `fsd`: `init` wrote the frontend
+  rules, which ask for `npm run lint:fsd`, and left `src/entities/order.py` without a node.
+  Release 8.0.0 read that tree as a monolith, and now does again. Three layer folders count as
+  the layout only when they hold JavaScript, TypeScript or Vue code, or when a `package.json`
+  sits at the project root or in the FSD root. The two FSD adopter fixtures are still `fsd`,
+  and the six others keep their presets.
+- **`init` keeps the indentation of the `package.json` it adds `lint:fsd` to
+  (`beadloom-af99.14`).** It rewrote the file with a fixed two-space indent, so on a
+  tab-indented file every line changed. It now writes in the indentation the file already has
+  (two spaces for a file on one line), the way npm does, so the diff is the one script. The
+  write is atomic, and the file keeps its permissions.
 
 ## [8.0.0] - 2026-10-08
 

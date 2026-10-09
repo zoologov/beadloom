@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.expo_modules import ExpoModules
 from beadloom.graph.go_modules import GoModules
+from beadloom.graph.project_walk import ProjectFiles
 from beadloom.graph.swift_packages import SwiftPackages
 from beadloom.graph.tsconfig_paths import TsConfigs
 from beadloom.infrastructure.db import get_meta, set_meta
@@ -157,9 +158,10 @@ def manifests_changed(
     script = _holds(conn, _SCRIPT_FILES)
     if not native and not script:
         return False
+    files = ProjectFiles(project_root)
     current = _readings(
         (GoModules(project_root), SwiftPackages(project_root)) if native else None,
-        (TsConfigs(project_root), ExpoModules(project_root)) if script else None,
+        (TsConfigs(project_root, files), ExpoModules(project_root, files)) if script else None,
         aliases,
     )
     return get_meta(conn, MANIFESTS_META_KEY) != current

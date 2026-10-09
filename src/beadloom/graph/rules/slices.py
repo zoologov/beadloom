@@ -17,9 +17,12 @@ layer order between slices is the ``layers`` rule's, not theirs.
   the slice's folder by its longest trailing path that names a file there:
   ``@/features/auth/model/session`` names ``model/session.ts`` inside
   ``src/features/auth``, and ``@/features/auth`` names nothing deeper, so the folder
-  itself, so its ``index``. An import into a slice that has no ``index`` is a finding
-  too: there is no public API to enter it through. An import whose file cannot be
-  located in a slice that has one is not judged.
+  itself, so its ``index``. Either way a candidate is the file only when its path is
+  named in its exact case (:func:`~beadloom.graph.exact_case.first_existing_file`, the
+  resolver's own completion): on macOS ``app.vue`` answers ``is_file()`` for ``App.vue``,
+  and until BDL-080 S3f the rule judged a file the resolver had not reached. An import
+  into a slice that has no ``index`` is a finding too: there is no public API to enter it
+  through. An import whose file cannot be located in a slice that has one is not judged.
 - :func:`evaluate_slice_shape_rules` — ``slice_shape``
   (:class:`~beadloom.graph.rules.types.SliceShapeRule`). A folder at a slice's top that
   is not one of the rule's ``segments``, and a code file there that is not its
@@ -35,6 +38,7 @@ import posixpath
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from beadloom.graph.exact_case import first_existing_file
 from beadloom.graph.js_specifiers import (
     MODULE_EXTENSIONS,
     is_relative_specifier,
@@ -88,13 +92,6 @@ def _slice_folders(
     }
 
 
-def _first_file(candidates: Sequence[str], project_root: Path) -> str | None:
-    for candidate in candidates:
-        if (project_root / candidate).is_file():
-            return candidate
-    return None
-
-
 def _inside(path: str, folder: str) -> bool:
     return path == folder or path.startswith(f"{folder}/")
 
@@ -102,16 +99,16 @@ def _inside(path: str, folder: str) -> bool:
 def _located(specifier: str, importer: str, folder: str, project_root: Path) -> str | None:
     """The file inside *folder* that *specifier*, imported by *importer*, names; or ``None``."""
     if is_relative_specifier(specifier):
-        found = _first_file(relative_import_candidates(specifier, importer), project_root)
+        found = first_existing_file(relative_import_candidates(specifier, importer), project_root)
         return found if found is not None and _inside(found, folder) else None
     segments = [segment for segment in specifier.split("/") if segment]
     for start in range(len(segments) + 1):
         target = posixpath.normpath(posixpath.join(folder, *segments[start:]))
         if not _inside(target, folder):
             continue
-        found = _first_file(module_file_candidates(target), project_root)
+        found = first_existing_file(module_file_candidates(target), project_root)
         if found is not None:
-            return found
+            return found if _inside(found, folder) else None
     return None
 
 

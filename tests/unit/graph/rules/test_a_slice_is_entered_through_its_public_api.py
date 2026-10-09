@@ -209,3 +209,32 @@ class TestTheLoaderReadsTheRule:
             ),
         ):
             load_rules(self._file(tmp_path, block))
+
+
+def _app_beside_app_vue(root: Path) -> sqlite3.Connection:
+    """A slice ``src/entities/app/`` with its index, and ``App.vue`` beside its folder."""
+    _write(root, "src/entities/app/index.ts", "src/entities/App.vue", "src/pages/home/Home.ts")
+    conn = open_graph()
+    for ref_id, source, tags in (
+        ("entities-app", "src/entities/app/", ["fsd-entities"]),
+        ("pages-home", "src/pages/home/", ["fsd-pages"]),
+    ):
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source, extra) VALUES (?, ?, ?, ?, ?)",
+            (ref_id, "component", ref_id, source, json.dumps({"tags": tags})),
+        )
+    return conn
+
+
+@pytest.mark.parametrize("specifier", ["@/entities/app", "../../entities/app"])
+def test_a_name_is_completed_in_its_exact_case_as_the_resolver_does(
+    tmp_path: Path, specifier: str
+) -> None:
+    # BDL-080 S3f (beadloom-af99.14), the S3 review's minor 3. The resolver resolves
+    # `entities/app` to the folder's index on every filesystem (graph/exact_case.py); on
+    # one that folds case, `is_file()` also answers for `app.vue` beside it, App.vue, and
+    # the rule read the import as reaching past the slice's index into it.
+    conn = _app_beside_app_vue(tmp_path)
+    _import(conn, "src/pages/home/Home.ts", specifier, "entities-app")
+
+    assert _findings(conn, tmp_path) == []

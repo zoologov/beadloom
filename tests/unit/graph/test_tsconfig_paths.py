@@ -214,3 +214,14 @@ class TestManifests:
     def test_a_project_with_no_config_has_none(self, tmp_path: Path) -> None:
         assert TsConfigs(tmp_path).manifests == ()
         assert TsConfigs(tmp_path).mapped("@/a", "src/main.ts") == ()
+
+
+@pytest.mark.parametrize("folder", ["venv", ".venv", "target"])
+def test_a_config_in_a_virtualenv_or_a_build_folder_is_not_read(
+    tmp_path: Path, folder: str
+) -> None:
+    # BDL-080 S3f (beadloom-af99.14): the walk skipped neither venv/ nor target/.
+    (tmp_path / folder / "pkg").mkdir(parents=True)
+    (tmp_path / folder / "pkg" / "tsconfig.json").write_text("{}", encoding="utf-8")
+
+    assert TsConfigs(tmp_path).manifests == ()

@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+from beadloom.graph.project_walk import ProjectFiles
 from beadloom.infrastructure.repository import get_owning_ref_id
 
 if TYPE_CHECKING:
@@ -48,9 +49,6 @@ if TYPE_CHECKING:
 
 #: The file an Expo module declares its native modules in.
 EXPO_MODULE_CONFIG = "expo-module.config.json"
-
-#: Folders the walk for configs does not enter: installed packages and build output.
-_SKIPPED_DIRECTORIES = frozenset({"node_modules", "dist", "build", "vendor", "Pods"})
 
 
 @dataclass(frozen=True)
@@ -130,37 +128,27 @@ def bridges_of(project_root: Path, config_path: str, text: str) -> tuple[NativeB
 
 
 class ExpoModules:
-    """The ``expo-module.config.json`` files of one project, found by one walk on first use."""
+    """The ``expo-module.config.json`` files of one project, found by one walk on first use.
 
-    def __init__(self, project_root: Path) -> None:
+    *files* is the project's walk, shared with the other readers of one run; without it
+    the configs are found by a walk of their own.
+    """
+
+    def __init__(self, project_root: Path, files: ProjectFiles | None = None) -> None:
         self._root = project_root
+        self._files = files if files is not None else ProjectFiles(project_root)
 
     @cached_property
     def manifests(self) -> tuple[tuple[str, str], ...]:
         """``(path, text)`` of every config, by project-relative path."""
         found: list[tuple[str, str]] = []
-        pending = [self._root]
-        while pending:
-            current = pending.pop()
+        for path in self._files.named(lambda name: name == EXPO_MODULE_CONFIG):
             try:
-                children = sorted(current.iterdir())
-            except OSError:
+                text = (self._root / path).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
                 continue
-            for child in children:
-                if child.is_dir():
-                    if not (
-                        child.is_symlink()
-                        or child.name.startswith(".")
-                        or child.name in _SKIPPED_DIRECTORIES
-                    ):
-                        pending.append(child)
-                elif child.name == EXPO_MODULE_CONFIG:
-                    try:
-                        text = child.read_text(encoding="utf-8")
-                    except (OSError, UnicodeDecodeError):
-                        continue
-                    found.append((child.relative_to(self._root).as_posix(), text))
-        return tuple(sorted(found))
+            found.append((path, text))
+        return tuple(found)
 
     @cached_property
     def bridges(self) -> tuple[NativeBridge, ...]:

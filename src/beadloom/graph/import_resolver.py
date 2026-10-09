@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config, script_blocks
-from beadloom.graph.exact_case import is_named_in_its_case
+from beadloom.graph.exact_case import first_existing_file
 from beadloom.graph.expo_modules import ExpoModules, refresh_bridge_edges
 from beadloom.graph.go_modules import GoModules
 from beadloom.graph.import_manifests import record_manifests
@@ -25,6 +25,7 @@ from beadloom.graph.js_specifiers import (
     relative_import_candidates,
 )
 from beadloom.graph.jvm_packages import JVM_EXTENSIONS, JvmPackages, read_jvm_packages
+from beadloom.graph.project_walk import ProjectFiles
 from beadloom.graph.rules.layers import part_of_ancestors
 from beadloom.graph.swift_packages import SwiftPackages
 from beadloom.graph.tsconfig_paths import TsConfigs
@@ -828,22 +829,6 @@ def _normalize_ts_import(import_path: str) -> str | None:
     return None
 
 
-def _first_existing(candidates: Sequence[str], project_root: Path) -> str | None:
-    """The first of *candidates* that is a file under *project_root*, named in its case.
-
-    ``None`` when no candidate is. A candidate counts only when every part of its path
-    is a name its folder lists exactly (BDL-080 S3e): on a filesystem that folds case
-    (macOS, Windows) ``src/app.vue`` answers ``is_file()`` for ``src/App.vue``, and as
-    the ``.vue`` candidate precedes the folder index, ``./app`` beside ``App.vue`` and
-    ``app/index.ts`` resolved to App.vue there and to the index on Linux. The bundler
-    agrees with Linux: Vite's default ``resolve.extensions`` holds no ``.vue``.
-    """
-    for candidate in candidates:
-        if (project_root / candidate).is_file() and is_named_in_its_case(project_root, candidate):
-            return candidate
-    return None
-
-
 def _mapped_file(tree: _ImportTree, importer: str, specifier: str) -> str | None:
     """The file a non-relative JS/TS *specifier* names through what the project declares.
 
@@ -860,7 +845,7 @@ def _mapped_file(tree: _ImportTree, importer: str, specifier: str) -> str | None
         tree.ts_configs.under_base_url(specifier, importer),
     ):
         for target in targets:
-            found = _first_existing(module_file_candidates(target), tree.project_root)
+            found = first_existing_file(module_file_candidates(target), tree.project_root)
             if found is not None:
                 return found
     return None
@@ -881,7 +866,7 @@ def resolve_relative_import(
     no file, or names a file no node owns; the caller records either as an
     unresolved import rather than dropping it.
     """
-    found = _first_existing(relative_import_candidates(specifier, importer), project_root)
+    found = first_existing_file(relative_import_candidates(specifier, importer), project_root)
     return get_owning_ref_id(conn, found) if found is not None else None
 
 
@@ -1342,6 +1327,7 @@ def _read_import_tree(
 ) -> _ImportTree:
     """Read the tree one run resolves its imports against; *files* are its source files."""
     scan_paths = resolve_scan_paths(project_root)
+    files_walked = ProjectFiles(project_root)
     return _ImportTree(
         project_root=project_root,
         scan_paths=scan_paths,
@@ -1350,9 +1336,9 @@ def _read_import_tree(
         go_modules=GoModules(project_root),
         swift_packages=SwiftPackages(project_root),
         jvm_packages=read_jvm_packages(project_root, files),
-        ts_configs=TsConfigs(project_root),
+        ts_configs=TsConfigs(project_root, files_walked),
         aliases=tuple(aliases),
-        expo_modules=ExpoModules(project_root),
+        expo_modules=ExpoModules(project_root, files_walked),
     )
 
 
