@@ -28,6 +28,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/test_binding.py` — `test_binding`: a test file bound to no node (the `files` leg) and a node with no bound test file, its own or a `part_of` descendant's (the `for` leg), over the binding the reindex records in `test_files` (BDL-074 C3).
 - `rules/test_import_boundary.py` — `test_import_boundary`: chooses which recorded TEST imports a boundary judges, then hands them to `forbid_import`'s own evaluator (BDL-074 C3).
 - `rules/scenario_binding.py` — `scenario_binding`: a scenario's `@node:` tag against the node folder its feature file sits in. Whether the scenario's steps execute that node is NOT judged (see below) (BDL-074 C3).
+- `rules/slices.py` — the two Feature-Sliced Design slice rules, `slice_public_api` and `slice_shape`, judged per slice over the slice's folder on disk, and `slice_rule_inert_reason`, which `liveness.py` reads (BDL-080 S3c).
 - `rules/suite_tables.py` — the `test_files` and `test_imports` tables read for the suite rules (`IndexedTestFile` carries each file's `path`, `ref_id`, `placement` and, since BDL-074 F1, its recorded `kind`), and `NodeSelection` (which nodes a matcher selects, and whether a node is one of them or `part_of` one). Every reader returns `None` for an index written before those tables existed, so a rule says "reindex" rather than reporting every node untested (BDL-074 C3).
 - `rules/listed_exemptions.py` — `ExemptionLedger`: what a `ListedExemption` does — which entry excuses a subject, which entries excuse nothing (dead) and which exemptions are past their `until` date while still excusing something (expired). `excused` counts the subjects the entries excused in a run, and `exemptions_used` (BDL-074 F1) how many exemptions excused at least one, which the `files` leg states as `excused by K exemption(s)`. The counterpart of `exemptions.py` for exemptions that list paths or node ids rather than a from/to glob pair (BDL-074 C3).
 - `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports.
@@ -38,7 +39,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 
 ### Purpose
 
-Enforce architectural constraints declaratively. Rules are defined in a YAML file and evaluated against the graph database (nodes, edges, code_imports, code_symbols, file_index, and sync_state tables). **Fifteen** rule types exist — `load_rules` dispatched nine from BDL-051 S3a, BDL-061 S4 added `scenario_coverage`, BDL-062 added `doc_area_coherence` (`.2`) and `summary_facts` (`.1`), and BDL-074 C3 added `test_binding`, `test_import_boundary` and `scenario_binding`. This table listed seven until BDL-061.48 counted them against the loader, and ten until BDL-062 `.1` counted them again; the count and the rows are checked against the loader's own dispatch, not against each other:
+Enforce architectural constraints declaratively. Rules are defined in a YAML file and evaluated against the graph database (nodes, edges, code_imports, code_symbols, file_index, and sync_state tables). **Seventeen** rule types exist — `load_rules` dispatched nine from BDL-051 S3a, BDL-061 S4 added `scenario_coverage`, BDL-062 added `doc_area_coherence` (`.2`) and `summary_facts` (`.1`), BDL-074 C3 added `test_binding`, `test_import_boundary` and `scenario_binding`, and BDL-080 S3c added `slice_public_api` and `slice_shape`. This table listed seven until BDL-061.48 counted them against the loader, and ten until BDL-062 `.1` counted them again; the count and the rows are checked against the loader's own dispatch, not against each other:
 
 | Type | Keyword | Semantics |
 |------|---------|-----------|
@@ -57,6 +58,8 @@ Enforce architectural constraints declaratively. Rules are defined in a YAML fil
 | **test_binding** | `test_binding` | A test file bound to no node, and a node with no bound test file |
 | **test_import_boundary** | `test_import_boundary` | Forbid imports from test files, narrowed to the tests of matched nodes |
 | **scenario_binding** | `scenario_binding` | A scenario's `@node:` tag names the node folder its feature file sits in |
+| **slice_public_api** | `slice_public_api` | An import into a Feature-Sliced slice from outside it lands on the slice's `index` |
+| **slice_shape** | `slice_shape` | A slice's top holds only its segments and its `index` |
 
 ### Constants
 
@@ -72,7 +75,7 @@ VALID_EDGE_KINDS: frozenset[str] = frozenset({
 SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2, 3})
 
 # Every key a rule may declare to select its type. A rule declares exactly one.
-# The keys of the dispatch table below, plus `layers`: fifteen.
+# The keys of the dispatch table below, plus `layers`: seventeen.
 AUTHORING_KEYS: frozenset[str] = frozenset({*_MAPPING_PARSERS, _KEY_READ_FROM_THE_RULE})
 ```
 
@@ -107,20 +110,23 @@ All dataclasses are frozen (immutable).
 
 #### `NodeMatcher`
 
-Matches graph nodes by `ref_id`, `kind`, `tag`, and/or `exclude`. In deny rules, at least one of `ref_id`, `kind`, or `tag` must be non-`None`. In require rules, an empty matcher (`has_edge_to: {}`) is allowed and matches **any** node — used for "must have at least one edge of this kind" semantics.
+Matches graph nodes by `ref_id`, `kind`, `tag`, `tag_prefix`, and/or `exclude`. In deny rules, at least one of `ref_id`, `kind`, `tag`, or `tag_prefix` must be non-`None`. In require rules, an empty matcher (`has_edge_to: {}`) is allowed and matches **any** node — used for "must have at least one edge of this kind" semantics.
 
 | Field     | Type                        | Description                                                        |
 |-----------|-----------------------------|--------------------------------------------------------------------|
 | `ref_id`  | `str \| None`               | Exact ref_id to match, or `None` for any.                          |
 | `kind`    | `str \| None`               | Node kind to match, or `None` for any.                             |
 | `tag`     | `str \| None`               | Tag the node must have, or `None` for any.                         |
+| `tag_prefix` | `str \| None`            | The beginning of a tag the node must carry: a node matches when ANY of its tags begins with it (BDL-080 S2b). `fsd-` selects a slice of every Feature-Sliced layer, where `tag` needs one rule per layer. `None` for any. |
 | `exclude` | `tuple[str, ...] \| None`   | Ref_ids to exclude from matching, or `None` for no exclusions.     |
 
 ```python
 def matches(self, node_ref_id: str, node_kind: str, *, tags: set[str] | None = None) -> bool
 ```
 
-Returns `False` immediately if `node_ref_id` is in `exclude`. Otherwise returns `True` if all non-`None` fields (`ref_id`, `kind`, `tag`) match the given node. The `tags` parameter is optional for backward compatibility; when `tags` is `None` and `self.tag` is set, the tag check is skipped.
+Returns `False` immediately if `node_ref_id` is in `exclude`. Otherwise returns `True` if all non-`None` fields (`ref_id`, `kind`, `tag`, `tag_prefix`) match the given node. The `tags` parameter is optional for backward compatibility; when `tags` is `None`, the `tag` and `tag_prefix` checks are skipped. An evaluator that judges by tags reads the property `reads_tags` (true when `tag` or `tag_prefix` is set) and loads the node's tags only then: `deny`, `require`, `forbid`, `check` and `scenario_coverage` all go through it, so a matcher selecting by `tag_prefix` alone is judged on tags rather than skipped (BDL-080 S2b).
+
+`describe()` renders the matcher as it reads in a finding: the set fields as `ref_id=…, kind=…, tag=…, tag_prefix=…`, or `everything`.
 
 In YAML, `exclude` accepts either a single string or a list of strings; both are normalized to a tuple internally by `_parse_node_matcher()`.
 
@@ -213,7 +219,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 
 #### Rule liveness (a rule that cannot fire)
 
-**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs), `scenario_coverage.py` for `scenario_coverage` (whose legs are decided by files on disk that no index holds), `doc_area.py` for `doc_area_coherence` (whose applicability is decided by the graph's own data rather than by its configuration), and `summary_facts.py` for `summary_facts` (for the same reason, and because it reports a second kind of ignorance no other rule has: one node whose claim cannot be checked, while the rule itself is live). The three suite rules of BDL-074 C3 report their own in `test_binding.py`, `test_import_boundary.py` and `scenario_binding.py`, and `liveness.py` counts each through that module's `*_inert_reason` predicate, so the finding and the count cannot disagree.
+**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types and, through `slices.slice_rule_inert_reason`, the two slice rules, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs), `scenario_coverage.py` for `scenario_coverage` (whose legs are decided by files on disk that no index holds), `doc_area.py` for `doc_area_coherence` (whose applicability is decided by the graph's own data rather than by its configuration), and `summary_facts.py` for `summary_facts` (for the same reason, and because it reports a second kind of ignorance no other rule has: one node whose claim cannot be checked, while the rule itself is live). The three suite rules of BDL-074 C3 report their own in `test_binding.py`, `test_import_boundary.py` and `scenario_binding.py`, and `liveness.py` counts each through that module's `*_inert_reason` predicate, so the finding and the count cannot disagree.
 
 **Reporting a rule and counting it are two questions, and for `scenario_coverage` and `doc_area_coherence` two modules answer them.** The finding says *what stood down and which glob did it*; `LintResult.rules_inert` says *how many of my rules checked nothing*. `liveness.py` counts `scenario_coverage` through that module's own `inert_reason` predicate and `doc_area_coherence` through `doc_area_inert_reason` — not second copies of them — and does not report either a second time. Until BDL-061.66 the count had no branch for the type at all: `13 rules evaluated, 0 inert` printed over a rule that had stood all four legs down.
 
@@ -221,7 +227,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 
 | Rule type | Inert when | Reported by |
 |-----------|------------|-------------|
-| `deny` | its `from` or `to` matcher selects **0** nodes (an unknown `ref_id` is named as such; otherwise the tag or kind nobody carries is named) | `liveness.py` |
+| `deny` | its `from` or `to` matcher selects **0** nodes. An unknown `ref_id` is named as such. Otherwise a `tag`, a `tag_prefix` or a `kind` is named only when **no** node carries it, in that order, and a matcher whose fields are each carried by some node but never together reads "its `<key>` matches none of the N nodes in the graph" (BDL-080 S2d: before it, a matcher setting `tag` and `tag_prefix` that was inert because of the prefix was blamed on a tag a node does carry). The same reason serves every matcher of `require`, `forbid` and `check` | `liveness.py` |
 | `require` | its `for` selects **0** nodes — **or** its `has_edge_to` selects 0, in which case every node it matches would fail, which is equally broken | `liveness.py` |
 | `forbid_cycles` | the graph holds **0** *live* (`active`) edges of the declared `edge_kind`(s), so there is no chain to walk | `liveness.py` |
 | `forbid_import` | its `from` glob matches **0** indexed source files, or its `to` glob matches **0** indexed import paths | `evaluators.py` (a stale `exempt` entry: `exemptions.py`) |
@@ -236,6 +242,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 | `test_binding` | the index holds no `test_files` table (it was written before test files were indexed), **or** every declared leg judges nothing: the `files` glob matches no test file the leg judges and the `for` matcher selects no node. One dead leg beside a live one is reported per leg and does not count the rule inert | reported by `test_binding.py`, counted by `liveness.py` |
 | `test_import_boundary` | no test import is recorded, **or** its `from` glob matches **0** test files with imports, its `of` matcher leaves no judged file, or its `to` glob matches **0** recorded test import paths — decided over every recorded test import, before any crossing | reported by `test_import_boundary.py`, counted by `liveness.py` |
 | `scenario_binding` | its `features` glob matches **0** feature files | reported by `scenario_binding.py`, counted by `liveness.py` when a `project_root` is given |
+| `slice_public_api`, `slice_shape` | **no** node carries any of its `tags`, **or** no node carrying one has a `source` folder on disk, so there is no slice to judge | `liveness.py`, through `slices.slice_rule_inert_reason` |
 
 ### `scenario_coverage` — behaviour bound to an executable claim (BDL-061 S4)
 
@@ -430,7 +437,8 @@ Enforces complexity limits per node (architectural smell detection).
 Rule = (DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule | LayerRule
         | CardinalityRule | UnregisteredFeatureCandidateRule | ModuleCoverageRule
         | ScenarioCoverageRule | DocAreaCoherenceRule | SummaryFactsRule
-        | TestBindingRule | TestImportBoundaryRule | ScenarioBindingRule)
+        | TestBindingRule | TestImportBoundaryRule | ScenarioBindingRule
+        | SlicePublicApiRule | SliceShapeRule)
 ```
 
 #### `Violation`
@@ -439,7 +447,7 @@ Rule = (DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule
 |--------------------|----------------|-------------------------------------------------|
 | `rule_name`        | `str`          | Name of the violated rule.                      |
 | `rule_description` | `str`          | Description of the violated rule.               |
-| `rule_type`        | `str`          | `"deny"`, `"require"`, `"cycle"`, `"forbid_import"`, `"forbid"`, `"layer"`, `"cardinality"`, `"test_binding"`, `"test_import_boundary"`, `"scenario_binding"`, `"suite_population"` (a suite rule's population statement — see above), `"layer_population"`, `"layer_declaration"`, or `"rule_liveness"` (a rule that cannot fire — see above). |
+| `rule_type`        | `str`          | `"deny"`, `"require"`, `"cycle"`, `"forbid_import"`, `"forbid"`, `"layer"`, `"cardinality"`, `"test_binding"`, `"test_import_boundary"`, `"scenario_binding"`, `"slice_public_api"`, `"slice_shape"`, `"suite_population"` (a suite rule's population statement — see above), `"layer_population"`, `"layer_declaration"`, or `"rule_liveness"` (a rule that cannot fire — see above). |
 | `severity`         | `str`          | `"error"` or `"warn"`.                          |
 | `file_path`        | `str \| None`  | Source file path (for deny/import violations).   |
 | `line_number`      | `int \| None`  | Line number (for deny/import violations).        |
@@ -753,6 +761,34 @@ holding one glob, so `ExemptionLedger` judges each entry on its own:
 Every liveness finding the three rules make is `warn`, including a total stand-down, because
 none of them passes the declared severity to `liveness_finding`.
 
+### The slice rules — `slice_public_api`, `slice_shape` (BDL-080 S3c)
+
+Feature-Sliced Design gives a slice a shape and a way in rather than a size. Both rules live in
+`rules/slices.py` and judge each **slice**: a node carrying one of the rule's `tags` whose
+`source` is a folder on disk. The layer order between slices is the `layers` rule's, not theirs.
+
+- **`slice_public_api`** reads `code_imports`, where the reindex already decided which node each
+  import reached. For an import resolved to a node inside a slice, from a file outside that slice,
+  it locates the imported file inside the slice's folder. A relative specifier is completed from
+  the importing file's folder by `js_specifiers.relative_import_candidates`, the completion the
+  resolver uses. Any other specifier went through an alias the rule does not read, so it is
+  matched by its longest trailing path that names a file in the folder: `@/features/auth` names
+  the folder itself, so its `index`. A file other than the slice's `index` is a finding, and so
+  is an import into a slice that has no `index`. An import whose file cannot be located is not
+  judged. A glob cannot express "inside this slice but not its index", which is why this is a
+  rule over resolved imports and not a `forbid_import` pattern. Steiger's
+  `fsd/no-public-api-sidestep` is the file-level check of the same thing.
+- **`slice_shape`** reads the folder: a folder at the slice's top that is not one of `segments`
+  (`DEFAULT_SLICE_SEGMENTS`, `ui model lib api config`) is a finding, and so is a code file there
+  that is not the `index`. Hidden entries and files that are not code (`README.md`) are not
+  judged.
+
+Both default to `error` (`slice_shape` is not in `_KEYS_THAT_DEFAULT_TO_WARN`). Each finding's
+remediation is written by `evaluate_all`: import through the index and export what is needed
+from it, or move the entry into a segment or a slice of its own. Neither rule reads a `scope:`
+key, and the loader accepts one there without a warning (measured by BDL-080 S2d, BDL-UX #312),
+so the `tags` alone confine what is judged.
+
 ### rules.yml Schema
 
 Schema supports versions 1, 2, and 3. Version 3 ADDED an optional top-level `tags:` block described as bulk tag assignments; nothing ever applied it, and BDL-070 A6 withdrew `load_rules_with_tags`, the only function that read it. A node's tags are declared on the node, and a `rules.yml` still carrying such a block loads unchanged while the block assigns nothing.
@@ -765,8 +801,8 @@ rules:
   - name: <unique-rule-name>
     description: "<description>"
     deny:
-      from: { ref_id: ..., kind: ..., tag: ..., exclude: [...] }  # NodeMatcher
-      to:   { ref_id: ..., kind: ..., tag: ..., exclude: [...] }  # NodeMatcher
+      from: { ref_id: ..., kind: ..., tag: ..., tag_prefix: ..., exclude: [...] }  # NodeMatcher
+      to:   { ref_id: ..., kind: ..., tag: ..., tag_prefix: ..., exclude: [...] }  # NodeMatcher
       unless_edge: [<edge_kind>, ...]    # optional, defaults to []
 
   # --- require: mandate specific edge relationships ---
@@ -833,14 +869,28 @@ rules:
     description: "<description>"
     severity: warn
     check:
-      for: { kind: domain }                    # NodeMatcher
+      for: { kind: domain }                    # NodeMatcher; `tag_prefix: fsd-` selects a tag family
       max_symbols: 180                         # optional (Beadloom's domain-size-limit; counts OWNED symbols since BDL-UX #144)
       max_files: 50                            # optional
       min_doc_coverage: 0.8                    # optional
+
+  # --- slice_public_api: enter a Feature-Sliced slice through its index ---
+  - name: <unique-rule-name>
+    description: "<description>"
+    slice_public_api:
+      tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]   # the tags a slice carries
+
+  # --- slice_shape: a slice's top holds its segments and its index ---
+  - name: <unique-rule-name>
+    description: "<description>"
+    severity: warn
+    slice_shape:
+      tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
+      segments: [ui, model, lib, api, config]  # optional; these five by default
 ```
 
 Each rule must contain exactly one key of `AUTHORING_KEYS` — the `Keyword` column of the table
-under Purpose. The sample above shows seven of the fifteen. The three suite rules are sampled under
+under Purpose. The sample above shows nine of the seventeen. The three suite rules are sampled under
 **The suite rules** above.
 
 ### Loading and Parsing
@@ -866,11 +916,11 @@ def load_rules(rules_path: Path) -> list[Rule]
    d. Take `AUTHORING_KEYS.intersection(rule)`. None or several raise `ValueError`:
       `rule '<name>' must have exactly one of <every authoring key, sorted>`.
    e. `layers` is handed, with the whole rule, to `_parse_layer_rule`. Any other key's value must
-      be a mapping — one message for all fourteen, `Rule '<name>': '<key>' must be a mapping` — and
+      be a mapping — one message for all sixteen, `Rule '<name>': '<key>' must be a mapping` — and
       is handed to `_MAPPING_PARSERS[key]`.
 6. Remember `(text, tuple(rules))` under the resolved path and return the list. A file that raises
    is not remembered.
-7. `NodeMatcher` parsing validates: for deny rules, at least one of `ref_id`, `kind`, or `tag` must be present. For require rules, `has_edge_to` accepts an empty dict `{}` (matches any node) via `allow_empty=True`. `kind` (if present) is validated against `VALID_NODE_KINDS`. `exclude` accepts a string or list, normalized to a tuple.
+7. `NodeMatcher` parsing validates: for deny rules, at least one of `ref_id`, `kind`, `tag`, or `tag_prefix` must be present, and none raises `<context>: node matcher must have at least one of 'ref_id', 'kind', 'tag', or 'tag_prefix'`. `tag_prefix`, when present, must be a non-empty string — `<context>: 'tag_prefix' must be a non-empty string` — because an empty prefix would begin every tag and select every tagged node in silence (BDL-080 S2b). For require rules, `has_edge_to` accepts an empty dict `{}` (matches any node) via `allow_empty=True`. `kind` (if present) is validated against `VALID_NODE_KINDS`. `exclude` accepts a string or list, normalized to a tuple.
 
 #### One parse per `init` — the memo (BDL-073 B4, F1)
 
@@ -1414,6 +1464,8 @@ def evaluate_one_import_rule(rule: ImportBoundaryRule, imports: list[tuple[str, 
 def evaluate_test_binding_rules(conn: sqlite3.Connection, rules: list[TestBindingRule], *, scenario_rules: Sequence[str] = ()) -> list[Violation]: ...  # evaluate_all passes the scenario_binding rules' names
 def evaluate_test_import_boundary_rules(conn: sqlite3.Connection, rules: list[TestImportBoundaryRule]) -> list[Violation]: ...
 def evaluate_scenario_binding_rules(conn: sqlite3.Connection, rules: list[ScenarioBindingRule], *, project_root: Path | None = None) -> list[Violation]: ...
+def evaluate_slice_public_api_rules(conn: sqlite3.Connection, rules: list[SlicePublicApiRule], *, project_root: Path | None = None) -> list[Violation]: ...
+def evaluate_slice_shape_rules(conn: sqlite3.Connection, rules: list[SliceShapeRule], *, project_root: Path | None = None) -> list[Violation]: ...
 def population_finding(*, rule_name: str, rule_description: str, message: str) -> Violation: ...  # rules/types.py; always warn
 def evaluate_all(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]: ...
 ```
@@ -1427,8 +1479,11 @@ class NodeMatcher:
     kind: str | None = None
     tag: str | None = None
     exclude: tuple[str, ...] | None = None
+    tag_prefix: str | None = None
+    @property
+    def reads_tags(self) -> bool: ...  # tag or tag_prefix is set
     def matches(self, node_ref_id: str, node_kind: str, *, tags: set[str] | None = None) -> bool: ...
-    def describe(self) -> str: ...  # "ref_id=…, kind=…, tag=…", or "everything"
+    def describe(self) -> str: ...  # "ref_id=…, kind=…, tag=…, tag_prefix=…", or "everything"
 
 @dataclass(frozen=True)
 class DenyRule:
@@ -1541,10 +1596,28 @@ class ScenarioBindingRule:
     exempt: tuple[ListedExemption, ...] = ()
     severity: str = "warn"
 
+DEFAULT_SLICE_SEGMENTS: tuple[str, ...] = ("ui", "model", "lib", "api", "config")
+
+@dataclass(frozen=True)
+class SlicePublicApiRule:
+    name: str
+    description: str
+    tags: tuple[str, ...]
+    severity: str = "error"
+
+@dataclass(frozen=True)
+class SliceShapeRule:
+    name: str
+    description: str
+    tags: tuple[str, ...]
+    segments: tuple[str, ...] = DEFAULT_SLICE_SEGMENTS
+    severity: str = "error"
+
 Rule = (DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule | LayerRule
         | CardinalityRule | UnregisteredFeatureCandidateRule | ModuleCoverageRule
         | ScenarioCoverageRule | DocAreaCoherenceRule | SummaryFactsRule
-        | TestBindingRule | TestImportBoundaryRule | ScenarioBindingRule)
+        | TestBindingRule | TestImportBoundaryRule | ScenarioBindingRule
+        | SlicePublicApiRule | SliceShapeRule)
 
 @dataclass(frozen=True)
 class Violation:
@@ -1600,7 +1673,7 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 ## Constraints
 
 - `rules.yml` must declare a version in `SUPPORTED_SCHEMA_VERSIONS` ({1, 2, 3}). Unsupported versions are rejected with `ValueError`.
-- `NodeMatcher` must have at least one of `ref_id`, `kind`, or `tag` in deny rules; providing none raises `ValueError`. In require rules, `has_edge_to` accepts empty `{}` for "any node" matching.
+- `NodeMatcher` must have at least one of `ref_id`, `kind`, `tag`, or `tag_prefix` in deny rules; providing none raises `ValueError`, and so does an empty or non-string `tag_prefix`. In require rules, `has_edge_to` accepts empty `{}` for "any node" matching.
 - Deny rules depend on the `code_imports` table being populated (typically via a prior `reindex` step).
 - Without a reindex callback `lint()` opens the index **read-only** and leaves `beadloom.db` byte-identical; a missing index raises `LintError` (exit 2) instead of reporting `0 violations` against a database it had just created (BDL-UX #147). "No rules file" still returns an empty result without touching the index at all.
 - Plain `lint` keeps exit 0 when error-severity violations are found without `--strict` — the exit code is unchanged so an adopter's pipeline does not turn red on upgrade — but the omission is now named on stderr.
@@ -1629,6 +1702,27 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 - **Empty matcher detects violations.** Assert nodes without outgoing edges of the required kind produce violations.
 - **Empty matcher satisfied.** Assert adding any `part_of` edge satisfies the empty-matcher rule.
 - **Empty for-matcher rejected in deny.** Assert empty matchers are still rejected in deny rule positions.
+
+### Matcher `tag_prefix` Tests (BDL-080 S2b, S2d)
+
+- `tests/unit/graph/rules/test_a_matcher_selects_by_a_tag_prefix.py`: a node matches when any of
+  its tags begins with the prefix; `reads_tags`; the loader refuses an empty or non-string
+  `tag_prefix` and names `tag_prefix` in the empty-matcher refusal.
+- `tests/integration/graph/rules/test_a_tag_prefix_selects_in_every_rule_that_takes_a_matcher.py`:
+  `require`, `forbid` and `deny` select by the prefix alone.
+- `tests/integration/graph/rules/test_scenario_coverage_selects_its_population_by_a_tag_prefix.py`:
+  only prefixed nodes without a scenario are reported, the population statement names
+  `tag_prefix=`, and a prefix no node carries is the liveness reason.
+- `tests/integration/graph/rules/test_a_size_check_reports_each_threshold_under_its_own_rule.py`:
+  a `check` finding carries the identity of the rule that produced it, a node exactly at the limit
+  is not reported, a node the matcher skips does not end the judgement of the nodes after it, and
+  the coverage threshold counts every pair not known to be behind.
+- `tests/integration/graph/rules/test_an_inert_matchers_reason_names_the_field_no_node_carries.py`:
+  a tag, a prefix or a kind is named only when no node carries it, and a combination no node
+  carries reads "matches none of the N nodes".
+- `tests/acceptance/graph/rule-engine/cohesion_signal.feature`, end to end: one rule judges a slice
+  of each layer and no node outside the prefix, a prefix no tag begins with is reported as a rule
+  that checks nothing, and a rule with a carried tag and an uncarried prefix names the prefix.
 
 ### Dispatch and Memo Tests
 

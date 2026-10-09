@@ -272,7 +272,15 @@ one implementation instead of three:
    `_landing.ru.md.txt` and `_tracker.ru.md.txt` ship).
 3. one **ARCHITECTURE** overlay — `ddd` or `fsd` (peers): the methodology's
    layer/boundary rules + the `# beadloom:` annotation vocabulary. FSD is at
-   **parity** with DDD (every role has both overlays).
+   **parity** with DDD (every role has both overlays). Since BDL-080 S2b the
+   `fsd` overlay maps a slice to a `component` node tagged with its layer
+   (`fsd-features`), `part_of` the frontend service, and `shared` and `app` to
+   containers whose segments are `component` nodes of the same tag. It states
+   the public-API rule (`slice_public_api` in the graph, Steiger's
+   `no-public-api-sidestep` file by file), the slice shape and a cohesion
+   section, and puts Steiger in the completion commands. The `ddd` overlay
+   gains the same cohesion section for Python packages, and the duty
+   `cohesion` is declared for `dev`, `explore` and `review`.
 4. one+ **STACK** overlays in **sorted** order: stack idioms + lint/type/test
    commands.
 5. the **PROJECT** fragment from the adopting repository —

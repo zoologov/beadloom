@@ -7,6 +7,8 @@ nodes:
     summary: "The overview map on the canvas: its plan routed by the overview's own router, titles dressed at the map's scale, the map's own aggregated and own lines, and what it draws beyond a level for the pointer, a selection and the test handle"
     source: src/beadloom/site_scaffold/.vitepress/theme/features/overview-map/
     tags: [fsd-features]
+    docs:
+      - docs/services/vitepress-site/overview-map.md
 edges:
   - src: site-overview-map
     dst: vitepress-site

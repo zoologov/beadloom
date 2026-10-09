@@ -204,13 +204,20 @@ One feature node covers the cooperating modules below (all annotated
   written; a file with an intact marker is rewritten when the shipped body or the version
   differs; a file with no marker, or whose body no longer matches its marker, is never
   overwritten and is reported as a `KeptFile` with its remedy. A file with an intact marker that
-  the installed version no longer ships is removed (`retired`). `.beadloom/site/` (`OVERRIDE_DIR`)
+  the installed version no longer ships is removed (`retired`). Since BDL-080 S2d a folder those
+  removals leave empty is removed with them (`retired_folders`, `_retire_emptied_folders`),
+  deepest first: the candidates are the folders a retired file sat in and the folders above them,
+  never the portal's root, so a folder the project made is never touched and one that still
+  holds anything, a file beadloom did not write included, stays. Without it a slice the scaffold
+  renamed outlived the version that wrote it as an empty tree: a portal written by 8.0.0 and
+  rewritten after the S2c renames kept six empty leaf folders under `entities/` (measured by
+  S2d: `42 retired, 9 empty folders retired`, 0 empty folders left). `.beadloom/site/` (`OVERRIDE_DIR`)
   is copied last and verbatim, and a shipped path it provides is not written at all.
   `shipped_files()` returns each body without the lines that are only a graph annotation
   (`without_annotations`), so a portal never names this repository's nodes; the marker hashes
   the body as written. `marker_line(body, version, note)` and `place_marked(target, expected)` are
   shared with the Pages workflow. `ScaffoldReport` counts `written`, `updated`, `unchanged`,
-  `retired`, `kept` and `overridden`.
+  `retired`, `retired_folders`, `kept` and `overridden`.
 - **pages_workflow.py** — `docs site --pages-workflow` (BDL-076 B2, `beadloom-ujzb.13`, `.20`).
   `write_pages_workflow(project_root, *, out_dir, base, version, branch=None)` writes
   `.github/workflows/beadloom-portal.yml` (`PAGES_WORKFLOW_PATH`) under the scaffold's marker

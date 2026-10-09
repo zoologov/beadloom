@@ -847,7 +847,7 @@ and writes under `--out` (default `site/`, the directory `beadloom init` ignores
 
 ```text
 Generated 144 files under /home/me/tidewater/site
-Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 copied from .beadloom/site/
+Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 copied from .beadloom/site/
 ```
 
 A kept file is named on stderr with the reason and the remedy, and the exit code stays 0. A

@@ -8,6 +8,8 @@ nodes:
     summary: "The overview's own router: a grid of tracks between the fixed top-level boxes, and every aggregated line between two top-level ends routed afresh on it"
     source: src/beadloom/site_scaffold/.vitepress/theme/shared/grid-routing/
     tags: [fsd-shared]
+    docs:
+      - docs/services/vitepress-site/shared-grid-routing.md
 edges:
   - src: site-shared-grid-routing
     dst: site-shared

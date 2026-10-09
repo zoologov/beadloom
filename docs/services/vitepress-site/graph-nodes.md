@@ -40,7 +40,8 @@ change to it runs, and its container. The node card itself is the `site-node-car
   with a layer's border and the status's mark in its corner, filled or a ring.
 
 How the canvas draws a node — a card in its layer's tone, corners at one radius on screen — is
-the viewer's (`site-graph-viewer`, `lib/corners.js`, `lib/stylesheet.js`).
+the viewer's (`site-graph-viewer`, `lib/stylesheet.js`; the corner radius is
+`site-shared-geometry`'s `shared/geometry/corners.js`).
 
 ## Depends on
 

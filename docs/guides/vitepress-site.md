@@ -577,7 +577,7 @@ under `e2e/`. One beadloom version means one theme: there is no separate npm pac
 step. The run says what it did with the scaffold:
 
 ```text
-Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 copied from .beadloom/site/
+Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 copied from .beadloom/site/
 ```
 
 ### The marker, upgrades and hand edits
@@ -594,6 +594,7 @@ each run does this:
 | marker intact, the installed beadloom ships another body or version | rewrites it (`updated`) — this is how an upgrade reaches the portal |
 | no marker, or edited after beadloom wrote it | never overwrites it, and names it on stderr with the remedy (`kept`); the exit code stays 0 |
 | marker intact, and the installed beadloom no longer ships it | removes it (`retired`), so a retired browser test does not keep running |
+| a folder that the removed files leave empty | removes it too (`empty folders retired`), so a renamed slice leaves no empty tree; a folder you made, or one still holding anything, stays |
 
 ```text
 Kept 1 file(s) under site that beadloom did not write or that were edited by hand; the shipped version was not written over them:
@@ -859,6 +860,17 @@ npm run docs:preview          # or `npm run docs:dev` for a live-reload dev serv
 architecture page in Chromium (after `npx playwright install chromium`), and fails on any page
 error. The shipped config pre-bundles `mermaid` and the layout engine's worker for the dev server,
 which a page with a diagram needs under `vitepress dev` (BDL-078).
+
+`npm run lint:fsd` runs Steiger, Feature-Sliced Design's own linter, over `.vitepress/theme`
+(BDL-080). The scaffold pins `steiger` and `@feature-sliced/steiger-plugin` exactly as
+development dependencies and ships `steiger.config.js`: the plugin's `recommended` set with one
+rule off, `fsd/insignificant-slice`, and the reason written beside the switch. The theme is cut
+so that pieces of work touching disjoint slices can run in parallel, not for reuse, so a feature
+that only the graph viewer uses is the intended shape. The pinned Steiger declares a later
+Node.js release than the scaffold's own `engines` floor, and on an earlier one it still ran,
+with an npm `EBADENGINE` warning (measured by BDL-080 S2a). It is
+a style linter: `beadloom lint` judges the graph's slices and their imports, Steiger judges the
+files, and `beadloom ci` names it under "Not run by this gate" when a pipeline runs it.
 
 Everything under the portal directory is output: `beadloom init` ignores `/site/` in
 `.gitignore` (see [Getting Started](../getting-started.md#what-init-writes)), and nothing there

@@ -7,6 +7,8 @@ nodes:
     summary: "Following a line: every edge along a hovered line and on a selection's walk drawn again over the canvas, and the lines that share a run with one arrowhead at a shared last run"
     source: src/beadloom/site_scaffold/.vitepress/theme/features/follow-edge/
     tags: [fsd-features]
+    docs:
+      - docs/services/vitepress-site/follow-edge.md
 edges:
   - src: site-follow-edge
     dst: vitepress-site

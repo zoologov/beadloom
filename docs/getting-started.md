@@ -513,7 +513,7 @@ npm run docs:preview                    # look at it locally
 
 ```text
 Generated 144 files under /home/me/tidewater/site
-Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 copied from .beadloom/site/
+Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 copied from .beadloom/site/
 ```
 
 **Give the portal your project's identity** in `.beadloom/config.yml`. Without it the title is

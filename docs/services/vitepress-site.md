@@ -19,6 +19,27 @@ Since BDL-076 B1 the scaffold is package data, so every project gets the same th
 installed beadloom, and `site/` in this repository is output only: `/site/` is ignored, and
 `docs site --out site` writes this repository's portal the way it writes an adopter's.
 
+## The pages it publishes
+
+`docs site` ([site generation](../domains/application/features/site-generation/SPEC.md)) writes
+the pages, in six sidebar sections (`page_map.PAGE_SECTIONS`): the About pages, the dashboard,
+the architecture pages, one page per node, the landscape pages, and the project's published
+documentation. The scaffold supplies what those pages mount, registered by name in the `app`
+layer:
+
+- the architecture page mounts `ArchitectureMap` (`site-architecture-page`), the graph viewer in
+  architecture mode with the node card;
+- every node page mounts the same `ArchitectureMap` with `focus` set to the node and a depth, so
+  it opens on that node's neighbourhood;
+- the landscape page mounts `LandscapeMap` (`site-landscape-page`), the viewer in landscape mode;
+- the dashboard mounts the panels of `site-dashboard`, among them `PageMap`, which lists the
+  pages the run wrote, per section (BDL-080 S4a);
+- every page mounts the Mermaid diagram viewer (`site-diagram-viewer`), which adds pan, zoom and
+  full screen to each diagram the page rendered, and the footer (`site-powered-by`) at the
+  bottom.
+
+The About and documentation pages are Markdown that VitePress renders with the default theme.
+
 ## What is scanned
 
 The scaffold lies under `src`, this repository's scan path, so its `.js`, `.mjs` and `.vue` files
@@ -45,15 +66,21 @@ symbol at all.
 
 Since BDL-076 A2 the theme follows Feature-Sliced Design. There are six layers, top to bottom, and
 a layer imports only the layers below it. A slice is used only through its public `index.js`, and
-it holds `ui`, `model`, `lib` or `api` segments as it needs them. Each slice is its own node,
-`part_of` this one, with a short document under [`vitepress-site/`](vitepress-site/app.md).
+it holds `ui`, `model`, `lib` or `api` segments as it needs them. Each slice is its own node
+(`component`, tagged with its layer), `part_of` this one, with a short document under
+[`vitepress-site/`](vitepress-site/app.md). `app` and `shared` have segments rather than slices:
+`app` is one node, and `shared` is the container node `site-shared`, which owns the segments
+nobody carved out and holds the five that are nodes of their own (BDL-080 S2a), each `part_of
+site-shared` and tagged `fsd-shared`. The theme has twenty-nine such nodes. BDL-080 S2a cut the
+viewer into ten slices, eight of them new nodes, so that pieces of work touching disjoint parts of
+the viewer can run in parallel on disjoint nodes (RFC D3).
 
 | Layer | Slice (node) | What it is |
 |-------|--------------|------------|
 | `app` | [`site-app`](vitepress-site/app.md) | The theme: registers the pages and widgets the generated Markdown mounts. |
 | `pages` | [`site-architecture-page`](vitepress-site/architecture-page.md) | `ArchitectureMap`: the viewer in architecture mode with the node card, on the architecture page and every node page. |
 | `pages` | [`site-landscape-page`](vitepress-site/landscape-page.md) | `LandscapeMap`: the viewer in landscape mode with the service card. |
-| `widgets` | [`site-graph-viewer`](vitepress-site/graph-viewer.md) | The viewer core: toolbar, canvas, panel and legend, in two data modes; ELK's routes, trunks and buses, the map, the overview's own routing, counts on pills, and followed lines drawn on top. |
+| `widgets` | [`site-graph-viewer`](vitepress-site/graph-viewer.md) | The viewer core: toolbar, canvas, panel and legend, in two data modes; it composes the slices below into ELK's routes, trunks and buses, the map, the overview's own routing, counts on pills, and followed lines drawn on top. |
 | `widgets` | [`site-node-card`](vitepress-site/node-card.md) | The architecture card: everything the data file says about one node. |
 | `widgets` | [`site-dashboard`](vitepress-site/dashboard.md) | The dashboard's panels. |
 | `widgets` | [`site-diagram-viewer`](vitepress-site/diagram-viewer.md) | Pan, zoom and full screen over Mermaid diagrams. |
@@ -64,13 +91,21 @@ it holds `ui`, `model`, `lib` or `api` segments as it needs them. Each slice is 
 | `features` | [`site-navigate-graph`](vitepress-site/navigate-graph.md) | Pan, zoom, fit and centre; no gesture moves a node. |
 | `features` | [`site-fullscreen`](vitepress-site/fullscreen.md) | Full screen with a CSS fallback. |
 | `features` | [`site-url-state`](vitepress-site/url-state.md) | A view's state in the query string. |
+| `features` | [`site-follow-edge`](vitepress-site/follow-edge.md) | Followed lines drawn again over the canvas, and one arrowhead where lines share their last run. |
+| `features` | [`site-overview-map`](vitepress-site/overview-map.md) | The overview's plan on the canvas, the map's titles at its scale, its aggregated and own lines, and what it draws for the pointer and a selection. |
+| `features` | [`site-edge-pills`](vitepress-site/edge-pills.md) | The map's counts over the canvas: a line's pill, a closed box's tally, a node's "+N". |
 | `entities` | [`site-architecture-data`](vitepress-site/architecture-data.md) | `architecture.data.json` and its schema version. |
 | `entities` | [`site-landscape-data`](vitepress-site/landscape-data.md) | `landscape.data.json`, its contracts' health, and which are verified. |
 | `entities` | [`site-dashboard-data`](vitepress-site/dashboard-data.md) | `dashboard.data.json`. |
 | `entities` | [`site-graph-nodes`](vitepress-site/graph-nodes.md) | A node's status, its risks and its container. |
 | `entities` | [`site-graph-edges`](vitepress-site/graph-edges.md) | Edge kinds, their styles, the legend, and which edges a walk follows. |
 | `entities` | [`site-layers`](vitepress-site/layers.md) | The declared layers, and their colours. |
-| `shared` | [`site-shared`](vitepress-site/shared.md) | Browser checks, JSON loading, tree walks, shell quoting, theme tokens, Cytoscape, the ELK layout in a Web Worker, fresh ids, ECharts and the copy button. |
+| `shared` | [`site-shared`](vitepress-site/shared.md) | The container of the shared segments, and the segments it owns itself: browser checks, JSON loading, tree walks, shell quoting, theme tokens, Cytoscape, the ELK layout in a Web Worker, fresh ids, ECharts and the copy button. |
+| `shared` | [`site-shared-geometry`](vitepress-site/shared-geometry.md) | The plane geometry of the drawing: spatial and route indexes, ELK's routes as segments, corner radii, grown boxes, an aggregated line's route, where a pill may stand. |
+| `shared` | [`site-shared-canvas-marks`](vitepress-site/shared-canvas-marks.md) | The classes and data a selection and a hover set on the canvas, and a canvas laid over Cytoscape's. |
+| `shared` | [`site-shared-bundling`](vitepress-site/shared-bundling.md) | Trunks, buses and joins rewritten from ELK's routes, and the last run lengthened for an arrowhead. |
+| `shared` | [`site-shared-grid-routing`](vitepress-site/shared-grid-routing.md) | The overview's own router: a grid of tracks between the top-level boxes, and A* over it. |
+| `shared` | [`site-shared-map-levels`](vitepress-site/shared-map-levels.md) | The map's levels, the fit they open past, the marks kept one size on screen, a node's drawn sizes, and loops drawn square. |
 
 This node keeps what belongs to no slice: `theme/index.js`, the file VitePress looks for, which
 re-exports the `app` layer; `.vitepress/config.mjs`, which reads the identity and the nav
@@ -88,7 +123,8 @@ the ELK worker engine for the dev server (`vite.optimizeDeps.include`, BDL-078 `
 because under `vitepress dev` mermaid's `fastdom` default export broke every page with a diagram.
 `npm run dev-check` (`scripts/dev-optimize-check.mjs`) starts the dev server, loads a page with a
 Mermaid diagram and the architecture page in Chromium, and fails on a page error, so it needs
-Playwright's Chromium; a slow test runs it on the six adopter fixtures. The viewer's dependencies are Cytoscape and
+Playwright's Chromium; a slow test runs it on the six adopter fixtures. `npm run lint:fsd` runs
+Steiger over `.vitepress/theme` with the configuration in `steiger.config.js` (below). The viewer's dependencies are Cytoscape and
 elkjs 0.12, which the viewer calls directly in a Web Worker. BDL-077 removed `cytoscape-elk`,
 which carried a nested elkjs 0.9 of its own, and `web-worker`, the one ranged pin, whose only
 user was elkjs's entry point under `cytoscape-elk`.
@@ -96,14 +132,44 @@ user was elkjs's entry point under `cytoscape-elk`.
 **The layer rule.** `site-fsd-layers` in `.beadloom/_graph/rules.yml` declares the six layers by
 the tags `fsd-app` to `fsd-shared`, at `error`, titled `FSD architecture`. Each slice carries its layer as its own tag and no
 node stands for a layer, so a dependency between two slices of one layer is reported as a
-same-layer crossing, which is FSD's rule that slices of a layer do not know each other. `app` and
-`shared` have segments rather than slices, so each is one node. The edges it judges are the
+same-layer crossing, which is FSD's rule that slices of a layer do not know each other. `app` is
+one node. The five `shared` segments that are nodes import each other, and that is legal: they
+are peers inside one tagged container, `site-shared`, which the rule allows (the tagged-container
+predicate, `layers.shares_tagged_ancestor`). The edges it judges are the
 relative imports between theme files, which resolve to the files they name. The rule declares no
 `scope:`; the portal derives `vitepress-site` as its scope, the lowest container of every slice it
 places. Since BDL-080 the portal draws this rule beside `architecture-layers`: the slices are
 coloured by their FSD layer, the legend has one group per rule, and `vitepress-site` opens onto
 six layer boxes, app, pages, widgets, features, entities and shared, stacked top to bottom
 ([`site-layers`](vitepress-site/layers.md)). An edge either rule finds against is drawn red.
+
+**The other rules over the slices.** Six `check` rules, `site-fsd-cohesion-app` to
+`site-fsd-cohesion-shared` (BDL-080 S2b), hold each layer's nodes to a `max_symbols` signal over
+the symbols one slice or segment OWNS: 80 for `widgets`, the layer that composes, and 60 for every
+other layer, at `warn`. They were calibrated after the cut and re-measured at `d99dfd0e` over the
+twenty-nine components: `site-graph-viewer` owns 65, the most of any widget, and `site-shared-map-levels`
+owns 56, the most of any other node. `site-fsd-public-api` (`slice_public_api`, `error`) and
+`site-fsd-slice-shape` (`slice_shape`, `warn`) judge the `pages`, `widgets`, `features` and
+`entities` slices (BDL-080 S2d): an import into a slice from outside it lands on its `index.js`,
+and a slice's top holds only its segments and its `index`. Measured by S2d on this repository: 22
+slices with a folder source, 55 imports into a slice from outside it, and no finding from either
+rule. Neither declares a `scope:`, because a slice rule does not read one; the `fsd-*` tags,
+which only the site's components carry, confine them.
+
+**Steiger.** The graph's rules judge slices and the imports between them; Steiger, the
+Feature-Sliced Design linter, judges the files (BDL-080 RFC D3). The scaffold's `package.json`
+pins `steiger` and `@feature-sliced/steiger-plugin` exactly as development dependencies, and
+its script `lint:fsd` runs `steiger .vitepress/theme`. `steiger.config.js`, shipped to every
+portal, takes the plugin's `recommended` set and switches exactly one rule off,
+`fsd/insignificant-slice`, by the owner's ruling of 2026-10-09 (S2c), with the reason beside the
+switch: the theme is cut so that beads touching disjoint nodes run in parallel, not for reuse, so
+a feature only the viewer widget uses is the intended shape. `fsd/inconsistent-naming` asked for
+plural `entities` slices, so S2c renamed `graph-edge`, `graph-node` and `layer` to `graph-edges`,
+`graph-nodes` and `layers`, with their nodes. Over a portal generated from this tree Steiger
+reports "No problems found!" (measured by S2c and S2R). CI runs it in the `site-build` job, step
+"Lint the theme's slices (Steiger)", after `npm ci` and before the build, and the GitLab mirror
+runs it the same way, so `beadloom ci` names "the FSD linter (`npm run lint:fsd`)" under "Not
+run by this gate" ([gate coverage](../domains/application/components/gate-coverage/DOC.md)).
 
 ## What the tools show
 
@@ -233,7 +299,7 @@ The bundling took 36 to 39 ms on the M1 Max and 186.8 ms on a GitHub-hosted Ubun
 two Playwright workers. On the M1 Max with the page's processor slowed four times it took 157 to
 161 ms, and slowed five times 196 to 205 ms, so the runner ran it about 4.7 times slower. The
 `ci` bound of 400 ms is about twice the runner's measurement. Both bounds still catch the bundling
-without its indexes, which took 100 to 230 ms on the M1 Max (`lib/spatialIndex.js`).
+without its indexes, which took 100 to 230 ms on the M1 Max (`shared/geometry/spatialIndex.js`).
 
 **Any project's graph** (`beadloom-ujzb.17`, `.20`). A case chooses its subject from the data the
 portal serves, never by a node id of this repository. A case written about a shape the served

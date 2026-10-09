@@ -8,6 +8,8 @@ nodes:
     summary: "The map's levels: which boxes are open and what each node is drawn as, the fit the levels open past, the marks and titles kept one size on screen, the sizes a node is drawn at, and the lines of an edge into its own box"
     source: src/beadloom/site_scaffold/.vitepress/theme/shared/map-levels/
     tags: [fsd-shared]
+    docs:
+      - docs/services/vitepress-site/shared-map-levels.md
 edges:
   - src: site-shared-map-levels
     dst: site-shared

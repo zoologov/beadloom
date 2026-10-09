@@ -37,6 +37,18 @@ The edge kinds the viewer draws, how each one looks, and which edges a walk foll
   how many of its drawn edges go out to it and come in from it, in code-unit order. An edge onto a
   box that holds it is not counted. `null` when the box holds no node. The card of a selected box
   reads it.
+- **How a line is drawn** (`lib/`, moved here from the graph viewer by BDL-080 S2a). `lineMarks.js`
+  holds a line's marks and the size each keeps on screen: one weight (`LINE_MARKS`,
+  `lineWidthOf`), a head of one length sized through Cytoscape's arrow formula inverted
+  (`arrowScaleOf`, `headLengthOf`, `endHeadLength`), a dash on screen (`dashOnScreen`,
+  `dashOffsetOf`) and the corners (`cornerRadiiOf`, `edgeCornerRadiiOf`, `routePointsOf`).
+  `heads.js` decides where a drawn line carries an arrowhead: the ends its edges arrive at
+  (`headEndsOf`), one head where lines share their last run (`droppedHeadsOf`), a head giving way
+  to one too close beside it (`crowdedHeadsOf`, `departuresBeside`) and the room a head stands in
+  (`headRoomsOf`, `HEAD_ROOM`). `edgePalette.js` gives each look's colours at rest, followed,
+  behind (`BEHIND_SHARE` 0.4) and dimmed (`DIMMED_SHARE` 0.14), from resolved theme tokens
+  (`edgePaletteOf`). How the viewer uses them is described under "Lines and arrowheads" in
+  [the viewer's page](graph-viewer.md).
 
 ## Public API
 
@@ -47,8 +59,15 @@ The edge kinds the viewer draws, how each one looks, and which edges a walk foll
 - `NEIGHBOURHOOD_KINDS`, `DEPENDENT_ENDS`, `DEPENDENCY_KINDS`, `edgeKeyOf(edge)`,
   `adjacencyOf(edges, kinds, ids)` returns `{ out, in }`, `dependentsOf(edges, dependentEnds, ids)`,
   `edgeGroupsOf(id, edges)`, `boxEdgesOf(box, edges, parents)`.
+- `DIMMED_SHARE`, `edgePaletteOf(tokens)`.
+- `HEAD_ROOM`, `NO_SOURCE_HEAD`, `NO_TARGET_HEAD`, `SAME_END`, `crowdedHeadsOf`,
+  `departuresBeside`, `droppedHeadsOf`, `headEndsOf`, `headRoomsOf`.
+- `LINE_MARKS`, `arrowScaleOf`, `cornerRadiiOf`, `dashOffsetOf`, `dashOnScreen`,
+  `edgeCornerRadiiOf`, `endHeadLength`, `headLengthOf`, `lineWidthOf`, `routePointsOf`.
 - `EdgeLegend` (Vue component): props `keys` and `colours` (style key -> its rest colour).
 
 ## Depends on
 
-- `site-shared`, for the theme variables the legend samples use.
+- `site-shared`, for the theme variables the legend samples use and `mixRgb`.
+- `site-shared-map-levels` (`AGGREGATE`, `STUB_AT`, `scaleOf`) and `site-shared-geometry`
+  (`pathOfSegments`), read by the line marks and the heads.

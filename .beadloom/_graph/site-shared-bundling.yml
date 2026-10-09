@@ -8,6 +8,8 @@ nodes:
     summary: "A node's edges drawn as trunks, buses and joins instead of a staircase, rewritten from ELK's own routes, and the last run into a node lengthened so an arrowhead fits"
     source: src/beadloom/site_scaffold/.vitepress/theme/shared/bundling/
     tags: [fsd-shared]
+    docs:
+      - docs/services/vitepress-site/shared-bundling.md
 edges:
   - src: site-shared-bundling
     dst: site-shared

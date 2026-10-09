@@ -1,7 +1,7 @@
 # Shared (component)
 
-A slice of the `shared` layer of the VitePress site's Feature-Sliced layout. The layout and the
-layer rule are described in [the site's page](../vitepress-site.md).
+The `shared` layer of the VitePress site's Feature-Sliced layout: the container of its segments.
+The layout and the layer rule are described in [the site's page](../vitepress-site.md).
 
 **Source:** `src/beadloom/site_scaffold/.vitepress/theme/shared/`
 
@@ -10,8 +10,13 @@ layer rule are described in [the site's page](../vitepress-site.md).
 ## Overview
 
 The segments every other layer may use. In Feature-Sliced Design `shared` has segments rather than
-slices, so this is one node. A segment uses another only through that segment's `index.js`, as
-every other layer does.
+slices. This node owns the segments listed below. Since BDL-080 S2a five more are nodes of their
+own, each `part_of` this one and tagged `fsd-shared`, so that they import each other as peers
+inside one tagged container, which `site-fsd-layers` allows:
+[`site-shared-geometry`](shared-geometry.md), [`site-shared-canvas-marks`](shared-canvas-marks.md),
+[`site-shared-bundling`](shared-bundling.md), [`site-shared-grid-routing`](shared-grid-routing.md)
+and [`site-shared-map-levels`](shared-map-levels.md). Their files came out of the graph viewer. A
+segment uses another only through that segment's `index.js`, as every other layer does.
 
 - `lib`: `isBrowser()`, `createJsonResource(path, validate)` (one fetch per file and page load),
   the tree walks `childrenOf`, `withAncestors` and `subtreeOf`, `breadthFirst(start, step,
@@ -26,7 +31,11 @@ every other layer does.
   tone `cyan` (`--bl-c-cyan-1`, `tones.css`, loaded by the segment's `index.js`): `#0e7490` in
   the light theme, 5.4:1 on the canvas, and `#22d3ee` in the dark theme, 9.5:1. The palette's
   brand colour is its indigo unless a project sets it, and its sponsor pink keeps 2.78:1 against
-  a tinted box in the dark theme, under the 3:1 a boundary needs.
+  a tinted box in the dark theme, under the 3:1 a boundary needs. Since BDL-080 S2a it also holds
+  `RING_TONES` (`ringTones.js`), the tone of each impact distance ring from the selected node
+  outwards (`brand`, `red`, `yellow`, `green`, `purple`, `gray`): the base colours rather than the
+  semantic ones, since VitePress defines `warning` as `yellow` and `danger` as `red`. The viewer's
+  stylesheet and the impact summary's legend both read them here.
 - `cytoscape`: `loadCytoscape()` imports Cytoscape in the browser only, once. It loads Cytoscape
   alone: the layout is not Cytoscape's.
 - `elk`: the layered layout, run by elkjs 0.12 in a Web Worker so that the page's main thread is
@@ -87,7 +96,8 @@ every other layer does.
 
 ## Depends on
 
-- Nothing inside the site.
+- Nothing inside the site. The segments it owns import none of the five segment nodes; those
+  import `ids` from here (`site-shared-bundling`, `site-shared-map-levels`).
 
 ## Tests
 

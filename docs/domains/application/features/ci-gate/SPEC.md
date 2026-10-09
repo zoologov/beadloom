@@ -452,9 +452,10 @@ on one assertion that reproduces locally in 0.07 s.
 `GateResult` therefore carries a `GateCoverage` beside its room census: the verifications this
 project's pipeline declares that no step of this run performed, each with the command the
 pipeline runs for it and the workflow job it was read from. On this repository the block names
-three — the test suite, the style linter and the type checker. The second and third are the ones
-nobody had filed: the gate's own step is called `lint` and checks the architecture boundaries,
-not the source style.
+four — the test suite, the style linter, the type checker and, since BDL-080 S2c put Steiger in
+the `site-build` job, the FSD linter (`npm run lint:fsd`). The style linter and the type checker
+are the ones nobody had filed: the gate's own step is called `lint` and checks the architecture
+boundaries, not the source style.
 
 **Both sides are derived.** What the run performed comes from its own step list, so a suite step
 added to the gate later removes the line by the same act rather than by somebody deleting a
