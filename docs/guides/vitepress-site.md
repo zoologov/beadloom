@@ -48,7 +48,7 @@ writes the portal's scaffold (see [The portal for your project](#the-portal-for-
 | `.vitepress/config.generated.mjs` | — | Nav/sidebar config imported by the shipped `config.mjs`. The top nav is empty; the left sidebar is a single ordered EN tree (see [Information architecture](#information-architecture)). |
 | `.vitepress/site.generated.mjs` | — | The portal's identity from the [`site:` block](#configuration-reference-site): title, description, base, repository link and its icon, the nav logo's address and whether it is drawn in the text's colour, the favicons and the footer switch. |
 | `public/logo.svg` or `public/logo.png` | — | The project's own logo, copied byte for byte from `site.logo`, only when the project declares one. |
-| `public/brand/beadloom-favicon.svg` + `.png` | — | Beadloom's favicon, written only when the portal shows it: without a logo of the project's own. |
+| `public/brand/beadloom-favicon.svg`, `.png` + `-dark.png` | — | Beadloom's favicon, written only when the portal shows it: without a logo of the project's own. |
 
 ### Showcase A — interactive ECharts metrics dashboard
 
@@ -443,6 +443,24 @@ The panel shows a card for the selected node, one kind per mode.
   [`site.forges`](#forges-a-self-hosted-forge). For any other host the card shows the source as
   plain text, because a guessed address would be a dead link. Nothing else from the git remote
   is published.
+
+  A portal built from a commit that no remote-tracking branch holds, such as a local build
+  before a push, would link every node to a 404, since the forge has never seen that commit. Its
+  links name a branch the remote holds instead: the upstream of the branch the commit is on,
+  else `origin`'s branch of the same name, else `origin`'s default branch (`origin/HEAD`). With
+  none of them they keep the commit. A path that exists only in the unpublished commit is still
+  missing on the branch. The card says `built from an unpublished commit; links point at main`
+  under the link, and `docs site` warns on stderr, naming the fix when no branch stands in:
+
+  ```text
+  Warning: the portal was built from 39f9247dddfd, which is on no remote branch, so its source
+  links point at main instead; a path that exists only in that commit is not there. Push the
+  commit and run `beadloom docs site` again for links to it.
+  ```
+
+  Only the refs the clone already holds are read, and the remote is never contacted. A CI
+  checkout holds the commit it builds under a remote-tracking ref, so a portal built there links
+  the commit.
 - **The service card** on the landscape: the service's kind, health, number of contracts and page,
   then every contract it produces or consumes, with its verdict, protocol, routing, the fields or
   the message body each side declares ("undeclared" when a side declared none) and, for a
@@ -746,16 +764,25 @@ Error: the `site:` block of .beadloom/config.yml cannot be used:
 The nav bar shows the project's own logo when `logo` names one, and nothing in its place when it
 does not. An SVG logo drawn in `currentColor` is drawn in the colour of the title beside it, dark
 on the light theme and light on the dark one, at 32 by 32 pixels: as an image it could not take
-the page's colour and would be black on the dark theme. Every other logo is drawn as it is, at
-VitePress's own 24 pixels of height.
+the page's colour and would be black on the dark theme. Every other logo is drawn as it is, in
+its own colours and proportions, 32 pixels high as well, so every portal's nav bar holds its
+logo at one height.
 
 The favicon is the project's logo when it declares one of its own, the same file as it is, an
 SVG or a PNG. Without one it is Beadloom's square icon, theme-adaptive: an SVG,
 `public/brand/beadloom-favicon.svg`, whose `prefers-color-scheme` query draws the glyph dark
-(`#3c3c43`) on a light browser and light (`#dfdfd6`) on a dark one, and a 32 by 32 pixel PNG,
-`public/brand/beadloom-favicon.png`, for the browsers that take no SVG favicon, such as Safari. A
-PNG cannot adapt, so it carries the light scheme's dark glyph. A logo that is Beadloom's own
-icon, byte for byte, takes Beadloom's favicon too, as this repository's portal does.
+(`#3c3c43`) on a light browser and light (`#dfdfd6`) on a dark one, and two 32 by 32 pixel PNGs
+for the browsers that take no SVG favicon, such as Safari. A PNG cannot adapt, so there is one
+per scheme: `public/brand/beadloom-favicon.png` carries the dark glyph, and
+`public/brand/beadloom-favicon-dark.png` the light glyph, linked behind the media query
+`(prefers-color-scheme: dark)`.
+
+A logo that is Beadloom's own icon, byte for byte, is not a logo of the project's own: it takes
+Beadloom's favicon too, as this repository's portal does. The rule compares the file with the
+square icon the installed package ships, byte for byte, so a copy of that icon gets the
+theme-adaptive favicon where the icon as it is would draw a black square on a dark tab. The copy
+`docs site` writes into a portal's `public/brand/` carries the generated marker and is not that
+icon. A logo that differs by one byte is the project's own, and is its favicon as it is.
 
 Without `repo_url` the nav bar has no repository link, and `beadloom config-check` says so on a
 project that declares a `site:` block, without blocking:

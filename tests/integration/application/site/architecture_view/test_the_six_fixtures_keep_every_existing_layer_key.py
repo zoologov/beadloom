@@ -184,8 +184,9 @@ def test_the_existing_layer_keys_are_unchanged_and_only_new_keys_are_added(
     data = _data_file(stack, tmp_path)
     measured = MEASURED[stack]
 
-    # BDL-080 S4a (`beadloom-5pxv`) adds `lint`, lint's reach over the project.
-    assert set(data) == OLD_TOP_KEYS | {"layer_rules", "lint"}
+    # BDL-080 S4a (`beadloom-5pxv`) adds `lint`, lint's reach over the project, and S4c
+    # (`beadloom-e1xo`) `source_ref`, the revision the source links name.
+    assert set(data) == OLD_TOP_KEYS | {"layer_rules", "lint", "source_ref"}
     assert data["schema_version"] == 2
     for node in data["nodes"]:
         assert set(node) == OLD_NODE_KEYS | {"layer_rule", "layer_rule_rank"}, node["id"]

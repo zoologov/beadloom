@@ -237,6 +237,8 @@ def test_the_portal_shows_the_logo_and_the_footer_its_project_declares(
     assert f'href="{fixture.base}{favicon}"' in index
     assert ("beadloom-favicon" in index) is beadloom_favicon
     assert (portal.dist / "brand" / "beadloom-favicon.png").is_file() is beadloom_favicon
+    # The light glyph's PNG for a dark browser (the owner's ruling of 2026-10-10, `beadloom-e1xo`).
+    assert (portal.dist / "brand" / "beadloom-favicon-dark.png").is_file() is beadloom_favicon
 
 
 @pytest.mark.parametrize("stack", _stacks())

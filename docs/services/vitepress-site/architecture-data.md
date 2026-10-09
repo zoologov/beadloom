@@ -23,7 +23,16 @@ Version 2 keeps every key of version 1 and adds what the viewer now reads:
 
 `source_url` is the finished link to the node's source at the commit the site was generated from.
 The generator decides it per forge and writes `""` for a host it does not recognise, so the viewer
-knows no forge. Nothing else from the git remote is in the file. `activity` carries only
+knows no forge. Nothing else from the git remote is in the file.
+
+Since BDL-080 S4c a commit no remote-tracking branch holds is linked through a branch the remote
+holds, and the top-level `source_ref` says which revision the links name, present whenever the
+file carries source links: `{commit, linked, pushed}`. `commit` is the full hash the site was
+built from; `pushed` is `false` only when git says no remote-tracking branch holds it; `linked` is
+that hash, or the name of the branch on the remote that stands in for it (the branch's upstream,
+else `origin`'s branch of the same name, else `origin/HEAD`). The card shows "built from an
+unpublished commit; links point at <linked>" under a source link when `pushed` is `false`, with a
+hash cut to 12 characters. `activity` carries only
 `commits_30d` and `level`. `tests` is `{files, file_count, count, placement}`: `files` lists only
 the test files bound to the node itself, and the counts are taken over the node and its `part_of`
 descendants.

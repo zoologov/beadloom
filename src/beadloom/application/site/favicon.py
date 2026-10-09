@@ -16,7 +16,13 @@ colour because a PNG cannot adapt. A logo that IS Beadloom's icon, byte for byte
 takes that favicon too: the theme-adaptive form of the same mark, where the
 icon as it is would draw black on a dark tab.
 
-The two files are package data under ``beadloom/site_favicon/``, not scaffold
+The owner's ruling of 2026-10-10 (``beadloom-e1xo``): the classic rule, a dark
+glyph on a light browser and a light glyph on a dark one. The SVG does it by
+itself; for the PNG a second one, drawn in :data:`DARK_SCHEME_GLYPH`, is linked
+behind the media query :data:`DARK_SCHEME`, after the first, so a dark browser
+that matches the query takes it.
+
+The three files are package data under ``beadloom/site_favicon/``, not scaffold
 files: the scaffold marks every file it ships with a text comment, and a PNG
 cannot carry one. They are written into ``public/brand/`` on every run that uses
 them, as the logo is copied, and a project replaces them under ``.beadloom/site/``.
@@ -36,6 +42,12 @@ if TYPE_CHECKING:
 #: The glyph's colour on a light browser, the colour the PNG carries.
 LIGHT_GLYPH = "#3c3c43"
 
+#: The glyph's colour on a dark browser, the colour the dark scheme's PNG carries.
+DARK_SCHEME_GLYPH = "#dfdfd6"
+
+#: The media query the dark scheme's PNG is linked behind.
+DARK_SCHEME = "(prefers-color-scheme: dark)"
+
 #: The PNG's width and height in pixels: a tab's 16 points at twice the density.
 FAVICON_PNG_SIZE = 32
 
@@ -47,19 +59,18 @@ _BEADLOOM_ICON = ("site_scaffold", "public", "brand", "beadloom-icon.svg")
 _BRAND_DIR = "brand"
 _SVG = "beadloom-favicon.svg"
 _PNG = "beadloom-favicon.png"
+_DARK_PNG = "beadloom-favicon-dark.png"
 
 #: The media type a favicon link names, by the file's suffix.
 _TYPES = {".svg": "image/svg+xml", ".png": "image/png"}
 
 
 def _beadloom_favicons() -> list[dict[str, str]]:
+    png = {"type": _TYPES[".png"], "sizes": f"{FAVICON_PNG_SIZE}x{FAVICON_PNG_SIZE}"}
     return [
         {"href": f"/{_BRAND_DIR}/{_SVG}", "type": _TYPES[".svg"]},
-        {
-            "href": f"/{_BRAND_DIR}/{_PNG}",
-            "type": _TYPES[".png"],
-            "sizes": f"{FAVICON_PNG_SIZE}x{FAVICON_PNG_SIZE}",
-        },
+        {"href": f"/{_BRAND_DIR}/{_PNG}", **png},
+        {"href": f"/{_BRAND_DIR}/{_DARK_PNG}", **png, "media": DARK_SCHEME},
     ]
 
 
@@ -78,7 +89,7 @@ def uses_beadloom_favicon(project_root: Path, logo: str) -> bool:
 
 
 def favicons_of(project_root: Path, logo: str) -> list[dict[str, str]]:
-    """The portal's favicons, each ``{href, type[, sizes]}`` with *href* before the base."""
+    """The portal's favicons, each ``{href, type[, sizes[, media]]}``, *href* before the base."""
     if uses_beadloom_favicon(project_root, logo):
         return _beadloom_favicons()
     suffix = PurePosixPath(logo).suffix.lower()
@@ -86,10 +97,10 @@ def favicons_of(project_root: Path, logo: str) -> list[dict[str, str]]:
 
 
 def write_beadloom_favicon(out_dir: Path) -> list[Path]:
-    """Write Beadloom's favicon, the SVG and the PNG, into the portal; the copies."""
+    """Write Beadloom's favicon, the SVG and the two PNGs, into the portal; the copies."""
     shipped = files("beadloom").joinpath(_PACKAGE_DIR)
     written: list[Path] = []
-    for name in (_SVG, _PNG):
+    for name in (_SVG, _PNG, _DARK_PNG):
         target = out_dir / "public" / _BRAND_DIR / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(shipped.joinpath(name).read_bytes())

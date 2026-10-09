@@ -24,8 +24,8 @@ const base = site.base || "/";
 /** A path the identity names from the portal's root, under the base. */
 const underBase = (path) => `${base}${path.replace(/^\//, "")}`;
 // The favicons the identity names: the project's logo when it has one of its own,
-// Beadloom's icon and its PNG otherwise. A `head` entry is written as it is, so
-// the base is prepended here.
+// Beadloom's icon and its two PNGs otherwise, the second behind a dark-scheme media
+// query. A `head` entry is written as it is, so the base is prepended here.
 const favicons = (site.favicons || []).map((icon) => [
   "link",
   { rel: "icon", ...icon, href: underBase(icon.href) },

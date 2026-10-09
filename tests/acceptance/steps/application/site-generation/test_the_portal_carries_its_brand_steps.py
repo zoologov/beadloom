@@ -36,7 +36,7 @@ _IDENTITY = ".vitepress/site.generated.mjs"
 _CONFIG = ".vitepress/config.mjs"
 #: Beadloom's icon as the package ships it, the footer's and the only mark.
 _BEADLOOM_ICON = ("site_scaffold", "public", "brand", "beadloom-icon.svg")
-#: Where the package keeps Beadloom's favicon, the SVG and its PNG.
+#: Where the package keeps Beadloom's favicon, the SVG and its two PNGs.
 _FAVICON_DIR = "site_favicon"
 
 #: A logo of the project's own, in each kind the portal takes; the bytes are compared.
@@ -185,11 +185,14 @@ def _favicon_from_identity(world: dict[str, Any]) -> None:
 @then(parsers.parse('the portal\'s identity names the favicons "{listed}"'))
 def _favicons(world: dict[str, Any], listed: str) -> None:
     expected = []
+    # "<href> <type> [<sizes> [<media>]]": a media query holds spaces, so it is the rest.
     for item in listed.split(", "):
-        href, kind, *sizes = item.split(" ")
+        href, kind, *rest = item.split(" ", 3)
         icon = {"href": href, "type": kind}
-        if sizes:
-            icon["sizes"] = sizes[0]
+        if rest:
+            icon["sizes"] = rest[0]
+        if len(rest) > 1:
+            icon["media"] = rest[1]
         expected.append(icon)
     assert _identity(world)["favicons"] == expected
 

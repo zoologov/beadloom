@@ -10,7 +10,8 @@
 // another.
 //
 // The card is handed lint's reach over the whole project from the data file the
-// viewer reads, so a card's findings are said against it.
+// viewer reads, so a card's findings are said against it, and the revision the
+// source links name, so a card says when it is not the built commit.
 //
 // A node page passes `focus`, its own node, with a depth and a height: the
 // viewer opens with that node selected and its neighbourhood marked, and the
@@ -38,6 +39,7 @@ const { data } = useArchitectureData();
         :layers="layers"
         :parents="parents"
         :lint="data?.lint || null"
+        :source-ref="data?.source_ref || null"
         @select="select"
         @close="close"
       />

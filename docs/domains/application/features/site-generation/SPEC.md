@@ -162,13 +162,16 @@ One feature node covers the cooperating modules below (all annotated
 - **favicon.py** — the portal's favicon (BDL-080 S4e, `beadloom-af99.9`, the owner's look of
   2026-10-09). `uses_beadloom_favicon(project_root, logo)` is true without a logo and for a logo
   that is Beadloom's icon byte for byte (`site_scaffold/public/brand/beadloom-icon.svg`).
-  `favicons_of(project_root, logo)` is then Beadloom's two, `/brand/beadloom-favicon.svg`
-  (`image/svg+xml`) and `/brand/beadloom-favicon.png` (`image/png`, `sizes` `32x32`), and
-  otherwise the logo's copy alone with its type. `write_beadloom_favicon(out_dir)` copies both
-  files from the package data `beadloom/site_favicon/` into `public/brand/`: not scaffold files,
-  because a PNG cannot carry the scaffold's text marker. `LIGHT_GLYPH` (`#3c3c43`) is the colour
-  the PNG carries, the SVG's light scheme; `FAVICON_PNG_SIZE` is 32. The PNG is generated from the
-  SVG by `tests/support/render_favicon_png.mjs`.
+  `favicons_of(project_root, logo)` is then Beadloom's three, `/brand/beadloom-favicon.svg`
+  (`image/svg+xml`), `/brand/beadloom-favicon.png` (`image/png`, `sizes` `32x32`) and, since
+  `beadloom-e1xo` (the owner's ruling of 2026-10-10), `/brand/beadloom-favicon-dark.png` (the
+  same, with `media` `DARK_SCHEME`, `(prefers-color-scheme: dark)`), and otherwise the logo's
+  copy alone with its type. `write_beadloom_favicon(out_dir)` copies the three files from the
+  package data `beadloom/site_favicon/` into `public/brand/`: not scaffold files, because a PNG
+  cannot carry the scaffold's text marker. `LIGHT_GLYPH` (`#3c3c43`) is the colour the first PNG
+  carries, the SVG's light scheme, and `DARK_SCHEME_GLYPH` (`#dfdfd6`) the second's, its dark
+  scheme; `FAVICON_PNG_SIZE` is 32. The PNGs are generated from the SVG, one per scheme, by
+  `tests/support/render_favicon_png.mjs`.
 - **forge_routes.py** — the routes a forge serves a path under (BDL-076 `beadloom-ujzb.8`).
   `Forge(kind, tree, blob, raw)` holds three URL templates over `{url}`, `{ref}`, `{path}`;
   `link(route, url, ref, path)` fills one, URL-encoding the revision and the path.
@@ -494,7 +497,18 @@ One feature node covers the cooperating modules below (all annotated
   `site.forges`, else a public forge's own host. Any other host gets no link, because a guessed
   route is a 404 that looks like a link. The remote reaches the data file only as each node's
   `source_url`: no screen reads the address, and a remote can hold a credential where no parser
-  expects it.
+  expects it. Since BDL-080 S4c (`beadloom-e1xo`) the revision is `source_ref.source_ref_of`'s
+  `linked`, and `RepositoryLink.source` carries the `SourceRef`; a branch is linked by the
+  forge's branch routes (`forge_routes.on_branch`).
+- **source_ref.py** — which revision the source links name (BDL-080 S4c, `beadloom-e1xo`,
+  BDL-UX #307). `source_ref_of(project_root, commit)` returns `SourceRef(commit, linked,
+  pushed)`: `pushed` and `linked == commit` when a remote-tracking ref holds the commit
+  (`git for-each-ref --contains`), or when git cannot say; otherwise `pushed` is `False` and
+  `linked` is the first of the branch's upstream on a remote that the clone holds, `origin`'s
+  branch of the same name and `origin/HEAD`, else the commit. Only refs the clone holds are read.
+  `SourceRef.as_dict()` is the data file's `source_ref`; `unpublished_warning(source_ref)` is
+  what `docs site` prints on stderr for an unpublished commit, naming
+  `git remote set-head origin --auto` when no branch stands in.
 - **node_pages.py** — per-node page rendering for `generate.py` (split out to stay under the
   domain-size limit). `render_all_pages(conn, portal=None)` returns sorted `NodePage`s, one per
   node of every kind; each page has summary (through `project_text.render_project_text` with
@@ -997,11 +1011,19 @@ Module `src/beadloom/application/site/site_logo.py`:
 Module `src/beadloom/application/site/favicon.py`:
 - `uses_beadloom_favicon(project_root, logo)` -> `bool`; `favicons_of(project_root, logo)` ->
   `list[dict[str, str]]`; `write_beadloom_favicon(out_dir)` -> `list[Path]`; `LIGHT_GLYPH`;
-  `FAVICON_PNG_SIZE`
+  `DARK_SCHEME_GLYPH`; `DARK_SCHEME`; `FAVICON_PNG_SIZE`
+
+Module `src/beadloom/application/site/source_ref.py`:
+- `SourceRef` — frozen dataclass `commit`, `linked`, `pushed`; `on_branch` -> `bool`;
+  `as_dict()` -> `dict[str, object]`
+- `source_ref_of(project_root, commit)` -> `SourceRef`; `unpublished_warning(source_ref)` ->
+  `str | None`; `SHORT_COMMIT` (12)
 
 Module `src/beadloom/application/site/forge_routes.py`:
 - `Forge(kind, tree, blob, raw)` with `link(route, url, ref, path)` and `route_segments`;
   `KNOWN_FORGES`; `PLACEHOLDERS` — `("url", "ref", "path")`
+- `on_branch(forge)` -> `Forge` — the forge's routes naming a branch: Gitea's `src/branch/` and
+  `raw/branch/`, Azure DevOps' `GB` and `versionType=branch`; any other forge as it is
 - `forge_for(web_url, declared=None)` -> `Forge | None`; `read_forge(setting)` ->
   `tuple[Forge | None, tuple[str, ...]]`; `template_problem(template)` -> `str | None`;
   `runs_past_repository(web_url, forge)` -> `bool`; `stops_before_repository(web_url, forge)` ->
@@ -1105,7 +1127,7 @@ Module `src/beadloom/application/site/architecture_card.py`:
 
 Module `src/beadloom/application/site/repository_link.py`:
 - `RepositoryLink` — frozen dataclass `url`, `ref` (both `""` when nothing states them),
-  `forges`; `source_url(source)`, `file_url(path)`, `raw_url(path)` -> `str` — the forge's
+  `forges`, `source` (the `SourceRef`, `None` without a commit or an address); `source_url(source)`, `file_url(path)`, `raw_url(path)` -> `str` — the forge's
   `tree`, `blob` and `raw` routes at `ref`, `""` when there is no repository, commit or path, or
   no forge is known for the host. `forge_of` was removed; `forge_routes.forge_for` replaces it
 - `web_url_of_remote(remote)` -> `str` — the web address of a git remote, `""` when a browser

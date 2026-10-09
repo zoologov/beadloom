@@ -343,6 +343,53 @@ test("the card shows the source without a link when the data file gives none", a
   await expect(field(page, "source").locator("a")).toHaveCount(0);
 });
 
+// A portal built from a commit no remote branch holds links a branch the remote holds
+// instead, and the card says so beside the link: the reader is looking at the branch,
+// which may differ from what the page says.
+const UNPUBLISHED = [
+  { linked: "main", says: "built from an unpublished commit; links point at main" },
+  { linked: COMMIT, says: `built from an unpublished commit; links point at ${COMMIT.slice(0, 12)}` },
+];
+
+/** Serve the data file with `sourceRef` as its `source_ref` (none when undefined); the node linked. */
+async function serveSourceRef(page, request, sourceRef) {
+  const data = await architectureData(request);
+  const node = [...data.nodes].filter((n) => n.source).sort((a, b) => a.id.localeCompare(b.id))[0];
+  node.source_url = `https://github.com/team/shop/tree/${sourceRef?.linked || COMMIT}/${node.source}`;
+  if (sourceRef === undefined) delete data.source_ref;
+  else data.source_ref = sourceRef;
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  return node;
+}
+
+for (const { linked, says } of UNPUBLISHED) {
+  test(`a card built from an unpublished commit reads "${says}" beside the source link`, async ({
+    page,
+    request,
+  }) => {
+    const node = await serveSourceRef(page, request, { commit: COMMIT, linked, pushed: false });
+
+    await openArchitecture(page, `?focus=${node.id}`);
+
+    await expect(field(page, "source").locator("a")).toHaveAttribute("href", node.source_url);
+    await expect(field(page, "source-ref")).toHaveText(says);
+  });
+}
+
+for (const { state, sourceRef } of [
+  { state: "a pushed commit", sourceRef: { commit: COMMIT, linked: COMMIT, pushed: true } },
+  { state: "a file that names no source ref", sourceRef: undefined },
+]) {
+  test(`a card built from ${state} says nothing about the commit`, async ({ page, request }) => {
+    const node = await serveSourceRef(page, request, sourceRef);
+
+    await openArchitecture(page, `?focus=${node.id}`);
+
+    await expect(field(page, "source").locator("a")).toHaveAttribute("href", node.source_url);
+    await expect(field(page, "source-ref")).toHaveCount(0);
+  });
+}
+
 // Every count on the card names what it was counted over. "none" under Rule
 // findings is said against lint's totals for the project, so it is not read as
 // "lint never ran"; the box holding the whole project lists the findings lint

@@ -646,8 +646,9 @@ class SlicePublicApiRule:
     """An import into a slice from outside it lands on the slice's ``index`` (BDL-080 S3c).
 
     Feature-Sliced Design enters a slice through its public API, the ``index`` file at
-    the top of its folder; Steiger's ``public-api`` rule reports reaching past it. A
-    *slice* is a node carrying one of ``tags`` whose ``source`` is a folder.
+    the top of its folder; Steiger's ``fsd/no-public-api-sidestep`` reports reaching
+    past it (its ``public-api`` reports a slice with no ``index`` at all). A *slice*
+    is a node carrying one of ``tags`` whose ``source`` is a folder.
 
     **Over resolved imports, not import paths.** ``forbid_import`` matches globs
     against import paths, and no glob says "inside this slice but not its index":

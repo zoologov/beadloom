@@ -1,6 +1,7 @@
 /* beadloom:component=site-app */
 /*
- * The project's logo in the nav bar, when it is an SVG drawn in `currentColor`.
+ * The project's logo in the nav bar: its height, and its colour when it is an SVG
+ * drawn in `currentColor`.
  *
  * VitePress draws the logo as an image, and an image cannot inherit the page's
  * colour: such a logo would be black on the dark theme. `config.mjs` marks it
@@ -11,11 +12,18 @@
  *
  * 32 px: half the nav bar's height and twice the title's 16 px type, so a square
  * mark reads beside the title rather than under it; VitePress's own 24 px suits a
- * wordmark, not a square.
+ * wordmark, not a square. Every nav logo is drawn 32 px high, an image in colours
+ * of its own as well, at its own proportions, so an adopter's portal matches
+ * Beadloom's; VitePress's own `--vp-nav-logo-height` is set inside the nav title
+ * only.
  */
 
 :root {
   --bl-nav-logo-size: 32px;
+}
+
+.VPNavBarTitle {
+  --vp-nav-logo-height: var(--bl-nav-logo-size);
 }
 
 .VPNavBarTitle .title .logo[data-monochrome] {

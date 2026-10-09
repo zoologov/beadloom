@@ -113,6 +113,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from beadloom.application.site.markdown_links import PortalLinks
+    from beadloom.application.site.source_ref import SourceRef
 
 logger = logging.getLogger(__name__)
 
@@ -137,12 +138,15 @@ class SiteResult:
     """The outcome of a site generation: every file written, sorted.
 
     ``scaffold`` is what the scaffold writer did with each shipped file,
-    including the ones it kept because they are not beadloom's.
+    including the ones it kept because they are not beadloom's. ``source_ref``
+    is the revision the source links name, ``None`` when they name none
+    (BDL-080 S4c): ``docs site`` warns when it is not a pushed commit.
     """
 
     out_dir: Path
     written: tuple[Path, ...]
     scaffold: ScaffoldReport
+    source_ref: SourceRef | None = None
 
 
 @dataclass(frozen=True)
@@ -705,5 +709,8 @@ def generate_site(
         written.append(out_dir / rel)
 
     return SiteResult(
-        out_dir=out_dir, written=tuple(sorted(set(written))), scaffold=scaffold
+        out_dir=out_dir,
+        written=tuple(sorted(set(written))),
+        scaffold=scaffold,
+        source_ref=repository.source,
     )

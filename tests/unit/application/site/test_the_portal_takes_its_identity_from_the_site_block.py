@@ -180,6 +180,12 @@ def test_the_generated_module_carries_the_identity_and_nothing_else(tmp_path: Pa
         "favicons": [
             {"href": "/brand/beadloom-favicon.svg", "type": "image/svg+xml"},
             {"href": "/brand/beadloom-favicon.png", "type": "image/png", "sizes": "32x32"},
+            {
+                "href": "/brand/beadloom-favicon-dark.png",
+                "type": "image/png",
+                "sizes": "32x32",
+                "media": "(prefers-color-scheme: dark)",
+            },
         ],
         "poweredBy": True,
     }

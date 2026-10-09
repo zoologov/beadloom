@@ -98,6 +98,18 @@ names its bead; the pull request is to be opened.
   section listed with 0) and `languages` (each About page's `language`, `en` or `ru`, and
   `page`). Two panels, Rule findings and Pages, follow the status cards; a data file without the
   keys shows neither.
+- **The Source link of a portal built from an unpublished commit names a branch the remote holds
+  (`beadloom-e1xo`).** A local build from a commit that no remote-tracking branch holds linked
+  every node to a 404. Its links now name the branch's upstream, else `origin`'s branch of the
+  same name, else `origin`'s default branch, and keep the commit when none of them exists; Gitea
+  and Azure DevOps links take their branch routes (`src/branch/`, `GB`). `architecture.data.json`
+  gains a top-level `source_ref`, `{commit, linked, pushed}`, present when the file carries
+  source links: `pushed` is `false` only when no remote-tracking branch holds the commit, and
+  `linked` is the commit's hash or the branch's name. The card says `built from an unpublished
+  commit; links point at main` under the link, and `docs site` warns on stderr without changing
+  its exit code. Measured on this repository, built from the unpushed `8dbe844c`: the links to
+  the commit answered 404; of the 139 links to `main`, 127 answered 200 and 12 answered 404, each
+  of the 12 a folder that `origin/main` does not hold yet.
 
 - **The portal carries a logo, a footer and its forge's icon (`beadloom-af99.7`,
   `beadloom-af99.9`).** Three keys
@@ -106,10 +118,13 @@ names its bead; the pull request is to be opened.
   project's own SVG or PNG by its path relative to the project root; `docs site` copies it to
   `public/logo.svg` or `public/logo.png` and the nav shows it beside the title, and a project
   that declares none gets no nav logo. An SVG logo drawn in `currentColor` is drawn in the
-  title's colour, 32 pixels square, in the light and the dark theme. The logo is the portal's
-  favicon too, as it is; a project without one, or whose logo is Beadloom's own icon, gets
-  Beadloom's: a theme-adaptive SVG and a 32-pixel PNG for browsers that take no SVG favicon, such
-  as Safari, which `docs site` writes under `public/brand/`. `site.powered_by` (default `true`)
+  title's colour, 32 pixels square, in the light and the dark theme; every other logo keeps its
+  colours and proportions and is drawn 32 pixels high too (`beadloom-e1xo`). The logo is the
+  portal's favicon too, as it is; a project without one, or whose logo is Beadloom's own icon
+  byte for byte, gets Beadloom's: a theme-adaptive SVG and two 32-pixel PNGs for browsers that
+  take no SVG favicon, such as Safari, the dark glyph's and the light glyph's behind
+  `(prefers-color-scheme: dark)` (`beadloom-e1xo`), which `docs site` writes under
+  `public/brand/`. `site.powered_by` (default `true`)
   switches a footer on every page: Beadloom's small icon and "Powered by Beadloom" on one line,
   without a link, and "MIT" and a link to Beadloom's repository drawn with the GitHub mark on the
   next; `false` removes it. `site.repo_icon` names the icon beside the header's repository link,
@@ -126,6 +141,9 @@ names its bead; the pull request is to be opened.
 
 - **Beadloom's mark is the square icon (`beadloom-af99.9`).** The lettered mark is retired, and
   `.github/social-preview.svg` is the square icon's version, approved by the owner on 2026-10-09.
+  Beadloom ships no colour brand asset (`beadloom-e1xo`): the sources, the colour icon and the
+  traced mark among them, are kept in `.github/brand/`, which nothing ships, with a README that
+  names the three files shipped from them byte for byte.
 - **Steiger passes on the scaffold, and this repository's CI runs it (`beadloom-af99.8`).** The
   scaffold's `steiger.config.js` switches `fsd/insignificant-slice` off and says why beside the
   switch: the theme is cut so that beads can run in parallel on disjoint graph nodes, not for

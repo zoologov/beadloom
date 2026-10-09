@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
     from beadloom.application.doc_spaces import SpacesReport, TrackerRead
     from beadloom.application.site.scaffold import ScaffoldReport
+    from beadloom.application.site.source_ref import SourceRef
 
 from beadloom.services.commands._root import main
 
@@ -159,6 +160,7 @@ def docs_site(
     click.echo(f"Generated {len(result.written)} files under {out}")
     _echo_scaffold_report(result.scaffold, out)
     _warn_about_the_base(project_root)
+    _warn_about_an_unpublished_commit(result.source_ref)
     if pages_workflow:
         _write_pages_workflow(project_root, out)
 
@@ -174,6 +176,19 @@ def _warn_about_the_base(project_root: Path) -> None:
     from beadloom.application.site.site_config import site_config_of
 
     warning = base_warning(site_config_of(project_root).base, origin_remote(project_root))
+    if warning is not None:
+        click.echo(warning, err=True)
+
+
+def _warn_about_an_unpublished_commit(source_ref: SourceRef | None) -> None:
+    """Warn on stderr when the portal was built from a commit no remote branch holds.
+
+    Its source links then name a branch standing in for it, or the commit
+    itself when none can (BDL-080 S4c); the exit code is the generation's own.
+    """
+    from beadloom.application.site.source_ref import unpublished_warning
+
+    warning = unpublished_warning(source_ref)
     if warning is not None:
         click.echo(warning, err=True)
 

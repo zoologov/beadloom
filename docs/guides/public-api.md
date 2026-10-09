@@ -31,7 +31,9 @@ makes it.
    `bitbucket`, `codeberg`, `gitea`, `azuredevops`, `git`. Without it the icon is read from the
    host of `site.repo_url`, which gives `azuredevops` for an Azure DevOps host as it has since
    8.0.0; BDL-080 S4e let `site.repo_icon` name it for a self-hosted server. `site.logo` is the
-   portal's favicon too (BDL-080 S4e); without it the favicon is Beadloom's.
+   portal's favicon too (BDL-080 S4e); without it, or when the file is Beadloom's own square
+   icon byte for byte, the favicon is Beadloom's (the owner accepted that rule on 2026-10-10,
+   `beadloom-e1xo`): the theme-adaptive SVG and a PNG per colour scheme under `public/brand/`.
 3. **The keys and the value vocabularies of the JSON outputs**: `ctx --json`, `status --json`,
    the debt report (`status --debt-report --json`) and `export`, whose artifact is JSON without
    an option. A vocabulary is the set of values a key can take. The activity level is one:
@@ -42,6 +44,13 @@ makes it.
 5. **The portal data file's schema**: the `schema_version` the generator writes and the keys under
    it. The reference is
    [`docs/services/vitepress-site/architecture-data.md`](../services/vitepress-site/architecture-data.md).
+   Key added since 8.0.0 (MINOR, BDL-080 S4c): the top-level `source_ref`, the revision the
+   source links name, present when the file carries source links. It is
+   `{commit, linked, pushed}`: `commit` is the full hash the portal was built from; `pushed` is
+   `true` or `false`, and `false` only when git says no remote-tracking branch holds the commit;
+   `linked` is the revision every source link names, either the same hash as `commit` (a pushed
+   commit, or an unpublished one no branch stands in for) or the name of a branch on the remote
+   (the branch's upstream, the remote's branch of the same name, or the remote's default branch).
 6. **The files generated for an adopter**: what `init`, `docs site`, `docs generate`,
    `setup-agentic-flow`, `setup-rules`, `setup-mcp` and `install-hooks` write into a project,
    their paths and what they mean to the project that receives them.

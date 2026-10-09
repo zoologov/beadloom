@@ -13,6 +13,12 @@
 // without one shows Beadloom's, so on an adopter's portal Beadloom's mark is in the
 // footer alone. A portal whose logo is Beadloom's own icon has no logo of its own:
 // it shows Beadloom's favicon, the theme-adaptive form of the same mark.
+//
+// A favicon follows the classic rule, a light glyph on a dark browser and a dark glyph
+// on a light one. The SVG does it by itself; a PNG cannot, so there are two, the light
+// glyph's behind a `prefers-color-scheme: dark` media query. And every nav logo is
+// drawn 32 pixels high, an image in colours of its own as a logo drawn in
+// `currentColor`, so an adopter's portal matches Beadloom's.
 
 import { test, expect } from "@playwright/test";
 import { importGenerated } from "../.vitepress/generated.mjs";
@@ -27,8 +33,14 @@ const FOOTER_ICON = `${BASE}brand/beadloom-icon.svg`;
 /** Beadloom's favicon: the theme-adaptive SVG, and the PNG for browsers that take no SVG. */
 const FAVICON_SVG = `${BASE}brand/beadloom-favicon.svg`;
 const FAVICON_PNG = `${BASE}brand/beadloom-favicon.png`;
+/** The PNG a dark browser takes: the light glyph. */
+const FAVICON_DARK_PNG = `${BASE}brand/beadloom-favicon-dark.png`;
 const FAVICON_PNG_SIZE = 32;
-/** The nav logo's side when it is drawn in the text's colour. */
+const DARK_SCHEME = "(prefers-color-scheme: dark)";
+/** The glyph's colour on a light browser and on a dark one, as the SVG draws them. */
+const DARK_GLYPH = "60,60,67";
+const LIGHT_GLYPH = "223,223,214";
+/** The nav logo's height, whatever the logo; its width too when it is drawn in the text's colour. */
 const NAV_LOGO_SIZE = 32;
 /** A page with a sidebar, which the footer must stay clear of. */
 const PAGE = "dashboard.html";
@@ -58,15 +70,36 @@ async function hasLogoOfItsOwn(request) {
   return (await served(request, logoPath())) !== icon;
 }
 
-/** The favicon links in the page's head, as `{href, type, sizes}`. */
+/** The favicon links in the page's head, as `{href, type, sizes, media}`. */
 async function favicons(page) {
   return page.locator('head link[rel="icon"]').evaluateAll((links) =>
     links.map((link) => ({
       href: link.getAttribute("href"),
       type: link.getAttribute("type"),
       sizes: link.getAttribute("sizes"),
+      media: link.getAttribute("media"),
     }))
   );
+}
+
+/** The colours of the fully opaque pixels of the image at `path`, each as "r,g,b". */
+async function opaqueColours(page, path) {
+  return page.evaluate(async (source) => {
+    const image = new Image();
+    image.src = source;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d");
+    context.drawImage(image, 0, 0);
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+    const colours = new Set();
+    for (let index = 0; index < data.length; index += 4) {
+      if (data[index + 3] === 255) colours.add(`${data[index]},${data[index + 1]},${data[index + 2]}`);
+    }
+    return [...colours];
+  }, path);
 }
 
 /** Whether the element is the topmost thing at its own centre: nothing covers it. */
@@ -96,16 +129,33 @@ test("a portal without a logo of its own shows Beadloom's favicon, theme-adaptiv
     expect(named, "an adopter's favicon names Beadloom's").toEqual([]);
     return;
   }
+  const sizes = `${FAVICON_PNG_SIZE}x${FAVICON_PNG_SIZE}`;
   expect(icons).toEqual([
-    { href: FAVICON_SVG, type: "image/svg+xml", sizes: null },
-    { href: FAVICON_PNG, type: "image/png", sizes: `${FAVICON_PNG_SIZE}x${FAVICON_PNG_SIZE}` },
+    { href: FAVICON_SVG, type: "image/svg+xml", sizes: null, media: null },
+    { href: FAVICON_PNG, type: "image/png", sizes, media: null },
+    { href: FAVICON_DARK_PNG, type: "image/png", sizes, media: DARK_SCHEME },
   ]);
   // The SVG picks its glyph's colour by the browser's scheme.
   expect(await served(request, FAVICON_SVG)).toContain("prefers-color-scheme: dark");
-  // The PNG is a PNG of the size its link declares: the signature, then IHDR's width and height.
-  const png = await (await request.get(FAVICON_PNG)).body();
-  expect([...png.subarray(1, 4)].map((code) => String.fromCharCode(code)).join("")).toBe("PNG");
-  expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([FAVICON_PNG_SIZE, FAVICON_PNG_SIZE]);
+  // Each PNG is a PNG of the size its link declares: the signature, then IHDR's width and height.
+  for (const path of [FAVICON_PNG, FAVICON_DARK_PNG]) {
+    const png = await (await request.get(path)).body();
+    expect([...png.subarray(1, 4)].map((code) => String.fromCharCode(code)).join(""), path).toBe("PNG");
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)], path).toEqual([FAVICON_PNG_SIZE, FAVICON_PNG_SIZE]);
+  }
+});
+
+test("Beadloom's PNG favicon is a dark glyph for a light browser and a light glyph behind the dark media query", async ({ page, request }) => {
+  await page.goto(PAGE);
+  if (await hasLogoOfItsOwn(request)) {
+    const named = (await favicons(page)).map((icon) => icon.href).filter((href) => href.includes("beadloom"));
+    expect(named, "an adopter's favicon names Beadloom's").toEqual([]);
+    return;
+  }
+  const media = await page.locator(`head link[rel="icon"][href="${FAVICON_DARK_PNG}"]`).getAttribute("media");
+  expect(media).toBe(DARK_SCHEME);
+  expect(await opaqueColours(page, FAVICON_PNG)).toEqual([DARK_GLYPH]);
+  expect(await opaqueColours(page, FAVICON_DARK_PNG)).toEqual([LIGHT_GLYPH]);
 });
 
 test("a portal with a logo of its own takes the logo as its favicon, as it is", async ({ page, request }) => {
@@ -116,7 +166,7 @@ test("a portal with a logo of its own takes the logo as its favicon, as it is", 
     return;
   }
   const type = site.logo.endsWith(".svg") ? "image/svg+xml" : "image/png";
-  expect(icons).toEqual([{ href: logoPath(), type, sizes: null }]);
+  expect(icons).toEqual([{ href: logoPath(), type, sizes: null, media: null }]);
 });
 
 test("the nav shows the project's logo when it declares one, and none otherwise", async ({ page }) => {
@@ -130,6 +180,18 @@ test("the nav shows the project's logo when it declares one, and none otherwise"
   await expect(logo).toHaveAttribute("src", logoPath());
   const drawn = await logo.evaluate((image) => image.complete && image.naturalWidth > 0);
   expect(drawn, `the logo ${site.logo} is not drawn`).toBe(true);
+});
+
+test("every nav logo is drawn 32 pixels high, an image in colours of its own as a logo in currentColor", async ({ page }) => {
+  await page.goto(PAGE);
+  const logo = page.locator(".VPNavBarTitle img.logo");
+  if (!site.logo) {
+    await expect(logo).toHaveCount(0);
+    return;
+  }
+  await expect(logo).toBeVisible();
+  const box = await logo.boundingBox();
+  expect(box.height).toBe(NAV_LOGO_SIZE);
 });
 
 test("a logo drawn in currentColor is drawn in the text's colour, in either theme, at 32 pixels", async ({ page, request }) => {

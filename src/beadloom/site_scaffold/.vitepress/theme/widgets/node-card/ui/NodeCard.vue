@@ -17,6 +17,8 @@
 // over the whole project, so "none" is not read as "lint never ran"; the box
 // that holds the whole project lists the findings lint binds to no node; a box's
 // debt is said twice, its own and the debt of the nodes inside it, by reason.
+// A portal built from a commit no remote branch holds links a branch the remote
+// holds instead, and the card says so beside the source link.
 //
 // Every value comes from the data file. A field the file holds nothing for says
 // "none"; a field a version 1 file does not carry at all says "not recorded",
@@ -40,6 +42,9 @@ const props = defineProps({
   // Lint's reach over the whole project, the data file's top-level `lint`, or
   // null for a file written before it was carried.
   lint: { type: Object, default: null },
+  // The revision the source links name, the data file's top-level `source_ref`
+  // (`{commit, linked, pushed}`), or null for a file that names none.
+  sourceRef: { type: Object, default: null },
 });
 const emit = defineEmits(["select", "close"]);
 
@@ -58,6 +63,16 @@ const layerOrigin = computed(() => {
 });
 
 const sourceUrl = computed(() => props.node.source_url || "");
+
+/** How much of a commit the card shows, as `docs site`'s warning does. */
+const SHORT_COMMIT = 12;
+// "built from an unpublished commit; links point at main", or "" for a pushed commit.
+const unpublished = computed(() => {
+  const ref = props.sourceRef;
+  if (!ref || ref.pushed !== false) return "";
+  const linked = ref.linked === ref.commit ? ref.commit.slice(0, SHORT_COMMIT) : ref.linked;
+  return `built from an unpublished commit; links point at ${linked}`;
+});
 
 // A doc's page, when the site published one: its served link ends with the doc's path.
 const docLinkOf = computed(() => {
@@ -152,7 +167,10 @@ const placements = computed(() =>
       <dt>Source</dt>
       <dd data-card-field="source">
         <template v-if="!node.source">{{ node.source === undefined ? NOT_RECORDED : NONE }}</template>
-        <a v-else-if="sourceUrl" :href="sourceUrl" target="_blank" rel="noopener"><code>{{ node.source }}</code></a>
+        <template v-else-if="sourceUrl">
+          <a :href="sourceUrl" target="_blank" rel="noopener"><code>{{ node.source }}</code></a>
+          <span v-if="unpublished" class="bl-card-note bl-card-source-ref" data-card-field="source-ref">{{ unpublished }}</span>
+        </template>
         <code v-else>{{ node.source }}</code>
       </dd>
       <dt>Activity</dt>
@@ -360,6 +378,9 @@ const placements = computed(() =>
 }
 .bl-card-note {
   color: var(--vp-c-text-3);
+}
+.bl-card-source-ref {
+  display: block;
 }
 .bl-card-tag,
 .bl-card-chip {

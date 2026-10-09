@@ -13,6 +13,11 @@
 # browsers that take no SVG favicon. A logo drawn in `currentColor` is drawn in the
 # text's colour in the nav, since an image cannot inherit the page's colour.
 #
+# The owner's rulings of 2026-10-10 (`beadloom-e1xo`): a favicon follows the classic rule,
+# a dark glyph on a light browser and a light glyph on a dark one. The SVG adapts by
+# itself; a PNG cannot, so Beadloom's favicon has two, the light glyph's behind the media
+# query `(prefers-color-scheme: dark)`.
+#
 # The project below is not this repository: its layers are `application`, `domain`
 # and `infrastructure`, and it keeps its logo under `art/`.
 
@@ -51,13 +56,14 @@ Feature: the portal shows the project's logo, a footer that can be switched off 
     And the portal holds no file "public/brand/beadloom-mark-mono.svg"
     And the portal's VitePress config takes its favicons from the portal's identity
 
-  @bead:beadloom-af99.9
-  Scenario: a project without a logo gets Beadloom's favicon, theme-adaptive, and its PNG
+  @bead:beadloom-af99.9 @bead:beadloom-e1xo
+  Scenario: a project without a logo gets Beadloom's favicon, theme-adaptive, and a PNG per scheme
     Given a project that declares the site block "title: Acme Orders"
     When the site is generated for the project
-    Then the portal's identity names the favicons "/brand/beadloom-favicon.svg image/svg+xml, /brand/beadloom-favicon.png image/png 32x32"
+    Then the portal's identity names the favicons "/brand/beadloom-favicon.svg image/svg+xml, /brand/beadloom-favicon.png image/png 32x32, /brand/beadloom-favicon-dark.png image/png 32x32 (prefers-color-scheme: dark)"
     And the portal holds Beadloom's favicon "public/brand/beadloom-favicon.svg", byte for byte
     And the portal holds Beadloom's favicon "public/brand/beadloom-favicon.png", byte for byte
+    And the portal holds Beadloom's favicon "public/brand/beadloom-favicon-dark.png", byte for byte
 
   @bead:beadloom-af99.9
   Scenario Outline: a logo of the project's own is its favicon, as it is
@@ -66,6 +72,7 @@ Feature: the portal shows the project's logo, a footer that can be switched off 
     Then the portal's identity names the favicons "/logo.<kind> <type>"
     And the portal holds no file "public/brand/beadloom-favicon.svg"
     And the portal holds no file "public/brand/beadloom-favicon.png"
+    And the portal holds no file "public/brand/beadloom-favicon-dark.png"
 
     Examples:
       | kind | type          |
@@ -76,7 +83,7 @@ Feature: the portal shows the project's logo, a footer that can be switched off 
   Scenario: a logo that is Beadloom's own icon takes Beadloom's favicon
     Given a project that holds Beadloom's icon at "art/beadloom.svg" and declares it as its logo
     When the site is generated for the project
-    Then the portal's identity names the favicons "/brand/beadloom-favicon.svg image/svg+xml, /brand/beadloom-favicon.png image/png 32x32"
+    Then the portal's identity names the favicons "/brand/beadloom-favicon.svg image/svg+xml, /brand/beadloom-favicon.png image/png 32x32, /brand/beadloom-favicon-dark.png image/png 32x32 (prefers-color-scheme: dark)"
     And the portal's identity draws the logo in the text's colour
 
   @bead:beadloom-af99.9

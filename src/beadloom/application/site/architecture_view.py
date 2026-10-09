@@ -528,8 +528,9 @@ def build_architecture_view_data(
             caller supplies it, so a fixed value regenerates byte-identically.
         repository: The repository the card links a node's source to, as the
             caller resolves it; ``None`` gives every node an empty link rather
-            than one nobody stated. It reaches the file only as each node's
-            ``source_url``.
+            than one nobody stated. It reaches the file as each node's
+            ``source_url`` and, when it knows the built commit, as the top-level
+            ``source_ref`` (BDL-080 S4c): ``{commit, linked, pushed}``.
         lint: Lint's totals and node-less findings for the whole project
             (BDL-080 S4a). Carried as the top-level ``lint`` when given, and
             omitted rather than reported clean when lint did not run.
@@ -539,6 +540,7 @@ def build_architecture_view_data(
         ``edges``, ``generated_at``, ``beadloom_version``, ``layers`` and
         ``layer_order`` (the first layer rule by name), ``layer_rules`` (every
         layer rule with its scope, BDL-080 S1b), ``lint`` when *lint* is given,
+        ``source_ref`` when *repository* names the built commit,
         every section sorted for
         byte-stable serialization. Each node carries its ``layer_rank`` (the
         partition index for the layered-lanes layout), its ``layer_rule`` and
@@ -574,6 +576,8 @@ def build_architecture_view_data(
     }
     if lint is not None:
         data["lint"] = lint.as_dict()
+    if repository is not None and repository.source is not None:
+        data["source_ref"] = repository.source.as_dict()
     return data
 
 

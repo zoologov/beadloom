@@ -125,6 +125,8 @@ class TestSiteGenerationCluster:
         nav: twenty-nine.
         BDL-080 S4e (``beadloom-af99.9``) added ``favicon.py``, the portal's favicon from
         the logo or Beadloom's own: thirty.
+        BDL-080 S4c (``beadloom-e1xo``) added ``source_ref.py``, which revision the
+        source links name when the built commit is on no remote branch: thirty-one.
         The test keeps its historical name so its collected id is unchanged.
         """
         app_dir = self_check_snapshot / "src" / "beadloom" / "application"
@@ -132,7 +134,7 @@ class TestSiteGenerationCluster:
         assert (site_dir / "__init__.py").is_file()
         names = {p.name for p in site_dir.glob("*.py")} - {"__init__.py"}
         assert "generate.py" in names
-        assert len(names) == 30, names
+        assert len(names) == 31, names
         assert (site_dir / "dashboard").is_dir()
         assert sorted(p.name for p in app_dir.glob("site*.py")) == []
 
