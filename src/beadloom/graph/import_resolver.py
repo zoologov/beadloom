@@ -14,11 +14,21 @@ from typing import TYPE_CHECKING
 from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config, script_blocks
+from beadloom.graph.exact_case import first_existing_file
+from beadloom.graph.expo_modules import ExpoModules, refresh_bridge_edges
 from beadloom.graph.go_modules import GoModules
 from beadloom.graph.import_manifests import record_manifests
+from beadloom.graph.js_specifiers import (
+    aliased_targets,
+    is_relative_specifier,
+    module_file_candidates,
+    relative_import_candidates,
+)
 from beadloom.graph.jvm_packages import JVM_EXTENSIONS, JvmPackages, read_jvm_packages
+from beadloom.graph.project_walk import ProjectFiles
 from beadloom.graph.rules.layers import part_of_ancestors
 from beadloom.graph.swift_packages import SwiftPackages
+from beadloom.graph.tsconfig_paths import TsConfigs
 from beadloom.infrastructure.repository import get_owning_ref_id
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
@@ -33,7 +43,10 @@ if TYPE_CHECKING:
 # Rust built-in crates to skip.
 _RUST_BUILTIN_CRATES: frozenset[str] = frozenset({"std", "core", "alloc"})
 
-# Well-known TS/JS path aliases mapped to directory names.
+# Well-known TS/JS path aliases mapped to directory names. The LAST reading of a
+# non-relative specifier: what a project's tsconfig `paths`/`baseUrl` and its
+# `imports.aliases:` map it to is tried first, and only a specifier none of them
+# names an existing file for is read through this table (BDL-080 `beadloom-cwzc`).
 _TS_ALIAS_MAP: dict[str, str] = {
     "@/": "src/",
     "~/": "src/",
@@ -714,7 +727,7 @@ def extract_imports(file_path: Path) -> list[ImportInfo]:
 
     if ext == ".py":
         return _extract_python_imports(root, file_str)
-    if ext in (".ts", ".tsx", ".js", ".jsx"):
+    if ext in _SCRIPT_EXTENSIONS:
         return _extract_ts_imports(root, file_str)
     if ext == ".go":
         return _extract_go_imports(root, file_str)
@@ -735,6 +748,10 @@ def extract_imports(file_path: Path) -> list[ImportInfo]:
 
 
 _VUE_EXTENSION = ".vue"
+
+#: The extensions whose files are JS/TS modules read by one extractor; ``.mjs`` and
+#: ``.cjs`` since BDL-080 (``beadloom-zd4m``), which the code indexer parses as JavaScript.
+_SCRIPT_EXTENSIONS = frozenset({".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"})
 
 
 def _read_source(file_path: Path) -> str | None:
@@ -812,48 +829,26 @@ def _normalize_ts_import(import_path: str) -> str | None:
     return None
 
 
-#: The order a relative JS/TS specifier is completed in (BDL-076 J1): the path
-#: as written, then each extension on it, then each extension on ``<path>/index``.
-#: A file therefore beats a folder of the same name, as it does for Node and for
-#: the bundlers. ``.mjs``/``.cjs`` and ``.vue`` need not be parseable here: the
-#: target only has to exist for its owning node to be named.
-_RELATIVE_EXTENSIONS: tuple[str, ...] = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue")
+def _mapped_file(tree: _ImportTree, importer: str, specifier: str) -> str | None:
+    """The file a non-relative JS/TS *specifier* names through what the project declares.
 
-#: TypeScript's ESM convention: a specifier carries the extension the file will
-#: have AFTER compilation, so ``./a.js`` in a source tree names ``a.ts``. Tried
-#: right after the path as written.
-_TS_SOURCES_OF_EMITTED: dict[str, tuple[str, ...]] = {
-    ".js": (".ts", ".tsx"),
-    ".jsx": (".tsx",),
-}
-
-
-def is_relative_specifier(specifier: str) -> bool:
-    """Whether a JS/TS module specifier is relative to the importing file."""
-    return specifier in (".", "..") or specifier.startswith(("./", "../"))
-
-
-def relative_import_candidates(specifier: str, importer: str) -> list[str]:
-    """The project-relative files a relative *specifier* may name, in resolution order.
-
-    *importer* is the importing file's project-relative POSIX path. A specifier
-    that climbs above the project root names nothing and yields ``[]``.
-
-    Not handled, each named so its absence reads as a decision: ``tsconfig``
-    ``paths``/``baseUrl`` beyond the two aliases in ``_TS_ALIAS_MAP``, a
-    folder's ``package.json`` ``main``/``exports``, ``.mts``/``.cts`` and
-    ``.d.ts`` targets, query suffixes (``./x.vue?raw``), CommonJS ``require()``.
+    Read in the order a project's own tooling reads it (BDL-080 ``beadloom-cwzc``): the
+    ``paths`` of the tsconfig governing *importer*, then the aliases declared under
+    ``imports.aliases:`` (the ones Babel ``module-resolver`` or Vite ``resolve.alias``
+    apply and no tsconfig carries), then ``baseUrl``. ``None`` when no declaration maps
+    the specifier to an existing file; the caller then reads it as it did before any
+    declaration was read.
     """
-    target = posixpath.normpath(posixpath.join(posixpath.dirname(importer), specifier))
-    if target == ".." or target.startswith("../"):
-        return []
-    stem, suffix = posixpath.splitext(target)
-    return [
-        target,
-        *(stem + ext for ext in _TS_SOURCES_OF_EMITTED.get(suffix, ())),
-        *(target + ext for ext in _RELATIVE_EXTENSIONS),
-        *(posixpath.join(target, f"index{ext}") for ext in _RELATIVE_EXTENSIONS),
-    ]
+    for targets in (
+        tree.ts_configs.mapped(specifier, importer),
+        aliased_targets(specifier, tree.aliases),
+        tree.ts_configs.under_base_url(specifier, importer),
+    ):
+        for target in targets:
+            found = first_existing_file(module_file_candidates(target), tree.project_root)
+            if found is not None:
+                return found
+    return None
 
 
 def resolve_relative_import(
@@ -871,10 +866,8 @@ def resolve_relative_import(
     no file, or names a file no node owns; the caller records either as an
     unresolved import rather than dropping it.
     """
-    for candidate in relative_import_candidates(specifier, importer):
-        if (project_root / candidate).is_file():
-            return get_owning_ref_id(conn, candidate)
-    return None
+    found = first_existing_file(relative_import_candidates(specifier, importer), project_root)
+    return get_owning_ref_id(conn, found) if found is not None else None
 
 
 def _find_node_by_source_prefix(
@@ -1302,7 +1295,7 @@ def create_import_edges(conn: sqlite3.Connection) -> int:
     return edges_created
 
 
-_TS_EXTENSIONS = frozenset({".ts", ".tsx", ".js", ".jsx", ".vue"})
+_TS_EXTENSIONS = frozenset({*_SCRIPT_EXTENSIONS, _VUE_EXTENSION})
 
 
 @dataclass(frozen=True)
@@ -1312,7 +1305,9 @@ class _ImportTree:
     An answer is a function of this and of the graph's nodes, and of nothing an
     earlier run left in the index (``beadloom-nh7h``). *source_files* are the
     project-relative POSIX paths of the source files under the scan paths; the
-    manifest readers each read their files once, on first use.
+    manifest readers each read their files once, on first use. *aliases* are the
+    ``(alias, folder)`` pairs the project declares under ``imports.aliases:``, read
+    by the caller, because the graph domain does not read that block itself.
     """
 
     project_root: Path
@@ -1322,11 +1317,17 @@ class _ImportTree:
     go_modules: GoModules
     swift_packages: SwiftPackages
     jvm_packages: JvmPackages
+    ts_configs: TsConfigs
+    aliases: tuple[tuple[str, str], ...]
+    expo_modules: ExpoModules
 
 
-def _read_import_tree(project_root: Path, files: Sequence[Path]) -> _ImportTree:
+def _read_import_tree(
+    project_root: Path, files: Sequence[Path], aliases: Sequence[tuple[str, str]]
+) -> _ImportTree:
     """Read the tree one run resolves its imports against; *files* are its source files."""
     scan_paths = resolve_scan_paths(project_root)
+    files_walked = ProjectFiles(project_root)
     return _ImportTree(
         project_root=project_root,
         scan_paths=scan_paths,
@@ -1335,6 +1336,21 @@ def _read_import_tree(project_root: Path, files: Sequence[Path]) -> _ImportTree:
         go_modules=GoModules(project_root),
         swift_packages=SwiftPackages(project_root),
         jvm_packages=read_jvm_packages(project_root, files),
+        ts_configs=TsConfigs(project_root, files_walked),
+        aliases=tuple(aliases),
+        expo_modules=ExpoModules(project_root, files_walked),
+    )
+
+
+def _record_manifests(conn: sqlite3.Connection, tree: _ImportTree) -> None:
+    """Record the fingerprint of every declaration *tree*'s answers were read through."""
+    record_manifests(
+        conn,
+        tree.go_modules,
+        tree.swift_packages,
+        tree.ts_configs,
+        tree.aliases,
+        tree.expo_modules,
     )
 
 
@@ -1370,6 +1386,10 @@ def _resolve_import(
         )
     if is_ts and is_relative_specifier(import_path):
         return resolve_relative_import(import_path, importer_posix, tree.project_root, conn)
+    if is_ts:
+        mapped = _mapped_file(tree, importer_posix, import_path)
+        if mapped is not None:
+            return get_owning_ref_id(conn, mapped)
     return resolve_import_to_node(
         import_path,
         file_path,
@@ -1442,21 +1462,30 @@ def _reresolve_stored_imports(
     return changed
 
 
-def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
+def index_imports(
+    project_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    aliases: Sequence[tuple[str, str]] = (),
+) -> int:
     """Scan all source files and index their imports into the code_imports table.
 
     Scans directories listed in ``scan_paths`` from config.yml.
-    After indexing, creates ``depends_on`` edges from resolved imports.
+    After indexing, creates ``depends_on`` edges from resolved imports, and the ``uses``
+    edges an Expo module's config declares (:mod:`beadloom.graph.expo_modules`).
+    *aliases* are the ``(alias, folder)`` pairs of ``imports.aliases:``; the
+    application layer reads them, with the refusals of that block.
     Returns the count of imports indexed.
     """
     files = _collect_source_files(project_root)
-    tree = _read_import_tree(project_root, files)
+    tree = _read_import_tree(project_root, files, aliases)
     total = sum(_index_one_file(file_path, tree, conn) for file_path in files)
     conn.commit()
-    record_manifests(conn, tree.go_modules, tree.swift_packages)
+    _record_manifests(conn, tree)
 
-    # Create depends_on edges from resolved imports.
+    # Create depends_on edges from resolved imports, and the bridges no import carries.
     refresh_import_edges(conn)
+    refresh_bridge_edges(conn, tree.expo_modules)
 
     return total
 
@@ -1467,6 +1496,7 @@ def reindex_file_imports(
     *,
     touched: Sequence[str],
     removed: Sequence[str],
+    aliases: Sequence[tuple[str, str]] = (),
 ) -> int:
     """Re-extract imports for *touched* files and forget those *removed*.
 
@@ -1481,17 +1511,18 @@ def reindex_file_imports(
     without parsing them, because a touched or removed file can change what an
     untouched one's import names (``beadloom-nh7h``), and so can a manifest: a
     caller that saw only a manifest change passes both lists empty
-    (``beadloom-jcng``). The result equals a fresh index of the tree, and the
-    fingerprint of the manifests it was read through is recorded. The derived
+    (``beadloom-jcng``), and so can a tsconfig or a declared alias (``beadloom-cwzc``).
+    The result equals a fresh index of the tree, and the fingerprint of the
+    manifests it was read through is recorded. The derived
     ``depends_on`` edge set is rebuilt afterwards, so an import that disappeared
-    stops being a dependency instead of lingering.
+    stops being a dependency instead of lingering, and so is the Expo bridge set.
 
     Returns the number of imports indexed for the touched files.
     """
     for rel_path in (*touched, *removed):
         conn.execute("DELETE FROM code_imports WHERE file_path = ?", (rel_path,))
 
-    tree = _read_import_tree(project_root, _collect_source_files(project_root))
+    tree = _read_import_tree(project_root, _collect_source_files(project_root), aliases)
     extensions = _supported_extensions()
     total = 0
     for rel_path in touched:
@@ -1502,8 +1533,9 @@ def reindex_file_imports(
     _reresolve_stored_imports(tree, conn, skip=frozenset(touched))
 
     conn.commit()
-    record_manifests(conn, tree.go_modules, tree.swift_packages)
+    _record_manifests(conn, tree)
     refresh_import_edges(conn)
+    refresh_bridge_edges(conn, tree.expo_modules)
     return total
 
 

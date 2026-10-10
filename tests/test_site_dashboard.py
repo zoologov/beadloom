@@ -292,7 +292,11 @@ def test_dashboard_data_json_matches_build(tmp_path: Path) -> None:
     finally:
         conn.close()
     written = json.loads((out / "public" / "dashboard.data.json").read_text(encoding="utf-8"))
+    # The page map is the one key the run adds: only the run knows what it wrote
+    # (BDL-080 S4a). Everything else is the build, verbatim.
+    pages = written.pop("pages")
     assert written == expected
+    assert pages["count"] == sum(section["count"] for section in pages["sections"]) > 0
 
 
 def test_dashboard_md_is_title_intro_plus_mounts_only(tmp_path: Path) -> None:
@@ -330,6 +334,26 @@ def test_dashboard_md_mounts_echarts_widgets(tmp_path: Path) -> None:
     md = render_dashboard_md(data)
     for tag in ("<HealthGauges", "<CategoryChart", "<TrendCharts", "<Recommendations"):
         assert tag in md, f"dashboard.md must mount {tag} ... />"
+
+
+def test_dashboard_md_mounts_the_population_panels_beside_the_cards(tmp_path: Path) -> None:
+    """BDL-080 S4a (`beadloom-5pxv`): lint's reach and the page map follow the cards.
+
+    The status cards carry lint's and the debt report's numbers; the two panels
+    after them name what those numbers were counted over — the findings bound to
+    no node, and the pages the run wrote.
+    """
+    project = _make_project(tmp_path, with_violation=True)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    md = render_dashboard_md(data)
+    cards = md.index("<StatusCards />")
+    assert cards < md.index("<RuleFindings />") < md.index("<PageMap />") < md.index(
+        "<HealthGauges />"
+    )
 
 
 def test_dashboard_md_has_no_verbose_text_dump(tmp_path: Path) -> None:

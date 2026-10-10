@@ -1,0 +1,16 @@
+  # BDL-080 S2a (`beadloom-7jgr`): the viewer cut by cohesion into Feature-Sliced
+  # slices (RFC D3). A segment of the site's `shared` layer is a node of its own,
+  # `part_of site-shared` and tagged `fsd-shared`: two segments importing each
+  # other are peers inside one tagged container, which `site-fsd-layers` allows.
+nodes:
+  - ref_id: site-shared-grid-routing
+    kind: component
+    summary: "The overview's own router: a grid of tracks between the fixed top-level boxes, and every aggregated line between two top-level ends routed afresh on it"
+    source: src/beadloom/site_scaffold/.vitepress/theme/shared/grid-routing/
+    tags: [fsd-shared]
+    docs:
+      - docs/services/vitepress-site/shared-grid-routing.md
+edges:
+  - src: site-shared-grid-routing
+    dst: site-shared
+    kind: part_of

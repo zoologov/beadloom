@@ -178,9 +178,12 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     result.warnings.extend(sym_warnings)
 
     # 3b. Extract and index code imports.
+    from beadloom.application.import_aliases import import_aliases
     from beadloom.graph.import_resolver import index_imports
 
-    result.imports_indexed = index_imports(project_root, conn)
+    result.imports_indexed = index_imports(
+        project_root, conn, aliases=import_aliases(project_root)
+    )
 
     # 3c. Load architecture rules from rules.yml.
     rules_path = project_root / ".beadloom" / "_graph" / "rules.yml"

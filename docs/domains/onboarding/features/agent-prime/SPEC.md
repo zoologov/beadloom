@@ -272,6 +272,179 @@ Not read, and said or known:
   node stays unplaced, and `init` names it below its `Tests:` line. An adopter who ran `init`
   before this version adds the key or re-runs `init`.
 
+## A Feature-Sliced frontend, Expo modules and Expo Router (BDL-080 S3)
+
+### The `fsd` preset
+
+`presets.detect_preset()` tries the `fsd` preset before every other one, the mobile short-circuit
+to `monolith` included. A React Native project in the FSD layout is mobile and layered at once,
+and read as a monolith its layers became domains and its slices their children, with no layer
+rule to judge them. A project is FSD when both hold (`_is_fsd_frontend`):
+
+- **the folders**: at least three of the six layers, `app`, `pages`, `widgets`, `features`,
+  `entities`, `shared` (`FSD_LAYERS`), are folders under `src/` or at the project root;
+  `presets.fsd_root()` reads `src/` first and returns the folder holding them (`""` for the
+  root), else `None`;
+- **a frontend** (BDL-080 S3f): a layer folder holds a `.js`, `.jsx`, `.ts`, `.tsx`, `.mjs`,
+  `.cjs` or `.vue` file of the project's own (not under `node_modules`, `dist`, `build` or
+  `vendor`), or a `package.json` sits at the project root or in the FSD root.
+
+The second condition came from the S3 review: by folder names alone, a Python tree with
+`src/app`, `src/entities`, `src/shared` and `src/infrastructure` was read as FSD, given a
+frontend's rules and lost a node. That tree is `monolith` again. The same Python tree beside a
+tooling `package.json` (husky, for one) is still FSD by this rule; that residual is the owner's
+to rule on. `init --preset fsd` selects the preset by hand.
+
+### What `init` writes for an FSD tree
+
+`scanner/fsd_layout.py` (`read_fsd_layout()` -> `FsdLayout`, `fsd_nodes()` -> `FsdGraph`) reads
+the tree slice by slice. Every node it writes is a `component` with one tag:
+
+| Folder | Node | Tag | `part_of` |
+|--------|------|-----|-----------|
+| a slice of `pages`, `widgets`, `features` or `entities` holding code | `<layer>-<slice>` | `fsd-<layer>` | the root service |
+| `app/`, `shared/` | a container named `app` / `shared` | `fsd-app` / `fsd-shared` | the root service |
+| a segment of `app/` or `shared/` holding code | `<layer>-<segment>` | `fsd-app` / `fsd-shared` | its container |
+| a folder beside the layers holding code (`components`, `hooks`, `stores`, ...) | the folder's name | `fsd-legacy` | the root service |
+| Expo Router's `app/` at the project root (see below) | `app-routes` | `fsd-app` | the `app` container, else the root |
+
+A layer folder is no node: a node per layer would be a tagged container holding every slice in
+it, and the layer rule reads two ends inside one tagged container as internal, so two widgets
+importing each other would pass. Legacy folders are nodes because a graph that omits half the
+code says by omission that it is not there; they stand outside every FSD rule. What the layout
+claims (`FsdLayout.claimed`: the whole `src/` and the routes folder when the layers are under
+`src/`, else the layer and legacy folders at the root) leaves the directory clustering.
+
+**No import edge is frozen into the YAML.** On an FSD tree `bootstrap_project()` skips the quick
+import scan, and the first reindex derives every `depends_on` edge from the code through tsconfig
+`paths` and `imports.aliases:`. Measured by S3c on its synthetic tree: with scan edges written,
+a cross-import removed from the code kept `fsd-layers` red, because the YAML edge was declared;
+the reindex derived the same 17 of 17 edges.
+
+**The rules it writes** (`rules_gen.generate_fsd_rules(frontend, rules_path)`, as commented text
+through `write_text_atomic`; the count it returns is read back from that text). Nine rules, each
+with the owner's reason in a comment beside it, citing Steiger's `recommended` set:
+
+| Rule | Type | Severity | What it judges |
+|------|------|----------|----------------|
+| `fsd-layers` | `layers`, titled `FSD architecture`, `scope:` the root service, `allow_skip: true`, `edge_kind: depends_on` | error | the six `fsd-<layer>` tags, top-down |
+| `fsd-public-api` | `slice_public_api`, tags `fsd-pages fsd-widgets fsd-features fsd-entities` | error | an import into a slice lands on its `index` |
+| `fsd-slice-shape` | `slice_shape`, the same tags, segments `ui model lib api config` | warn | a slice's top holds its segments and its `index` |
+| `fsd-cohesion-<layer>` (six) | `check`, `for: {kind: component, tag: fsd-<layer>}`, `max_symbols` | warn | widgets 80 symbols, every other layer 60 (`FSD_COHESION_LIMITS`) |
+
+**Steiger's script** (`scanner/steiger_script.py`, `ensure_steiger_script(project_root,
+fsd_root)` -> `SteigerScript`). `init` writes `"lint:fsd": "steiger ./<fsd root>"` (`steiger .`
+for layers at the root) into `package.json`, unless a script is already named `lint:fsd` or runs
+`steiger`, and prints one line. On the `rn-fsd` fixture it prints:
+
+```text
+Steiger: wrote the script 'lint:fsd' ('steiger ./src') into package.json, the file-level half of the FSD rules; install it with `npm install -D steiger @feature-sliced/steiger-plugin` and add a steiger.config.js with the plugin's recommended set
+```
+
+The file keeps its key order and the indentation of its second line (two spaces for a one-line
+file), so the diff is the one script: measured by S3f on a tab-indented `package.json`,
+`git diff --numstat` went from 13 insertions and 12 deletions to 2 and 1. It is written whole
+through `write_text_atomic` and keeps its permission bits. A `package.json` that is not a JSON
+object, or whose `scripts` is not an object, is left alone and the line says why.
+
+**The aliases** (`scanner/alias_scan.py`, `scan_bundler_aliases(project_root)` -> `AliasScan`;
+BDL-080 S3a). On every project, FSD or not, `init` reads the text of `babel.config.{js,cjs,mjs,json}`,
+`.babelrc` and `vite.config.*` at the root, in that order, without running them. In an
+`alias: { ... }` object it reads each entry whose key is a quoted string or a bare name; in an
+`alias: [ ... ]` array, each `{ find, replacement }` whose `find` is a string. The folder is
+built from the value's string literals in order (`path.resolve(__dirname, 'src', 'shared')` is
+`src/shared`). A regular-expression alias, a value with no string literal and a folder outside
+the project are named and not written. The usable aliases go under `imports.aliases:` in
+`.beadloom/config.yml`, and `init` prints a line for the user to confirm them. On the `rn-fsd`
+fixture it prints:
+
+```text
+Import aliases: 2 read from babel.config.js by a text scan, not by running it (@ -> src, @modules -> modules); written under imports.aliases: in .beadloom/config.yml - confirm them
+```
+
+**Its verdict names the code.** `init` lints the graph it wrote. When every error-severity
+finding is a `layers`, `slice_public_api` or `slice_shape` finding, the code fails the rules,
+not the scaffold, and `init` prints `Error: your code does not pass the rules this command wrote
+alongside it.`, one line per finding, and that each line is a finding about the project, not a
+defect in the scaffold. The exit code stays 1, what the Gate's lint step says, so a scripted
+`init && ci` stops. Measured on the `vue-fsd` fixture: `init` exits 1 naming the cross-import
+`features-apply-coupon -> features-add-to-cart` and the deep import at
+`src/widgets/product-grid/ui/ProductGrid.vue:3`; on `rn-fsd` it exits 0 with one
+`fsd-slice-shape` warning.
+
+### Expo modules
+
+`scanner/expo_layout.py` (`read_expo_layout()` -> `ExpoLayout`, `expo_nodes()` -> `ExpoGraph`;
+BDL-080 S3b) reads every folder below the root that holds `expo-module.config.json`, on every
+preset, outside an FSD root and a generated portal. Each is written as:
+
+- component `<name>` (source the module folder, `part_of` the root service), whose own code is
+  everything outside its two native folders;
+- component `<name>-ios` when `ios/` holds `.swift`, `.m` or `.mm` code, and `<name>-android`
+  when `android/` holds `.kt` or `.java` code (`Pods`, `build`, `.gradle` and `.cxx` skipped),
+  each `part_of` its module.
+
+The module folders leave the directory clustering and the JVM walk
+(`jvm_layout.read_jvm_layout(project_root, *, skip=...)`), and Swift in them is not reported as
+unread (`swift_layout.unread_swift(project_root, layout, *, read=...)`). Before S3b the JVM walk
+took `android/` as a Gradle module with a node per package, part of the root, and the Swift in
+`ios/` was in no node. Each module folder becomes a scan path, and the native suffixes join
+`languages`. No `uses` edge is written into the YAML: the reindex derives one from the module to
+each part its config links (see the
+[import-resolver SPEC](../../../graph/features/import-resolver/SPEC.md#expo-module-bridges)).
+`bootstrap_project()` returns the layout as `expo_modules`; `init` prints nothing about it.
+
+Not read: a repository that is itself one Expo module (its config at the root), and native code
+an `apple.podspecPath` or `android.path` moves out of the two folders.
+
+### Expo Router
+
+An Expo app in the FSD layout keeps its routes in `app/` at the project root, beside `src/`, and
+FSD's guidance for Expo Router reads that folder as the top layer. `scanner/expo_router.py`
+(`expo_router_routes(project_root)`; BDL-080 S3e) finds the routes folder **by the
+dependency**: `package.json`'s `dependencies` name `expo-router` and `app/` is a folder at the
+root. A file test such as `app/_layout.*` would miss a routes folder holding only `index.tsx`,
+because the router makes the root layout optional, and would read a name other tools may use.
+`devDependencies` are not read, because the router runs in the shipped app.
+
+When the FSD layers are under `src/`, `fsd_layout` writes the routes folder as ONE node,
+`app-routes` (source `app/`, tag `fsd-app`, `part_of` the `app` container, else the root), and
+`FsdLayout.routes` names it. With the layers at the root, `app/` is the `app` layer itself and
+no routes node is written. One node, not one per route: routes as nodes is `beadloom-mnuu`, after
+this epic. Before S3e the clustering made a node of each route folder (`app/trail/` as `trail`,
+outside every layer) and left `app/_layout.tsx` to the root. Measured on the `rn-fsd` fixture:
+`fsd-layers` judged 12 of 15 `depends_on` edges before and 15 of 17 after.
+
+Not read: the `root` option of the `expo-router` config plugin, and `src/app/` as the routes
+folder, which in an FSD project is the `app` layer.
+
+### The project name of `init --project .`
+
+`project_scan._detect_project_name` resolves the path before taking the folder's name (BDL-080
+S3e, BDL-UX #313). `init --project .` used to name the root service `''` whenever no
+`pyproject.toml`, `package.json`, `go.mod` or `Cargo.toml` named the project. Measured on a copy
+of the Java fixture: `init` exited 1 with two `domain-needs-parent` findings before the fix and 0
+after, with the root named after the folder; S3T saw the same exit on the Kotlin and Swift
+fixtures.
+
+### Tests
+
+Unit: `tests/unit/onboarding/test_an_fsd_project_is_detected_before_every_other_preset.py`,
+`tests/unit/onboarding/scanner/test_an_fsd_layout_is_read_slice_by_slice.py`,
+`tests/unit/onboarding/scanner/test_init_writes_the_fsd_rules.py`,
+`tests/unit/onboarding/scanner/test_init_gives_a_frontend_its_steiger_script.py`,
+`tests/unit/onboarding/scanner/test_alias_scan.py`,
+`tests/unit/onboarding/scanner/test_expo_layout.py`,
+`tests/unit/onboarding/scanner/test_expo_router.py`. Integration:
+`tests/integration/onboarding/scanner/test_init_writes_the_aliases_a_bundler_declares.py`,
+`tests/integration/onboarding/scanner/test_lint_judges_an_fsd_projects_layers_straight_after_init.py`,
+`tests/integration/onboarding/scanner/test_init_names_the_root_after_a_relative_project_path.py`.
+Acceptance, under `tests/acceptance/onboarding/agent-prime/`:
+`init_on_a_feature_sliced_frontend.feature`, `init_on_an_app_with_expo_modules.feature`,
+`init_on_an_fsd_app_with_expo_router.feature`,
+`init_reads_layer_named_folders_as_fsd_only_on_a_frontend.feature`,
+`init_keeps_a_frontends_package_json_as_it_was_written.feature`.
+
 ## API
 
 ### `prime_context(project_root, *, fmt="markdown")`
@@ -477,7 +650,8 @@ fails at the call site instead.
 
 ## Source
 
-- `src/beadloom/onboarding/scanner/` — cohesion-split package; `prime.py` (`prime_context()`), `agents_md.py` (`setup_rules_auto()`, `generate_agents_md()`, `setup_mcp_auto()`), `types.py` (`ScanResult`, `ClusterEntry`), plus `bootstrap.py` / `init_flow.py` / `project_scan.py` / `summary.py` / `entry_points.py` / `import_scan.py` / `readme.py` / `doc_classify.py` / `rules_gen.py` / `claude_md.py` / `constants.py` / `reindex_port.py`, and the stack layouts `jvm_layout.py` (`read_jvm_layout()`, `JvmLayout`, `SourceRoot`, `is_test_set()`, `cluster_packages()`, `jvm_package_directory()`; `JvmLayout.read_folders`) and `swift_layout.py` (`read_swift_layout()`, `SwiftLayout`, `TargetRoot`, `cluster_targets()`, `unread_swift()`, `UnreadSwift`; `SwiftLayout.read_folders`); `project_scan.py` also holds `unclaimed_code()`, `UnclaimedCode`, `CodeBesideModules`, `generated_portals()` and `unscanned_portals_sentence()`; the package `__init__.py` re-exports the full public surface
+- `src/beadloom/onboarding/scanner/` — cohesion-split package; `prime.py` (`prime_context()`), `agents_md.py` (`setup_rules_auto()`, `generate_agents_md()`, `setup_mcp_auto()`), `types.py` (`ScanResult`, `ClusterEntry`), plus `bootstrap.py` / `init_flow.py` / `project_scan.py` / `summary.py` / `entry_points.py` / `import_scan.py` / `readme.py` / `doc_classify.py` / `rules_gen.py` / `claude_md.py` / `constants.py` / `reindex_port.py`, and the stack layouts `jvm_layout.py` (`read_jvm_layout()`, `JvmLayout`, `SourceRoot`, `is_test_set()`, `cluster_packages()`, `jvm_package_directory()`; `JvmLayout.read_folders`) and `swift_layout.py` (`read_swift_layout()`, `SwiftLayout`, `TargetRoot`, `cluster_targets()`, `unread_swift()`, `UnreadSwift`; `SwiftLayout.read_folders`); `project_scan.py` also holds `unclaimed_code()`, `UnclaimedCode`, `CodeBesideModules`, `generated_portals()` and `unscanned_portals_sentence()`; since BDL-080 S3 the frontend readers `fsd_layout.py` (`read_fsd_layout()`, `FsdLayout`, `FsdUnit`, `fsd_nodes()`, `FsdGraph`, `fsd_tag()`, `FSD_LEGACY_TAG`, `ROUTES_UNIT`), `expo_layout.py` (`read_expo_layout()`, `ExpoLayout`, `ExpoModuleUnit`, `NativePart`, `expo_nodes()`, `NATIVE_FOLDERS`), `expo_router.py` (`expo_router_routes()`, `EXPO_ROUTER_PACKAGE`), `steiger_script.py` (`ensure_steiger_script()`, `SteigerScript`, `SCRIPT_NAME`) and `alias_scan.py` (`scan_bundler_aliases()`, `AliasScan`), and in `rules_gen.py` `generate_fsd_rules()`, `fsd_rules_text()` and `FSD_COHESION_LIMITS`; the package `__init__.py` re-exports the full public surface
+- `src/beadloom/onboarding/presets.py` — `FSD`, `FSD_LAYERS`, `fsd_root()` and the `fsd` branch of `detect_preset()`
 - `src/beadloom/services/commands/query.py` — `prime` CLI command
 - `src/beadloom/services/commands/setup.py` — `setup-rules` and `setup-mcp` CLI commands
 - `src/beadloom/services/mcp_server.py` — `prime` MCP tool

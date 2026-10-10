@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-BDL-080 slice 1: the portal is a service, and every layer rule is drawn. **The next version is
-major** (owner, 2026-10-09): one change under Breaking can move `lint`'s exit code on a project
-nobody edited, which the public API guide classes MAJOR. Everything else adds; nothing is
-removed or renamed, the data file stays schema 2, and `kind: site` stays accepted. Each line
-names its bead; the pull request is to be opened.
+BDL-080: the portal is a service, every layer rule is drawn, and the viewer serves a
+Feature-Sliced frontend. **The next version is major** (owner, 2026-10-09): one change under
+Breaking can move `lint`'s exit code on a project nobody edited, which the public API guide
+classes MAJOR. Everything else adds; nothing is removed or renamed, the data file stays schema
+2, and `kind: site` stays accepted. Each line names its bead; the pull request is to be opened.
 
 ### Breaking
 
@@ -63,6 +63,300 @@ names its bead; the pull request is to be opened.
 - **The rule-engine SPEC documents the new keys (`beadloom-we9t`):** `scope:` and `title:` on a
   `layers` rule, with their refusals and what a scope narrows, in the
   [rule reference](docs/domains/graph/features/rule-engine/SPEC.md#rulesyml-schema).
+- **`tag_prefix:` on a node matcher (`beadloom-5wh2`).** A matcher selects a node carrying any
+  tag that begins with the prefix, in every rule that takes a matcher (`check`, `require`,
+  `deny`, `forbid`, `scenario_coverage`), so one rule covers a family of tags such as `fsd-*`.
+  It combines with `kind`, `ref_id`, `tag` and `exclude`; an empty or non-string prefix is
+  refused at load, a prefix no tag begins with makes the rule inert and says so, and the
+  `rules` index stores it.
+- **The Gate names Steiger among what it did not run (`beadloom-5wh2`).** A pipeline step that
+  runs `steiger`, or the `lint:fsd` script, is listed under `Not run by this gate:` as the FSD
+  linter with its command and job. `npm`, `pnpm` and `yarn` are read as runners in front of a
+  script, the way `uv run` already was.
+- **The viewer is cut into Feature-Sliced slices, and the scaffold carries Steiger
+  (`beadloom-7jgr`).** The graph viewer's 43 files are ten slices under `shared`, `entities`,
+  `features` and `widgets`, each entered through its `index`, with a byte-identical dump of nine
+  views before and after. The scaffold's `package.json` gains `steiger` and the `lint:fsd`
+  script with Steiger's `recommended` set; over the cut it reported 13 errors, 12
+  `insignificant-slice` and 1 `inconsistent-naming`, which `beadloom-af99.8` settles below.
+- **The portal names lint's reach and the findings bound to no node (`beadloom-5pxv`).**
+  `architecture.data.json` gains a top-level `lint` with `errors`, `warnings`,
+  `nodes_with_findings` and `nodeless`, a list of findings each with `rule`, `severity`, `message`,
+  `file` (`""` when the finding names none) and `line` (`null` when it names none); the key is
+  omitted when lint did not run. `severity` takes lint's values, `error` and `warn`. A card with
+  no finding reads `none — this project: 0 errors, 69 warnings — 33 on 27 nodes, 36 on none`:
+  lint's totals, then the findings on nodes with how many nodes carry them, then the findings on
+  none (`beadloom-af99.15`; the findings on nodes are the totals less the node-less ones, so no
+  key stores them). The same line stands under a card's own findings, the dashboard's Rule
+  findings panel says it the same way, and the card of the box that holds the whole project
+  lists the findings bound to no node.
+- **A box's debt names the debt inside it (`beadloom-5pxv`).** A node that holds another gains
+  `debt.inside` with `nodes` (its `part_of` descendants that carry debt), `score` (the sum of
+  their own scores) and `by_reason` (per reason of the debt report, how many of them carry it).
+  A leaf's `debt` is unchanged. On this repository's `beadloom` box the card reads `own 0` and
+  `inside 38.5 on 32 nodes: dormant 13, high_fan_out 10, oversized 8, undocumented 3`, and the
+  box's Inside section repeats the second line (measured on 2026-10-10 at `39b01cd9` with every
+  document fresh; a stale document adds a `stale_doc` reason, so the figure moves with the tree).
+- **The dashboard names what its numbers were counted over (`beadloom-5pxv`).** In
+  `dashboard.data.json`, `lint` gains `nodes_with_findings` and `nodeless`, as above, and a
+  top-level `pages` lists the pages the run wrote: `count`, `sections` (each with `name`, `count`
+  and `pages`; names `about`, `dashboard`, `architecture`, `nodes`, `landscape`, `docs`, an empty
+  section listed with 0) and `languages` (each About page's `language`, `en` or `ru`, and
+  `page`). Two panels, Rule findings and Pages, follow the status cards; a data file without the
+  keys shows neither. Pages says what the run wrote, `beadloom docs site wrote 297 pages; the
+  About page in en (index.md), ru (ru/index.md).` on this repository's portal, since a file a
+  project places under `.beadloom/site/` is on the portal and is not counted
+  (`beadloom-af99.16`). The dashboard file is not on the public API list, so these keys carry no
+  promise; the architecture file's `lint`, `debt.inside` and `source_ref` do.
+- **The Source link of a portal built from an unpublished commit names a branch `origin` holds
+  (`beadloom-e1xo`, `beadloom-af99.16`).** A local build from a commit that no branch of
+  `origin` holds linked every node to a 404. Its links now name the branch's upstream when it
+  is on `origin`, else `origin`'s branch of the same name, else `origin`'s default branch, and
+  keep the commit when none of them exists; Gitea and Azure DevOps links take their branch
+  routes (`src/branch/`, `GB`). Only `origin`'s branches count, because the links name
+  `origin`'s address: a commit or an upstream only a fork holds would be a 404 there too.
+  `architecture.data.json` gains a top-level `source_ref`, `{commit, linked, pushed}`, present
+  when the file carries source links: `pushed` is `false` only when no branch of `origin` holds
+  the commit, and `linked` is the commit's hash or the branch's name. The card says `built from
+  an unpublished commit; links point at main` under the link, and `docs site` warns on stderr
+  without changing its exit code. Measured on this repository, built from the unpushed
+  `8dbe844c`: the links to the commit answered 404; of the 139 links to `main`, 127 answered
+  200 and 12 answered 404, each of the 12 a folder that `origin/main` does not hold yet.
+
+- **The portal carries a logo, a footer and its forge's icon (`beadloom-af99.7`,
+  `beadloom-af99.9`).** Three keys
+  join the `site:` block of `.beadloom/config.yml`, each refused by name by `docs site`,
+  `config-check` and the Gate when it holds a value the portal cannot use. `site.logo` names the
+  project's own SVG or PNG by its path relative to the project root; `docs site` copies it to
+  `public/logo.svg` or `public/logo.png` and the nav shows it beside the title, and a project
+  that declares none gets no nav logo. An SVG logo drawn in `currentColor` is drawn in the
+  title's colour, 32 pixels square, in the light and the dark theme; every other logo keeps its
+  colours and proportions and is drawn 32 pixels high too (`beadloom-e1xo`). The logo is the
+  portal's favicon too, as it is; a project without one, or whose logo is Beadloom's own icon
+  byte for byte, gets Beadloom's: a theme-adaptive SVG and two 32-pixel PNGs for browsers that
+  take no SVG favicon, such as Safari, the dark glyph's and the light glyph's behind
+  `(prefers-color-scheme: dark)` (`beadloom-e1xo`), which `docs site` writes under
+  `public/brand/`. `site.powered_by` (default `true`)
+  switches a footer on every page: Beadloom's small icon and "Powered by Beadloom" on one line,
+  without a link, and "MIT" and a link to Beadloom's repository drawn with the GitHub mark on the
+  next; `false` removes it. `site.repo_icon` names the icon beside the header's repository link,
+  one of `github`, `gitlab`, `bitbucket`, `codeberg`, `gitea`, `azuredevops` or `git`; without it
+  the icon is read from the host of `site.repo_url` (`github.com`, `gitlab.*`, `bitbucket.org`,
+  `codeberg.org`, `gitea.*`, the Azure DevOps hosts, any other host `git`). The scaffold ships
+  Beadloom's square icon under `public/brand/`, an `.svg` file carries the generated marker as an
+  XML comment, and the identity module `.vitepress/site.generated.mjs` gains `logo`,
+  `logoMonochrome`, `favicons` and `poweredBy`. `config-check` names a declared `site:` block
+  without `repo_url`, which leaves the header without a repository link, and does not block on
+  it.
+- **`init` reads Expo Router's routes beside a Feature-Sliced `src/` as one segment of the `app`
+  layer (`beadloom-af99.12`).** When the layers are under `src/` and `package.json` names
+  `expo-router` among its `dependencies`, `app/` at the project root is written as ONE component,
+  `app-routes`, with source `app/`, tag `fsd-app` and `part_of` the `app` container (the root
+  service when the layer has none), so the layer rule judges the route files as the top layer.
+  The dependency decides, not a file: the router is what reads `app/` as routes, and it makes
+  `_layout` optional. `devDependencies`, the config plugin's `root` option and `src/app/` as the
+  routes folder are not read. Before, `init` clustered each route folder as a node of its own
+  (`app/trail/` as `trail`, outside every layer) and left `app/_layout.tsx` and `app/index.tsx`
+  to the root service. Measured on the `rn-fsd` adopter fixture: `fsd-layers` judges 15 of 17
+  `depends_on` edges, up from 12 of 15.
+- **The import resolver reads tsconfig `paths` and `baseUrl` (`beadloom-cwzc`).** A non-relative
+  JS/TS specifier is read through the `compilerOptions.paths` of the tsconfig or jsconfig that
+  governs the importing file (every config of the nearest folder holding one, so `create-vue`'s
+  `tsconfig.app.json` counts; JSON with comments; relative `extends` followed), then through
+  `imports.aliases:`, then under `baseUrl`. Only when none of them names a file does the old
+  reading of `@/` and `~/` as `src/` answer. An Expo app whose `@/*` names the project root got
+  no edge for those imports before.
+- **`imports.aliases` in `.beadloom/config.yml` (`beadloom-cwzc`).** A mapping of an import alias
+  to a folder or file relative to the project root, for the aliases Babel `module-resolver` and
+  Vite `resolve.alias` apply and no tsconfig carries; the longest alias a specifier is, or starts
+  with followed by `/`, wins. `beadloom init` writes the block from a text scan of
+  `babel.config.*`, `.babelrc` and `vite.config.*`, which it does not run, and prints the
+  aliases it wrote and those it would not (a regular expression, a value with no string
+  literal) for you to confirm. An unknown key, a pattern, a path as an alias and a folder that
+  names nothing are refused by name by `config-check` and the Gate (rule `import-aliases`).
+  Editing the block, or a tsconfig, re-resolves on the next incremental reindex. Measured on a
+  synthetic Vue 3 FSD tree: Vite aliases resolved 0 of 4 before and 4 of 4 after; on an
+  Expo-like tree, Babel aliases 2 of 9 before and 10 of 10 after.
+- **React Native's platform files resolve (`beadloom-cwzc`).** `./Button` names
+  `Button.ios.tsx`, `Button.android.tsx`, `Button.native.tsx` or `Button.web.tsx`, tried in that
+  order before the plain extension, for relative and aliased specifiers and for a folder's
+  `index`. A module that exists only in those forms was unresolved before.
+- **`.mjs` and `.cjs` files are read (`beadloom-cwzc`, closing `beadloom-zd4m`).** Both are
+  parsed as JavaScript: their symbols are indexed and their ES module imports become edges, where
+  before they were import targets only. The parser fingerprint changes, so the first reindex
+  after the upgrade is a full one.
+- **The `fsd` preset: `init` reads a Feature-Sliced frontend slice by slice (`beadloom-5t8d`).**
+  Detected before every other preset when three of `app`, `pages`, `widgets`, `features`,
+  `entities`, `shared` are folders under `src/` or at the root of a frontend, or chosen with
+  `init --preset fsd`. Each slice is a `component` tagged `fsd-<layer>`, `app` and `shared` are
+  containers of segment components, and folders beside the layers are nodes tagged
+  `fsd-legacy`. `init` writes nine rules: `fsd-layers` (titled `FSD architecture`, scoped to the
+  frontend) and `fsd-public-api` at `error`, `fsd-slice-shape` and a cohesion check per layer
+  (widgets 80 symbols, the others 60) at `warn`; a `lint:fsd` script running Steiger into
+  `package.json` unless one runs it already; and no import edge into the graph YAML, since the
+  reindex derives them from the code. When the rules it wrote find the code's own crossings,
+  `init` says the code fails them, not the scaffold, and exits 1.
+- **Two rule types, `slice_public_api` and `slice_shape` (`beadloom-5t8d`).** `slice_public_api:
+  {tags: [...]}` reports an import into a slice (a node carrying one of the tags whose source is
+  a folder) from outside it that lands on a file other than the slice's `index`, and an import
+  into a slice with no `index`. `slice_shape: {tags: [...], segments: [...]}` reports a folder at
+  a slice's top that is not one of the segments (`ui`, `model`, `lib`, `api`, `config` by
+  default) and a code file there that is not the `index`. Both default to `error`, are refused
+  at load when `tags` or `segments` is not a non-empty list of strings, and are inert, and say
+  so, when no node carries a tag or no carrier's source is a folder.
+- **An Expo module's TypeScript is linked to its native code (`beadloom-wbqd`).** The reindex
+  reads every `expo-module.config.json` (`apple.modules`, else `ios.modules`; `android.modules`;
+  `platforms` when it is a list) and draws a `uses` edge from the node owning the config to the
+  node owning the module's `ios/` and `android/` folders, marked `derived: expo-module` with the
+  config, the platform and the native classes. The edges are rebuilt on every reindex, and an
+  edit to a config alone is seen by the incremental one. `init` writes each local Expo module as
+  a component with `<name>-ios` and `<name>-android` parts, on every preset; before, the JVM walk
+  took `android/` as a Gradle module part of the root and the Swift in `ios/` was in no node.
+- **Two Feature-Sliced adopter fixtures, and two `site-adopters` legs (`beadloom-chdx`).**
+  `tests/fixtures/site/vue-fsd` (Vite, Vue 3, TypeScript, Pinia, `.vue` single-file components,
+  tsconfig `@/`, Vite aliases, legacy folders beside the layers) and `tests/fixtures/site/rn-fsd`
+  (Expo, React Native, Expo Router, one Expo module with Swift and Kotlin, platform files, Babel
+  aliases, `.mjs` and `.cjs`). `init` writes their nodes, tags and rules with no hand edit. The
+  workflow's matrix is `[python, go, typescript, java, kotlin, swift, vue-fsd, rn-fsd, projects]`,
+  reported as `site-adopters (vue-fsd)` and `site-adopters (rn-fsd)` beside the others; none is a
+  required check. Measured with a reference reader per import form: 49 of 49 imports of
+  `vue-fsd` and 33 of 33 of `rn-fsd` land on the node owning the file their bundler loads.
+
+### Changed
+
+- **Beadloom's mark is the square icon (`beadloom-af99.9`).** The lettered mark is retired, and
+  `.github/social-preview.svg` is the square icon's version, approved by the owner on 2026-10-09.
+  Beadloom ships no colour brand asset (`beadloom-e1xo`): the sources, the colour icon and the
+  traced mark among them, are kept in `.github/brand/`, which nothing ships, with a README that
+  names the three files shipped from them byte for byte.
+- **Steiger passes on the scaffold, and this repository's CI runs it (`beadloom-af99.8`).** The
+  scaffold's `steiger.config.js` switches `fsd/insignificant-slice` off and says why beside the
+  switch: the theme is cut so that beads can run in parallel on disjoint graph nodes, not for
+  reuse, so a feature that one widget uses is the intended shape. Every other rule of the
+  `recommended` set stays on. Three `entities` slices take the plural that
+  `fsd/inconsistent-naming` asks for: `graph-edge`, `graph-node` and `layer` become
+  `graph-edges`, `graph-nodes` and `layers`, and their graph nodes `site-graph-edges`,
+  `site-graph-nodes` and `site-layers`. The next `docs site` retires the old folders' files from
+  a portal written by an earlier version. The `site-build` job runs `npm run lint:fsd` after
+  `npm ci`, so the Gate lists the FSD linter under `Not run by this gate:`.
+- **A `codeberg.org` repository link draws Codeberg's mark (`beadloom-af99.7`).** It drew
+  Gitea's, the software Codeberg runs, and a host whose first label is `gitlab` or `gitea` now
+  draws that forge's mark rather than git's own. The source links of either are unchanged.
+- **Every adopter's portal gains the footer on upgrade (`beadloom-af99.7`).** It is on by
+  default, so the next `docs site` adds it to a portal nobody edited; `site.powered_by: false`
+  keeps the portal as it was.
+- **The legend names the lines drawn on the canvas, and a line of the map keeps its kind's dash
+  (`beadloom-bjrw`, `beadloom-af99.13`).** The edge legend was made of the data file's edges, so
+  at the overview it listed `consumes` and `produces`, which no line there draws; it now lists the
+  styles of the lines drawn at the level on the canvas, the map's aggregated lines among them.
+  An aggregated line that carries one kind keeps that kind's dash (`uses` is dotted at the
+  overview too), where every aggregated line was solid. One that carries several kinds stays
+  solid, in the colour of the kind it carries most, and while one is drawn the legend adds the
+  entry "several kinds: solid, in the colour of the kind it carries most" (the owner's ruling of
+  2026-10-10); this repository's portal draws 17 such lines at the whole-graph fit.
+- **A title on a plate is broken onto two lines where its name breaks (`beadloom-bjrw`,
+  `beadloom-af99.13`).** One more node in one box widened this repository's frame, the fit's
+  scale stepped, and three lines between other boxes ran under `ai_agents`'s plate; a plate one
+  line narrower leaves them room. The overview's plan is made once (the owner's ruling of
+  2026-10-10).
+- **The `fsd` role overlay maps a slice to a `component` (`beadloom-5wh2`).** It used to map a
+  layer to a `domain`, a slice to a `feature` and a segment to a `component`. A slice is now a
+  `component` tagged with its layer and `part_of` the frontend service, and `shared` and `app`
+  are containers of segment components — the graph `beadloom init` writes. The overlay states
+  the slice's public API, its shape and its size signal, drops the deprecated `processes`
+  layer from the chain, and puts Steiger in the commands a bead completes with.
+- **The `fsd` overlays and the rules `init` writes name Steiger's `no-public-api-sidestep`
+  (`beadloom-af99.10`).** They cited `public-api` for an import that lands past another slice's
+  `index`. In `@feature-sliced/steiger-plugin` 0.8.0 that import is reported by
+  `fsd/no-public-api-sidestep`, while `fsd/public-api` reports a slice that has no `index` at
+  all; the dev and review overlays and the comment above `fsd-public-api` in the `rules.yml`
+  that `init` writes now name both for what each reports. The same comment cites the largest
+  widget of Beadloom's portal as 65 symbols, the number measured, where it said 66.
+- **`docs site` retires the folders its retired files leave empty (`beadloom-af99.10`).** A
+  portal written by 8.0.0 and rewritten after the `entities` slices were renamed lost the old
+  files and kept `entities/graph-edge`, `graph-node` and `layer` as empty trees. A folder a
+  retired file sat in, or one above it, is now removed when nothing is left in it; a folder the
+  project made, or one that still holds a file beadloom did not write, stays. The scaffold line
+  gains the count: `N retired, M empty folders retired, N copied from .beadloom/site/`.
+- **This repository's portal is judged by `slice_public_api` and `slice_shape`
+  (`beadloom-af99.10`).** `.beadloom/_graph/rules.yml` declares `site-fsd-public-api` (error)
+  and `site-fsd-slice-shape` (warn) over the four sliced layers, the rules `init` writes for an
+  FSD frontend. On this repository they judge 22 slices and 55 imports into a slice from
+  outside it, and report nothing.
+- **A rule that cannot fire names the matcher field no node carries (`beadloom-af99.10`).** A
+  matcher that set both `tag` and `tag_prefix` and was inert because of the prefix was reported
+  as "tag '<tag>' is carried by no node" while a node carried it. A `tag`, a `tag_prefix` or a
+  `kind` is now named only when no node carries it; fields that some node carries each, and
+  none together, read "matches none of the N nodes in the graph".
+- **Cohesion is a declared duty of the dev, explore and review roles (`beadloom-5wh2`).** The
+  coordinator declares it and each core carries it, so `config-check` reports a role that loses
+  it. The `ddd` overlay states it for Python packages, and the explorer writes a size finding
+  on the row of the node it names.
+
+### Fixed
+
+- **A JS/TS specifier names a file by its exact case, on every filesystem (`beadloom-af99.12`).**
+  On a filesystem that folds case (macOS) `./app` beside `src/App.vue` and `src/app/index.ts`
+  resolved to `App.vue`: `src/app.vue` answered for `App.vue`, and the `.vue` candidate precedes
+  the folder index. On Linux the same import resolved to the folder index, so one tree was
+  indexed two ways. A candidate now counts only when each part of its path is a name its folder
+  lists exactly, which is also what Vite loads, since its default `resolve.extensions` holds no
+  `.vue`.
+- **`init --project .` names the root service after the folder (`beadloom-af99.12`).** A
+  project whose manifest names nothing took its name from the path, and `Path('.').name` is
+  empty, so the root service was written as `''` and `init` exited 1 with `domain-needs-parent`
+  on every domain. Found on scratch copies of the Java, Kotlin and Swift adopter fixtures
+  (`beadloom-hvnv`); an absolute path, or no `--project` at all, was not affected.
+- **The `fsd` preset is chosen only for a frontend (`beadloom-af99.14`).** It was chosen from
+  folder names alone and tried before every other preset, so a Python tree holding
+  `src/app`, `src/entities` and `src/shared` was detected as `fsd`: `init` wrote the frontend
+  rules, which ask for `npm run lint:fsd`, and left `src/entities/order.py` without a node.
+  Release 8.0.0 read that tree as a monolith, and now does again. Three layer folders count as
+  the layout only when they hold JavaScript, TypeScript or Vue code, or when a `package.json`
+  sits at the project root or in the FSD root. The two FSD adopter fixtures are still `fsd`,
+  and the six others keep their presets.
+- **The viewer draws a node's edges into an open box as its own lines (`beadloom-af99.13`).**
+  While a node is under the pointer or selected, an edge from it into a box that is open, onto
+  the box or to a node inside it, stayed on the pair's line to the box's border; it is now drawn
+  to the end it reaches, as an outward edge is. With the other fixes below, the shipped browser
+  suite went from 7 failing cases to none on the `vue-fsd` portal and from 17 to none on
+  `rn-fsd`, measured locally on Darwin arm64 (not on the Linux CI legs, whose fonts differ).
+- **A pill keeps its place when a sibling box opens (`beadloom-bjrw`).** The pills of the lines
+  between top-level boxes are placed around each box's closed room, its title's plate included,
+  whether the box is open or not, so opening `ai_agents` no longer moves the pills of
+  `cli|doc-sync` and `cli|infrastructure`.
+- **The overview keeps lines off what no route moves (`beadloom-af99.13`).** A plate keeps off a
+  line drawn as itself; a box drawn larger for its title keeps such a line outside it, or the
+  title is broken in the laid-out box; the router crosses such a line near its arrowhead only on
+  its relaxed pass, priced as eight refusals, where a crossing had shrunk a planned line's head
+  to 3.57 px; lines keep below the frame's title band; and a resize alone no longer resizes the
+  boxes, which had moved the fit by 0.2 % on `rn-fsd`.
+- **A title at the overview is never drawn under 10 px, in any font (`beadloom-af99.17`).**
+  The overview's plan sized its titles at the scale of the laid-out boxes' fit, while the viewer
+  fits the boxes it draws, and a box the plan drew larger past the project box widened that fit
+  a step coarser: the titles then read 0.868 of their size, and two titles of the `vue-fsd`
+  portal read 8.57 px under Linux's fonts on CI. A box the plan draws larger now keeps the fit
+  on the plan's scale, so a title that does not fit is broken or stands on a plate, and the plan
+  is made again at the fit's scale should what it drew still move the fit. The browser suite's
+  title-floor case also runs in a wider font (Verdana, or DejaVu Sans on Linux), and this
+  portal's viewer reads the same before and after.
+- **`init` keeps the indentation of the `package.json` it adds `lint:fsd` to
+  (`beadloom-af99.14`).** It rewrote the file with a fixed two-space indent, so on a
+  tab-indented file every line changed. It now writes in the indentation the file already has
+  (two spaces for a file on one line), the way npm does, so the diff is the one script. The
+  write is atomic, and the file keeps its permissions.
+
+### Known limitations
+
+- **CommonJS is not read (owner's ruling, 2026-10-10).** `require()` and `module.exports` yield
+  no edge and no symbol, so a `.cjs` or `.js` file written in CommonJS is an import target only
+  and its own dependencies draw nothing. In a Feature-Sliced frontend CommonJS lives in
+  configuration files, not in layer code.
+- **Not read by the resolver or by `init`:** a folder's `package.json` `main`/`exports`;
+  `.mts`, `.cts` and `.d.ts` targets; Babel `module-resolver`'s `root:` and regular-expression
+  aliases; tsconfig `references` to another folder, `include`/`exclude` and `rootDirs`; an Expo
+  module's `apple.podspecPath` and `android.path`; a repository that is itself one Expo module;
+  an FSD tree inside one package of a monorepo, and slice groups.
 
 ## [8.0.0] - 2026-10-08
 

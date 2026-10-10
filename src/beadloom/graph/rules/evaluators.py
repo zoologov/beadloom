@@ -121,7 +121,7 @@ def evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list
 
     # Check whether any rule actually uses tag-based matching
     any_tag_rule = any(
-        r.from_matcher.tag is not None or r.to_matcher.tag is not None for r in rules
+        r.from_matcher.reads_tags or r.to_matcher.reads_tags for r in rules
     )
 
     # Fetch all code_imports with resolved ref_ids
@@ -232,7 +232,7 @@ def evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -
 
     # Check whether any rule actually uses tag-based matching
     any_tag_rule = any(
-        r.for_matcher.tag is not None or r.has_edge_to.tag is not None for r in rules
+        r.for_matcher.reads_tags or r.has_edge_to.reads_tags for r in rules
     )
 
     # Fetch all nodes once
@@ -486,7 +486,7 @@ def evaluate_forbid_edge_rules(
 
     # Check whether any rule actually uses tag-based matching
     any_tag_rule = any(
-        r.from_matcher.tag is not None or r.to_matcher.tag is not None for r in rules
+        r.from_matcher.reads_tags or r.to_matcher.reads_tags for r in rules
     )
 
     # Fetch all edges once
@@ -738,7 +738,7 @@ def evaluate_cardinality_rules(
     tags = node_tags(conn)
 
     # Check whether any rule uses tag-based matching
-    any_tag_rule = any(r.for_matcher.tag is not None for r in rules)
+    any_tag_rule = any(r.for_matcher.reads_tags for r in rules)
 
     # Fetch all nodes once (ref_id, kind, source)
     all_nodes = conn.execute("SELECT ref_id, kind, source FROM nodes").fetchall()

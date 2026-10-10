@@ -1,0 +1,16 @@
+  # BDL-080 S2a (`beadloom-7jgr`): the viewer cut by cohesion into Feature-Sliced
+  # slices (RFC D3). A segment of the site's `shared` layer is a node of its own,
+  # `part_of site-shared` and tagged `fsd-shared`: two segments importing each
+  # other are peers inside one tagged container, which `site-fsd-layers` allows.
+nodes:
+  - ref_id: site-shared-canvas-marks
+    kind: component
+    summary: "The classes and data a selection and a hover mark the canvas with, named once with how each is set, and a canvas over Cytoscape's for what the viewer draws on top of the graph"
+    source: src/beadloom/site_scaffold/.vitepress/theme/shared/canvas-marks/
+    tags: [fsd-shared]
+    docs:
+      - docs/services/vitepress-site/shared-canvas-marks.md
+edges:
+  - src: site-shared-canvas-marks
+    dst: site-shared
+    kind: part_of

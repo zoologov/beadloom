@@ -75,7 +75,7 @@ def _matched_nodes(conn: sqlite3.Connection, matcher: NodeMatcher) -> list[str]:
     rows = conn.execute("SELECT ref_id, kind FROM nodes ORDER BY ref_id").fetchall()
     matched: list[str] = []
     for ref_id, kind in ((str(r[0]), str(r[1])) for r in rows):
-        tags = get_node_tags(conn, ref_id) if matcher.tag is not None else None
+        tags = get_node_tags(conn, ref_id) if matcher.reads_tags else None
         if matcher.matches(ref_id, kind, tags=tags):
             matched.append(ref_id)
     return matched

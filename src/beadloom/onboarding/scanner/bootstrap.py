@@ -19,8 +19,16 @@ from beadloom.onboarding.scanner.agents_md import (
     setup_mcp_auto,
     setup_rules_auto,
 )
+from beadloom.onboarding.scanner.alias_scan import scan_bundler_aliases
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
 from beadloom.onboarding.scanner.entry_points import _discover_entry_points
+from beadloom.onboarding.scanner.expo_layout import (
+    ExpoModuleUnit,
+    NativePart,
+    expo_nodes,
+    read_expo_layout,
+)
+from beadloom.onboarding.scanner.fsd_layout import FsdLayout, FsdUnit, fsd_nodes, read_fsd_layout
 from beadloom.onboarding.scanner.import_scan import _quick_import_scan
 from beadloom.onboarding.scanner.jvm_layout import cluster_packages, read_jvm_layout
 from beadloom.onboarding.scanner.parent_edges import missing_parent_edges, parented_by
@@ -36,7 +44,8 @@ from beadloom.onboarding.scanner.project_scan import (
 )
 from beadloom.onboarding.scanner.readme import _ingest_readme
 from beadloom.onboarding.scanner.ref_ids import RefIdAllocator
-from beadloom.onboarding.scanner.rules_gen import generate_rules
+from beadloom.onboarding.scanner.rules_gen import generate_fsd_rules, generate_rules
+from beadloom.onboarding.scanner.steiger_script import SteigerScript, ensure_steiger_script
 from beadloom.onboarding.scanner.summary import _build_contextual_summary
 from beadloom.onboarding.scanner.swift_layout import (
     cluster_targets,
@@ -72,7 +81,7 @@ def bootstrap_project(
 
     Returns summary dict with generated file counts.
     """
-    from beadloom.onboarding.presets import PRESETS, detect_preset
+    from beadloom.onboarding.presets import FSD, PRESETS, detect_preset
 
     beadloom_dir = project_root / ".beadloom"
     graph_dir = beadloom_dir / "_graph"
@@ -94,9 +103,18 @@ def bootstrap_project(
     # TypeScript service beside a module or a package keeps its node and its scan
     # path (R2 finding 2). Without such a tree both lists below are the scan's,
     # as they were.
-    jvm = read_jvm_layout(project_root)
+    # A Feature-Sliced frontend is read slice by slice (BDL-080 S3c): the FSD root
+    # leaves the directory clustering like a module does, and its slices, segments
+    # and legacy folders are written by `fsd_nodes` below.
+    fsd = read_fsd_layout(project_root, skip=portals) if preset is FSD else FsdLayout()
+    # A local Expo module is its TypeScript and its native parts (BDL-080 S3b): its
+    # folder leaves the clustering, and the JVM walk, which took its `android/` as a
+    # Gradle module part of the root; `expo_nodes` below writes it.
+    expo = read_expo_layout(project_root, skip=(*portals, *fsd.claimed))
+    jvm = read_jvm_layout(project_root, skip=expo.claimed)
     swift = read_swift_layout(project_root)
-    claimed = jvm.claimed | swift.claimed
+    module_claims = jvm.claimed | swift.claimed | expo.claimed
+    claimed = module_claims | fsd.claimed
     source_dirs = [d for d in scan["source_dirs"] if not is_claimed(d, claimed)]
     clusters = _cluster_with_children(
         project_root,
@@ -108,16 +126,18 @@ def bootstrap_project(
     # The scan paths leave out only what the layouts READ (a module's `src`, a
     # target's folder): the rest of a module's folder is scanned like any other,
     # and a code file no scan path can hold is named (the re-review's finding m3).
-    read = jvm.read_folders | swift.read_folders
+    read = jvm.read_folders | swift.read_folders | expo.claimed
     unclaimed = unclaimed_code(
         project_root, [d for d in scan["source_dirs"] if not is_claimed(d, read)], read
     )
     beside_modules = CodeBesideModules(
-        scanned=tuple(folder for folder in unclaimed.folders if is_claimed(folder, claimed)),
+        scanned=tuple(
+            folder for folder in unclaimed.folders if is_claimed(folder, module_claims)
+        ),
         unread=unclaimed.loose_files,
     )
 
-    nodes: list[dict[str, str]] = []
+    nodes: list[dict[str, Any]] = []
     edges: list[dict[str, str]] = []
 
     # The ref_id of every node this function writes is handed out by one object,
@@ -213,6 +233,29 @@ def bootstrap_project(
                     }
                 )
 
+    # The FSD tree: a node per slice, segment, container and legacy folder, each
+    # `part_of` the frontend service, the root node of a single-app repository.
+    fsd_graph = fsd_nodes(
+        fsd,
+        ref_ids,
+        root_ref_id,
+        lambda unit: _unit_summary(unit, project_root, all_entry_points),
+    )
+    nodes.extend(fsd_graph.nodes)
+    edges.extend(fsd_graph.edges)
+
+    # Each local Expo module and its native parts. The `uses` edge from a module to a
+    # part is no import, and is not written here: the reindex derives it from the
+    # module's `expo-module.config.json` on every run (`graph.expo_modules`).
+    expo_graph = expo_nodes(
+        expo,
+        ref_ids,
+        root_ref_id,
+        lambda unit: _unit_summary(unit, project_root, all_entry_points),
+    )
+    nodes.extend(expo_graph.nodes)
+    edges.extend(expo_graph.edges)
+
     # Fallback: no clusters found, create minimal nodes from scan.
     if not nodes and source_dirs:
         for sd in source_dirs:
@@ -245,9 +288,18 @@ def bootstrap_project(
                         }
                     )
 
-    # Quick import scan for additional depends_on edges.
-    import_edges = _quick_import_scan(project_root, clusters, cluster_refs, jvm=jvm, swift=swift)
-    edges.extend(import_edges)
+    # Quick import scan for additional depends_on edges — except on an FSD frontend
+    # (BDL-080 S3c). An edge written here is DECLARED: it stays in the YAML when the
+    # import it was read from is gone, and the FSD rules judge depends_on edges at
+    # `error`. Measured on the synthetic FSD tree: with the edges written, a
+    # cross-import removed from the code kept `fsd-layers` red. The reindex derives
+    # the same edges from the code on every run, through tsconfig `paths` and
+    # `imports.aliases` (17 of 17 identical on that tree), and drops them when the
+    # import goes.
+    if fsd.root is None:
+        edges.extend(
+            _quick_import_scan(project_root, clusters, cluster_refs, jvm=jvm, swift=swift)
+        )
 
     # Create root node + part_of edges from top-level nodes.
     if nodes:
@@ -345,9 +397,17 @@ def bootstrap_project(
     # Generate rules.yml (only if it doesn't already exist).
     rules_path = graph_dir / "rules.yml"
     if nodes and not rules_path.exists():
-        rules_count = generate_rules(nodes, edges, project_name, rules_path)
+        rules_count = (
+            generate_fsd_rules(root_ref_id, rules_path)
+            if fsd.root is not None
+            else generate_rules(nodes, edges, project_name, rules_path)
+        )
     else:
         rules_count = 0
+    # The file-level half of the FSD rules: Steiger, given a script when none runs it.
+    steiger = (
+        ensure_steiger_script(project_root, fsd.root) if fsd.root is not None else SteigerScript()
+    )
 
     # Check for docs.
     docs_dir = project_root / "docs"
@@ -360,12 +420,14 @@ def bootstrap_project(
                 *unclaimed.folders,
                 *jvm.production_roots,
                 *swift.production_roots,
+                *expo.scan_paths,
             ]
         )
         or ["src"],
         # The project scan counts no `.swift` file, so a Swift package's language
-        # comes from its targets.
-        "languages": sorted({*scan["languages"], *swift.languages}) or ["python"],
+        # comes from its targets, and an Expo module's from its native parts.
+        "languages": sorted({*scan["languages"], *swift.languages, *expo.languages})
+        or ["python"],
         "sync": {"hook_mode": "warn"},
         "preset": preset.name,
     }
@@ -387,6 +449,12 @@ def bootstrap_project(
         tests["flat_tests"] = True
     if tests:
         config["tests"] = tests
+    # The aliases a bundler applies and no tsconfig carries, read from the text of
+    # `babel.config.*` / `vite.config.*` and written for the user to confirm; the
+    # resolver reads tsconfig `paths` itself (BDL-080 `beadloom-cwzc`).
+    aliases = scan_bundler_aliases(project_root)
+    if aliases.aliases:
+        config["imports"] = {"aliases": dict(aliases.aliases)}
     write_yaml_atomic(
         beadloom_dir / "config.yml",
         config,
@@ -428,9 +496,35 @@ def bootstrap_project(
         "ignore_skipped_reason": ignore.skipped_reason,
         "portal_ignore": portal_ignore,
         # Swift this run saw and did not read, said rather than left silent (R2 F7).
-        "unread_swift": unread_swift(project_root, swift),
+        "unread_swift": unread_swift(project_root, swift, read=expo.claimed),
         # Code beside a module: scanned, or named when no scan path can hold it (m3).
         "beside_modules": beside_modules,
         # Top-level folders holding the portal `docs site` wrote, not scanned (m4).
         "generated_portals": portals,
+        # The aliases read from the bundler's config by a text scan (BDL-080).
+        "import_aliases": aliases,
+        # The `lint:fsd` script written, or the one kept (BDL-080 S3c).
+        "steiger_script": steiger,
+        # The local Expo modules written with their native parts (BDL-080 S3b).
+        "expo_modules": expo,
     }
+
+
+def _unit_summary(
+    unit: FsdUnit | ExpoModuleUnit | NativePart,
+    project_root: Path,
+    entry_points: list[dict[str, str]],
+) -> str:
+    """The contextual summary of a unit a layout writes as a component, built as a cluster's is.
+
+    One body for every layout's unit (an FSD slice, segment, container or legacy folder;
+    an Expo module or one of its native parts), named after the last folder of its path.
+    """
+    return _build_contextual_summary(
+        project_root / unit.directory,
+        unit.directory.rsplit("/", 1)[-1],
+        "component",
+        list(unit.files),
+        project_root,
+        entry_points=entry_points,
+    )

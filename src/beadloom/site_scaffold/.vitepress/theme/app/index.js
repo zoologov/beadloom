@@ -3,7 +3,10 @@
 //
 // Feature-Sliced Design. This is the `app` layer: it wires the slices
 // below it into VitePress and holds no behaviour of its own. It mounts the
-// Mermaid diagram viewer on every page and registers, by name, the components
+// Mermaid diagram viewer on every page, the "Powered by Beadloom" footer at the
+// bottom of every page (which hides itself when the project switched it off),
+// draws the project's logo in the nav in the text's colour when it is drawn in
+// `currentColor` (`styles/nav-logo.css`), and registers, by name, the components
 // the generated Markdown mounts: the architecture and landscape pages and the
 // dashboard's panels. Each is SSR-safe under the `<ClientOnly>` the generated
 // page puts around it, where the static summary is the fallback.
@@ -20,17 +23,23 @@ import {
   AlertBanner,
   CategoryChart,
   HealthGauges,
+  PageMap,
   Recommendations,
+  RuleFindings,
   StatusCards,
   TrendCharts,
 } from "../widgets/dashboard/index.js";
 import { DiagramViewer } from "../widgets/diagram-viewer/index.js";
+import { PoweredBy } from "../widgets/powered-by/index.js";
+import "./styles/nav-logo.css";
 
 /** The components the generated pages mount by name. */
 const GLOBAL_COMPONENTS = {
   DiagramViewer,
   AlertBanner,
   StatusCards,
+  RuleFindings,
+  PageMap,
   HealthGauges,
   CategoryChart,
   TrendCharts,
@@ -44,10 +53,11 @@ const GLOBAL_COMPONENTS = {
 export default {
   extends: DefaultTheme,
   // The diagram viewer is mounted on every page, in the content area, where it
-  // enhances each `.mermaid` SVG the page rendered.
+  // enhances each `.mermaid` SVG the page rendered; the footer below the page.
   Layout() {
     return h(DefaultTheme.Layout, null, {
       "doc-footer-before": () => h(DiagramViewer),
+      "layout-bottom": () => h(PoweredBy),
     });
   },
   enhanceApp({ app }) {

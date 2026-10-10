@@ -3,7 +3,7 @@
 //
 // The walk goes from the selected node to its dependents, theirs, and so on,
 // with no depth limit, over a map of dependents the mode builds from its edges
-// (`dependentsOf` in `entities/graph-edge`): in the architecture, backwards
+// (`dependentsOf` in `entities/graph-edges`): in the architecture, backwards
 // along the dependency kinds. The summary here is what an estimate needs: how
 // many nodes, which domains and services hold them, which layer boundaries the
 // walked edges cross, and which nodes are a risk. It is the graph's view —
@@ -12,9 +12,9 @@
 // is `contractImpact.js`.
 
 import { breadthFirst } from "../../../shared/lib/index.js";
-import { containerOfKind, risksOf } from "../../../entities/graph-node/index.js";
-import { DEPENDENCY_KINDS } from "../../../entities/graph-edge/index.js";
-import { layerOfNode } from "../../../entities/layer/index.js";
+import { containerOfKind, risksOf } from "../../../entities/graph-nodes/index.js";
+import { DEPENDENCY_KINDS } from "../../../entities/graph-edges/index.js";
+import { layerOfNode } from "../../../entities/layers/index.js";
 
 /** The node kinds the summary groups the affected nodes by. */
 const DOMAIN_KIND = "domain";

@@ -17,7 +17,10 @@ make — and this script is where those answers meet mutmut 3.7, as it is:
     (59 of the 167 unplaced files were in it on 2026-09-28, measured). Then prepare the
     mutants and take the EXACT names of the changed functions' mutants from
     ``mutants/*.meta`` (a glob ending ``__mutmut_*`` makes mutmut's clean run
-    fall back to the whole selection, BDL-073).
+    fall back to the whole selection, BDL-073). Given ``--budget``, a change
+    with more mutants than that is measured in part: whole functions, the
+    largest first, each one that still fits, and every function left out is
+    named with its count and written to ``--left-out`` (``beadloom-af99.17``).
 ``sample``
     Prepare the mutants and draw a seeded random sample of exact names from the
     whole declared scope.
@@ -26,7 +29,7 @@ make — and this script is where those answers meet mutmut 3.7, as it is:
     write the counters and the survivors the product reads.
 ``judge``
     Tell a run that judged every selected mutant from one that left some
-    unjudged while every step exited 0.
+    unjudged while every step exited 0, and name what a capped run left out.
 
 **Preparing the mutants uses mutmut's command line only.** mutmut has no
 command that generates mutants and stops, and its generation functions moved
@@ -144,6 +147,19 @@ class ChosenTests:
         return tuple(sorted({*self.bound, *self.acceptance, *self.fallback}))
 
 
+#: One function a capped run left out: its source path, its name, its mutants.
+Left = tuple[str, str, int]
+
+
+@dataclass(frozen=True)
+class Budgeted:
+    """What a run measures within its budget of mutants, and what it leaves out."""
+
+    measured: PickedNames
+    left: tuple[Left, ...]
+    budget: int | None
+
+
 @dataclass(frozen=True)
 class Counted:
     """Counters over exactly the selected names, and the survivors among them."""
@@ -197,6 +213,63 @@ def names_for_functions(
         names.extend(own)
         counts.append((path, wanted, len(own)))
     return PickedNames(names=tuple(dict.fromkeys(names)), counts=tuple(counts))
+
+
+def budgeted_names(
+    functions: Sequence[Mapping[str, object]],
+    metas: Mapping[str, Mapping[str, int | None]],
+    budget: int | None,
+) -> Budgeted:
+    """The change's names within *budget* mutants: whole functions, the largest first.
+
+    A change within the budget, or with none, is measured whole. Otherwise each
+    function is taken, largest first and in the plan's order among equals, when
+    its mutants still fit what is left of the budget; a function they do not fit
+    gives way to smaller ones, and is left out with its count. A function with no
+    mutant costs nothing and is always measured.
+    """
+    everything = names_for_functions(functions, metas)
+    if budget is None or len(everything.names) <= budget:
+        return Budgeted(measured=everything, left=(), budget=budget)
+    room = budget
+    taken: set[int] = set()
+    for index in sorted(range(len(everything.counts)), key=lambda k: -everything.counts[k][2]):
+        count = everything.counts[index][2]
+        if count <= room:
+            taken.add(index)
+            room -= count
+    chosen = [function for index, function in enumerate(functions) if index in taken]
+    left = tuple(count for index, count in enumerate(everything.counts) if index not in taken)
+    return Budgeted(measured=names_for_functions(chosen, metas), left=left, budget=budget)
+
+
+def describe_left(left: Sequence[Left]) -> str:
+    """The remainder a capped run did not measure, as one clause; empty for none."""
+    if not left:
+        return ""
+    mutants = sum(count for _, _, count in left)
+    named = ", ".join(f"{function} ({count})" for _, function, count in left)
+    return f"{mutants} mutant(s) of {len(left)} function(s) not measured, over the budget: {named}"
+
+
+def write_left(path: Path, left: Sequence[Left]) -> None:
+    """Write the remainder one function per line: path, name and count, tab-separated."""
+    path.write_text(
+        "".join(f"{source}\t{name}\t{count}\n" for source, name, count in left), encoding="utf-8"
+    )
+
+
+def read_left(path: Path) -> tuple[Left, ...]:
+    """The remainder :func:`write_left` wrote; a line in another shape is an error."""
+    left: list[Left] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        if len(parts) != 3 or not parts[2].isdigit():
+            raise AdapterShapeError(f"{path}: {line!r} is not path<TAB>function<TAB>count")
+        left.append((parts[0], parts[1], int(parts[2])))
+    return tuple(left)
 
 
 def tests_for_change(plan: Mapping[str, object], pool: Sequence[str]) -> ChosenTests:
@@ -304,8 +377,19 @@ def runner_executable() -> str:
     return found
 
 
-def judge(selected: int, stats: Path) -> tuple[str, str]:
-    """``judged`` when every selected mutant has a verdict, else ``silent`` and why."""
+def judge(selected: int, stats: Path, left: Sequence[Left] = ()) -> tuple[str, str]:
+    """``judged`` when every selected mutant has a verdict, else ``silent`` and why.
+
+    *left* is what a capped run did not measure: the verdict is over the selected
+    mutants alone, and the detail names the remainder whatever the verdict.
+    """
+    verdict, detail = _verdict(selected, stats)
+    remainder = describe_left(left)
+    return verdict, f"{detail}; {remainder}" if remainder else detail
+
+
+def _verdict(selected: int, stats: Path) -> tuple[str, str]:
+    """The verdict over the selected mutants and its reason."""
     try:
         data = json.loads(stats.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -404,16 +488,42 @@ def _select(args: argparse.Namespace) -> int:
         return 1
     pyproject.write_text(with_selection(text, chosen.files), encoding="utf-8")
     _say(describe_tests(chosen, plan))
-    picked = names_for_functions(plan["functions"], read_metas(prepare_mutants(root)))
+    functions = list(plan["functions"])
+    budgeted = budgeted_names(functions, read_metas(prepare_mutants(root)), args.budget)
+    picked = budgeted.measured
     for path, function, count in picked.counts:
         _say(f"  {function} ({path}): {count} mutant(s)")
+    for path, function, count in budgeted.left:
+        _say(f"  not measured: {function} ({path}), {count} mutant(s)")
     names_out.write_text("".join(f"{name}\n" for name in picked.names), encoding="utf-8")
-    _outputs(args.github_output, mutants=len(picked.names), tests=len(chosen.files))
-    if not picked.names:
-        _say("Population: 0 mutants — mutmut generated none for the changed functions")
-        return 0
-    _say(f"Population: {len(picked.names)} mutant(s) of {len(picked.counts)} function(s)")
+    if args.left_out:
+        write_left(Path(args.left_out), budgeted.left)
+    unmeasured = sum(count for _, _, count in budgeted.left)
+    _outputs(
+        args.github_output,
+        mutants=len(picked.names),
+        tests=len(chosen.files),
+        unmeasured=unmeasured,
+    )
+    _say(_population(budgeted))
     return 0
+
+
+def _population(budgeted: Budgeted) -> str:
+    """The population line: what is measured and, for a capped run, what is not."""
+    picked = budgeted.measured
+    if not budgeted.left:
+        if not picked.names:
+            return "Population: 0 mutants — mutmut generated none for the changed functions"
+        return f"Population: {len(picked.names)} mutant(s) of {len(picked.counts)} function(s)"
+    unmeasured = sum(count for _, _, count in budgeted.left)
+    whole = len(picked.names) + unmeasured
+    functions = len(picked.counts) + len(budgeted.left)
+    return (
+        f"Population: {len(picked.names)} of {whole} mutant(s) of {functions} function(s) "
+        f"measured, in {len(picked.counts)} function(s) — the budget of {budgeted.budget} "
+        f"mutants this job's time holds; {describe_left(budgeted.left)}"
+    )
 
 
 def _sample(args: argparse.Namespace) -> int:
@@ -440,7 +550,8 @@ def _counters(args: argparse.Namespace) -> int:
 
 
 def _judge(args: argparse.Namespace) -> int:
-    verdict, detail = judge(len(_read_names(args.names)), Path(args.stats))
+    left = read_left(Path(args.left)) if args.left else ()
+    verdict, detail = judge(len(_read_names(args.names)), Path(args.stats), left)
     _say(f"verdict={verdict}")
     _say(f"detail={detail}")
     return 0
@@ -454,6 +565,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     select.add_argument("--plan", required=True)
     select.add_argument("--names-out", required=True)
     select.add_argument("--github-output")
+    select.add_argument("--budget", type=int, help="the most mutants the run measures")
+    select.add_argument("--left-out", help="where the functions over the budget are written")
     select.set_defaults(handler=_select)
 
     sample = commands.add_parser("sample", help="a seeded random sample of the scope")
@@ -472,6 +585,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     verdict = commands.add_parser("judge", help="judged or silent, for the announcement")
     verdict.add_argument("--names", required=True)
     verdict.add_argument("--stats", required=True)
+    verdict.add_argument("--left", help="the functions a capped run did not measure")
     verdict.set_defaults(handler=_judge)
 
     args = parser.parse_args(argv)

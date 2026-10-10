@@ -19,7 +19,7 @@ earlier "Arrange" button was removed in BDL-077).
 Fitting and centring leave out the part of the canvas something lies over. In the page the
 viewer's panel covers the canvas's right edge, and a graph fitted to the whole canvas would put
 what the reader asked for under it, so the caller reports that inset. A fit zooms in no closer
-than `FIT_MAX_ZOOM`, so a lone node is framed rather than filling the canvas. A fit measures the
+than `FIT_MAX_ZOOM` (1.5), so a lone node is framed rather than filling the canvas. A fit measures the
 nodes' shapes and the edges' routes, not their labels or strokes (`shapesBoxOf`): the viewer's
 map titles a closed box at a constant size on screen and draws every line at one width on screen,
 so in graph units both grow as the view zooms out, and a fit measured with them would depend on
@@ -41,7 +41,9 @@ because a reader of the zoom from outside can start too late on a slow machine t
 
 ## Public API
 
-- `NAVIGATION_OPTIONS`, `ZOOM_STEP`, `FIT_PADDING`, `FIT_MAX_ZOOM`.
+- `NAVIGATION_OPTIONS`, `ZOOM_STEP`. `FIT_PADDING` and `FIT_MAX_ZOOM`, the fit it measures, are
+  read from `site-shared-map-levels` since BDL-080 S2a, beside the levels that open past that
+  fit, and this slice no longer exports them.
 - `useGraphNavigation(getCy, { getInset })` returns `panOnNodes()`, `zoomIn()`, `zoomOut()`,
   `fit(selector)`, `fitZoom({ drawing })`, `frame({ box, focus, leastZoom }, { animate })`,
   `lastMove()` and `centre(id)`. `panOnNodes` is called once the graph holds its
@@ -57,7 +59,8 @@ because a reader of the zoom from outside can start too late on a slow machine t
 
 ## Depends on
 
-- Nothing inside the site; Cytoscape is handed in by the caller.
+- `site-shared-map-levels`, for `FIT_PADDING` and `FIT_MAX_ZOOM`. Cytoscape is handed in by the
+  caller.
 
 ## Tests
 

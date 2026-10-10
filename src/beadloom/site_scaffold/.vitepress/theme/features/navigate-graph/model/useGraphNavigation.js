@@ -16,6 +16,8 @@
 // zoom a fit of everything visible would take is also read on its own
 // (`fitZoom`): the viewer's map measures how far the reader has zoomed in from it.
 
+import { FIT_MAX_ZOOM, FIT_PADDING } from "../../../shared/map-levels/index.js";
+
 /** The Cytoscape options of the navigation model, given when the graph is created. */
 export const NAVIGATION_OPTIONS = Object.freeze({
   autoungrabify: true,
@@ -30,10 +32,6 @@ export const NAVIGATION_OPTIONS = Object.freeze({
 
 /** How much one zoom step changes the zoom level. */
 export const ZOOM_STEP = 1.25;
-/** Padding around the graph when it is fitted, in pixels. */
-export const FIT_PADDING = 40;
-/** The closest a fit zooms in, so a lone node is framed rather than filling the canvas. */
-export const FIT_MAX_ZOOM = 1.5;
 /** How long a framing move takes, in milliseconds, when it is animated. */
 export const FRAME_MS = 350;
 /** The media query a reader who asks for less motion matches. */

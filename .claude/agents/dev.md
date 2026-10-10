@@ -61,12 +61,16 @@ Feature: <the capability, in the user's words>
 - Boundaries are machine-enforced (`beadloom lint --strict`). A new module that isn't a classified node with a doc trips coverage-lint (error). Fix every violation before completing the bead — do not ship across a red boundary.
 
 ### Cohesion-driven design (first-class — peer to DDD / TDD / trunk-based)
+
+<!-- beadloom:carries=cohesion -->
+
 Every module, class, and function carries **one responsibility you can name in a phrase**. This is non-negotiable, in both directions:
 - **No monster modules.** A file that mixes several responsibilities (types + policy + I/O + orchestration) or has grown past readability is split BY RESPONSIBILITY into cohesive units. Huge files are a defect regardless of what any metric says.
 - **No over-splitting.** Cohesion is the driver, **not** line count. Do not shatter code into shrapnel — tiny files, indirection for its own sake, or a flow you must chase across a dozen modules is equally a defect.
 - **The test:** can you state the module's single responsibility in one phrase? If it needs "and", split it; if the split produces fragments with no standalone meaning, don't.
-- **Size limits are a consequence, never a driver.** `domain-size-limit` (and similar) must pass because the structure is genuinely cohesive — NEVER by reclassifying nodes or moving a monster into a new folder to hide it. Note an in-domain split (a monster file → a cohesive package in the SAME domain) does NOT lower the domain's symbol count: the win is the file, not the metric. When a domain is *legitimately* large after honest decomposition, **recalibrate the threshold deliberately, with a documented rationale in the rule** — recalibration ≠ gaming. Gaming dodges the count by reclassification; recalibration admits the limit was miscalibrated for a large bounded context and resets it openly. The limit stays a SIGNAL for genuine re-scoping, never a target.
-- On extraction, preserve public import paths (re-export from the package `__init__`) and git history (`git mv`); decomposition is behavior-preserving.
+- **Size limits are a consequence, never a driver.** `domain-size-limit`, a per-layer cohesion check on a Feature-Sliced frontend, and every other `check` rule's `max_symbols` must pass because the structure is genuinely cohesive — NEVER by reclassifying nodes or moving a monster into a new folder to hide it. Note an in-domain split (a monster file → a cohesive package in the SAME domain) does NOT lower the domain's symbol count: the win is the file, not the metric. When a domain is *legitimately* large after honest decomposition, **recalibrate the threshold deliberately, with a documented rationale in the rule** — recalibration ≠ gaming. Gaming dodges the count by reclassification; recalibration admits the limit was miscalibrated for a large bounded context and resets it openly. The limit stays a SIGNAL for genuine re-scoping, never a target.
+- **A unit is entered through its public surface.** A package is imported through what its `__init__` re-exports, a slice through its `index`; an import past it couples the caller to the unit's insides, and the architecture overlay names the rule that reports it.
+- On extraction, preserve public import paths (re-export from the package `__init__`, or the slice's `index`) and git history (`git mv`); decomposition is behavior-preserving.
 
 ### Annotation discipline (keeps the graph honest — non-negotiable)
 You MUST emit the project's graph annotations **on the code you write**, by construction — they are how the architecture graph stays truthful as code changes:
@@ -305,6 +309,11 @@ Emit on every new/changed module so it maps to its graph node:
 - `# beadloom:feature=<ref>` — a feature/use-case within a domain.
 - `# beadloom:component=<ref>` — a finer-grained component of a domain/service.
 A new module with no annotation (and no matching node `source`) is invisible to the graph and fails `module-coverage` (error) — classify it as a node with a doc.
+
+### Cohesion (DDD, Python packages)
+- A domain is a bounded context; a feature or component inside it holds one responsibility you can name in a phrase, and so does each module.
+- A module that outgrows one responsibility becomes a package in the SAME domain (`git mv`, then split by responsibility), its public names re-exported from its `__init__` so callers' imports keep working. Callers import from the package, not from the module that happens to hold a name today.
+- When a part of that package has a responsibility of its own, make it its own `component` node, `part_of` the domain: `domain-size-limit` counts the symbols a node OWNS, so a real part carved out relieves the parent. Moving a monster into a new folder without that is gaming the count, not cohesion.
 
 <!-- overlay:python — Python stack idioms + lint/type/test commands. -->
 ## STACK (Python)

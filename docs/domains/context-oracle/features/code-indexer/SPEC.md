@@ -34,6 +34,14 @@ Vue single-file components (BDL-076 J3) have no loader of their own:
 `.js` loader (`tree_sitter_typescript`) is installed. That changes the parser
 fingerprint, so the first reindex after upgrade is a full code reindex.
 
+`.mjs` and `.cjs` files (BDL-080 S3a `beadloom-cwzc`, closing `beadloom-zd4m`) are read by
+the grammar the `.js` loader uses: `_EXTENSION_LOADERS` maps both to `_load_typescript`, so
+both are in `supported_extensions()`, their symbols are indexed and their ES module imports
+are read by the import resolver. CommonJS is not read, by the owner's ruling for BDL-080:
+`module.exports` yields no symbol and `require()` no import, so a CommonJS file is an import
+target only. The parser fingerprint is the sorted list of supported extensions, so the two
+new ones make the first reindex after the upgrade a full code reindex.
+
 ### Symbol kinds
 
 The indexer owns the symbol vocabulary: `function`, `class`, `type`,

@@ -1,7 +1,7 @@
 // beadloom:component=site-graph-viewer
 // The map drawn on the canvas: which boxes are open and closed, and the level they make drawn on Cytoscape.
 //
-// The levels are decided in `lib/levels.js`; this is what they do to Cytoscape.
+// The levels are decided in `shared/map-levels/levels.js`; this is what they do to Cytoscape.
 // A closed box keeps its place and its size, ELK's, and its children are taken
 // out of the graph with `cy.remove` and put back with `restore`: elements hidden
 // with `display: none` stay in the graph, and Cytoscape keeps spending time on
@@ -9,19 +9,19 @@
 // everything it had, where it was.
 //
 // The pairs of drawn ends a level holds are drawn as aggregated edges, elements
-// of the map's own (`aggregateElements.js`). An aggregated edge the budget
+// of the map's own (`features/overview-map/model/aggregateElements.js`). An aggregated edge the budget
 // leaves out is taken out of the graph as well, and each end it would join
 // carries the count (`hiddenEdges`); while the pointer is on an end, or the end
 // is selected, all of its edges are drawn. A closed box carries how many edges
 // come into it and go out of it (`tally`), the ones left out included. What the
 // pointer, a selection and the test handle draw besides — a node's own lines,
-// edges as themselves, stubs, a walk's counts — is `mapExtras.js`'s; an edge
+// edges as themselves, stubs, a walk's counts — is `features/overview-map/model/mapExtras.js`'s; an edge
 // from a node to a box that holds it is drawn by a line of its own along its
-// route (`loopLines.js`).
+// route (`shared/map-levels/loopLines.js`).
 //
 // The map's marks keep one size on screen at a scale stepped with the zoom, and
 // the titles and boxes drawn larger than their layout are dressed at it
-// (`mapTitles.js`), every node's corners too (`nodeCorners.js`). An edge out of
+// (`features/overview-map/model/mapTitles.js`), every node's corners too (`nodeCorners.js`). An edge out of
 // the graph is given the scale when it is put back, so it comes back at the size
 // of the rest: Cytoscape restyles an element out of the graph as it does one in
 // it, and giving every edge of the file the scale at each step restyled them
@@ -45,28 +45,39 @@ import {
   LAYER_BOX,
   LEVEL_OPTIONS,
   MAP_SCALE,
+  OUTWARD,
   PROJECT_BOX,
+  STUB_AT,
+  TALLY,
   boxTreeOf,
   boxesRevealing,
   budgetOf,
   isWithinAny,
   levelOf,
+  loopLines,
   openInView,
   outwardOf,
+  reachingOf,
   smallestChildOf,
   zoomDrawingOf,
-} from "../lib/levels.js";
-import { STUB_AT } from "../lib/heads.js";
-import { OUTWARD, TALLY } from "../lib/mapMarks.js";
-import { routePointsOf } from "../lib/lineMarks.js";
-import { aggregateElements, isOwnLine, talliesOf, weigh } from "./aggregateElements.js";
+} from "../../../shared/map-levels/index.js";
+import { routePointsOf } from "../../../entities/graph-edges/index.js";
+import {
+  FORCED,
+  aggregateElements,
+  isOwnLine,
+  keepsOutside,
+  mapExtras,
+  overviewPlanner,
+  scaleAt,
+  talliesOf,
+  titleDresser,
+  titleLooks,
+  weigh,
+} from "../../../features/overview-map/index.js";
 import { isLoop } from "./canvasLayout.js";
-import { giveData, setClass } from "./canvasMarks.js";
-import { loopLines } from "./loopLines.js";
-import { FORCED, mapExtras } from "./mapExtras.js";
-import { scaleAt, titleDresser, titleLooks } from "./mapTitles.js";
+import { giveData, setClass } from "../../../shared/canvas-marks/index.js";
 import { nodeCorners } from "./nodeCorners.js";
-import { overviewPlanner } from "./overviewPlan.js";
 
 const sameSet = (a, b) => a.size === b.size && [...a].every((id) => b.has(id));
 
@@ -78,8 +89,9 @@ const sameSet = (a, b) => a.size === b.size && [...a].every((id) => b.has(id));
  *
  * `fitZoom({ drawing })` gives the zoom of the whole-graph fit now, which may be
  * measured once per `drawing`, a token the map changes whenever it draws a level
- * or the filters change, and never for a zoom or a pan alone; `onLevel()` is called
- * when the view opens or closes a box, and is expected to call `apply`;
+ * or the filters change, and never for a zoom or a pan alone; `onLevel(options)` is called
+ * when the view opens or closes a box, and is expected to call `apply`, or with
+ * `{ boxes: false }` when only a box drawn larger than its layout changed size;
  * `onRescale()` when the scale stepped and nothing else changed. Nothing is
  * drawn differently until the first `apply`.
  */
@@ -113,7 +125,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   let ownPairs = [];
   // The edges of the file a line other than their box's draws now: as themselves, or on a node's own line.
   let drawnElsewhere = new Set();
-  // The lines that end as a stub at an open box, and the box (`mapExtras.js`).
+  // The lines that end as a stub at an open box, and the box (`features/overview-map/model/mapExtras.js`).
   let stubs = new Map();
   // The scale the map is drawn at: the overview plan's, read from ELK's boxes, from the first drawing on
   // (`apply`), so the first fit measures the map as the overview draws it. Without a plan, the scale of the
@@ -128,8 +140,10 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   // A token of what is drawn, which the fit is measured once per: it changes with every drawing of a level.
   let drawing = 0;
   let hiddenAt = new Map();
-  // The nodes an edge of the file is drawn as itself into at rest, and the box each node drawn larger than its layout is drawn as now.
-  let ownEnds = new Set();
+  // The routes of the edges of the file the level draws as themselves, by each node they end at; the nodes
+  // an edge a reveal or a walk draws as itself ends at; and the box each node drawn larger than its layout is drawn as now.
+  let ownLinesAt = new Map();
+  let revealedEnds = new Set();
   let grownNow = new Map();
   /**
    * The scale the map is drawn at now. The whole-graph fit is measured only when
@@ -142,21 +156,32 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     if (scale === null) scale = scaleAt(fitZoom());
     return scale;
   }
-  /** The map's drawing now, as the titles read it (`mapTitles.js`). */
-  const drawnNow = () => ({ scale: scaleNow(), hiddenAt, grownNow, ownEnds });
+  /**
+   * Whether `box`, drawn for node `id`, would cover a line of the file drawn as
+   * itself into it now: one the level draws, which the overview's plan kept
+   * outside the box where it drew the node larger, or any a reveal or a walk
+   * draws, which the plan never saw, so the node is drawn as laid out; and so is
+   * a node the test handle reveals with all of its edges.
+   */
+  const coversOwnLine = (id, box) => revealedEnds.has(id) || !keepsOutside(box, ownLinesAt.get(id) || []);
+  /** The map's drawing now, as the titles read it (`features/overview-map/model/mapTitles.js`). */
+  const drawnNow = () => ({ scale: scaleNow(), hiddenAt, grownNow, coversOwnLine });
   const corners = nodeCorners(cy);
   /** The route an edge of the file is drawn along, bundled, or null. */
   const drawnRouteOf = (id) => (edges.get(id)?.data("route") ? routePointsOf(edges.get(id)) : null);
   const lines = aggregateElements(cy, { tree, geometry, nodes, edges, taken, drawnRouteOf });
-  const extras = mapExtras(cy, { tree, edges, plainEdges, edgeById, byKey });
+  // A node with edges into an open box draws them when exposed, as a node with outward edges does.
+  const reaches = (id) => (levelCache.own?.get(id)?.length || 0) > 0;
+  const extras = mapExtras(cy, { tree, edges, plainEdges, edgeById, byKey, reaches });
   const looks = titleLooks(cy, { nodes, tree, geometry });
   const planner = overviewPlanner(cy, {
     tree,
     geometry,
     plainEdges,
     routePointsOf: drawnRouteOf,
-    // The plan asks whether a title fits its box on one line: whether to break it is the plan's to decide.
-    titleOf: (id, at, hidden) => looks.lookOf(id, at, hidden, null, false),
+    // The plan asks whether a title fits its box on one line, or broken onto two: whether to break it is the plan's to decide.
+    titleOf: (id, at, hidden, broken = false) => looks.lookOf(id, at, hidden, null, broken),
+    linesOf: looks.linesOf,
     projectTitleOf: (at) => looks.projectTitleAt(at),
     // A box is drawn at least as tall as it was laid out, and its status mark takes room by the height it is drawn at.
     leastBoxOf: looks.leastBoxOf,
@@ -167,7 +192,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     scaleAt,
     budget: options.budget,
   });
-  const titles = titleDresser(looks, planner, tree);
+  const titles = titleDresser(looks, planner, tree, geometry);
 
   /** The view now, as the levels read it: the fit measured once per drawing (`drawing`). */
   const viewNow = () => ({ zoom: cy.zoom(), fitZoom: fitZoom({ drawing }), extent: cy.extent() });
@@ -210,8 +235,13 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     const key = `${shownVersion}\n${[...openNow].sort().join("\n")}`;
     if (levelCache.key !== key) {
       const level = levelOf(tree, openNow, plainEdges);
-      const outward = outwardOf(tree, openNow, plainEdges.filter((edge) => kept(edge.id)), level);
-      levelCache = { key, level, outward };
+      const shownEdges = plainEdges.filter((edge) => kept(edge.id));
+      const outward = outwardOf(tree, openNow, shownEdges, level);
+      const reaching = reachingOf(tree, openNow, shownEdges, level);
+      // What a node exposed draws besides the level at rest: its outward edges, and its edges into an open box.
+      const own = new Map(outward);
+      for (const [id, more] of reaching) own.set(id, [...(own.get(id) || []), ...more]);
+      levelCache = { key, level, outward, own };
     }
     return levelCache;
   }
@@ -225,7 +255,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     // An edge the filters hide is drawn as itself and marked hidden, as ever; an
     // aggregated edge carries only the edges they show.
     const kept = (id) => shown(edges.get(id));
-    const { level, outward } = levelNow(nextOpen, kept);
+    const { level, outward, own } = levelNow(nextOpen, kept);
     const weighed = [...level.pairs.values()].map((pair) => weigh(pair, kept)).filter((pair) => pair.weight > 0);
     const leftOut = budgetOf(weighed, options.budget);
     const free = new Set([...exempt.values()].filter(Boolean));
@@ -241,9 +271,16 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     if (!planned && planner.titleScale()) [scale, planned] = [planner.titleScale(), true];
     scaleNow();
     const full = extras.fullDetailOf(level, nextOpen);
-    ownEnds = new Set([...level.originals, ...full].flatMap((id) => [edgeById.get(id).source, edgeById.get(id).target]));
+    ownLinesAt = new Map();
+    for (const id of level.originals) {
+      const path = drawnRouteOf(id);
+      if (!path) continue;
+      for (const end of [edgeById.get(id).source, edgeById.get(id).target]) ownLinesAt.set(end, [...(ownLinesAt.get(end) || []), path]);
+    }
+    // A node the handle reveals with all of its edges is drawn as laid out, as at full detail it always was.
+    revealedEnds = new Set([...full.flatMap((id) => [edgeById.get(id).source, edgeById.get(id).target]), ...extras.forcedIds()]);
     grownNow = titles.grownBoxesNow(level.nodes, nextOpen, drawnNow());
-    const besides = extras.extrasOf(level, nextOpen, outward, kept, grownNow);
+    const besides = extras.extrasOf(level, nextOpen, own, kept, grownNow);
     for (const id of full) besides.originals.add(id);
     stubs = besides.stubs;
     drawnElsewhere = new Set([...besides.originals, ...besides.own.flatMap((pair) => [...pair.forward, ...pair.backward])]);
@@ -306,10 +343,18 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   /** Whether `id` is at the top: the box that holds everything, or a node right under it. */
   const atTop = (id) => id === tree.wrapper || tree.parent.get(id) === tree.wrapper;
 
+  /**
+   * Whether an edge of the file joins a box at the top to the box that holds
+   * everything: drawn by a line of its own only while that box is open, as what
+   * the box draws out of it.
+   */
+  const opensWithItsBox = (edge) =>
+    [edge.source, edge.target].includes(tree.wrapper) && [edge.source, edge.target].some((end) => end !== tree.wrapper && tree.boxes.has(end));
+
   /** Whether `element`, whose id is `id`, is of the top level (`ofTopLevel`). */
   function isOfTopLevel(element, id) {
     const fileEdge = edgeById.get(element.isEdge() ? id : loopEdgeOfEnd.get(id));
-    if (fileEdge) return atTop(fileEdge.source) && atTop(fileEdge.target);
+    if (fileEdge) return atTop(fileEdge.source) && atTop(fileEdge.target) && !opensWithItsBox(fileEdge);
     if (element.isEdge()) return Boolean(lines.entryOf(id)?.pair.ends.every(atTop));
     return nodes.has(id) && atTop(id);
   }
@@ -344,18 +389,26 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
   /**
    * Work out the boxes wanted again, and have the level drawn again when they
    * differ or a drawn box changed size; otherwise, when only the scale stepped,
-   * tell the canvas (`onRescale`), whose marks of shared lines depend on it.
+   * tell the canvas (`onRescale`), whose marks of shared lines depend on it. A
+   * drawn box that changed size alone draws the same boxes again without sizing
+   * them anew (`{ boxes: false }`): the frame of the box that holds everything
+   * keeps the size its level was drawn at, which holds every box the plan draws
+   * larger inside it (`reachOf`); sized again at another scale it came out a
+   * layout unit narrower on each side, which moved the fit by 0.2 % (measured on
+   * a Feature-Sliced frontend).
    */
   function evaluate() {
     if (destroyed) return;
     placed = true;
     const before = scaleNow();
     const resized = rescale();
-    if (sameSet(wanted(), open) && !resized) {
+    const sameBoxesOpen = sameSet(wanted(), open);
+    if (sameBoxesOpen && !resized) {
       if (scale !== before) onRescale();
       return;
     }
-    onLevel();
+    if (sameBoxesOpen) onLevel({ boxes: false });
+    else onLevel();
   }
 
   // Once per frame at most, and only once the view holds still: a frame of an animated move is not a level.
@@ -423,7 +476,9 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     /**
      * Whether `element` is of the top level, drawn alike at every level: a node
      * at the top or the box that holds everything, a line whose ends both are —
-     * the overview's own lines among them — and a loop of such a line, its end too.
+     * the overview's own lines among them — and a loop of such a line, its end too;
+     * but not a box's own edge to the box that holds everything, drawn only while
+     * the box is open.
      */
     ofTopLevel(element) {
       const id = element.id();
@@ -450,8 +505,16 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     scale: scaleNow,
     /** A number that changes whenever what the map draws or the scale it draws at changes. */
     version: () => version,
-    /** What the overview's last plan was (`overviewPlan.js`): `{ ms, unit, routed, failed, grown, plates }`. */
+    /** What the overview's last plan was (`features/overview-map/model/overviewPlan.js`): `{ ms, unit, routed, failed, grown, plates }`. */
     plan: () => planner.report(),
+    /** Whether `id` is a box at the top: right under the box that holds everything, or a root when none does. */
+    isTopBox: (id) => tree.boxes.has(id) && planner.isTop(id),
+    /**
+     * The room top-level box `id` takes drawn closed at the map's scale now, open
+     * now or not: `[{ x1, y1, x2, y2 }]` in layout units, its box and its title's
+     * plate (`features/overview-map/model/mapTitles.js`, `closedRoomsOf`).
+     */
+    closedRoomsOf: (id) => titles.closedRoomsOf(id, scaleNow()),
     /**
      * The room box `id` holds besides its children as drawn, or null: for the box
      * that holds everything, the most the nodes drawn larger than their layout at
@@ -464,7 +527,7 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
       return boxes.reduce((a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) }));
     },
     fitZoom,
-    /** The least zoom at which node `id` is drawn as itself and readable (`lib/levels.js`, `zoomDrawingOf`). */
+    /** The least zoom at which node `id` is drawn as itself and readable (`shared/map-levels/levels.js`, `zoomDrawingOf`). */
     zoomDrawing: (id) => zoomDrawingOf(tree, id, smallest, fitZoom(), options),
     /** Whether a change of the view is still to be read: the boxes open may be about to change. */
     pending: () => queued,

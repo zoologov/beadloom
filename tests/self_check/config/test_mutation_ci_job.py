@@ -54,6 +54,21 @@ _FIRST_KILL_MINUTES = 73
 #: The per-change budget the PRD states, in minutes on `ubuntu-latest`.
 _PER_CHANGE_BUDGET_MINUTES = 10
 
+#: The mutants a per-change run is capped at, as the workflow's header derives it.
+_DERIVED_MUTANT_BUDGET = "350"
+
+#: The measured cost of a mutant of the functions the cap takes, at two children,
+#: in seconds: 600 of PR #98's ran in 1 807 s on Darwin arm64, a room level with
+#: the runner on the stats pass (205 s against 202 s, `beadloom-af99.17`).
+_RUNNER_SECONDS_PER_MUTANT = 3.0
+
+#: The minutes before the first mutant on the runner (PR #98: 3 min 50 s, the
+#: stats pass 3 min 22 s of it) and after the last (counters, score, judge, upload).
+_FIXED_MINUTES = 5
+
+#: What the job keeps between its last step and its limit, in minutes.
+_MARGIN_MINUTES = 7
+
 
 def _workflow() -> dict[object, object]:
     data = yaml.safe_load(MUTATION.read_text(encoding="utf-8"))
@@ -312,6 +327,38 @@ class TestTheSizesAreTheDerivedOnes:
         assert isinstance(env, dict)
         assert env["BUDGET_SECONDS"] == str(_PER_CHANGE_BUDGET_MINUTES * 60)
         assert "::warning::" in _steps_text(PER_CHANGE)
+
+    def test_the_per_change_selection_is_capped_and_the_rest_is_named(self) -> None:
+        """A 36-commit pull request selected 1 168 mutants and was cancelled at
+        the job's limit before its judge ran (`beadloom-af99.17`): the select
+        step is given the derived budget and writes what it left out, and the
+        judge and the job's summary name that remainder."""
+        job = _jobs()[PER_CHANGE]
+        env = job["env"]
+        assert isinstance(env, dict)
+        assert env["MUTANT_BUDGET"] == _DERIVED_MUTANT_BUDGET
+        steps = _run_steps(PER_CHANGE)
+        select = [s for s in steps if f"{ADAPTER} select" in s]
+        assert len(select) == 1
+        assert '--budget "$MUTANT_BUDGET"' in select[0]
+        assert '--left-out "$RUNNER_TEMP/unmeasured.txt"' in select[0]
+        assert "GITHUB_STEP_SUMMARY" in select[0]
+        # An unnamed shell is `bash -e`, without pipefail: a refusal piped into
+        # `tee` would exit 0 and the job would run on with no names.
+        assert "set -o pipefail" in select[0]
+        judge = [s for s in steps if f"{ADAPTER} judge" in s]
+        assert len(judge) == 1
+        assert '--left "$RUNNER_TEMP/unmeasured.txt"' in judge[0]
+        assert "GITHUB_STEP_SUMMARY" in judge[0]
+
+    def test_the_budget_leaves_the_job_its_margin(self) -> None:
+        """The header derives the budget; this holds the derivation's arithmetic:
+        the fixed minutes plus the budget's mutants at the runner's measured rate
+        end before the limit by the margin."""
+        timeout = _jobs()[PER_CHANGE]["timeout-minutes"]
+        assert isinstance(timeout, int)
+        run_minutes = int(_DERIVED_MUTANT_BUDGET) * _RUNNER_SECONDS_PER_MUTANT / 60
+        assert _FIXED_MINUTES + run_minutes + _MARGIN_MINUTES <= timeout
 
     def test_the_seed_defaults_to_the_iso_week(self) -> None:
         """Reproducible from the commit and the seed alone."""

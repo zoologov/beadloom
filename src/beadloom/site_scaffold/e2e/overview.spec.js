@@ -642,7 +642,12 @@ test("zoomed in from the fit, a node drawn larger than its layout keeps its cent
     const titles = Object.fromEntries((await viewer(page, "titles")).map((t) => [t.id, t]));
     const ownLines = (await viewer(page, "edgeRoutes")).filter((r) => !r.aggregated);
     const nodes = Object.fromEntries(
-      grown.filter((id) => boxes[id]).map((id) => [id, { size: sizeOnScreen(boxes[id], zoom), text: titles[id]?.text ?? null, own: ownLines.some((r) => r.source === id || r.target === id) }])
+      grown
+        .filter((id) => boxes[id])
+        .map((id) => {
+          const own = ownLines.filter((r) => r.source === id || r.target === id).map((r) => r.points);
+          return [id, { size: sizeOnScreen(boxes[id], zoom), text: titles[id]?.text ?? null, own: own.length > 0, routes: own }];
+        })
     );
     return { zoom, boxes, titles, open: JSON.stringify(await viewer(page, "openBoxes")), nodes };
   };
@@ -660,9 +665,15 @@ test("zoomed in from the fit, a node drawn larger than its layout keeps its cent
       const box = now.boxes[id];
       const [a, b] = [centreOf(box), centreOf(elk[id])];
       if (!within(elk[id], box) || Math.hypot(a.x - b.x, a.y - b.y) > ON_BORDER) wrong.push(`step ${step}: ${id} does not hold its laid-out box around its centre`);
-      // An edge of the file drawn as itself into it ends on its laid-out border: the node is drawn at that size.
+      // An edge of the file drawn as itself into it keeps its route and ends on the node's border: a node
+      // drawn larger keeps that line outside it, as a node widened in its row does for the lines from
+      // the rows above and below.
       if (now.nodes[id].own) {
-        if (larger(now.boxes).includes(id)) wrong.push(`step ${step}: ${id} is drawn larger than its layout with an edge drawn as itself into it`);
+        const inner = (p) => p.x > box.x1 + ON_BORDER && p.x < box.x2 - ON_BORDER && p.y > box.y1 + ON_BORDER && p.y < box.y2 - ON_BORDER;
+        const along = (points) => points.flatMap((p, k) => (k ? [p, { x: (p.x + points[k - 1].x) / 2, y: (p.y + points[k - 1].y) / 2 }] : [p]));
+        if (larger(now.boxes).includes(id) && now.nodes[id].routes.some((points) => along(points).some(inner))) {
+          wrong.push(`step ${step}: ${id} is drawn larger than its layout over an edge drawn as itself into it`);
+        }
         continue;
       }
       const title = now.titles[id];
@@ -778,7 +789,7 @@ test("a closed box large enough to say it says how many edges come in and how ma
 /** Plan `input` with the shipped router, in the page. */
 function plan(page, input) {
   return page.evaluate(async (given) => {
-    const { planOverview } = await import("/widgets/graph-viewer/lib/overviewRoutes.js");
+    const { planOverview } = await import("/shared/grid-routing/overviewRoutes.js");
     const { paths, failed } = planOverview(given);
     return { paths: Object.fromEntries(paths), failed };
   }, input);
@@ -786,6 +797,29 @@ function plan(page, input) {
 
 const box = (id, x1, y1, x2, y2) => ({ id, x1, y1, x2, y2 });
 const lengthOf = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
+
+test("the overview's lines keep below a box's title room by the room ELK keeps inside a box's border, read from the layout itself", async ({
+  page,
+}) => {
+  await openThemeModules(page);
+  // The overview once restated ELK's 12 as a number of its own, so a change to the
+  // layout's padding would have left the lines' frame where it was, silently.
+  const found = await page.evaluate(async () => {
+    const { BOX_SIDE, elkGraphOf } = await import("/shared/elk/index.js");
+    const { GEOMETRY } = await import("/shared/map-levels/index.js");
+    const { routedFrameOf } = await import("/features/overview-map/model/overviewPlan.js");
+    const graph = elkGraphOf({ nodes: [{ id: "box", parent: null }, { id: "leaf", parent: "box", width: 10, height: 10 }], edges: [] });
+    return {
+      side: BOX_SIDE,
+      padding: graph.children[0].layoutOptions["elk.padding"],
+      top: routedFrameOf({ x1: 0, y1: 100, x2: 300, y2: 400 }).y1 - 100,
+      titleRoom: GEOMETRY.boxTitleRoom,
+    };
+  });
+  expect(typeof found.side).toBe("number");
+  expect(found.padding).toBe(`[top=${found.side},left=${found.side},bottom=${found.side},right=${found.side}]`);
+  expect(found.top).toBe(found.titleRoom - found.side);
+});
 
 test("a planned line leaves one box and reaches the other on their borders, with a straight run into each long enough for an arrowhead and a corner", async ({
   page,
@@ -939,7 +973,7 @@ test("a line drawn along its medoid, where the router found it no route, has its
   const options = { headRun: 15, headRunStep: 1, headRunClearance: 4, cellSize: 50, bandWidth: 8 };
   const routes = await page.evaluate(
     async (given) => {
-      const { lengthenLineEnds } = await import("/widgets/graph-viewer/lib/headRuns.js");
+      const { lengthenLineEnds } = await import("/shared/bundling/headRuns.js");
       return Object.fromEntries(lengthenLineEnds(given.input, given.options));
     },
     {
@@ -1101,7 +1135,7 @@ test("every port of the overview lies on the straight part of a side: a line mee
 test("the pill search passes over a too-dear stretch of a run at once and tries the very points it tries asking at each", async ({ page }) => {
   await openThemeModules(page);
   const found = await page.evaluate(async () => {
-    const { candidatesOf } = await import("/widgets/graph-viewer/lib/pillPoints.js");
+    const { candidatesOf } = await import("/shared/geometry/pillPoints.js");
     // Three runs, the middle one long and level; along it, stretches where a pill would cover other lines.
     const line = { points: [{ x: 0, y: 0 }, { x: 0, y: 300 }, { x: 900, y: 300 }, { x: 900, y: 20 }], heads: [true, true] };
     const spans = [[100, 260], [180, 400.5], [610, 700], [700, 702]];

@@ -317,8 +317,13 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    `beadloom-btkd.1` it carries every refused value of the `activity:` block the same way
    (`_activity_setting_findings`, rule `activity-settings`, severity `error`, read by
    `application.activity_settings.read_activity_exclusions`): a mistyped `exlude:` would count
-   every generated line as work without a word. With either block refused the summary is
-   ``N unusable `site:` value(s)`` and/or ``N unusable `activity:` value(s)``, joined by `+`.
+   every generated line as work without a word. Since BDL-080 S3a (`beadloom-cwzc`) it carries
+   every refused entry of the `imports:` block too (`_import_alias_findings`, rule
+   `import-aliases`, severity `error`, read by
+   `application.import_aliases.read_import_aliases`): a mistyped alias folder would leave every
+   import under the alias unresolved without a word. With any of the three blocks refused the
+   summary is ``N unusable `site:` value(s)``, ``N unusable `activity:` value(s)`` and/or
+   ``N unusable `imports:` value(s)``, joined by `+`.
 11. **doctor** — graph integrity.
 12. **federate** — `federate --fail-on` when hub exports are supplied.
 
@@ -452,9 +457,10 @@ on one assertion that reproduces locally in 0.07 s.
 `GateResult` therefore carries a `GateCoverage` beside its room census: the verifications this
 project's pipeline declares that no step of this run performed, each with the command the
 pipeline runs for it and the workflow job it was read from. On this repository the block names
-three — the test suite, the style linter and the type checker. The second and third are the ones
-nobody had filed: the gate's own step is called `lint` and checks the architecture boundaries,
-not the source style.
+four — the test suite, the style linter, the type checker and, since BDL-080 S2c put Steiger in
+the `site-build` job, the FSD linter (`npm run lint:fsd`). The style linter and the type checker
+are the ones nobody had filed: the gate's own step is called `lint` and checks the architecture
+boundaries, not the source style.
 
 **Both sides are derived.** What the run performed comes from its own step list, so a suite step
 added to the gate later removes the line by the same act rather than by somebody deleting a

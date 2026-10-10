@@ -14,17 +14,21 @@ and a collapsible panel, with the legend below them. That element is what goes f
 embedded view and full screen are one UI. In the page the panel lies over the canvas's right edge;
 in full screen it sits beside the canvas.
 
+This page describes the whole drawing, as the reader sees it. Since BDL-080 S2a most of the code
+behind it lives in slices of its own, which the widget composes; the paths below name the file
+where it lives now, and [Modules](#modules) maps each part to its slice and page.
+
 - **Two modes** (`model/modes.js`). One core draws the architecture graph, from
   `architecture.data.json`, and the landscape of contracts between services, from
-  `landscape.data.json`. A mode names only what differs: the data file and how it becomes nodes and
-  edges, the filters in its slot of the toolbar and the set they show, what its search finds
+  `landscape.data.json`. A mode names only what differs: the data file and how it becomes nodes
+  and edges, the filters in its slot of the toolbar and the set they show, what its search finds
   (`searched`), its impact walk, and whether it is layered (`layered`: the architecture is, the
   landscape is not). Since BDL-080 the architecture mode's graph also carries `layerRules`, the
   data file's `layer_rules`, and the mode carries `layerChoiceOf` (`site-filter-graph`): once the
   layers are read, the viewer settles the Layer filter's value through it, so a link naming a
-  bare layer (`?layer=domains`) filters on a portal that draws two rules and the URL is
-  rewritten to the value the filter offers. The mode is the page's prop and the URL does not carry it, because the two
-  modes are two pages with two different cards.
+  bare layer (`?layer=domains`) filters on a portal that draws two rules and the URL is rewritten
+  to the value the filter offers. The mode is the page's prop and the URL does not carry it,
+  because the two modes are two pages with two different cards.
 - **Layout.** ELK lays the graph out once, in a Web Worker (`site-shared`, `shared/elk`), and
   everything the canvas draws is read from that one layout: nodes, box sizes, routes, bundles,
   the map's levels and the overview's plan. Until ELK answers, a `role=status` note says "Laying
@@ -42,22 +46,22 @@ in full screen it sits beside the canvas.
   plan has given one (`canvasMap.js`, `scaleNow`). Together these took the longest task on the
   adopter-sized graph from 603 to 626 ms to 299 to 300 ms on Darwin arm64 (`beadloom-btkd.22`,
   bound in [the site's page](../vitepress-site.md)).
-- **Selection.** A selected node is the start of a walk. In the neighbourhood the walk goes to the
-  chosen depth and direction (`site-select-neighbourhood`); with **Impact** on it goes to
+- **Selection.** A selected node is the start of a walk. In the neighbourhood the walk goes to
+  the chosen depth and direction (`site-select-neighbourhood`); with **Impact** on it goes to
   everything that depends on the node, without a limit, by the mode's walk (`site-impact-view`).
   What the walk leaves out is dimmed, or hidden when the reader asks, and the containers of what
   it reached stay. Every selection — a tap, the URL, the card, the impact list, a search — is
-  framed (BDL-078, owner's ruling 7): the view zooms and pans to the walk, never below the zoom at
-  which the node is drawn as itself and readable, in a 350 ms animation unless the reader asks for
-  reduced motion (`site-navigate-graph`, `frame`). A selected box is a walk over everything it
-  holds taken as one node (`boxNeighbourhoodOf`): it opens at any zoom, is framed whole, keeps its
-  contents at full strength and draws its outward edges as the pointer on it does. The one
+  framed (BDL-078, owner's ruling 7): the view zooms and pans to the walk, never below the zoom
+  at which the node is drawn as itself and readable, in a 350 ms animation unless the reader asks
+  for reduced motion (`site-navigate-graph`, `frame`). A selected box is a walk over everything
+  it holds taken as one node (`boxNeighbourhoodOf`): it opens at any zoom, is framed whole, keeps
+  its contents at full strength and draws its outward edges as the pointer on it does. The one
   exception is a box holding a layer rule's boxes (BDL-080 S1e): it opens only where those boxes
   are readable, also when tapped, because at the zoom that frames it whole their titles would
-  stand on plates over each other. Measured on this repository: `vitepress-site` tapped at the fit
-  is framed whole at zoom 0.128 and drawn closed, its title inside and its card in the panel;
-  zoomed in, it opens at 0.313 with layer boxes 29.7 px tall, and zoomed out it stays open at 0.250
-  and closes at 0.200, with no title over another at any step (5 overlaps at 0.128 before).
+  stand on plates over each other. Measured on this repository: `vitepress-site` tapped at the
+  fit is framed whole at zoom 0.128 and drawn closed, its title inside and its card in the panel;
+  zoomed in, it opens at 0.313 with layer boxes 29.7 px tall, and zoomed out it stays open at
+  0.250 and closes at 0.200, with no title over another at any step (5 overlaps at 0.128 before).
 - **Panel.** It shows what the page puts in its `panel` slot for the selected node and, in impact
   mode, the impact summary above it. A widget does not import another, so the page composes the
   card; the slot passes `parents`, so the card can say what a box holds. Each viewer gets its own
@@ -71,17 +75,17 @@ in full screen it sits beside the canvas.
   open panel covers. Keys, while focus is in the viewer: `+` and `-` zoom, `0` fits, `f` toggles
   full screen, `Esc` clears the selection.
 - **Layer boxes** (BDL-080 S1c). A layer rule whose scope is a box other than the project's frame
-  draws one box per layer inside that box (`site-layer`, `layerBoxesOf`). The viewer draws from
+  draws one box per layer inside that box (`site-layers`, `layerBoxesOf`). The viewer draws from
   that containment, `drawnParents`: the elements, the filters' ancestors, and the selection's
   kept nodes, holders and selected box read it. The card and impact read the file's own
   `parents`, because a layer box is no node of the graph. `buildElements` emits each layer box as
   a node carrying `LAYER_BOX` (the rule's name) and marks the scope box `STACK_LANES`, both
-  exported from `lib/levels.js`. `canvasLayout` passes `stack` to ELK for such a box, so its layer
-  boxes stack top to bottom by rank (`site-shared`, `shared/elk`). A layer box is titled and toned
-  by its layer, opens by readability, is joined by lines and carries tallies and pills like any
-  box, and a tap on it selects nothing. On this repository `vitepress-site` opens onto six layer
-  boxes, app, pages, widgets, features, entities and shared. The panel slot's `layer-name` is the
-  layer's caption.
+  exported from `shared/map-levels/levels.js`. `canvasLayout` passes `stack` to ELK for such a
+  box, so its layer boxes stack top to bottom by rank (`site-shared`, `shared/elk`). A layer box
+  is titled and toned by its layer, opens by readability, is joined by lines and carries tallies
+  and pills like any box, and a tap on it selects nothing. On this repository `vitepress-site`
+  opens onto six layer boxes, app, pages, widgets, features, entities and shared. The panel
+  slot's `layer-name` is the layer's caption.
 - **URL state.** The filters, the selection, depth, direction, dim or hide, and the neighbourhood
   or impact view round-trip through the query string (`site-url-state`). The URL overrides the
   props.
@@ -95,20 +99,20 @@ that open when their nodes are readable; and a zoom to the selection.
 ### Routes, measured
 
 `model/canvasLayout.js` draws the layout as ELK computed it. Every leaf stands at the centre of
-its ELK box. Every box is sized to its ELK box (`lib/routes.js`, `compoundSizeOf`), with compound
-padding 0 and `compound-sizing-wrt-labels: exclude`, and it is sized again whenever a filter or a
-selection changes which of its children are drawn, so a box keeps its place. Every edge follows its ELK route:
-`curve-style: round-segments`, its ends and corners given relative to its nodes' centres
-(`segmentsOf`), with the arrowhead where the route enters the target's box. An edge from a node
-to a box that holds it is drawn the same way since BDL-078, square along its route, by a line of
-its own to an invisible end on the box's border (`model/loopLines.js`): Cytoscape would draw it
-as a compound loop straight across the box. ELK's input carries
-nothing about the canvas, so the architecture page, a node page and full screen share one layout.
-It carries nothing about text either: a leaf's size is the stylesheet's 160 by 44 units plus its
-border, never its label (`layoutInputOf`), and ELK sizes every box, so the layout depends on the
-data file alone. The geometry in the site-e2e trace of 2026-10-04, taken on a Linux runner, is
-identical to that of the same data file laid out on macOS (`beadloom-m6k7.7`), and
-`layout.spec.js` holds it with the fonts changed.
+its ELK box. Every box is sized to its ELK box (`shared/geometry/routes.js`, `compoundSizeOf`),
+with compound padding 0 and `compound-sizing-wrt-labels: exclude`, and it is sized again whenever
+a filter or a selection changes which of its children are drawn, so a box keeps its place. Every
+edge follows its ELK route: `curve-style: round-segments`, its ends and corners given relative to
+its nodes' centres (`segmentsOf`), with the arrowhead where the route enters the target's box. An
+edge from a node to a box that holds it is drawn the same way since BDL-078, square along its
+route, by a line of its own to an invisible end on the box's border
+(`shared/map-levels/loopLines.js`): Cytoscape would draw it as a compound loop straight across
+the box. ELK's input carries nothing about the canvas, so the architecture page, a node page and
+full screen share one layout. It carries nothing about text either: a leaf's size is the
+stylesheet's 160 by 44 units plus its border, never its label (`layoutInputOf`), and ELK sizes
+every box, so the layout depends on the data file alone. The geometry in the site-e2e trace of
+2026-10-04, taken on a Linux runner, is identical to that of the same data file laid out on macOS
+(`beadloom-m6k7.7`), and `layout.spec.js` holds it with the fonts changed.
 
 The routes replaced Cytoscape's `bezier` curves from one node's centre to the other's in BDL-077.
 Measured on this repository's graph in headless Chromium on an Apple M1 Max, with the built
@@ -135,15 +139,17 @@ The stylesheet (`lib/stylesheet.js`) is built from theme tokens resolved to lite
 values and rebuilt when VitePress switches between light and dark; no colour is a fallback.
 
 - **A node is a card.** Leaf or box, it is drawn as the legend draws its layer: a thin border in
-  its layer's tone over a tint of it (`LAYER_FILL_SHARE`, 0.16, `site-layer`), its title in the
+  its layer's tone over a tint of it (`LAYER_FILL_SHARE`, 0.16, `site-layers`), its title in the
   middle. A node in no layer takes the `text2` tone, and the legend then names "no layer". Its
-  corners keep one radius on screen at every zoom, 8 px (`lib/corners.js`, `NODE_CORNER_PX`), a
-  quarter of its shorter side where that is less, and a corner gives way where a line ends nearer
-  to it than the radius, so no line stops in the air beside an arc (`model/nodeCorners.js`).
-  The overview's boxes have the same rounded corners as the nodes (owner, 2026-10-07).
+  corners keep one radius on screen at every zoom, 8 px (`shared/geometry/corners.js`,
+  `NODE_CORNER_PX`), a quarter of its shorter side where that is less, and a corner gives way
+  where a line ends nearer to it than the radius, so no line stops in the air beside an arc
+  (`model/nodeCorners.js`). The overview's boxes have the same rounded corners as the nodes
+  (owner, 2026-10-07).
 - **Status is a corner mark** (owner's ruling 5): a dot 10 units across in the top right corner,
-  filled for an error finding or a stale document, a ring for warn findings only (`NODE_STATUSES[s].mark`,
-  `site-graph-node`). The border stays its layer's, so a status moves nothing.
+  filled for an error finding or a stale document, a ring for warn findings only
+  (`NODE_STATUSES[s].mark`, `site-graph-nodes`). The border stays its layer's, so a status moves
+  nothing.
 - **An open box** is a fainter tint of its layer's tone (0.07) inside a thin solid border, its
   title inside at the top. ELK keeps 36 units above a box's children for that title
   (`GEOMETRY.boxTitleRoom`, `shared/elk`, `boxTop`).
@@ -161,166 +167,187 @@ detail, and every node's border keeps 3:1 (`look.spec.js`, `metrics.spec.js`).
 ### Lines and arrowheads
 
 - **One weight** (owner's rulings 4 and 10). Every line is 1.35 px on screen at every zoom,
-  whatever its kind, its count or its state (`lib/lineMarks.js`, `LINE_MARKS.width`). Kinds differ
-  by colour and dash only. A count is said on a pill, never in the width.
+  whatever its kind, its count or its state (`entities/graph-edges/lib/lineMarks.js`,
+  `LINE_MARKS.width`). Kinds differ by colour and dash only. A count is said on a pill, never in
+  the width.
 - **No gradient** (ruling 3). A line is one colour from end to end; its arrowhead carries the
   direction. At rest a line takes its kind's share of its tone over the background
-  (`EDGE_STYLES[k].strength`, `site-graph-edge`): an import is a light neutral, a violation the
+  (`EDGE_STYLES[k].strength`, `site-graph-edges`): an import is a light neutral, a violation the
   full danger colour. A followed line is drawn in its full tone. A line outside a selection is its
   rest colour faded towards the background at full opacity (`DIMMED_SHARE` 0.14), because edges
   drawn along one trunk at opacity 0.14 would add up to about four fifths of full strength. While
   the pointer rests on a node, every line not its own is faded less (`BEHIND_SHARE` 0.4)
-  (`lib/edgePalette.js`).
+  (`entities/graph-edges/lib/edgePalette.js`).
 - **Whole arrowheads.** A head is 6 px long on screen (`LINE_MARKS.head`), sized through
   Cytoscape's own arrow formula inverted (`arrowScaleOf`), and stands on a straight run of its
   own length and half a head more (`stem`). Where a line's run has no room for that, the head is
   drawn shorter, down to 3 px (`smallestHead`, `headLengthAt`); the routes give it the room where
-  nothing is in the way (`lib/headRuns.js`, below). The corner before a headed end is rounded only
-  by what its run has to spare, every other corner at 6 px, so a branch leaves its trunk in a
-  rounded merge on the stroke (ruling 2). A dashed line's pattern is shifted so a dash ends inside
-  the head (`dashOffsetOf`).
+  nothing is in the way (`shared/bundling/headRuns.js`, below). The corner before a headed end is
+  rounded only by what its run has to spare, every other corner at 6 px, so a branch leaves its
+  trunk in a rounded merge on the stroke (ruling 2). A dashed line's pattern is shifted so a dash
+  ends inside the head (`dashOffsetOf`); for an aggregated line, the head it is drawn with
+  (`AGGREGATE_ARROW`, a triangle) rather than its kind's. Without that a dotted aggregated line
+  stopped 0.93 px short of its head (measured by S4b on `heads.spec.js`).
+- **The legend is the canvas's** (BDL-080 S4b, S4f). After every drawing `useGraphCanvas` notes
+  the style keys of the lines shown (`drawnStyles`), the map's aggregated lines among them, and
+  whether one of them carries several styles (`drawnSeveral`); `GraphViewer` passes them to
+  `EdgeLegend` through `legendKeysOf` and its `several` prop. Before S4b the legend was made of
+  the data file's edges, so it listed `consumes` and `produces` at the overview, where no such
+  line is drawn. A line hidden by the filters or left outside a selection is not shown, and a
+  dimmed one is. See [Graph edges](graph-edges.md) for the "several kinds" entry.
 - **One head per shared last run** (ruling 10). Lines that reach one end along one final run end
   in one arrowhead: the loudest look draws it (a violation is never hidden under an import's
   head), then an edge of the file before a line of the map's, then the first by id; the others
-  end at its base (`lib/heads.js`, `droppedHeadsOf`; `model/sharedLines.js`). Lines that reach a
-  box side separately keep their own heads. Of two heads too close side by side on one border,
-  one gives way and its line ends beside the other's head (`crowdedHeadsOf`). A loop keeps its
-  own head.
+  end at its base (`entities/graph-edges/lib/heads.js`, `droppedHeadsOf`;
+  `features/follow-edge/model/sharedLines.js`). Lines that reach a box side separately keep their
+  own heads. Of two heads too close side by side on one border, one gives way and its line ends
+  beside the other's head (`crowdedHeadsOf`). A loop keeps its own head.
 - **Labels.** Cytoscape draws no edge label but a landscape contract's badge. The kind of the line
   under the pointer is drawn on the layer above (below), and only while it is hovered.
 
 ### Trunks and buses
 
 ELK gives each edge of a node its own port and channel, so a node with seventy edges leaves its
-side in a staircase as wide as the graph. `lib/bundles.js` (`bundleRoutes`) rewrites the routes
-after the layout, and no node or box moves:
+side in a staircase as wide as the graph. `shared/bundling/bundles.js` (`bundleRoutes`) rewrites
+the routes after the layout, and no node or box moves:
 
-- **Bus** (`lib/buses.js`), on every node with two or more drawn edges: the edges leaving one side
-  in one direction start from the side's middle and share one channel in the first gap, the
-  nearest one ELK already used. The gap ends at the nearest box over any place the channel runs
-  to, a lane's as well as a port's. The port moves 3 units (`portShift`) off the middle when a
-  lane begins there, and when its drop to the channel would run along an edge that does not end
-  at the node: a box's own child can send an edge out through the middle of the box's side, and
-  then no edge of the bus could start there (`portOf`, `beadloom-m6k7.7`).
-- **Trunk** (`lib/trunks.js`), on a node, leaf or box, with twenty or more drawn edges, loops
-  included: its edges to one top-level box share one member's route to a distribution line 8
-  units outside that box, then drop in where ELK had them enter. Out-trunks are drawn before
-  in-trunks, and an edge between two busy nodes is in both.
-- **Join** (`lib/joins.js`): an edge a trunk left in a lane of its own rides the box's main lane
-  out past 150 units, then turns back to its own route. Each lane is tried as the one joined, and
-  failing every lane, a fresh column straight out of the node's side (`joinsAt`).
-- **Head run** (`lib/headRuns.js`, `lengthenHeadRuns`, BDL-078 `beadloom-btkd.2`): last, the
-  lines arriving at one point of a node have their last bend moved back along their last run,
-  where nothing is in the way, until the run is 20 units long (`headRun`), in steps of 2
-  (`headRunStep`), clear of unrelated edges by 8 (`headRunClearance`). ELK ends a line 10 units
+- **Bus** (`shared/bundling/buses.js`), on every node with two or more drawn edges: the edges
+  leaving one side in one direction start from the side's middle and share one channel in the
+  first gap, the nearest one ELK already used. The gap ends at the nearest box over any place the
+  channel runs to, a lane's as well as a port's. The port moves 3 units (`portShift`) off the
+  middle when a lane begins there, and when its drop to the channel would run along an edge that
+  does not end at the node: a box's own child can send an edge out through the middle of the
+  box's side, and then no edge of the bus could start there (`portOf`, `beadloom-m6k7.7`).
+- **Trunk** (`shared/bundling/trunks.js`), on a node, leaf or box, with twenty or more drawn
+  edges, loops included: its edges to one top-level box share one member's route to a
+  distribution line 8 units outside that box, then drop in where ELK had them enter. Out-trunks
+  are drawn before in-trunks, and an edge between two busy nodes is in both.
+- **Join** (`shared/bundling/joins.js`): an edge a trunk left in a lane of its own rides the
+  box's main lane out past 150 units, then turns back to its own route. Each lane is tried as the
+  one joined, and failing every lane, a fresh column straight out of the node's side (`joinsAt`).
+- **Head run** (`shared/bundling/headRuns.js`, `lengthenHeadRuns`, BDL-078 `beadloom-btkd.2`):
+  last, the lines arriving at one point of a node have their last bend moved back along their
+  last run, where nothing is in the way, until the run is 20 units long (`headRun`), in steps of
+  2 (`headRunStep`), clear of unrelated edges by 8 (`headRunClearance`). ELK ends a line 10 units
   after its last bend, about five pixels where a node is just readable, and a head is six.
   `lengthenLineEnds` does the same for an overview line drawn along its medoid, moving only that
   line (`movable`).
 - **Fallback**: an edge keeps its ELK route wherever a new segment would cross a box or run along
   an edge with no end in common with it.
 
-The thresholds are `BUNDLE_OPTIONS`. `lib/bundleDrawing.js` holds the drawing being rewritten and
-`lib/spatialIndex.js` the grid over boxes and the band index over segments; a band query stops
-when its visitor asks and, over a long run, visits only the bands that hold something. The
-bundles are kept per layout, so a node page or full screen does not compute them again. Measured
-(`beadloom-bcqk`, `beadloom-m6k7.4`): `cli-commands` leaves its bottom side in one channel and
-crosses a line 150 units out in nine lanes, nine being its bound, where ELK's routes took 36
-channels and 69 lanes.
+The thresholds are `BUNDLE_OPTIONS`. `shared/bundling/bundleDrawing.js` holds the drawing being
+rewritten and `shared/geometry/spatialIndex.js` the grid over boxes and the band index over
+segments; a band query stops when its visitor asks and, over a long run, visits only the bands
+that hold something. The bundles are kept per layout, so a node page or full screen does not
+compute them again. Measured (`beadloom-bcqk`, `beadloom-m6k7.4`): `cli-commands` leaves its
+bottom side in one channel and crosses a line 150 units out in nine lanes, nine being its bound,
+where ELK's routes took 36 channels and 69 lanes.
 
-Where routes part, the rounded corner of the one that turns is the merge; no dot marks it
-(ruling 2). On a shared line Cytoscape reports one edge under the pointer; the viewer marks every
-edge along that line (`lib/routeIndex.js`, `routesAlong`; `is-along-hover`), and when the line
-carries two or more, a note over the canvas (`data-testid="edge-bundle-note"`) names the first
-eight and counts the rest.
+Where routes part, the rounded corner of the one that turns is the merge; no dot marks it (ruling
+2). On a shared line Cytoscape reports one edge under the pointer; the viewer marks every edge
+along that line (`shared/geometry/routeIndex.js`, `routesAlong`; `is-along-hover`), and when the
+line carries two or more, a note over the canvas (`data-testid="edge-bundle-note"`) names the
+first eight and counts the rest.
 
 ### Followed lines
 
 There are no bridges (ruling 1). A followed line — every edge along the hovered line, every line
 of the node under the pointer, and every edge of a selection's walk (`HIGHLIGHTED_EDGES`) — is
-drawn again on a canvas above Cytoscape's (`model/followedOverlay.js`, `model/overlayCanvas.js`),
-in its full colour, over a casing 2 px wide on each side (`LINE_MARKS.casing`) in the canvas's
-background colour that clears what it crosses. The drawing goes in passes: every casing, then every
-line, then the arrowheads, then the title of each open box a followed line runs through, drawn
-again on a patch of the box's fill so the line runs under it, then the label of the edge under the
-pointer. In passes, lines of one bundle do not cut slits into each other where they part. A
-followed line is drawn as Cytoscape draws it — the same route, corners and sizes — and always with
-its arrowhead. Two layers lie over the canvas, in order: `followed`, then `pills`.
+drawn again on a canvas above Cytoscape's (`features/follow-edge/model/followedOverlay.js`,
+`shared/canvas-marks/overlayCanvas.js`), in its full colour, over a casing 2 px wide on each side
+(`LINE_MARKS.casing`) in the canvas's background colour that clears what it crosses. The drawing
+goes in passes: every casing, then every line, then the arrowheads, then the title of each open
+box a followed line runs through, drawn again on a patch of the box's fill so the line runs under
+it, then the label of the edge under the pointer. In passes, lines of one bundle do not cut slits
+into each other where they part. A followed line is drawn as Cytoscape draws it — the same route,
+corners and sizes — and always with its arrowhead. Two layers lie over the canvas, in order:
+`followed`, then `pills`.
 
 ### The map
 
-The whole-graph view is drawn like a map (`lib/levels.js`, `model/canvasMap.js`). A box is open
-or closed. A closed box keeps ELK's size and place, is drawn tinted with its title, and its
-children are taken out of the graph (`cy.remove`, put back with `restore`). A level is a set of
-open boxes and nothing is laid out again, so no box moves between levels.
+The whole-graph view is drawn like a map (`shared/map-levels/levels.js`, `model/canvasMap.js`). A
+box is open or closed. A closed box keeps ELK's size and place, is drawn tinted with its title,
+and its children are taken out of the graph (`cy.remove`, put back with `restore`). A level is a
+set of open boxes and nothing is laid out again, so no box moves between levels.
 
-- **The sibling rule** (ruling 9, `levelOf`, `siblingsOf`). An edge is drawn at the lowest box that
-  holds both its ends, between the two children of that box that hold them: as itself only when
-  those children are its own ends and neither is a box; otherwise it is carried by one aggregated
-  edge per unordered pair of those children. So an open box keeps its outward edges aggregated at
-  the box, shows its nodes and the edges among them, and opening it moves no line between it and
-  its siblings. This replaces BDL-077's rule that an edge is drawn as itself once both ends are
-  drawn. Measured on this repository's graph (RFC probe): lines in view with one box open fell
-  from 114 to 43.
-- **Aggregated edges.** One per pair, an element of the map's own (`model/aggregateElements.js`)
-  with an arrowhead at each end its edges arrive at and its count each way in its data. Between two
-  top-level nodes its route is the overview's plan (below), at every level; any other runs along
-  the medoid of its members' ELK routes between the two boxes (`lib/aggregateRoutes.js`), its last
-  run into a closed box straightened where it was a short dogleg (`straightenedInto`). It takes a
-  violation's look when one of its edges is one. Hovering it shows a note
+- **The sibling rule** (ruling 9, `levelOf`, `siblingsOf`). An edge is drawn at the lowest box
+  that holds both its ends, between the two children of that box that hold them: as itself only
+  when those children are its own ends and neither is a box; otherwise it is carried by one
+  aggregated edge per unordered pair of those children. So an open box keeps its outward edges
+  aggregated at the box, shows its nodes and the edges among them, and opening it moves no line
+  between it and its siblings. This replaces BDL-077's rule that an edge is drawn as itself once
+  both ends are drawn. Measured on this repository's graph (RFC probe): lines in view with one
+  box open fell from 114 to 43.
+- **Aggregated edges.** One per pair, an element of the map's own
+  (`features/overview-map/model/aggregateElements.js`) with an arrowhead at each end its edges
+  arrive at and its count each way in its data. Between two top-level nodes its route is the
+  overview's plan (below), at every level; any other runs along the medoid of its members' ELK
+  routes between the two boxes (`shared/geometry/aggregateRoutes.js`), its last run into a closed
+  box straightened where it was a short dogleg (`straightenedInto`). It takes a violation's look
+  when one of its edges is one, and otherwise the look of the style its edges are drawn in most.
+  Since BDL-080 S4b a line of one style keeps that style's dash, so `uses` is dotted at the
+  overview too, and a line of several styles carries `SEVERAL_STYLES` and is drawn solid in the
+  colour of the kind it carries most (RFC D8). Hovering it shows a note
   (`data-testid="aggregated-edge-note"`) naming its edges each way by their ends.
 - **Budget.** A level draws at most 100 aggregated edges (`LEVEL_OPTIONS.budget`): the heaviest,
-  ties broken by the pair's ends in code-unit order (`budgetOf`). Each drawn end of a left-out edge
-  carries the count (`hiddenEdges`).
+  ties broken by the pair's ends in code-unit order (`budgetOf`). Each drawn end of a left-out
+  edge carries the count (`hiddenEdges`).
 - **What is readable opens** (ruling 12, `openInView`). A box opens when the box holding it is
-  open, it overlaps the view, the zoom is past 1.3 times the whole-graph fit (`fitFloor`), and its
-  smallest child is at least 24 px tall on screen (`readable`); it closes below 0.9 of that
-  (`closeShare`). This replaced BDL-077's rule of a box side reaching six hundred pixels, at which
-  a box's own cards stood about fifty-five pixels wide and twelve high. The rule runs at most once per frame, on viewport changes, and not while the view is
-  animated.
-- **What a selection needs opens** (`boxesRevealing`, `selectionReveals`). A selected node is drawn
-  as itself with its own edges: every box that holds it opens, and so does the node when it is a
-  box. With nothing more asked a selection opens only that, which is what the pointer on the node
-  needs, so a click and a hover draw the node's edges on the same lines. Impact, and a
-  neighbourhood the reader changed (deeper, one way, the rest hidden), open what every node of the
-  walk needs. A selected box opens at any zoom (`forced`), except a box holding a layer rule's
-  boxes, which opens where they are readable (`model/canvasMap.js`, BDL-080 S1e). The search box opens the boxes that
-  hold its matches. Other filters open nothing, and an aggregated edge carries only the edges they
-  show.
-- **"+N" and own lines** (the owner's rulings nine and fourteen). A node inside an open box whose outward edges a box
-  that holds it carries at rest shows their count as "+N" on a badge across the middle of its
-  right side (`outwardOf`; `lib/mapMarks.js`, `OUTWARD`). While the pointer is on the node, or it
-  is selected, they are drawn on top (`model/mapExtras.js`): each as itself where both ends are
-  drawn at their laid-out size, otherwise one own line from the node to each node the other ends
-  are drawn as (`ownLinesOf`), along the medoid of their drawn routes. The box-level line they
-  belong to is not drawn twice. A line into an open box whose nodes the node's other lines run on
-  into is their stub, with no head of its own (`STUB_AT`). The "+N", the hover and the click name
-  the same edges (`counts.spec.js`).
-- **Loops** (the owner's ruling thirteen). An edge from a node to a box that holds it stays drawn, square along its
-  route (`model/loopLines.js`), once both its ends are drawn and neither is a closed box. An edge
-  onto the one root box that holds everything is not drawn while its other end is inside a closed
-  box.
+  open, it overlaps the view, the zoom is past 1.3 times the whole-graph fit (`fitFloor`), and
+  its smallest child is at least 24 px tall on screen (`readable`); it closes below 0.9 of that
+  (`closeShare`). This replaced BDL-077's rule of a box side reaching six hundred pixels, at
+  which a box's own cards stood about fifty-five pixels wide and twelve high. The rule runs at
+  most once per frame, on viewport changes, and not while the view is animated.
+- **What a selection needs opens** (`boxesRevealing`, `selectionReveals`). A selected node is
+  drawn as itself with its own edges: every box that holds it opens, and so does the node when it
+  is a box. With nothing more asked a selection opens only that, which is what the pointer on the
+  node needs, so a click and a hover draw the node's edges on the same lines. Impact, and a
+  neighbourhood the reader changed (deeper, one way, the rest hidden), open what every node of
+  the walk needs. A selected box opens at any zoom (`forced`), except a box holding a layer
+  rule's boxes, which opens where they are readable (`model/canvasMap.js`, BDL-080 S1e). The
+  search box opens the boxes that hold its matches. Other filters open nothing, and an aggregated
+  edge carries only the edges they show.
+- **"+N" and own lines** (the owner's rulings nine and fourteen). A node inside an open box whose
+  outward edges a box that holds it carries at rest shows their count as "+N" on a badge across
+  the middle of its right side (`outwardOf`; `shared/map-levels/mapMarks.js`, `OUTWARD`). While
+  the pointer is on the node, or it is selected, they are drawn on top
+  (`features/overview-map/model/mapExtras.js`): each as itself where both ends are drawn at their
+  laid-out size, otherwise one own line from the node to each node the other ends are drawn as
+  (`ownLinesOf`), along the medoid of their drawn routes. The box-level line they belong to is
+  not drawn twice. A line into an open box whose nodes the node's other lines run on into is
+  their stub, with no head of its own (`STUB_AT`). The "+N", the hover and the click name the
+  same edges (`counts.spec.js`). Since BDL-080 S4f a node's edges into an open box, which run on
+  the pair's line of the node and the box and end on the box's border, are drawn the same way
+  while the node is under the pointer or selected (`reachingOf`), to the end they reach inside
+  the box. No "+N" counts them, since the node's line carries them at rest.
+- **Loops** (the owner's ruling thirteen). An edge from a node to a box that holds it stays
+  drawn, square along its route (`shared/map-levels/loopLines.js`), once both its ends are drawn
+  and neither is a closed box. An edge onto the one root box that holds everything is not drawn
+  while its other end is inside a closed box.
 - **Marks keep their size.** A line's weight, arrowheads and corners, a node's corners, and a
   closed box's title keep one size on screen: each carries the map's scale, a power of 1.25 near
-  `1 / zoom` (`model/mapTitles.js`, `scaleAt`, `SCALE_STEP`), so a zoom gesture restyles them
-  only when the zoom crosses a step. A class or data is set only where it changes
-  (`model/canvasMarks.js`, `setClass`, `giveData`), because Cytoscape 3.34 restyles an element for
-  every class it is given, changed or not.
+  `1 / zoom` (`features/overview-map/model/mapTitles.js`, `scaleAt`, `SCALE_STEP`), so a zoom
+  gesture restyles them only when the zoom crosses a step. A class or data is set only where it
+  changes (`shared/canvas-marks/canvasMarks.js`, `setClass`, `giveData`), because Cytoscape 3.34
+  restyles an element for every class it is given, changed or not.
 
 The landscape has no boxes, so it has no levels.
 
 ### The overview
 
 The overview is the level with every top-level box closed (ruling 8). Its lines are routed
-together by the overview's own router (`lib/overviewRoutes.js`, `planOverview`) at the scale of the
-whole-graph fit, where the reader sees them, between the fixed top-level boxes; no box moves.
+together by the overview's own router (`shared/grid-routing/overviewRoutes.js`, `planOverview`)
+at the scale of the whole-graph fit, where the reader sees them, between the fixed top-level
+boxes; no box moves.
 
-- **The grid** (`lib/overviewGrid.js`, `gridOf`). Lines run on tracks at least a pitch apart, 8 px
-  at the fit (`OVERVIEW_MARKS.pitch`). Each box is an obstacle with a half-pitch margin and a halo
-  up to 14 px deep (`halo`) that only its own lines enter, straight at it, so a line arrives with
-  a straight run of at least 15 px (`run`). A port lies on the straight part of a side, clear of
-  the rounded corners (`sideRange`). The box that holds everything is a frame: an outer wall the
-  lines keep inside. A box nearer the frame than half a pitch, whose every port runs into a box
-  standing across it, gets a track through the stretch of a side nothing covers.
+- **The grid** (`shared/grid-routing/overviewGrid.js`, `gridOf`). Lines run on tracks at least a
+  pitch apart, 8 px at the fit (`OVERVIEW_MARKS.pitch`). Each box is an obstacle with a
+  half-pitch margin and a halo up to 14 px deep (`halo`) that only its own lines enter, straight
+  at it, so a line arrives with a straight run of at least 15 px (`run`). A port lies on the
+  straight part of a side, clear of the rounded corners (`sideRange`). The box that holds
+  everything is a frame: an outer wall the lines keep inside. A box nearer the frame than half a
+  pitch, whose every port runs into a box standing across it, gets a track through the stretch of
+  a side nothing covers.
 - **The router.** A route costs its length, plus each bend, crossing and run beside another line
   (A* over cells and directions). Lines are routed shortest span first, then each once more. Two
   lines never share a track, except that lines ending at one box that agree on having an
@@ -328,23 +355,37 @@ whole-graph fit, where the reader sees them, between the fixed top-level boxes; 
   again with each refusal priced; one that still finds none is routed before the lines in its way,
   which are laid again around it, the plan put back as it was when one of them then fails. A line
   nothing can route is drawn along its medoid, its last runs lengthened for its heads
-  (`model/overviewPlan.js`, fallbacks).
-- **The plan** (`model/overviewPlan.js`, `overviewPlanner`) is made from the overview whatever
-  level is drawn, and made again only when the edges the filters show, or the fit's scale on a
-  resize, change; a line between two top-level nodes keeps the plan's route at every level, so a
-  zoom or a box opened moves none of them. A line the budget left out and the pointer or a
-  selection now draws is routed around the plan's lines and kept the same way.
-- **Titles** (`lib/mapMarks.js`, `lib/grownBoxes.js`, `model/mapTitles.js`). A closed box's or
-  top-level node's title is drawn inside its box at 14, 12.5, 11 or 10 px, the largest that
-  fits. Where none fits, a top-level box is drawn at the least size that holds the title, centred on its
-  laid-out box and clear of every other (`grownBoxesOf`); the lines are routed around the drawn
-  box and on to the laid-out one, and zoomed in, the drawn box keeps about its size on screen
-  until the laid-out box is as large. Where no such box fits one line, the name is broken onto two
-  at a hyphen, underscore, slash, dot, colon or space (`brokenLabelOf`). Only a title neither fits
-  stands on a plate with a border, above its box or on the side where it covers nothing
-  (`plateOf`); the router prices a plate so no line runs under it and no line ends on it. The
-  project box's title stands on a plate above it while its own title would read smaller than
-  10 px.
+  (`features/overview-map/model/overviewPlan.js`, fallbacks).
+- **The plan** (`features/overview-map/model/overviewPlan.js`, `overviewPlanner`) is made from
+  the overview whatever level is drawn, and made again only when the edges the filters show, or
+  the fit's scale on a resize, change; a line between two top-level nodes keeps the plan's route
+  at every level, so a zoom or a box opened moves none of them. A line the budget left out and
+  the pointer or a selection now draws is routed around the plan's lines and kept the same way.
+  The plan is made once per change: S4b made a second plan with the plate titles broken where a
+  line ran under a plate, and S4f removed it by the owner's ruling of 2026-10-10, since plate
+  titles now always break. The lines keep inside the frame below the band its title is drawn in
+  (`routedFrameOf`). A redraw for a resize alone keeps the frame its size: a box drawn larger
+  than its layout that changed size redraws the same boxes without sizing them anew
+  (`onLevel({ boxes: false })`); sized again at another scale, the frame came out one layout
+  unit narrower on each side and moved the fit by 0.2 % on the `rn-fsd` adopter portal
+  (measured by S4f).
+- **Titles** (`shared/map-levels/mapMarks.js`, `shared/geometry/grownBoxes.js`,
+  `features/overview-map/model/mapTitles.js`). A closed box's or top-level node's title is drawn
+  inside its box at 14, 12.5, 11 or 10 px, the largest that fits. Where none fits, a top-level
+  box is drawn at the least size that holds the title, centred on its laid-out box and clear of
+  every other (`grownBoxesOf`); the lines are routed around the drawn box and on to the laid-out
+  one, and zoomed in, the drawn box keeps about its size on screen until the laid-out box is as
+  large. Where no such box fits one line, the name is broken onto two at a hyphen, underscore,
+  slash, dot, colon or space (`brokenLabelOf`). Only a title neither fits stands on a plate with
+  a border, above its box or on the side where it covers nothing (`plateOf`); the router prices a
+  plate so no line runs under it and no line ends on it. The project box's title stands on a
+  plate above it while its own title would read smaller than 10 px. Since BDL-080 S4b a title on
+  a plate is broken onto two lines where its name breaks (`ai_` / `agents` on this repository's
+  portal), always since S4f, so the plate leaves the corridor beside it room for the lines.
+  Since S4f a plate also keeps off a line drawn as itself, which no route moves. A node that
+  such a line ends at is drawn larger only by a box that keeps the line outside it, its end on
+  the border (`keepsOutside`); otherwise its title, broken onto two lines, is drawn in its
+  laid-out box where it fits there.
 - **Calm by default.** Lines at rest are thin and light. Hovering or selecting a box brings its
   lines and pills forward (`is-in-front`) and fades the rest (`is-behind`), and the pointer gone,
   all are back at rest. A closed box large enough on screen says how many edges come in and go out
@@ -359,18 +400,23 @@ was.
 ### Counts
 
 A line's count is drawn on a pill, an opaque rounded label with a thin border in the line's
-colour, on a canvas above every line (`model/pillOverlay.js`), so no later line paints over it.
-A line says its count once it carries more than one edge; a line of the node under the pointer, a
-node's own line and a line of a selection's walk say it even when it is one, so the numbers on
-the lines a reader is shown for a node add up to the node's count. During a selection a line says
-how many of the walk's edges it carries (`SAID`). The place is a free point on the line, tried
-every 6 px from the middle out (`lib/pillPoints.js`, `candidatesOf`), clear of every node, title,
-arrowhead and other pill and far enough from the ends to leave the heads whole
-(`lib/pillPlaces.js`, `pillStagesOf`). The pills are placed in three stages: a node's own lines
-first, then the lines between top-level things, among what the top level draws alone, so opening
-a box moves none of them, then the rest. A line with no free point has no pill, and its count is
-in the note shown on hover; a line asked to say its count says it anyway (`crowded`). A pill is
-placed once per step of the map's scale.
+colour, on a canvas above every line (`features/edge-pills/model/pillOverlay.js`), so no later
+line paints over it. A line says its count once it carries more than one edge; a line of the node
+under the pointer, a node's own line and a line of a selection's walk say it even when it is one,
+so the numbers on the lines a reader is shown for a node add up to the node's count. During a
+selection a line says how many of the walk's edges it carries (`SAID`). The place is a free point
+on the line, tried every 6 px from the middle out (`shared/geometry/pillPoints.js`,
+`candidatesOf`), clear of every node, title, arrowhead and other pill and far enough from the
+ends to leave the heads whole (`shared/geometry/pillPlaces.js`, `pillStagesOf`). The pills are
+placed in three stages: a node's own lines first, then the lines between top-level things, among
+what the top level draws alone, so opening a box moves none of them, then the rest. Since BDL-080
+S4b the second stage places them around every top-level box's closed room, its box or grown box
+with its border and its title's plate, whether the box is open or not (`closedRoomsOf`), with the
+overview's count of lines left out; and a box's own edge to the frame is drawn only while the box
+is open, so it is not of the top level. Before that, opening `ai_agents` moved the pills of
+`cli|doc-sync` and `cli|infrastructure` on this repository's portal (measured by S4b). A line with
+no free point has no pill, and its count is in the note shown on hover; a line asked to say its
+count says it anyway (`crowded`). A pill is placed once per step of the map's scale.
 
 ### Performance
 
@@ -382,6 +428,12 @@ suite generates, in headless Chromium at 1400 x 900 on Darwin arm64, against the
 (25), the display's refresh cap in that run. A hover is drawn once per event in a microtask, so a
 `mouseout` and the `mouseover` after it cost one drawing. The CI bounds are set per environment;
 see [the site's page](../vitepress-site.md).
+
+Measured again by BDL-080 S4f at `e2d03791`, same machine and bounds, with the overview's plan
+made once: overview planning 33.9 ms (50), a zoom step 44.9 ms (60), a hover 29.4 ms (50),
+bundling 41.6 ms (50), the adopter-sized first drawing 5,979 ms (7,200). A second plan, made
+only where a line ran under a plate, measured 57 to 60 ms on this portal (S4b), over the 50 ms
+bound; plate titles always break instead.
 
 ### Test handle
 
@@ -426,49 +478,59 @@ that reads the whole graph at full detail opens every box through it.
 
 ### Modules
 
+BDL-080 S2a cut the viewer into ten slices so that work on one part of it runs on its own node
+(RFC D3). The widget keeps twelve files. The drawing it composes moved into nine other slices:
+eight new nodes and the entity `site-graph-edges`. Each moved file kept its name.
+
+What stays in `widgets/graph-viewer/`:
+
+- `index.js` — the public API: `GraphViewer`, `buildElements`, `buildStylesheet`, `CURVE_STYLE`.
+- `ui/GraphViewer.vue` — the component: toolbar, canvas, panel and legend, and the wiring of
+  every slice below. The edge legend's keys are `legendKeysOf(canvas.drawnStyles)` and its
+  `several` prop `canvas.drawnSeveral` (BDL-080 S4b, S4f).
 - `lib/elements.js` — `buildElements`: the data file as Cytoscape elements, and the boxes a
   scoped layer rule draws (`LAYER_BOX`); a scope box is marked `STACK_LANES`. An edge's id is
   `e<index>:<src>-><dst>` unless a node has that id, then primed (`freshId`).
-- `lib/stylesheet.js` — `buildStylesheet(tokens)`, `GEOMETRY`, `CURVE_STYLE`, `drawnSizeOf`,
-  `rimOf`.
-- `lib/edgePalette.js` — each edge look's colours at rest, followed, behind and dimmed.
-- `lib/lineMarks.js` — `LINE_MARKS`; line width, head length, arrow scale, dash offset, corner
-  radii.
-- `lib/heads.js` — `headEndsOf`, `droppedHeadsOf`, `crowdedHeadsOf`, `departuresBeside`,
-  `headRoomsOf`, `HEAD_ROOM`, `SAME_END`.
-- `lib/corners.js` — `NODE_CORNER_PX`, `CORNER`, `cornerRadiusOf`, `cornerRoomOf`.
-- `lib/routes.js` — `centreOf`, `pathOf`, `segmentsOf`, `pathOfSegments`, `compoundSizeOf`.
-- `lib/bundles.js`, `lib/buses.js`, `lib/trunks.js`, `lib/joins.js`, `lib/headRuns.js`,
-  `lib/bundleDrawing.js`, `lib/spatialIndex.js`, `lib/routeIndex.js` — trunks, buses, joins, head
-  runs and the indexes they read.
-- `lib/levels.js` — the levels: `levelOf`, `siblingsOf`, `outwardOf`, `outwardOfOpen`,
-  `ownLinesOf`, `openInView`, `readableZoomOf`, `zoomDrawingOf`, `selectionReveals`, `budgetOf`,
-  `isWithinAny`, `LEVEL_OPTIONS`, `PROJECT_BOX`, `STACK_LANES`, `LAYER_BOX`.
-- `lib/aggregateRoutes.js` — the medoid route of an aggregated edge.
-- `lib/mapMarks.js` — titles, plates, broken titles, status marks; `MAP_MARKS`.
-- `lib/overviewGrid.js`, `lib/overviewRoutes.js` — the overview's grid and router
-  (`OVERVIEW_MARKS`).
-- `lib/grownBoxes.js` — the top-level nodes drawn larger to hold their titles.
-- `lib/pillPlaces.js`, `lib/pillPoints.js` — where each pill stands.
+- `lib/stylesheet.js` — `buildStylesheet(tokens)`, `CURVE_STYLE`. It reads a node's sizes from
+  `GEOMETRY`, `drawnSizeOf` and `rimOf`, which moved to `shared/map-levels/nodeSizes.js`. Since
+  BDL-080 S4b an aggregated edge is no longer forced solid: it is drawn in its style's dash, and
+  solid only with `SEVERAL_STYLES`.
 - `model/useGraphCanvas.js` — the Cytoscape instance: mount, layout, hover, `showOnly`,
   `markSelection`, `reveal`; returns `layingOut`, `layout`, `bundles`, `hoveredEdges`,
-  `layoutError`, `pills()`, `tallies()` and `map()`.
+  `drawnStyles` and `drawnSeveral` (BDL-080 S4b, S4f), `layoutError`, `pills()`, `tallies()` and
+  `map()`.
 - `model/canvasLayout.js` — `layoutInputOf`, `applyGeometry`, `fitCompounds`, `isLoop`; a node's
   `stack` is read from `STACK_LANES`.
-- `model/canvasMap.js` — `canvasMap`, the level drawn on Cytoscape; `model/mapTitles.js`
-  (`titleLooks`, `titleDresser`, `scaleAt`, `SCALE_STEP`), `model/aggregateElements.js` (the
-  map's lines, `SAID`, `OWN_LINE`) and `model/mapExtras.js` (own lines, edges as themselves,
-  stubs, walk counts; `FORCED`) were split out of it by job (`beadloom-btkd.17`). It re-exports
-  none of their names (`beadloom-btkd.20`): each is imported from its owner.
-- `model/overviewPlan.js` — the overview's plan on the canvas, `PROJECT_PLATE_SIDE`.
-- `model/sharedLines.js` — the edges along a hovered line, one head per shared last run, a head's
-  room.
-- `model/followedOverlay.js`, `model/pillOverlay.js`, `model/overlayCanvas.js` — what is drawn
-  above Cytoscape's canvas.
-- `model/loopLines.js`, `model/nodeCorners.js` — loops drawn square, corners held at line ends.
-- `model/canvasMarks.js` — the selection and hover class names, `DISTANCE_DATA`, `setClass`,
-  `giveData`, kept apart so the test handle loads without the canvas.
+- `model/canvasMap.js` — `canvasMap`, the level drawn on Cytoscape. Its parts were split out by
+  job in `beadloom-btkd.17` and now live in `site-overview-map`; it re-exports none of their
+  names (`beadloom-btkd.20`). Since BDL-080 S4b it also returns `isTopBox(id)` and
+  `closedRoomsOf(id)`, which the pills are placed around, and `ofTopLevel` no longer counts a top
+  box's own edge to the frame. Since S4f a node's edges into an open box are among what it
+  draws when exposed (`reachingOf`), a node keeps a box the plan drew larger only while the box
+  covers none of its lines drawn as themselves (`coversOwnLine`), and `onLevel` is called with
+  `{ boxes: false }` when only a box drawn larger than its layout changed size.
+- `model/nodeCorners.js` — corners held at line ends.
 - `model/modes.js`, `model/testHandle.js`, `model/usePanelId.js`, `model/viewerKeys.js`.
+
+What moved out, and where:
+
+| Files | Now in | Node |
+|-------|--------|------|
+| `routes.js`, `corners.js`, `spatialIndex.js`, `routeIndex.js`, `grownBoxes.js`, `aggregateRoutes.js`, `pillPoints.js`, `pillPlaces.js` (were `lib/`) | `shared/geometry/` | [`site-shared-geometry`](shared-geometry.md) |
+| `canvasMarks.js`, `overlayCanvas.js` (were `model/`) | `shared/canvas-marks/` | [`site-shared-canvas-marks`](shared-canvas-marks.md) |
+| `bundles.js`, `buses.js`, `trunks.js`, `joins.js`, `headRuns.js`, `bundleDrawing.js` (were `lib/`) | `shared/bundling/` | [`site-shared-bundling`](shared-bundling.md) |
+| `overviewGrid.js`, `overviewRoutes.js` (were `lib/`) | `shared/grid-routing/` | [`site-shared-grid-routing`](shared-grid-routing.md) |
+| `levels.js`, `mapMarks.js` (were `lib/`), `loopLines.js` (was `model/`), and the new `nodeSizes.js` | `shared/map-levels/` | [`site-shared-map-levels`](shared-map-levels.md) |
+| `heads.js`, `lineMarks.js`, `edgePalette.js` (were `lib/`) | `entities/graph-edges/lib/` | [`site-graph-edges`](graph-edges.md) |
+| `followedOverlay.js`, `sharedLines.js` (were `model/`) | `features/follow-edge/model/` | [`site-follow-edge`](follow-edge.md) |
+| `overviewPlan.js`, `mapTitles.js`, `aggregateElements.js`, `mapExtras.js` (were `model/`) | `features/overview-map/model/` | [`site-overview-map`](overview-map.md) |
+| `pillOverlay.js` (was `model/`) | `features/edge-pills/model/` | [`site-edge-pills`](edge-pills.md) |
+
+Four names moved with the cut: `GEOMETRY`, `drawnSizeOf` and `rimOf` out of the stylesheet into
+`shared/map-levels/nodeSizes.js`; `FIT_PADDING` and `FIT_MAX_ZOOM` out of `site-navigate-graph`
+into `shared/map-levels/levels.js`; `OWN_LINE` out of the map's lines into the same file; and
+`RING_TONES` out of `site-impact-view` into `shared/theme-tokens` (`site-shared`). The test-handle
+dump over nine views was byte-identical before and after the cut (measured by S2a, 3.11 MB).
 
 `lib/bridges.js`, `lib/bridgePaint.js`, `lib/junctions.js`, `model/bridgeOverlay.js` and
 `model/bundleOverlay.js` were removed by BDL-078; `routeIndex.js` keeps what a hover needs of the
@@ -486,10 +548,12 @@ old junction index.
 ## Depends on
 
 - `site-filter-graph`, `site-navigate-graph`, `site-select-neighbourhood`, `site-impact-view`,
-  `site-fullscreen`, `site-url-state` (features).
-- `site-architecture-data`, `site-landscape-data`, `site-graph-node`, `site-graph-edge`,
-  `site-layer` (entities).
-- `site-shared` (`cytoscape`, `elk`, `ids`, `theme-tokens`, `lib`).
+  `site-fullscreen`, `site-url-state`, `site-follow-edge`, `site-overview-map`, `site-edge-pills`
+  (features).
+- `site-architecture-data`, `site-landscape-data`, `site-graph-nodes`, `site-graph-edges`,
+  `site-layers` (entities).
+- `site-shared` (`cytoscape`, `elk`, `ids`, `theme-tokens`, `lib`), `site-shared-geometry`,
+  `site-shared-canvas-marks`, `site-shared-bundling`, `site-shared-map-levels`.
 
 ## Tests
 

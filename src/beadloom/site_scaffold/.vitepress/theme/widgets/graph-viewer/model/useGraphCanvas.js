@@ -5,9 +5,9 @@
 // page stays responsive, draws it as ELK laid it out — every node in its place,
 // every box at its size, every edge along its route with its node's fans bundled
 // (`canvasLayout.js`) and one arrowhead where lines share their last run
-// (`sharedLines.js`) — draws the followed lines on top of everything they cross,
-// with the label of the one under the pointer (`followedOverlay.js`), draws the
-// map's counts over everything (`pillOverlay.js`), reports taps, marks every
+// (`features/follow-edge/model/sharedLines.js`) — draws the followed lines on top of everything they cross,
+// with the label of the one under the pointer (`features/follow-edge/model/followedOverlay.js`), draws the
+// map's counts over everything (`features/edge-pills/model/pillOverlay.js`), reports taps, marks every
 // edge along the hovered line, brings the lines of the node under the pointer in
 // front of the rest and fades the rest, shows only a set of node ids
 // (and of contracts), marks a selection — the selected node, the nodes and edges
@@ -26,21 +26,21 @@
 // the pointer and the selected node have their outward edges drawn on top of the
 // rest. Whenever the level changes, what the filters show and what the selection
 // marks are marked again on what is drawn now, so a box opened later shows its
-// children marked as everything else is. A loop's end (`loopLines.js`) is no
-// node of the file: it is shown with its box and marked with nothing.
+// children marked as everything else is. A loop's end (`shared/map-levels/loopLines.js`) is no
+// node of the file: it is shown with its box and marked with nothing. After every
+// drawing it notes the styles the lines on the canvas are drawn in (`drawnStyles`),
+// the map's aggregated lines among them, which the legend is made of.
 
 import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { loadCytoscape } from "../../../shared/cytoscape/index.js";
 import { idRecord } from "../../../shared/ids/index.js";
 import { elkGraphOf, layOut, warmUpLayout } from "../../../shared/elk/index.js";
-import { ALONG_HOVER, BEHIND, DISTANCE_DATA, HOVERED, IN_FRONT, SELECTION_CLASSES, setClass } from "./canvasMarks.js";
+import { ALONG_HOVER, BEHIND, DISTANCE_DATA, HOVERED, IN_FRONT, SELECTION_CLASSES, setClass } from "../../../shared/canvas-marks/index.js";
 import { applyGeometry, fitCompounds, layoutInputOf } from "./canvasLayout.js";
 import { canvasMap } from "./canvasMap.js";
-import { followedOverlay } from "./followedOverlay.js";
-import { pillOverlay } from "./pillOverlay.js";
-import { sharedLines } from "./sharedLines.js";
-import { COLLAPSED, LOOP_BOX, LOOP_END, endsOfLine } from "../lib/levels.js";
-import { GEOMETRY } from "../lib/stylesheet.js";
+import { followedOverlay, sharedLines } from "../../../features/follow-edge/index.js";
+import { pillOverlay } from "../../../features/edge-pills/index.js";
+import { COLLAPSED, GEOMETRY, LOOP_BOX, LOOP_END, SEVERAL_STYLES, endsOfLine } from "../../../shared/map-levels/index.js";
 
 /** The marks of an element a selection leaves as it is. */
 const NO_MARKS = Object.freeze({ classes: Object.freeze([]) });
@@ -82,7 +82,7 @@ async function undrawnUntil(instance, promise) {
 }
 
 /**
- * `{ cy, ready, layingOut, layout, bundles, hoveredEdges, layoutError, followed,
+ * `{ cy, ready, layingOut, layout, bundles, hoveredEdges, drawnStyles, drawnSeveral, layoutError, followed,
  * labelled, frames, droppedHeads, pills, tallies, outward, map, mount, setStyle, reveal,
  * showOnly, markSelection, resize }` over the container in `containerRef`.
  *
@@ -100,11 +100,13 @@ async function undrawnUntil(instance, promise) {
  * source, ms }` (`shared/elk`, `layOut`), or null; `bundles` is its routes with
  * the fans bundled, `{ paths, trunks, buses, ms }` (`canvasLayout.js`), or null;
  * `hoveredEdges` the ids of the edges along the line under the pointer;
+ * `drawnStyles` the style keys the lines shown now are drawn in, sorted, and
+ * `drawnSeveral` whether one of them is a line of the map's of several styles;
  * `layoutError` is the error a failed run gave, or null; `followed()` the lines
  * drawn on top, `labelled()` the ones whose label is drawn and `frames()` what
- * drawing them cost (`followedOverlay.js`); `droppedHeads()` the line ends that
- * leave their arrowhead to another on their last run (`sharedLines.js`);
- * `pills()`, `tallies()` and `outward()` the map's counts drawn last (`pillOverlay.js`).
+ * drawing them cost (`features/follow-edge/model/followedOverlay.js`); `droppedHeads()` the line ends that
+ * leave their arrowhead to another on their last run (`features/follow-edge/model/sharedLines.js`);
+ * `pills()`, `tallies()` and `outward()` the map's counts drawn last (`features/edge-pills/model/pillOverlay.js`).
  */
 export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundTap, fitZoom, tokens }) {
   const cy = shallowRef(null);
@@ -113,6 +115,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   const layout = shallowRef(null);
   const bundles = shallowRef(null);
   const hoveredEdges = shallowRef([]);
+  const drawnStyles = shallowRef([]);
+  const drawnSeveral = shallowRef(false);
   const layoutError = shallowRef(null);
   let shared = null;
   let followed = null;
@@ -215,6 +219,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     layout.value = null;
     bundles.value = null;
     hoveredEdges.value = [];
+    drawnStyles.value = [];
+    drawnSeveral.value = false;
     containerRef.value?.removeEventListener("mouseleave", clearHover);
     shared = null;
     pointerQueued = false;
@@ -329,6 +335,20 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   }
 
   /**
+   * Note the style keys the lines shown on `instance` are drawn in, when they
+   * differ from the ones noted, and whether a line of several styles is shown: a
+   * line hidden by the filters or left outside a selection is not shown, a
+   * dimmed one is.
+   */
+  function noteDrawnStyles(instance) {
+    const shown = instance.edges().filter((edge) => edge.visible());
+    const keys = [...new Set(shown.map((edge) => edge.data("styleKey")).filter(Boolean))].sort();
+    if (keys.join("\n") !== drawnStyles.value.join("\n")) drawnStyles.value = keys;
+    const several = shown.some((edge) => Boolean(edge.data(SEVERAL_STYLES)));
+    if (several !== drawnSeveral.value) drawnSeveral.value = several;
+  }
+
+  /**
    * Draw the level wanted now, and mark the filters and the selection on it;
    * every box sized to ELK's again unless `boxes` is false, as for a change that
    * draws no node and hides none, which keeps the boxes open now open.
@@ -344,6 +364,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     });
     if (boxes) fitBoxes();
     refreshOverlay();
+    noteDrawnStyles(instance);
   }
 
   /** Draw the nodes in `ids` as themselves for `source`, from the next drawing on. */
@@ -484,6 +505,8 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     layout,
     bundles,
     hoveredEdges,
+    drawnStyles,
+    drawnSeveral,
     layoutError,
     followed: () => followed?.followed() || { edges: [], passes: [] },
     labelled: () => followed?.labelled() || [],

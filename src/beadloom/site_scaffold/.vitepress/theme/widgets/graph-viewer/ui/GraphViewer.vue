@@ -24,7 +24,7 @@
 // edge — under the pointer, or on a selection's walk — is drawn on top of every
 // edge it crosses, over a casing, so it can be followed through a busy area.
 //
-// The graph is drawn like a map (`lib/levels.js`): at the whole-graph fit the
+// The graph is drawn like a map (`shared/map-levels/levels.js`): at the whole-graph fit the
 // boxes at the top and one aggregated edge per pair of them, more detail where
 // the reader zooms in: a box opens once its nodes are readable. An open box keeps
 // its edges to the outside on its own lines; a node in it says how many of its
@@ -55,15 +55,16 @@
 // asks; the containers of what it reached stay.
 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { NodeStatusLegend, parentMapOf, statusesOf } from "../../../entities/graph-node/index.js";
+import { NodeStatusLegend, parentMapOf, statusesOf } from "../../../entities/graph-nodes/index.js";
 import {
   EdgeLegend,
   NEIGHBOURHOOD_KINDS,
   adjacencyOf,
   dependentsOf,
+  edgePaletteOf,
   legendKeysOf,
-} from "../../../entities/graph-edge/index.js";
-import { LayerLegend, hasUnlayeredNode, layerBoxesOf, layerOfNode, layersOf } from "../../../entities/layer/index.js";
+} from "../../../entities/graph-edges/index.js";
+import { LayerLegend, hasUnlayeredNode, layerBoxesOf, layerOfNode, layersOf } from "../../../entities/layers/index.js";
 import {
   NAVIGATION_OPTIONS,
   NavigationControls,
@@ -88,10 +89,9 @@ import { childrenOf, subtreeOf, withAncestors } from "../../../shared/lib/index.
 import { useThemeTokens } from "../../../shared/theme-tokens/index.js";
 import { buildElements } from "../lib/elements.js";
 import { buildStylesheet } from "../lib/stylesheet.js";
-import { edgePaletteOf } from "../lib/edgePalette.js";
-import { AGGREGATE, boxTreeOf, endsOfLine, selectionReveals } from "../lib/levels.js";
+import { AGGREGATE, boxTreeOf, endsOfLine, selectionReveals } from "../../../shared/map-levels/index.js";
 import { useGraphCanvas } from "../model/useGraphCanvas.js";
-import { SAID } from "../model/aggregateElements.js";
+import { SAID } from "../../../features/overview-map/index.js";
 import { keyHandler } from "../model/viewerKeys.js";
 import { exposeTestHandle } from "../model/testHandle.js";
 import { usePanelId } from "../model/usePanelId.js";
@@ -146,11 +146,6 @@ const unlayered = computed(() => {
 });
 const options = computed(() => mode.filterOptions(graph.value, layers.value));
 const statuses = computed(() => statusesOf(nodes.value));
-const legendKeys = computed(() =>
-  legendKeysOf(
-    edges.value.filter((edge) => nodeById.value.has(edge.src) && nodeById.value.has(edge.dst))
-  )
-);
 // `{ nodes, contracts }`: the node ids the filters show and, on the landscape,
 // the contracts they show (null where the mode filters no contract).
 const visible = computed(() =>
@@ -280,6 +275,9 @@ const canvas = useGraphCanvas(container, {
     focusCanvas();
   },
 });
+// The legend names the styles the lines on the canvas are drawn in at the level drawn now, the map's
+// aggregated lines among them, not every kind the data file holds.
+const legendKeys = computed(() => legendKeysOf(canvas.drawnStyles.value));
 // Until ELK has placed the nodes, every one stands at one point: the canvas is not shown.
 const unplaced = computed(() => canvas.layingOut.value || Boolean(canvas.layoutError.value));
 // The graph could not be laid out: there is nothing to zoom, filter or walk.
@@ -622,7 +620,7 @@ onBeforeUnmount(() => disposeHandle());
     <div class="bl-viewer-legend" aria-label="Legend">
       <LayerLegend :layers="layers" :unlayered="unlayered" />
       <NodeStatusLegend :statuses="statuses" />
-      <EdgeLegend :keys="legendKeys" :colours="legendColours" />
+      <EdgeLegend :keys="legendKeys" :colours="legendColours" :several="canvas.drawnSeveral.value" />
     </div>
   </div>
 </template>

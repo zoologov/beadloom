@@ -128,6 +128,13 @@ export function layerBoxesOf(data) {
 }
 
 /**
+ * The boxes that hold the layer boxes a scoped rule draws: such a box holds
+ * layer boxes rather than nodes, and opens only where they are readable, also
+ * when it is tapped (`layer-boxes.spec.js`).
+ */
+export const layerScopesOf = (data) => new Set(layerBoxesOf(data).map((box) => box.scope));
+
+/**
  * Each drawn node's box: the file's parent, or the layer box a scoped rule draws
  * around the node, and each layer box's scope.
  */

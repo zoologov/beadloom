@@ -1,13 +1,13 @@
 # ACTIVE: BDL-080 — The portal is a service, and the viewer serves a Feature-Sliced frontend
 
-> **Last updated:** 2026-10-08
+> **Last updated:** 2026-10-10
 > **Phase:** Development
 
 ---
 
 ## Current Bead
 
-**Bead:** S1 — `beadloom-lsev` (S1T); then R, W, PR.
+**Bead:** `beadloom-3dqv` — PR #98 open from `features/BDL-080-s2-s4` (the remote `features/BDL-080` kept S1's pre-merge commits; no force-push, a fresh branch instead; #97 closed as opened by mistake); CI: required checks green except `ai-techwriter` (self-hosted runner offline — the owner's VPS); advisory reds fixed by S4i `be84eb96`, pushed to the PR; CI re-run pending. Merge on green; then the MAJOR release by BDL-079's recipe. Coordinator state committed `39b01cd9`. S2 and S3 complete; the owner ruled ONE PR for S2+S3+S4 after S4W (`beadloom-3dqv`; jkqc and iapw folded). Next: the S4R re-check of S4h + S4W → the ONE PR (`beadloom-3dqv`) → the MAJOR release.
 **Goal:** the site a service, every layer rule drawn (S1); then S2, S3, S4.
 **Done when:** every PRD goal's *Done when* holds; four PRs merged; a MINOR release.
 
@@ -15,7 +15,7 @@
 
 - [x] PRD, RFC, CONTEXT, PLAN approved (2026-10-08)
 - [x] S1a, S1b, S1c, S1d landed
-- [ ] S1 test, S1e (owner's look), review, docs, PR
+- [x] S1 test, S1e (owner's look), reviews, docs, PR #96 merged 2026-10-09
 - [ ] S2, S3, S4
 
 ## Results
@@ -33,10 +33,47 @@
 | `beadloom-af99.4` | S1R2 | ✓ done (ISSUES) | re-review of the fix |
 | `beadloom-af99.5` | S1R3 | ✓ done (OK) | the card-tags regression fix re-read |
 | `beadloom-we9t` | S1W | ✓ done | docs |
-| `beadloom-af99.6` | S1g | in progress | cause: the runner, not S1e (same node `application`, same move at 8.0.0; the old case red 5/5 at 6x CPU throttling on both commits, green 5/5 at 4x); fix: the navigation model counts the frames its move is drawn over, the handle's `move()` reads it, the case judges 1 frame reduced and > 1 otherwise: 5/5 green at 4x (7-8 frames), 6x (3), 20x (2); committed as `e5fd94cb`; tech-writer pass: `navigate-graph.md` gains `lastMove()`, `graph-viewer.md` the handle's `move`, the two hash-only pairs attested after reading; stale 4 -> 0, `beadloom ci` rc 0; pushed, CI to read |
-| `beadloom-z30s` | S1P | in progress | PR, merge on green |
+| `beadloom-af99.6` | S1g | ✓ done | cause: the runner, not S1e (same node `application`, same move at 8.0.0; the old case red 5/5 at 6x CPU throttling on both commits, green 5/5 at 4x); fix: the navigation model counts the frames its move is drawn over, the handle's `move()` reads it, the case judges 1 frame reduced and > 1 otherwise: 5/5 green at 4x (7-8 frames), 6x (3), 20x (2); committed as `e5fd94cb`; tech-writer pass: `navigate-graph.md` gains `lastMove()`, `graph-viewer.md` the handle's `move`, the two hash-only pairs attested after reading; stale 4 -> 0, `beadloom ci` rc 0; pushed, CI to read |
+| `beadloom-z30s` | S1P | ✓ done | PR, merge on green |
+
+| `beadloom-7jgr` | S2A | ✓ done | the viewer cut into ten slices, eight new nodes; four moves; dump byte-identical; Steiger 13 errors, all `insignificant-slice` and `inconsistent-naming` (left red, reason on the bead); chromium 325 + performance 10 green |
+| `beadloom-5wh2` | S2B | ✓ done | `tag_prefix` on a matcher; six per-layer cohesion checks (80 widgets / 60 rest, measured 65 / 56); fsd+ddd overlays restated, `cohesion` duty in dev/explore/review; Steiger in gate_coverage; commit `bebbbd7d` |
+| `beadloom-af99.9` | S4E | ✓ done (commit `674a6090`; nav logo 32 px in the text's colour; favicon SVG + PNG 32 dark glyph; adopter favicon from `site.logo`; footer line 1 without a link; azuredevops; 8584 passed on the tree; 3 questions for the owner) | brand corrections from the owner's look (2026-10-09): the square icon is the only mark, bigger + monochrome in the nav, theme-adaptive favicon, Powered by without a link, adopter favicon from site.logo, azuredevops, square social preview |
+| `beadloom-af99.8` | S2C | ✓ done (commit `23963f84`; Steiger rc 0; `site-graph-edge/node/layer` → plural; `lint:fsd` in CI site-build; gate 8575 passed, the known path-sensitive self-check red only) | Steiger green by the owner's ruling: `insignificant-slice` off with the reason, slices renamed, `lint:fsd` in CI with the style linters |
+| `beadloom-cwzc` | S3A | ✓ done | tsconfig `paths`/`baseUrl` (JSON with comments; nearest folder's configs, relative `extends`), `imports.aliases:` (refused like `activity:`; `init` writes a text scan of `babel.config.*`/`vite.config.*` and says so), `.ios .android .native .web` before each extension, `.mjs`/`.cjs` parsed (closes `beadloom-zd4m`); tsconfig + aliases in the manifest fingerprint. Synthetic Vue tree: Vite aliases 0/4 -> 4/4, baseUrl 0/1 -> 1/1, edges 13 -> 18; synthetic Expo tree: relative 4/7 -> 8/8, tsconfig `@/` 0/2 -> 2/2, Babel aliases 2/9 -> 10/10, edges 3 -> 14. Six fixtures identical (imports, edges, file index) |
+| `beadloom-wbqd` | S3B | ✓ done | `graph/expo_modules.py`: uses edges from the module's TS node to its ios/android parts, rebuilt with the import edges, in the manifest fingerprint; init writes `<name>`, `<name>-ios`, `<name>-android`; 38 cases; commit `5a7d5ac2`; combined-tree gate of wave 1 falls to the coordinator after S4a lands |
+| `beadloom-5t8d` | S3C | ✓ done | `fsd` preset first (src/ or root, >= 3 layers); slices `component` `fsd-<layer>` part_of the root, app/shared containers of segments, legacy folders `fsd-legacy`; rules.yml: `fsd-layers` (scope, title), `slice_public_api`, `slice_shape`, six `fsd-cohesion-*` checks (no `tag_prefix`); `lint:fsd` written; no import edge frozen into the YAML; init names the code as what fails. Synthetic tree: 3 of 3 planted violations found |
+| `beadloom-chdx` | S3D | ✓ done (commit `d99dfd0e`; fixtures `vue-fsd`, `rn-fsd`; matrix 8 legs; closed by its agent — see its COMPLETED comment) |
+| `beadloom-5pxv` | S4A | ✓ done | `lint_reach.py`, `page_map.py`; data file: top-level `lint` {errors, warnings, nodes_with_findings, nodeless[]}, `debt.inside` {nodes, score, by_reason}; dashboard `pages` + two panels; card «none — this project: 0 errors, 69 warnings on 27 nodes», box debt own/inside; 11 Playwright + 20 pytest cases; dump byte-identical; commit `35a69743`; 4 wording questions for the owner |
+| `beadloom-bjrw` | S4B | ✓ done (commit `8dbe844c`; legend from the drawn styles; one-kind aggregates keep their dash; pills placed around closed rooms; plate titles broken; the three S4d reds green; chromium 345/347 — metrics:335 ×2 red on HEAD too; 2 questions for the owner) |
+| `beadloom-af99.13` | S4F | ✓ done (commit `e2d03791`; the suite green on all nine portals — this portal 364/364 incl. metrics:335; vue-fsd 321, rn-fsd 280, 0 failed; classes A–E fixed in the viewer + three measured spec relaxations; the 'several kinds' legend entry; 8729 passed on the tree; 3 questions for the owner) |
+| `beadloom-e1xo` | S4C | ✓ done (commit `558b67fb`; `source_ref` {commit, linked, pushed}; 127 of 139 links 200 on the remote, 12 are folders main lacks; card note + docs site warning; favicon dark PNG; brand sources in `.github/brand/`; 32 px every nav logo; 8642 passed on the tree, 2 reds from S4f's uncommitted spec; 3 questions for the owner) |
+| `beadloom-af99.7` | S4D | ✓ done (commits `afa468b5`, `43046bde`; brand files in `site_scaffold/public/brand/`; `site.logo`, `site.powered_by`, `site.repo_icon`; footer widget slice `site-powered-by`; 3 overview cases red from the extra slice → S4b/S4T) | the portal's logo: `site.logo`, `site.powered_by`, favicon, brand files (approved 2026-10-09; files parked in presentation/public/brand/ until it lands). Footer: icon + «Powered by Beadloom»; line 2: MIT + GitHub link with the header's GitHub icon. Header link = the adopter's `site.repo_url`, its icon derived from the host (github/gitlab/bitbucket/codeberg/gitea/generic git) with override `site.repo_icon` |
+| `beadloom-tnya` | S2T | ✓ done (commit `a266e99d`; goal 3 met: sizes 65/80, 56/60, 53/60; waves by substance 2-in-1; Playwright 350 = 335 + 5 known reds; Steiger rc 0; mutation 89.2% ≥ 0.88; full tree: unit 2678, integration 5901, acceptance 754, self_check 1015 + 10 known reds; BDL-UX #309–#311 filed) |
+| `beadloom-cp4u` | S2R | ✓ done — REVIEW PASSED: 0 major, 3 minor (liveness reason with tag+tag_prefix; Steiger rule name in the fsd overlays; this site lacks slice_public_api/slice_shape), 2 nits; stale docs listed for S2W |
+| `beadloom-af99.10` | S2D | ✓ done (commit `39f9247d`; liveness reason; Steiger `no-public-api-sidestep` in the overlays and rules_gen; `site-fsd-public-api` (error) + `site-fsd-slice-shape` (warn) over four layers, 0 findings; 65 in both files; 9 empty folders retired on upgrade; 20 cases; BDL-UX #312 filed on `scope:`) |
+| `beadloom-af99.11` | S2R2 | ✓ done — REVIEW PASSED after the fix cycle (major fixed `f721f985`; minors resolved; nit 5 '118 written' left, predates S2). S2 PR `beadloom-jkqc` ready — awaiting the owner's choice of PR shape |
+| `beadloom-s6mb` | S2W | ✓ done (commit `f1689eba`; 8 slice pages; vitepress-site.md 29 nodes + pages + Steiger; graph-viewer.md 37 paths; rule-engine SPEC 17 types + tag_prefix; surface 749 → 800; S2 refs ok; stale 302 → 254, the rest S3W/S4W) |
+| `beadloom-jkqc` | S2P | blocked | |
+| `beadloom-af99.12` | S3E | ✓ done (commit `4b42e86f`; `app/` → one component `app-routes`, tag `fsd-app`, detected by `expo-router` in dependencies; rn-fsd fsd-layers 15 of 17; exact-case resolution via `graph/exact_case.py` (27–32 ms cached); `init --project .` fixed (#313); 18 cases; 2 questions for the owner) |
+| `beadloom-hvnv` | S3T | ✓ done (commit `1754ecf9`; goal 4: init no hand edit ✓, imports 49/49 + 33/33 ✓, Expo bridge ✓, matrix 8+projects ✓, browser suite ✗ vue 7 / rn 17 → S4f; expo walk 0.4% of a full reindex, 10% of a nothing-changed incremental; full tree: unit 2691, integration 5961, acceptance 763, self_check 1017 + known reds; BDL-UX #313 filed → S3e) |
+| `beadloom-jtki` | S3R | ✓ done — REVIEW PASSED after the fix cycle (S3f `b80520fb` + `7306a989`; every probe re-run by the reviewer) |
+| `beadloom-af99.14` | S3F | ✓ done (commit `b80520fb`; fsd preset needs JS/TS/Vue code or a package.json — the Python tree is monolith again; package.json keeps its indent, atomic; slice rule and resolver share `exact_case.first_existing_file`; one `project_walk` (incremental 388 → 334 ms); rule count read back; 33 cases; debt bead `beadloom-ba9w.5`; BDL-UX #314 filed (atomic writers → 0600); grammar guard fixed `7306a989`) |
+| `beadloom-ql96` | S3W | ✓ done (commit `71c2e4e6`; S3 refs 224 stale → 0; tree 281 → 57, all S4's; 21 documents; CHANGELOG Added + Known limitations; surface 806) |
+| `beadloom-iapw` | S3P | blocked | |
+| `beadloom-af99.15` | S4G | ✓ done (commit `1d71be89`; card and dashboard read «… 69 warnings — 33 on 27 nodes, 36 on none»; no new key; dump byte-identical) | the card's Rule findings wording names both populations (owner, 2026-10-10) |
+| `beadloom-brgd` | S4T | ✓ done (commit `10fb8003`; goal 5 holds (a)–(h): legend at every level on nine portals; populations named; Source link 127/139 200 (12 folders main lacks); brand 8/8 ×9; suites 0 failed on all nine, this portal 364/364; footer-link allowance fixed; full tree green except 57 stale pairs → S4W; mutation 89.4 → 94.6%) |
+| `beadloom-xkrn` | S4R | ✓ done — REVIEW PASSED; re-check at `d4395725`: all seven findings fixed, nothing new |
+| `beadloom-af99.17` | S4I | ✓ done (commit `be84eb96`; the plan's unit is the fit of what it draws — grown boxes limited; wide-font probe in e2e/support/fonts.js; MUTANT_BUDGET=350 with the unmeasured remainder named; this portal 369/369, vue-fsd and rn-fsd 0 failed) |
+| `beadloom-af99.16` | S4H | ✓ done (commits `7a9ed23d`, `3e155fdc`; source links judge `pushed` and the stand-in by origin only; `BOX_SIDE` exported from shared/elk; page map «beadloom docs site wrote N pages»; 8744 passed on the tree; the two hash-only pairs + DOC.md:63 → S4W's follow-up) |
+| `beadloom-n644` | S4W | ✓ done (commits `328db625`, `d4395725`; D1 + D2 fixed; `beadloom ci` rc 0 on the tree, 0 stale of 806 pairs; dashboard keys documented as carrying no promise — owner's call; PR-job `pushed` question raised) |
+| `beadloom-3dqv` | S4P | blocked | |
 
 ## Notes
+
+- **S3a closed (2026-10-09):** `a2bbd888` — tsconfig `paths`/`baseUrl`, `imports.aliases:` (read through config-declarations; init writes what a text scan of babel/vite configs finds and says so), platform suffixes, `.mjs`/`.cjs` parsed (closes `beadloom-zd4m`); on the synthetic trees: Vue aliases 0/4 -> 4/4, edges 13 -> 18; Expo aliases 2/9 -> 10/10, relative 4/7 -> 8/8, edges 3 -> 14; the six fixtures index identically (a case holds it); 90 tests. Follow-ups: init's quick scan reads no aliases (S3c); import_resolver.py ~1,470 lines (debt epic). S3c launched beside S2a.
+
+- **S1 shipped (2026-10-09):** PR #96 squash-merged into `main` as `977b0614` after CI 18 of 18 (site-e2e green on `4ae5ae73` after S1g: the reduced-motion case counts the viewer's own frames). The branch `features/BDL-080` reset onto `main`; S2, S3, S4 beads created as one plan.
 
 - **PR #96 (2026-10-09):** pushed at `08ac23fb`; CI 19 of 20 green incl. the six stacks; site-e2e advisory red on one timing case (`levels.spec.js:303`, 1 zoom sample where > 2 expected on a 37-minute runner) -> `beadloom-af99.6` before the merge.
 

@@ -422,7 +422,7 @@ test("a node's bus leaves its side in one channel when an edge of its own child 
   await openThemeModules(page);
   const drawing = crossedPortDrawing();
   const paths = await page.evaluate(async (input) => {
-    const { bundleRoutes } = await import("/widgets/graph-viewer/lib/bundles.js");
+    const { bundleRoutes } = await import("/shared/bundling/bundles.js");
     return bundleRoutes(input).paths;
   }, drawing);
   const routes = drawing.edges.map((edge) => ({ ...edge, points: paths[edge.id] }));
@@ -495,7 +495,7 @@ test("a last run lengthened for its arrowhead does not cross another line's last
   await openThemeModules(page);
   const drawing = oppositeEdgesDrawing();
   const { paths, unlengthened, room } = await page.evaluate(async (input) => {
-    const { BUNDLE_OPTIONS, bundleRoutes } = await import("/widgets/graph-viewer/lib/bundles.js");
+    const { BUNDLE_OPTIONS, bundleRoutes } = await import("/shared/bundling/bundles.js");
     // A head's run asked to be no length at all: the bundling with that pass moving nothing.
     return { paths: bundleRoutes(input).paths, unlengthened: bundleRoutes(input, { headRun: 0 }).paths, room: BUNDLE_OPTIONS.headRun };
   }, drawing);

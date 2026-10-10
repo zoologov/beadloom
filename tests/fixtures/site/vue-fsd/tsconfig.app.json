@@ -1,0 +1,16 @@
+{
+  // The application's sources; the bundler config is checked by tsconfig.node.json.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "jsx": "preserve",
+    "allowJs": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+    },
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.js", "src/**/*.mjs"],
+}

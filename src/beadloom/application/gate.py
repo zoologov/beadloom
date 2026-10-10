@@ -1046,15 +1046,19 @@ def _step_config_check(project_root: Path) -> GateStep:
     # reason: a mistyped key counts every generated line as work without a word.
     activity = _activity_setting_findings(project_root)
     findings.extend(activity)
+    # The `imports:` block (BDL-080 `beadloom-cwzc`) blocks for the same reason: a
+    # mistyped folder leaves every import under the alias unresolved without a word.
+    imports = _import_alias_findings(project_root)
+    findings.extend(imports)
     blocking = [d for d in drifts if d.severity == "error"]
     warned = len(drifts) - len(blocking) + len(scope)
-    passed = not blocking and not site and not activity
+    passed = not blocking and not site and not activity and not imports
     # Three states, three summaries. `agent-config in sync` printed over a
     # reported-but-non-blocking finding is the shape BDL-061 S2b spent itself on.
-    if site or activity:
+    if site or activity or imports:
         unusable = [
             f"{len(found)} unusable `{block}:` value(s)"
-            for block, found in (("site", site), ("activity", activity))
+            for block, found in (("site", site), ("activity", activity), ("imports", imports))
             if found
         ]
         summary = " + ".join(unusable)
@@ -1401,6 +1405,14 @@ def _activity_setting_findings(project_root: Path) -> list[Finding]:
 
     _, refusals = read_activity_exclusions(project_root)
     return _config_block_findings("activity-settings", refusals)
+
+
+def _import_alias_findings(project_root: Path) -> list[Finding]:
+    """Every entry of the ``imports:`` block the resolver could not use, as blocking findings."""
+    from beadloom.application.import_aliases import read_import_aliases
+
+    _, refusals = read_import_aliases(project_root)
+    return _config_block_findings("import-aliases", refusals)
 
 
 def _config_block_findings(rule: str, refusals: Sequence[Refusal]) -> list[Finding]:

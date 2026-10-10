@@ -201,7 +201,7 @@ class TestAMalformedBlockIsRefusedByName:
             ValueError,
             match=exactly(
                 "Rule 'boundary' test_import_boundary.of: node matcher must have at "
-                "least one of 'ref_id', 'kind', or 'tag'"
+                "least one of 'ref_id', 'kind', 'tag', or 'tag_prefix'"
             ),
         ):
             load_rules(path)

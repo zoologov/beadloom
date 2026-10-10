@@ -12,7 +12,8 @@ values below.
 files' layer keys as the code before this bead (``7f262f5f``) wrote them,
 generated from the same six fixtures on 2026-10-08. The full data files were
 compared too, with the commit and the build instant normalised and the three
-new keys removed: identical for all six.
+new keys removed: identical for all six. The two FSD fixtures BDL-080 S3d
+(``beadloom-chdx``) added came after and have no measurement before this bead.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from tests.support.adopter_portals import FIXTURES_BY_STACK, adopt
+from tests.support.adopter_portals import FIXTURES_BY_STACK, SIX_STACKS, adopt
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -173,17 +174,19 @@ def _data_file(stack: str, workdir: Path) -> dict[str, Any]:
 
 
 def test_every_stack_is_measured() -> None:
-    assert set(MEASURED) == set(FIXTURES_BY_STACK)
+    assert set(MEASURED) == set(SIX_STACKS)
 
 
-@pytest.mark.parametrize("stack", sorted(FIXTURES_BY_STACK))
+@pytest.mark.parametrize("stack", sorted(SIX_STACKS))
 def test_the_existing_layer_keys_are_unchanged_and_only_new_keys_are_added(
     stack: str, tmp_path: Path
 ) -> None:
     data = _data_file(stack, tmp_path)
     measured = MEASURED[stack]
 
-    assert set(data) == OLD_TOP_KEYS | {"layer_rules"}
+    # BDL-080 S4a (`beadloom-5pxv`) adds `lint`, lint's reach over the project, and S4c
+    # (`beadloom-e1xo`) `source_ref`, the revision the source links name.
+    assert set(data) == OLD_TOP_KEYS | {"layer_rules", "lint", "source_ref"}
     assert data["schema_version"] == 2
     for node in data["nodes"]:
         assert set(node) == OLD_NODE_KEYS | {"layer_rule", "layer_rule_rank"}, node["id"]
@@ -196,7 +199,7 @@ def test_the_existing_layer_keys_are_unchanged_and_only_new_keys_are_added(
     } == measured["violations"]
 
 
-@pytest.mark.parametrize("stack", sorted(FIXTURES_BY_STACK))
+@pytest.mark.parametrize("stack", sorted(SIX_STACKS))
 def test_with_one_rule_or_none_the_new_keys_repeat_the_first_rules_answer(
     stack: str, tmp_path: Path
 ) -> None:

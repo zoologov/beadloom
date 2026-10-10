@@ -72,6 +72,35 @@
 # the budget and warns when it is over; the timeout is well above the budget so
 # that an over-budget run still ends with its numbers rather than being cut off.
 #
+# PER CHANGE — THE CAP, and the run that made it (`beadloom-af99.17`). PR #98, an
+# epic of 36 commits, selected 1 168 mutants of 32 functions in `graph/rules/`.
+# The job started at 07:39:15 and its first mutant ran at 07:43:05 (the select
+# step's stats pass over 129 test files took 202 s); 931 mutants had a verdict by
+# 08:07:38 and the job was cancelled at its 30-minute limit, so the judge never
+# ran. mutmut runs the cheapest mutants first: the first 361 took 135 s, the next
+# 570 took 1 338 s (2.35 s each), and the 237 never reached were the dearest. A
+# change is therefore capped at MUTANT_BUDGET mutants — whole functions, the
+# largest first, each one that still fits — and the select step and the judge
+# name every function left out with its count, in the log and in the summary.
+#
+# THE BUDGET IS MEASURED on the functions the cap takes, which are the dear
+# ones. Darwin arm64 (10 cores, CPython 3.13.7, mutmut 3.7.0, other work on the
+# machine): the same select step took 205 s, which puts this room level with the
+# runner on the stats pass (202 s); the 600 mutants a cap of 600 took ran in
+# 1 807 s, 3.0 s each at two children (546 killed, 54 survived), where a seeded
+# sample of 10 had read 1.89 s per mutant in its own process and under-stated it.
+#
+#   fixed      ~5 minutes on the runner: 230 s to the first mutant, then the
+#              counters, the score, the judge and the upload
+#   run        350 mutants x 3.0 s = 17.5 minutes
+#   margin     ~7 minutes under the 30-minute limit, for a change whose largest
+#              functions' covering tests are dearer still
+#
+# For PR #98 a cap of 350 measures 350 of the 1 168 mutants — evaluate_all and
+# evaluate_cardinality_rules, then the two that still fit — and names 818 mutants
+# of 25 functions as not measured. The floor of 0.88 holds over what was
+# measured; the remainder is a stated population, not a score.
+#
 # WEEKLY SAMPLE — THE SIZE IS DERIVED, not chosen, and was re-derived once it
 # had been run (2026-09-27, Darwin arm64, 10 cores, mutmut 3.7.0):
 #
@@ -148,6 +177,7 @@ jobs:
     env:
       BASE: origin/${{ github.base_ref }}
       BUDGET_SECONDS: "600"
+      MUTANT_BUDGET: "350"
     steps:
       - name: Start the clock
         run: echo "STARTED=$(date +%s)" >> "$GITHUB_ENV"
@@ -179,11 +209,17 @@ jobs:
 
       - name: Select the mutants and the tests
         id: select
-        run: >-
-          uv run python .github/scripts/mutmut_adapter.py select
-          --plan "$RUNNER_TEMP/plan.json"
-          --names-out "$RUNNER_TEMP/names.txt"
-          --github-output "$GITHUB_OUTPUT"
+        run: |
+          # An unnamed shell is `bash -e`, without pipefail: the selection is
+          # also written to the summary, and a refusal must still fail the step.
+          set -o pipefail
+          uv run python .github/scripts/mutmut_adapter.py select \
+            --plan "$RUNNER_TEMP/plan.json" \
+            --names-out "$RUNNER_TEMP/names.txt" \
+            --budget "$MUTANT_BUDGET" \
+            --left-out "$RUNNER_TEMP/unmeasured.txt" \
+            --github-output "$GITHUB_OUTPUT" | tee "$RUNNER_TEMP/selection.txt"
+          cat "$RUNNER_TEMP/selection.txt" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run the selected mutants
         if: steps.select.outputs.mutants != '0'
@@ -231,8 +267,10 @@ jobs:
         run: |
           uv run python .github/scripts/mutmut_adapter.py judge \
             --names "$RUNNER_TEMP/names.txt" \
-            --stats mutants/change-stats.json > "$RUNNER_TEMP/verdict.txt"
+            --stats mutants/change-stats.json \
+            --left "$RUNNER_TEMP/unmeasured.txt" > "$RUNNER_TEMP/verdict.txt"
           cat "$RUNNER_TEMP/verdict.txt"
+          cat "$RUNNER_TEMP/verdict.txt" >> "$GITHUB_STEP_SUMMARY"
           grep -qx "verdict=judged" "$RUNNER_TEMP/verdict.txt"
 
       - name: State the time against the budget
@@ -254,6 +292,7 @@ jobs:
           path: |
             ${{ runner.temp }}/plan.json
             ${{ runner.temp }}/names.txt
+            ${{ runner.temp }}/unmeasured.txt
             mutants/change-stats.json
             mutants/change-survivors.json
           if-no-files-found: ignore

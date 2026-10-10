@@ -1,17 +1,20 @@
 """The adopter fixtures, one per claimed stack, and the portal each one builds.
 
 BDL-076 B3 (``beadloom-hmqn``). The PRD claims the portal works for an adopter on
-Python, Go, JS/TS, Java, Kotlin and Swift. Each of those is a small project under
-``tests/fixtures/site/<stack>/``: a few modules with real imports between them, a
-README, a ``docs/`` folder and tests in the stack's own convention. Nothing in a
-fixture names this repository. A fixture file named like one of this repository's
-own tests is stored under :data:`STORED_SUFFIX` and takes its name back on copy.
+Python, Go, JS/TS, Java, Kotlin and Swift; BDL-080 S3d (``beadloom-chdx``) adds two
+Feature-Sliced frontends, Vue 3 + TypeScript and React Native + TypeScript. Each of
+those is a small project under ``tests/fixtures/site/<stack>/``: a few modules with real
+imports between them, a README, a ``docs/`` folder and tests in the stack's own
+convention. Nothing in a fixture names this repository. A fixture file named like one
+of this repository's own tests is stored under :data:`STORED_SUFFIX` and takes its name
+back on copy.
 
 :func:`build_portal` does to a copy what an adopter does: commit it to git with an
 ``origin``, run ``beadloom init``, declare the portal's identity (and, where the
 fixture has them, its layers and rules), ``reindex``, ``docs site``, ``npm ci``
-and ``vitepress build``. It records every step's exit code and output rather than
-raising, so a test names the step that failed.
+and ``vitepress build``. On a Feature-Sliced fixture ``init`` writes the layers
+itself, and the adopter declares only the identity. It records every step's exit
+code and output rather than raising, so a test names the step that failed.
 
 Each :class:`AdopterFixture` states, independently of the product, what an
 adopter would expect the graph to show: which source directories are modules, and
@@ -49,6 +52,13 @@ STORED_SUFFIX = ".fixture"
 #: The oldest Node the scaffold's ``engines.node`` accepts.
 NODE_MAJOR = 22
 
+#: The logo an adopter adds after ``init``: a lantern of its own, nothing of Beadloom's.
+ADOPTER_LOGO = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" '
+    'aria-label="Lantern Notes"><rect x="7" y="4" width="10" height="16" rx="3" '
+    'fill="#e9a23b"/></svg>\n'
+)
+
 #: A forge's route to a path at a commit, written from the forge's published URL
 #: form and not read from the product's table.
 GITHUB_TREE = "{url}/tree/{ref}/{path}"
@@ -66,7 +76,16 @@ class AdopterFixture:
     read from the fixture's code. ``tags`` maps a source directory to the tags the
     adopter declares on its node after ``init``; ``layers`` names the layer rule's
     layers top to bottom, each tagged ``tier-<name>``; ``rules`` are further rules
-    the adopter adds, as ``rules.yml`` writes them.
+    the adopter adds, as ``rules.yml`` writes them. ``logo`` is the path of a logo
+    the adopter adds and declares as ``site.logo`` (BDL-080 S4d), and
+    ``powered_by`` is ``site.powered_by``, declared only when it is ``False``.
+
+    BDL-080 S3d: ``layers_by_init`` says that ``init`` writes the layer rule and the
+    tags itself (the FSD preset), so the adopter declares no layer rule and ``layers``
+    are the ones the portal is expected to serve from it. ``init_exit`` is the exit code
+    ``init`` is expected to end with: 1 where the fixture's code breaks the rules
+    ``init`` writes beside it on purpose, which ``init`` reports as findings about the
+    code (S3c, ``beadloom-5t8d``) and which the portal is expected to draw.
     """
 
     stack: str
@@ -82,6 +101,10 @@ class AdopterFixture:
     layers: tuple[str, ...] = ()
     tags: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     rules: tuple[Mapping[str, Any], ...] = ()
+    logo: str = ""
+    powered_by: bool = True
+    layers_by_init: bool = False
+    init_exit: int = 0
 
     @property
     def source(self) -> Path:
@@ -187,6 +210,8 @@ TYPESCRIPT = AdopterFixture(
         ("src/reports/digest", "src/notes/store"),
     ),
     layers=("interface", "data", "core"),
+    # The one fixture with a nav logo of its own; the others show none (BDL-080 S4d).
+    logo="art/lantern-notes.svg",
     tags={
         "src/accounts": ("tier-data",),
         "src/notes/api": ("tier-interface",),
@@ -241,6 +266,8 @@ SWIFT = AdopterFixture(
     repo_url="https://bitbucket.org/trail-beacons/beacon-kit",
     origin="git@bitbucket.org:trail-beacons/beacon-kit.git",
     tree_route=BITBUCKET_TREE,
+    # The one fixture that switches the "Powered by Beadloom" footer off (BDL-080 S4d).
+    powered_by=False,
     modules=("Sources/BeaconApp", "Sources/BeaconCore", "Sources/BeaconNetwork"),
     imports=(
         ("Sources/BeaconApp", "Sources/BeaconCore"),
@@ -249,9 +276,139 @@ SWIFT = AdopterFixture(
     ),
 )
 
-#: Every claimed stack, in the PRD's order.
+#: The six layers of Feature-Sliced Design, top to bottom: what ``init`` writes for both
+#: FSD fixtures, read from the methodology and not from the product's preset.
+FSD_LAYERS = ("app", "pages", "widgets", "features", "entities", "shared")
+
+#: A Vite + Vue 3 + TypeScript + Pinia storefront in the FSD layout under ``src/``, with
+#: two folders from before the move beside the layers (BDL-080 S3d, RFC D6). Its code
+#: breaks the rules ``init`` writes twice on purpose (a cross-import inside ``features``
+#: and a deep import past ``entities/product``'s index), so ``init`` exits 1 and names them.
+VUE_FSD = AdopterFixture(
+    stack="vue-fsd",
+    project="heron-market",
+    title="Heron Market",
+    base="/heron-market/",
+    repo_url="https://github.com/heron-prints/heron-market",
+    origin="https://github.com/heron-prints/heron-market.git",
+    tree_route=GITHUB_TREE,
+    modules=(
+        "src/app",
+        "src/app/providers",
+        "src/app/styles",
+        "src/pages/catalog",
+        "src/pages/checkout",
+        "src/widgets/product-grid",
+        "src/widgets/site-header",
+        "src/features/add-to-cart",
+        "src/features/apply-coupon",
+        "src/entities/cart",
+        "src/entities/product",
+        "src/shared",
+        "src/shared/api",
+        "src/shared/config",
+        "src/shared/lib",
+        "src/shared/ui",
+        "src/components",
+        "src/stores",
+    ),
+    # A container's import of its own segment (``src/app/index.ts`` re-exporting
+    # ``./providers/setup``) is inside it, and no pair here.
+    imports=(
+        ("src/app/providers", "src/pages/catalog"),
+        ("src/app/providers", "src/pages/checkout"),
+        ("src/pages/catalog", "src/widgets/product-grid"),
+        ("src/pages/catalog", "src/widgets/site-header"),
+        ("src/pages/checkout", "src/entities/cart"),
+        ("src/pages/checkout", "src/features/apply-coupon"),
+        ("src/pages/checkout", "src/widgets/site-header"),
+        ("src/widgets/product-grid", "src/entities/product"),
+        ("src/widgets/product-grid", "src/features/add-to-cart"),
+        ("src/widgets/site-header", "src/entities/cart"),
+        ("src/widgets/site-header", "src/shared/ui"),
+        ("src/features/add-to-cart", "src/entities/cart"),
+        ("src/features/add-to-cart", "src/shared/ui"),
+        ("src/features/apply-coupon", "src/entities/cart"),
+        ("src/features/apply-coupon", "src/features/add-to-cart"),
+        ("src/features/apply-coupon", "src/shared/lib"),
+        ("src/features/apply-coupon", "src/shared/ui"),
+        ("src/entities/cart", "src/shared/lib"),
+        ("src/entities/product", "src/shared/api"),
+        ("src/entities/product", "src/shared/lib"),
+        ("src/shared/api", "src/shared/config"),
+        ("src/components", "src/shared/ui"),
+        ("src/stores", "src/entities/product"),
+    ),
+    layers=FSD_LAYERS,
+    layers_by_init=True,
+    init_exit=1,
+)
+
+_HAPTICS = "modules/trail-haptics"
+
+#: An Expo + React Native + TypeScript app: Expo Router's ``app/`` at the root, the FSD
+#: layers under ``src/``, ``.tsx`` beside ``.jsx`` and ``.js``, platform suffixes, a Babel
+#: ``module-resolver`` alias and one local Expo module with a Swift and a Kotlin side
+#: (BDL-080 S3d, RFC D6). Its code passes the error rules ``init`` writes and breaks one
+#: warn rule (a ``hooks/`` folder in a slice), so ``init`` exits 0.
+RN_FSD = AdopterFixture(
+    stack="rn-fsd",
+    project="moss-trail",
+    title="Moss Trail",
+    base="/moss-trail/",
+    repo_url="https://gitlab.com/moss-outdoors/moss-trail",
+    origin="git@gitlab.com:moss-outdoors/moss-trail.git",
+    tree_route=GITLAB_TREE,
+    modules=(
+        "app",
+        "src/app",
+        "src/app/providers",
+        "src/pages/home",
+        "src/pages/trail",
+        "src/widgets/trail-list",
+        "src/features/start-hike",
+        "src/entities/trail",
+        "src/shared",
+        "src/shared/api",
+        "src/shared/config",
+        "src/shared/lib",
+        "src/shared/ui",
+        "src/screens",
+        _HAPTICS,
+        f"{_HAPTICS}/ios",
+        f"{_HAPTICS}/android",
+    ),
+    imports=(
+        ("app", "src/app"),
+        ("app", "src/pages/home"),
+        ("app", "src/pages/trail"),
+        ("src/app/providers", "src/shared/api"),
+        ("src/pages/home", "src/widgets/trail-list"),
+        ("src/pages/trail", "src/entities/trail"),
+        ("src/pages/trail", "src/features/start-hike"),
+        ("src/widgets/trail-list", "src/entities/trail"),
+        ("src/widgets/trail-list", "src/shared/ui"),
+        ("src/features/start-hike", _HAPTICS),
+        ("src/features/start-hike", "src/entities/trail"),
+        ("src/features/start-hike", "src/shared/ui"),
+        ("src/entities/trail", "src/shared/api"),
+        ("src/entities/trail", "src/shared/lib"),
+        ("src/entities/trail", "src/shared/ui"),
+        ("src/shared/api", "src/shared/config"),
+        ("src/screens", "src/entities/trail"),
+    ),
+    layers=FSD_LAYERS,
+    layers_by_init=True,
+)
+
+#: The six stacks BDL-076 claimed, in the PRD's order: the fixtures every baseline measured
+#: before BDL-080 S3d added the two FSD frontends was taken on.
+SIX_STACKS: tuple[str, ...] = ("python", "go", "typescript", "java", "kotlin", "swift")
+
+#: Every claimed stack, in the PRD's order, then the two FSD frontends (BDL-080 S3d).
 FIXTURES_BY_STACK: Mapping[str, AdopterFixture] = {
-    fixture.stack: fixture for fixture in (PYTHON, GO, TYPESCRIPT, JAVA, KOTLIN, SWIFT)
+    fixture.stack: fixture
+    for fixture in (PYTHON, GO, TYPESCRIPT, JAVA, KOTLIN, SWIFT, VUE_FSD, RN_FSD)
 }
 
 #: The environment variable that names the one part of the slow tests a run takes
@@ -265,11 +422,16 @@ SLOW_PARTS: tuple[str, ...] = (*FIXTURES_BY_STACK, PROJECTS_PART)
 
 @dataclass
 class Step:
-    """One step of a portal build: its exit code, its output and its wall time."""
+    """One step of a portal build: its exit code, its output and its wall time.
+
+    ``expected`` is the exit code the step is expected to end with: 0 for every step
+    but an ``init`` whose fixture breaks the rules it writes (BDL-080 S3d).
+    """
 
     returncode: int
     output: str
     seconds: float
+    expected: int = 0
 
 
 @dataclass
@@ -298,10 +460,13 @@ class BuiltPortal:
         return loaded
 
     def failed_step(self) -> str | None:
-        """The first step that did not exit 0, with its output; ``None`` when all did."""
+        """The first step that did not exit as expected, with its output; ``None`` when all did."""
         for name, step in self.steps.items():
-            if step.returncode != 0:
-                return f"{name} exited {step.returncode}:\n{step.output[-4000:]}"
+            if step.returncode != step.expected:
+                return (
+                    f"{name} exited {step.returncode}, expected {step.expected}:\n"
+                    f"{step.output[-4000:]}"
+                )
         return None
 
 
@@ -340,6 +505,13 @@ def _declare(root: Path, fixture: AdopterFixture) -> None:
     site["repo_url"] = fixture.repo_url
     if fixture.forges:
         site["forges"] = dict(fixture.forges)
+    if fixture.logo:
+        logo = root / fixture.logo
+        logo.parent.mkdir(parents=True, exist_ok=True)
+        logo.write_text(ADOPTER_LOGO, encoding="utf-8")
+        site["logo"] = fixture.logo
+    if not fixture.powered_by:
+        site["powered_by"] = False
     config = root / ".beadloom" / "config.yml"
     config.write_text(
         config.read_text(encoding="utf-8") + yaml.safe_dump({"site": site}, sort_keys=False),
@@ -354,7 +526,7 @@ def _declare(root: Path, fixture: AdopterFixture) -> None:
             nodes[source]["tags"] = list(tags)
         graph.write_text(yaml.safe_dump(declared, sort_keys=False), encoding="utf-8")
     added: list[dict[str, Any]] = [dict(rule) for rule in fixture.rules]
-    if fixture.layers:
+    if fixture.layers and not fixture.layers_by_init:
         added.insert(0, _layer_rule(fixture))
     if added:
         rules_file = root / ".beadloom" / "_graph" / "rules.yml"
@@ -390,7 +562,8 @@ def adopt(fixture: AdopterFixture, workdir: Path) -> BuiltPortal:
     built = BuiltPortal(fixture, root, commit)
     project = ("--project", str(root))
     built.steps["init"] = _beadloom("init", "--yes", *project)
-    if built.steps["init"].returncode != 0:
+    built.steps["init"].expected = fixture.init_exit
+    if built.failed_step() is not None:
         return built
     _declare(root, fixture)
     built.steps["reindex"] = _beadloom("reindex", *project)

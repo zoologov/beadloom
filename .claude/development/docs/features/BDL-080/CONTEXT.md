@@ -44,6 +44,12 @@ per slice; merge on green CI.
 | 2026-10-09 | `title:` on a layers rule is the display name (legend, filter, card); the URL keeps the rule's name; a box holding a rule's layer boxes opens only once they are readable, even when selected | Owner: «делай через title, и фильтр тоже так показывай»; the owner's look at S1 |
 | 2026-10-09 | The release after BDL-080 is MAJOR: a `kind: site` node is judged by service rules, which can move `lint`'s exit code on an unedited project (Breaking by the public API guide); the alias stays everywhere rather than being narrowed to the portal | Owner: «1 вариант» — the strict reading over the narrowed alias and over 'site was never public' |
 | 2026-10-08 | Legend from the canvas, not the data; one-kind aggregated lines keep their dash | Owner's two legend observations (#uses, #contracts) |
+| 2026-10-10 | One PR for S2 + S3 + S4 after S4W (the slices interleaved on one branch); the S2 and S3 PR beads fold into the S4 one | Owner |
+| 2026-10-10 | Brand: the square junction icon is the only mark, monochrome everywhere; the colour sources are kept in `.github/brand/`, not shipped; the social preview keeps its gradient accent bars; every adopter nav logo is 32 px; the favicon follows the theme (SVG media query + two PNGs); an adopter's favicon derives from `site.logo`, a logo byte-identical to Beadloom's icon gets Beadloom's favicon | Owner's look at the S4d/S4e portals |
+| 2026-10-10 | The card's Rule findings line names both populations: `0 errors, 69 warnings — 33 on 27 nodes, 36 on none` | Owner (S4a's open question) |
+| 2026-10-10 | Expo Router `app/` beside an FSD `src/` is one node `app-routes` (tag `fsd-app`), found by the `expo-router` dependency only; CommonJS is not read in this epic, documented as not handled | Owner confirmed S3e's and S3T's defaults |
+| 2026-10-10 | A line of several edge kinds stays solid in the majority colour and the legend gains a 'several kinds' entry while one is drawn; plate titles always break; S4f's three measured spec relaxations accepted | Owner (S4b, S4f questions) |
+| 2026-10-10 | Flow documents are filled strictly by template: fixed header vocabulary, no owner quotations in metadata; enforcement widened to all six documents (`beadloom-cnty`) | Owner |
 
 ## Related Files
 

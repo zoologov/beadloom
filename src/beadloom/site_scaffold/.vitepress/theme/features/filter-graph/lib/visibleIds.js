@@ -8,8 +8,8 @@
 // keeps a matching node on the canvas inside the boxes that hold it.
 
 import { childrenOf, subtreeOf, withAncestors } from "../../../shared/lib/index.js";
-import { isFlagged } from "../../../entities/graph-node/index.js";
-import { layerOfNode } from "../../../entities/layer/index.js";
+import { isFlagged } from "../../../entities/graph-nodes/index.js";
+import { layerOfNode } from "../../../entities/layers/index.js";
 
 /** The value of a selection filter that does not filter. */
 export const ALL = "all";

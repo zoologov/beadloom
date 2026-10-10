@@ -89,16 +89,24 @@ test("the scope opens onto its layers, closed, each title inside its box with no
   await zoomIntoBox(page, scope);
   await settled(page);
 
+  const tree = treeOf(data);
   const level = await viewer(page, "level");
   const view = { zoom: level.zoom, pan: await viewer(page, "pan") };
   const collapsed = new Set(level.collapsed.map((box) => box.id));
-  expect(ofScope.filter((box) => !collapsed.has(box.id)).map((box) => box.id)).toEqual([]);
+  // Drawn closed, but for a layer whose parts are readable where the scope opens, which opens by the rule every box
+  // opens by: a layer whose one part is a box of its own, holding the layer's segments, is readable as soon as the
+  // scope is. At least one layer stays closed, or the scope did not open onto its layers.
+  const scopeGeometry = (await viewer(page, "elkGeometry")).boxes;
+  const misjudged = againstReadability(level, tree, scopeGeometry, smallestChildOf(tree, scopeGeometry));
+  expect(misjudged.filter((line) => ofScope.some((box) => line.startsWith(`${box.id} `)))).toEqual([]);
+  expect(ofScope.filter((box) => collapsed.has(box.id)).length).toBeGreaterThan(0);
 
   const nodeBoxes = await viewer(page, "nodeBoxes");
   const titles = new Map((await viewer(page, "titles")).map((title) => [title.id, title]));
   const lines = (await viewer(page, "lineLooks")).filter((look) => look.points?.length > 1);
   const off = [];
-  for (const box of ofScope) {
+  // A closed layer box's title, drawn by the map; an open one is titled at its top as every open box is.
+  for (const box of ofScope.filter((layerBox) => collapsed.has(layerBox.id))) {
     const title = titles.get(box.id);
     if (!title) {
       off.push(`${box.id}: no title`);
@@ -120,7 +128,6 @@ test("the scope opens onto its layers, closed, each title inside its box with no
   const widest = [...ofScope].sort((a, b) => b.members.length - a.members.length)[0];
   await zoomIntoBox(page, widest.id);
   await settled(page);
-  const tree = treeOf(data);
   const geometry = await viewer(page, "elkGeometry");
   expect(againstReadability(await viewer(page, "level"), tree, geometry.boxes, smallestChildOf(tree, geometry.boxes))).toEqual([]);
 });

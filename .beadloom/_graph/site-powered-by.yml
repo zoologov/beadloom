@@ -1,0 +1,19 @@
+  # BDL-080 S4d (`beadloom-af99.7`): the footer the owner ruled on 2026-10-09, a
+  # widget of the site theme. The slice carries its FSD layer as a tag, and
+  # `site-fsd-layers` in rules.yml judges its imports against the layer order.
+nodes:
+  - ref_id: site-powered-by
+    kind: component
+    summary: "The footer of every page: Beadloom's icon, Powered by Beadloom, MIT and Beadloom's repository; site.powered_by: false removes it"
+    source: src/beadloom/site_scaffold/.vitepress/theme/widgets/powered-by/
+    tags: [fsd-widgets]
+    # The browser cases of the portal's brand: the footer, and the favicon, the
+    # nav logo and the header's repository icon that `.vitepress/config.mjs` sets.
+    tests:
+      - src/beadloom/site_scaffold/e2e/brand.spec.js
+    docs:
+      - docs/services/vitepress-site/powered-by.md
+edges:
+  - src: site-powered-by
+    dst: vitepress-site
+    kind: part_of

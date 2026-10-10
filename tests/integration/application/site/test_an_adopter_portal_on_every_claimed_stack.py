@@ -1,9 +1,11 @@
 """An adopter on each claimed stack builds its portal and sees its own architecture.
 
 BDL-076 B3 (``beadloom-hmqn``). The PRD claims the portal for Python, Go, JS/TS,
-Java, Kotlin and Swift. Each stack's fixture (``tests/fixtures/site/<stack>/``) is
-copied, committed with an ``origin``, initialised with ``beadloom init``, given
-its portal identity, and built with ``npm ci`` and ``vitepress build``.
+Java, Kotlin and Swift, and BDL-080 S3d (``beadloom-chdx``) the two Feature-Sliced
+frontends on Vue 3 and on React Native. Each stack's fixture
+(``tests/fixtures/site/<stack>/``) is copied, committed with an ``origin``,
+initialised with ``beadloom init``, given its portal identity, and built with ``npm ci``
+and ``vitepress build``.
 
 A build that passes is half the claim. The other half is what the adopter sees:
 the modules as nodes, the imports between them as ``depends_on`` edges and no
@@ -15,8 +17,8 @@ Where the product does not meet an expectation today, the test is a strict
 ``xfail`` naming the bead that holds the defect, so it fails the day the defect
 is fixed and the mark is still there.
 
-Marked ``slow``: six portal builds, about three minutes on a warm npm cache. The
-advisory CI job ``site-adopters`` runs it.
+Marked ``slow``: eight portal builds, about half a minute each on a warm npm cache. The
+advisory CI job ``site-adopters`` runs it, one stack per leg.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from tests.support.adopter_portals import FIXTURES_BY_STACK, this_repositorys_identity
+from tests.support.footer_link import without_the_footer_link
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -39,6 +42,11 @@ pytestmark = pytest.mark.slow
 #: xfail naming its bead: Go (``beadloom-ujzb.14``, B5), Maven/Gradle
 #: (``beadloom-ujzb.15``, B6) and SwiftPM (``beadloom-ujzb.16``, B7). All three are
 #: fixed and their marks are gone; a new defect adds its mark through ``_stacks``.
+#:
+#: BDL-080 S3d (``beadloom-chdx``) measured a fourth on rn-fsd: Expo Router's ``app/``
+#: beside an FSD ``src/`` was no node, so three cases here were strict xfails. S3e
+#: (``beadloom-af99.12``) made the routes one segment of the ``app`` layer and removed
+#: the marks.
 
 
 def _stacks(xfails: dict[str, str] | None = None) -> list[Any]:
@@ -204,6 +212,33 @@ def test_the_portal_carries_the_projects_title_base_and_repository(
 
 
 @pytest.mark.parametrize("stack", _stacks())
+def test_the_portal_shows_the_logo_and_the_footer_its_project_declares(
+    adopter_portals: Callable[[str], BuiltPortal], stack: str
+) -> None:
+    """BDL-080 S4d: the adopter's logo in the nav when declared; the footer unless switched off.
+
+    S4e (``beadloom-af99.9``): the favicon is the adopter's logo when it declares one,
+    and Beadloom's icon with its PNG only when it does not.
+    """
+    portal = _built(adopter_portals, stack)
+    fixture = portal.fixture
+    index = (portal.dist / "index.html").read_text(encoding="utf-8")
+
+    logo = f'src="{fixture.base}logo.svg"'
+    assert (logo in index) is bool(fixture.logo)
+    if fixture.logo:
+        assert (portal.dist / "logo.svg").read_bytes() == (portal.root / fixture.logo).read_bytes()
+    assert ('data-testid="powered-by"' in index) is fixture.powered_by
+    beadloom_favicon = not fixture.logo
+    favicon = "brand/beadloom-favicon.svg" if beadloom_favicon else "logo.svg"
+    assert f'href="{fixture.base}{favicon}"' in index
+    assert ("beadloom-favicon" in index) is beadloom_favicon
+    assert (portal.dist / "brand" / "beadloom-favicon.png").is_file() is beadloom_favicon
+    # The light glyph's PNG for a dark browser (the owner's ruling of 2026-10-10, `beadloom-e1xo`).
+    assert (portal.dist / "brand" / "beadloom-favicon-dark.png").is_file() is beadloom_favicon
+
+
+@pytest.mark.parametrize("stack", _stacks())
 def test_no_text_of_this_repository_reaches_the_portal(
     adopter_portals: Callable[[str], BuiltPortal], stack: str
 ) -> None:
@@ -215,7 +250,7 @@ def test_no_text_of_this_repository_reaches_the_portal(
         for path in portal.dist.rglob("*")
         if path.suffix in {".html", ".js", ".json", ".css"}
         for token in ours
-        if token in path.read_text(encoding="utf-8", errors="replace")
+        if token in without_the_footer_link(path.read_text(encoding="utf-8", errors="replace"))
     )
 
     assert leaks == []

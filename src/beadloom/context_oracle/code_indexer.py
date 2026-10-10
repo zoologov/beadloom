@@ -281,6 +281,10 @@ _EXTENSION_LOADERS: dict[str, Callable[[], LangConfig]] = {
     ".tsx": _load_tsx,
     ".js": _load_typescript,
     ".jsx": _load_tsx,
+    # ES and CommonJS modules are JavaScript; read by the grammar `.js` is
+    # (BDL-080 `beadloom-cwzc`, closing `beadloom-zd4m`).
+    ".mjs": _load_typescript,
+    ".cjs": _load_typescript,
     ".go": _load_go,
     ".rs": _load_rust,
     ".kt": _load_kotlin,

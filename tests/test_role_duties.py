@@ -100,13 +100,15 @@ def test_the_report_names_its_limit_on_a_clean_run(project: Path) -> None:
     declares NOTHING: since BDL-UX #228 the shipped coordinator declares the
     `clean-room` duty for all five roles, and since BDL-068 S5 the `landing-lock`
     and `tracker-answers` duties beside it, so every project running this flow
-    inherits three declarations and three carriages per role.
+    inherits three declarations and three carriages per role. Since BDL-080 S2b it
+    also declares `cohesion` for the dev, explore and review roles.
     """
     report = duty_report(project)
 
     assert report.findings == ()
     assert {d.duty for d in report.declarations} == {
         "clean-room",
+        "cohesion",
         "landing-lock",
         "tracker-answers",
     }

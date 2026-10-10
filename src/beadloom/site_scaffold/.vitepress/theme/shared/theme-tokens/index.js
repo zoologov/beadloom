@@ -5,4 +5,5 @@
 import "./tones.css";
 
 export { TOKEN_VARIABLES, mixRgb, resolveTokens } from "./resolve.js";
+export { RING_TONES } from "./ringTones.js";
 export { useThemeTokens } from "./useThemeTokens.js";

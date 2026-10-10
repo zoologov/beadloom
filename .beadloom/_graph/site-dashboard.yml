@@ -4,9 +4,12 @@
 nodes:
   - ref_id: site-dashboard
     kind: component
-    summary: "The dashboard's panels: alert banner, status cards, health gauges, category and trend charts, recommendations and the AI tech-writer's runs"
+    summary: "The dashboard's panels: alert banner, status cards, rule findings bound to no node, the page map, health gauges, category and trend charts, recommendations and the AI tech-writer's runs"
     source: src/beadloom/site_scaffold/.vitepress/theme/widgets/dashboard/
     tags: [fsd-widgets]
+    # BDL-080 S4a (`beadloom-5pxv`): the browser tests of the two population panels.
+    tests:
+      - src/beadloom/site_scaffold/e2e/dashboard.spec.js
     docs:
       - docs/services/vitepress-site/dashboard.md
 edges:

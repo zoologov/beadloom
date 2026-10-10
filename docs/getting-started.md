@@ -140,12 +140,14 @@ two-module Python project with `tests/test_invoice.py` and `tests/test_helpers.p
 `init` makes a node of each module it finds and draws an edge for each import between two of
 them. Six stacks were measured, each on a small project under `tests/fixtures/site/` built from
 the installed wheel: every module became a node, every import between modules an edge, and no
-edge appeared that the code does not have.
+edge appeared that the code does not have. BDL-080 added two Feature-Sliced frontends,
+`vue-fsd` and `rn-fsd`, measured by import form rather than by module count.
 
 | Stack | What `init` reads | Measured on its fixture |
 |-------|-------------------|-------------------------|
 | Python | the folders under the source directories; imports through the scan paths | three of three modules, three of three edges |
-| JavaScript, TypeScript | the same; a relative import (`./x`, `../y`) by the file it names | six of six modules, seven of seven edges |
+| JavaScript, TypeScript | the same; a relative import (`./x`, `../y`) by the file it names; since BDL-080 a non-relative one through the governing tsconfig `paths`, then `imports.aliases:`, then `baseUrl`; React Native's `.ios`/`.android`/`.native`/`.web` files; `.mjs` and `.cjs` files; a file counts only when named in its exact case. CommonJS `require()` is not read | six of six modules, seven of seven edges |
+| A Feature-Sliced frontend (Vue, React Native) | the `fsd` preset: a node per slice tagged with its layer, `app`/`shared` segments, legacy folders, Expo Router's `app/` as one `app-routes` node, each Expo module with its `ios/` and `android/` parts; the FSD rules and Steiger's `lint:fsd` script; the aliases `babel.config.*` and `vite.config.*` declare | every import into the project lands on the node owning the file its bundler loads, all 49 on `vue-fsd` (Vite) and all 33 on `rn-fsd` (Metro); `lint --strict` right after `init` finds what each fixture plants: on `vue-fsd` a cross-import and a deep import (2 errors), on `rn-fsd` a slice's extra folder (1 warning) |
 | Go | the folders; an import through the governing `go.mod`, with `go.work` `use` and local `replace` directives; the standard library and other modules draw no edge | five of five modules, seven of seven edges |
 | Java, Kotlin (Maven, Gradle) | every module holding `src/<set>/<java\|kotlin>/`; the packages below the common base package become nodes, the production roots the scan paths, each test tree a `tests.mirrors` entry; an import through the package its files declare | Java: four packages, four edges. Kotlin: three and three, on the layout Kotlin's conventions recommend, with the common root package left out of the folders |
 | Swift (Swift Package Manager) | every `Package.swift`, read as text and never run; each library, executable, macro or plugin target holding Swift becomes a node and its folder a scan path; each test target a `tests.mirrors` entry; an import through the target the manifest declares | three targets, three edges |
@@ -179,12 +181,14 @@ names it:
   of a class to the folder holding the class's file (`B.kt`, `B.java`). A wildcard import of
   such a package, a top-level Kotlin function, or a class in a file named otherwise draws no
   edge rather than a guessed one.
-- **After changing only `go.mod`, `go.work` or `Package.swift`,** an incremental
-  `beadloom reindex` does not re-resolve the imports of the files they govern (`beadloom-jcng`).
-  Run `beadloom reindex --full`.
-- **Flat Python tests** (`tests/test_*.py`) bind to no node after `init`, because the tests it
-  binds by path are those under `tests/unit/` and `tests/integration/` (`beadloom-76mk`). Move
-  them into a kind folder, or list them under the node's `tests:` in the graph.
+- **CommonJS is not read** (BDL-080, the owner's ruling): `require()` and `module.exports` draw
+  no edge and no symbol, so a `.cjs` or `.js` file written in CommonJS is an import target only.
+  In a Feature-Sliced frontend CommonJS lives in configuration files, not in layer code.
+- **An alias a bundler computes** — a Babel `module-resolver` `root:` folder, a
+  regular-expression alias, a value built with no string literal — is not read; `init` names
+  the last two it met. Declare the folder under `imports.aliases:` by hand.
+- **A Feature-Sliced tree inside one package of a monorepo,** and slice groups (a folder of
+  slices inside a layer), are not read as such: the group is read as one slice.
 
 ## Configuration
 
@@ -201,6 +205,7 @@ Everything lives under `.beadloom/` in your repo.
 | `tests` | see below | Where your tests are and which files are tests |
 | `site` | the directory name, base `/`, no repository | The portal's identity: `title`, `description`, `base`, `repo_url`, `forges`; see the [`site:` reference](guides/vitepress-site.md#configuration-reference-site) |
 | `activity` | no block | `exclude:`, the project's own machine-written files, left out of activity; see below |
+| `imports` | no block | `aliases:`, the import aliases a bundler applies and no tsconfig carries; see below |
 
 #### `tests:` — where your tests are
 
@@ -329,6 +334,30 @@ A key the block does not read (`activity.exlude`), an `exclude:` that is not a l
 that is not a non-empty string are each refused by name. `beadloom config-check` and the Gate's
 `config-check` step block on them, under ``The `activity:` block of .beadloom/config.yml (N):``;
 the usable entries are kept.
+
+#### `imports:` — the aliases your bundler applies
+
+A JavaScript or TypeScript import such as `@shared/api` names a folder through an alias. The
+resolver reads tsconfig `paths` and `baseUrl` itself. Babel's `module-resolver` and Vite's
+`resolve.alias` live in a program it does not run, so their aliases are declared here, and
+`beadloom init` writes what a text scan of `babel.config.*`, `.babelrc` and `vite.config.*`
+found, for you to confirm:
+
+```yaml
+# .beadloom/config.yml
+imports:
+  aliases:
+    "@shared": src/shared   # @shared/api -> src/shared/api
+    "~": src                # ~/features/auth -> src/features/auth
+```
+
+An alias is the string a specifier is, or starts with followed by `/`; the longest one that
+matches wins. Its value is a folder or file relative to the project root (`.` for the root). A
+non-relative specifier is read through tsconfig `paths` first, then these aliases, then
+`baseUrl`. An unknown key, an alias that is a pattern (`@/*` is tsconfig's form; write `@`) or a
+relative path, and a folder that names nothing in the project are each refused by name, and
+`beadloom config-check` and the Gate's `config-check` step block on them, under ``The `imports:`
+block of .beadloom/config.yml (N):``.
 
 ### `.beadloom/flow.yml` — the agentic dev flow
 
@@ -513,7 +542,7 @@ npm run docs:preview                    # look at it locally
 
 ```text
 Generated 144 files under /home/me/tidewater/site
-Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 copied from .beadloom/site/
+Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 copied from .beadloom/site/
 ```
 
 **Give the portal your project's identity** in `.beadloom/config.yml`. Without it the title is

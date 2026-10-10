@@ -19,6 +19,19 @@ that indexes it records the fingerprint.
 A JVM package is not in this set: it is read from the files that declare it, so a layout
 change moves source files, and an incremental run already resolves every stored import again
 when one does (``beadloom-nh7h``).
+
+**The JavaScript side** (BDL-080 ``beadloom-cwzc``). A non-relative JS/TS import is resolved
+through the project's tsconfig/jsconfig files (:attr:`TsConfigs.manifests`) and through the
+aliases declared under ``imports.aliases:`` in ``.beadloom/config.yml``. Both are in the
+fingerprint, read only when some stored import was written in JavaScript, TypeScript or a
+Vue component, and only then: a project without one records what it recorded before, so
+an upgrade re-resolves nothing it need not.
+
+**The Expo modules** (BDL-080 ``beadloom-wbqd``). The ``uses`` edge from an Expo module to
+its native code is read from its ``expo-module.config.json``
+(:mod:`beadloom.graph.expo_modules`), which is no source file either. Every config joins the
+JavaScript side, by path and text, and only when one exists: a project with none digests
+what it digested before.
 """
 
 # beadloom:domain=graph
@@ -30,12 +43,16 @@ import hashlib
 import json
 from typing import TYPE_CHECKING
 
+from beadloom.graph.expo_modules import ExpoModules
 from beadloom.graph.go_modules import GoModules
+from beadloom.graph.project_walk import ProjectFiles
 from beadloom.graph.swift_packages import SwiftPackages
+from beadloom.graph.tsconfig_paths import TsConfigs
 from beadloom.infrastructure.db import get_meta, set_meta
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Sequence
     from pathlib import Path
 
 #: The ``meta`` key the fingerprint of the last reading is stored under.
@@ -45,38 +62,106 @@ MANIFESTS_META_KEY = "import_manifests"
 #: patterns over ``code_imports.file_path``.
 _GO_FILES = "%.go"
 _SWIFT_FILES = "%.swift"
+_NATIVE_FILES = (_GO_FILES, _SWIFT_FILES)
+#: The files whose non-relative imports are read through tsconfig and the declared aliases.
+_SCRIPT_FILES = ("%.ts", "%.tsx", "%.js", "%.jsx", "%.mjs", "%.cjs", "%.vue")
+#: The entry the declared aliases take in the fingerprint, named so it cannot be a path.
+_ALIASES_ENTRY = "imports.aliases:"
+
+
+def _digest(manifests: Sequence[object]) -> str:
+    return hashlib.sha256(json.dumps(list(manifests), ensure_ascii=False).encode()).hexdigest()
 
 
 def manifests_fingerprint(go_modules: GoModules, swift_packages: SwiftPackages) -> str:
     """One digest of every manifest the two readers rest on, each by path and text."""
-    manifests = [*go_modules.manifests, *swift_packages.manifests]
-    return hashlib.sha256(json.dumps(manifests, ensure_ascii=False).encode()).hexdigest()
+    return _digest([*go_modules.manifests, *swift_packages.manifests])
+
+
+def _holds(conn: sqlite3.Connection, patterns: Sequence[str]) -> bool:
+    """Whether some stored import was written in a file matching one of *patterns*."""
+    where = " OR ".join("file_path LIKE ?" for _ in patterns)
+    query = f"SELECT 1 FROM code_imports WHERE {where} LIMIT 1"  # noqa: S608 - placeholders only
+    return conn.execute(query, tuple(patterns)).fetchone() is not None
 
 
 def resolves_through_manifests(conn: sqlite3.Connection) -> bool:
     """Whether some stored import was written in a language a manifest resolves."""
-    row = conn.execute(
-        "SELECT 1 FROM code_imports WHERE file_path LIKE ? OR file_path LIKE ? LIMIT 1",
-        (_GO_FILES, _SWIFT_FILES),
-    ).fetchone()
-    return row is not None
+    return _holds(conn, _NATIVE_FILES) or _holds(conn, _SCRIPT_FILES)
+
+
+def _readings(
+    native: tuple[GoModules, SwiftPackages] | None,
+    script: tuple[TsConfigs, ExpoModules] | None,
+    aliases: Sequence[tuple[str, str]],
+) -> str:
+    """The digest of the families read: Go and Swift manifests, then the JavaScript side.
+
+    A project with no JavaScript import digests exactly what ``beadloom-jcng`` digested,
+    so its index is not resolved again on the upgrade that added the JavaScript side.
+    """
+    manifests: list[object] = []
+    if native is not None:
+        go_modules, swift_packages = native
+        manifests.extend([*go_modules.manifests, *swift_packages.manifests])
+    if script is not None:
+        ts_configs, expo_modules = script
+        manifests.extend(ts_configs.manifests)
+        if aliases:
+            manifests.append([_ALIASES_ENTRY, [list(pair) for pair in aliases]])
+        manifests.extend(expo_modules.manifests)
+    return _digest(manifests)
 
 
 def record_manifests(
-    conn: sqlite3.Connection, go_modules: GoModules, swift_packages: SwiftPackages
+    conn: sqlite3.Connection,
+    go_modules: GoModules,
+    swift_packages: SwiftPackages,
+    ts_configs: TsConfigs,
+    aliases: Sequence[tuple[str, str]],
+    expo_modules: ExpoModules,
 ) -> None:
-    """Store the fingerprint of the reading the stored imports were just resolved through."""
-    if resolves_through_manifests(conn):
-        set_meta(conn, MANIFESTS_META_KEY, manifests_fingerprint(go_modules, swift_packages))
+    """Store the fingerprint of the reading the stored imports were just resolved through.
+
+    *expo_modules* is the reading the Expo bridge edges were derived from in the same run.
+
+    Each family is digested only when a stored import was written in its languages: the
+    walks for ``go.mod``, ``Package.swift`` and tsconfig files cost a walk of the project
+    each, and no answer of a project without such an import depends on them.
+    """
+    native = _holds(conn, _NATIVE_FILES)
+    script = _holds(conn, _SCRIPT_FILES)
+    if not native and not script:
+        return
+    current = _readings(
+        (go_modules, swift_packages) if native else None,
+        (ts_configs, expo_modules) if script else None,
+        aliases,
+    )
+    set_meta(conn, MANIFESTS_META_KEY, current)
 
 
-def manifests_changed(project_root: Path, conn: sqlite3.Connection) -> bool:
-    """Whether a manifest some stored import rests on differs from the one it was read in.
+def manifests_changed(
+    project_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    aliases: Sequence[tuple[str, str]] = (),
+) -> bool:
+    """Whether a declaration some stored import rests on differs from the one it was read in.
 
     ``True`` also for an index that recorded no fingerprint and holds such an import, which
     is an index written before the fingerprint existed: its answers are resolved once more.
+    *aliases* are the pairs ``imports.aliases:`` declares now. A family no stored import
+    is written in is not read, not even constructed.
     """
-    if not resolves_through_manifests(conn):
+    native = _holds(conn, _NATIVE_FILES)
+    script = _holds(conn, _SCRIPT_FILES)
+    if not native and not script:
         return False
-    current = manifests_fingerprint(GoModules(project_root), SwiftPackages(project_root))
+    files = ProjectFiles(project_root)
+    current = _readings(
+        (GoModules(project_root), SwiftPackages(project_root)) if native else None,
+        (TsConfigs(project_root, files), ExpoModules(project_root, files)) if script else None,
+        aliases,
+    )
     return get_meta(conn, MANIFESTS_META_KEY) != current

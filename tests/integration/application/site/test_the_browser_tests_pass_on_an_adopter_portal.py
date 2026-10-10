@@ -18,7 +18,8 @@ where they would draw the same graph and do the same work. Every other case runs
 on every stack. The third test holds those cases to running where they are taken
 and nowhere else.
 
-Marked ``slow``: six portal builds and six Playwright runs. The advisory CI job
+Marked ``slow``: eight portal builds and eight Playwright runs (BDL-080 S3d added the
+two Feature-Sliced frontends, whose six layers ``init`` writes). The advisory CI job
 ``site-adopters`` installs Chromium and runs them, one claimed stack per leg.
 """
 

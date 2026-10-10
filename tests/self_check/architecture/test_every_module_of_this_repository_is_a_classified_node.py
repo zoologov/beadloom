@@ -117,6 +117,16 @@ class TestSiteGenerationCluster:
         markdown-it-attrs reads a brace as the start of attributes: twenty-four.
         BDL-080 S1b (``beadloom-kgh6``) added ``layer_rules_view.py``, every
         declared layer rule as the architecture view draws it: twenty-five.
+        BDL-080 S4a (``beadloom-5pxv``) added ``lint_reach.py``, lint's totals and
+        the findings bound to no node, and ``page_map.py``, the pages a run wrote:
+        twenty-seven.
+        BDL-080 S4d (``beadloom-af99.7``) added ``repository_icon.py``, the icon beside
+        the header's repository link, and ``site_logo.py``, the project's logo in the
+        nav: twenty-nine.
+        BDL-080 S4e (``beadloom-af99.9``) added ``favicon.py``, the portal's favicon from
+        the logo or Beadloom's own: thirty.
+        BDL-080 S4c (``beadloom-e1xo``) added ``source_ref.py``, which revision the
+        source links name when the built commit is on no remote branch: thirty-one.
         The test keeps its historical name so its collected id is unchanged.
         """
         app_dir = self_check_snapshot / "src" / "beadloom" / "application"
@@ -124,7 +134,7 @@ class TestSiteGenerationCluster:
         assert (site_dir / "__init__.py").is_file()
         names = {p.name for p in site_dir.glob("*.py")} - {"__init__.py"}
         assert "generate.py" in names
-        assert len(names) == 25, names
+        assert len(names) == 31, names
         assert (site_dir / "dashboard").is_dir()
         assert sorted(p.name for p in app_dir.glob("site*.py")) == []
 

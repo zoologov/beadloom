@@ -37,7 +37,7 @@
 
 ## Open Issues
 
-> Last checked against the tracker on 2026-10-07. Two entries are about to close: 290 is fixed
+> Last checked against the tracker on 2026-10-10. Fixed on `features/BDL-080` and closing when its PR merges: 305 and 306 (S4a), 307 (S4c), 313 (S3e); 313 refiles `beadloom-0e3m`. Two entries are about to close: 290 is fixed
 > on `features/BDL-078` (`beadloom-nh7h`) and closes when it merges; the cause of 293 was removed
 > by BDL-074, and the entry holds itself open until about 2026-10-29.
 
@@ -45,6 +45,12 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 314 | 2026-10-10 | medium | `write_text_atomic` and `write_yaml_atomic` leave every file they write at mode 0600, so a 0644 file edited by `init` becomes owner-only and `rules.yml` is born unreadable to the group |
+| 313 | 2026-10-10 | medium | `init --project .` names the root service `''` (`Path('.').name`), so on a JVM or Swift project `init` exits 1 with `domain-needs-parent` |
+| 312 | 2026-10-10 | medium | a rule-level `scope:` is read only by `layers` rules and accepted without a word on every other rule type — a setting that looks configured and does nothing |
+| 311 | 2026-10-10 | medium | `clean-room` installs with `uv pip install -e`, ignoring `uv.lock`, so a room resolves dependencies CI never sees (gherkin 42 vs 29) |
+| 310 | 2026-10-10 | low | a verdict-room scenario assumes the run lacks the `search` extra, so `--all-extras` turns 8 tests red with one cause |
+| 309 | 2026-10-10 | low | the reference-parser self-check hands gherkin's `TokenScanner` a path where it takes text, so it breaks on gherkin >= 30 |
 | 308 | 2026-10-08 | medium | active-sync reconciles the bead table and leaves ACTIVE.md's header, 'Current bead' and checklist stale when the work item ships |
 | 307 | 2026-10-07 | medium | the portal's Source link is a permalink to the built commit, so a local build from an unpushed commit links to a 404 on every node |
 | 306 | 2026-10-07 | medium | a box's card says `Debt 0` from the box's own score while its activity rolls up from its parts — two populations on one card, unnamed |
@@ -130,6 +136,54 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+314. [2026-10-10] [MEDIUM] `write_text_atomic` and `write_yaml_atomic` leave every file they write at mode 0600
+
+    **Severity:** medium (silent; a shared checkout or a CI cache loses group read on files Beadloom rewrote)
+    **Command:** `beadloom init`, and every command that writes through `infrastructure/atomic_io.py`
+    **Context:** BDL-080 S3f made `init` write an adopter's `package.json` atomically and measured the mode: 0644 became 0600; a `rules.yml` written by `init` is 0600 from birth. The temp file `mkstemp` creates is 0600 and the rename keeps it.
+    **Issue:** the atomic writers never copy the target's mode (or apply the umask) onto the temp file before the rename, so the write silently changes permissions.
+    **Expected:** an existing target keeps its mode; a new file gets `0666 & ~umask`. S3f restored `package.json`'s mode in `steiger_script` only; the fix belongs in `atomic_io.py` with a case per writer. Found by S3f (`beadloom-af99.14`); for Debt to zero (`beadloom-ba9w`).
+
+313. [2026-10-10] [MEDIUM] `init --project .` names the root service `''`, so on a JVM or Swift project `init` exits 1 with `domain-needs-parent`
+
+    **Severity:** medium (a common invocation; the failure names a rule, not the cause)
+    **Command:** `beadloom init --yes --project .`
+    **Context:** BDL-080 S3T ran `init` on scratch copies of the adopter fixtures; with `--project .` the java, kotlin and swift fixtures failed, with an absolute path they passed.
+    **Issue:** `project_scan._detect_project_name` takes `Path('.').name`, which is the empty string, so the root service gets no id and every domain's `part_of` points nowhere.
+    **Expected:** the project path is resolved before its name is taken; `init` says which name it chose. Found by S3T (`beadloom-hvnv`); fixed in S3e (`beadloom-af99.12`).
+
+312. [2026-10-10] [MEDIUM] a rule-level `scope:` is read only by `layers` rules and accepted without a word on every other rule type
+
+    **Severity:** medium (a key the author believes narrows the rule has no effect, and nothing says so)
+    **Command:** `beadloom lint`, `beadloom config-check`
+    **Context:** BDL-080 S2d declared this repository's `slice_public_api` and `slice_shape` rules and tried `scope: vitepress-site` as the brief asked; `scope: no-such-node-anywhere` was accepted just the same, on every rule type but `layers`.
+    **Issue:** the loader rejects unknown keys elsewhere but lets `scope:` through on rule types that never read it, so the rule looks narrowed and judges the whole graph.
+    **Expected:** the loader refuses `scope:` on a rule type that does not read it (naming the types that do), or every tag-selected rule reads it; `config-check` names a rule carrying a key its type ignores. Found by S2d (`beadloom-af99.10`); for the rules epic (`beadloom-j4gi`) or Debt to zero (`beadloom-ba9w`).
+
+311. [2026-10-10] [MEDIUM] `clean-room` installs with `uv pip install -e`, ignoring `uv.lock`, so a room resolves dependencies CI never sees
+
+    **Severity:** medium (a bead's "green in a clean room" is measured against a dependency set no CI leg installs)
+    **Command:** `beadloom clean-room <bead> --carry ...`
+    **Context:** BDL-080 S2b's and S3b's rooms installed pytest-bdd 9.0.0 and gherkin-official 42.0.1; the tree and CI hold 8.1.0 and 29.0.0 from `uv.lock` (`pytest-bdd>=7.0` is the only pin in `pyproject.toml`). One self-check test failed in every room and nowhere else.
+    **Issue:** the room installs the project with `uv pip install -e`, which resolves afresh and ignores the lock, so a room's verdict can differ from CI's for a reason that is neither the bead nor the tree.
+    **Expected:** the room installs from the lock (`uv sync --frozen` with the leg's extras), or names in its verdict that it resolved outside the lock and which versions differ. Found by S2T (`beadloom-tnya`); for Debt to zero (`beadloom-ba9w`).
+
+310. [2026-10-10] [LOW] a verdict-room scenario assumes the run lacks the `search` extra, so `--all-extras` turns 8 tests red with one cause
+
+    **Severity:** low (a false red for anyone who runs the suite with every extra; CI is unaffected because no leg installs `search`)
+    **Command:** `uv run pytest tests/acceptance tests/integration tests/self_check` after `uv sync --all-extras`
+    **Context:** S2T measured the full tree in a worktree synced with `--all-extras`. `tests/acceptance/application/verdict-room/room_extras.feature`, scenario "a leg installing different extras is not entered, and says which", expects the reason to name `search` as the missing extra; with the extra present the reason never names it.
+    **Issue:** one scenario's assumption about the environment takes down `test_room_dependent_assertions` (5), the self_check shipped-suite test and `test_bead14_s4_binding::...reddens_the_run` (its sabotage control). It looked path-sensitive on 2026-10-09; it is extras-sensitive, measured under `/private/tmp` with CI's extras (passes) and under `$HOME` with all extras (fails).
+    **Expected:** the scenario picks an extra the run provably lacks, or skips with the reason when every extra is installed. Found by S2T; for Debt to zero (`beadloom-ba9w`).
+
+309. [2026-10-10] [LOW] the reference-parser self-check hands gherkin's `TokenScanner` a path where it takes text, so it breaks on gherkin >= 30
+
+    **Severity:** low (a test defect; the product does not use the reference parser)
+    **Command:** `uv run pytest tests/unit/graph/scenarios/test_scenario_binding.py`
+    **Context:** `test_our_own_suite_parses_the_way_the_reference_parser_reads_it` passes a file path to `TokenScanner`; gherkin-official 42 (pulled by pytest-bdd 9) takes the text. Seen in every clean room of BDL-080 (see #311); all 755 acceptance scenarios pass under 9.0.0 + 42.0.1.
+    **Issue:** the test couples itself to a gherkin API that changed at 30, and the lock keeps it green only by chance of the pin.
+    **Expected:** `TokenScanner(path.read_text(encoding="utf-8"))`, which works on 29 and 42. Found by S2T; for Debt to zero (`beadloom-ba9w`).
 
 308. [2026-10-08] [MEDIUM] active-sync reconciles the bead table and leaves ACTIVE.md's header, 'Current bead' and checklist stale when the work item ships
 

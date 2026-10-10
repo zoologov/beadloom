@@ -281,3 +281,8 @@ site:
   description: "Living knowledge base: metrics dashboard, interactive architecture, and validated docs."
   base: /beadloom/
   repo_url: https://github.com/zoologov/beadloom
+  # BDL-080 S4e: this portal's nav shows Beadloom's square icon, its only mark,
+  # the file the scaffold ships under public/brand/ for the footer. Drawn in
+  # currentColor, it takes the text's colour in the nav; being Beadloom's own
+  # icon, it leaves the favicon Beadloom's theme-adaptive one.
+  logo: src/beadloom/site_scaffold/public/brand/beadloom-icon.svg

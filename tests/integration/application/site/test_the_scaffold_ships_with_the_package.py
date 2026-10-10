@@ -12,7 +12,8 @@ an adopter installs, and a build backend that drops a hidden directory such as
 ``.vitepress/`` would pass the first reading and fail the second.
 
 Nothing in the scaffold may name this repository: its title, its base path or its
-repository. The layer vocabulary is the project's, and the scaffold names none.
+repository, except the footer's link to Beadloom's repository (BDL-080 S4d). The layer
+vocabulary is the project's, and the scaffold names none.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.application.site.scaffold import MARKABLE_SUFFIXES, shipped_files
+from tests.support.footer_link import without_the_footer_link
 from tests.support.repository_root import REPO_ROOT
 
 if TYPE_CHECKING:
@@ -72,7 +74,7 @@ def test_nothing_shipped_names_this_repository() -> None:
         (rel, token)
         for rel, body in shipped_files().items()
         for token in _OUR_IDENTITY
-        if token in body
+        if token in without_the_footer_link(body)
     ]
     assert leaks == []
 

@@ -15,10 +15,10 @@
 
 import { computed } from "vue";
 import { shellQuote } from "../../../shared/lib/index.js";
-import { TOKEN_VARIABLES } from "../../../shared/theme-tokens/index.js";
+import { RING_TONES, TOKEN_VARIABLES } from "../../../shared/theme-tokens/index.js";
 import { CopyCommand } from "../../../shared/ui/index.js";
 import { CONTRACT_WALK } from "../lib/contractImpact.js";
-import { RING_TONES, ringOf } from "../model/rings.js";
+import { ringOf } from "../model/rings.js";
 
 const props = defineProps({
   summary: { type: Object, required: true },

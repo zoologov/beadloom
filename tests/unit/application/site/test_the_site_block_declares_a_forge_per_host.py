@@ -170,13 +170,13 @@ def test_the_unknown_key_refusal_names_forges_among_the_keys(tmp_path: Path) -> 
     assert "`forges:`" in refusals[0].why
 
 
-def _icon(config: SiteConfig) -> object:
-    match = re.search(r"export const site = (\{.*\});", render_site_module(config))
+def _icon(config: SiteConfig, root: Path) -> object:
+    match = re.search(r"export const site = (\{.*\});", render_site_module(config, root))
     assert match is not None
     return json.loads(match.group(1))["repoIcon"]
 
 
-def test_the_repository_icon_follows_the_declared_kind() -> None:
+def test_the_repository_icon_follows_the_declared_kind(tmp_path: Path) -> None:
     url = "https://git.acme.example/platform/shop"
     declared = SiteConfig(
         title="t",
@@ -187,5 +187,5 @@ def test_the_repository_icon_follows_the_declared_kind() -> None:
     )
     undeclared = SiteConfig(title="t", description="d", base="/", repo_url=url)
 
-    assert _icon(declared) == "gitlab"
-    assert _icon(undeclared) == "git"
+    assert _icon(declared, tmp_path) == "gitlab"
+    assert _icon(undeclared, tmp_path) == "git"

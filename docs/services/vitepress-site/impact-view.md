@@ -14,7 +14,7 @@ toolbar's **Impact** button switches between it and the neighbourhood. The walk 
 selected node to what depends on it, then to what depends on those, and so on. Each reached node
 is drawn in the ring of its fewest steps: the selection is ring 0, direct dependents ring 1, and
 every distance from the last tone on shares that tone. Which end of an edge depends on the other
-is the mode's table (`site-graph-edge`, `site-landscape-data`), so one walk serves both modes.
+is the mode's table (`site-graph-edges`, `site-landscape-data`), so one walk serves both modes.
 
 - **Architecture** (`lib/impact.js`). The walk goes backwards along `depends_on`, `uses` and
   `consumes`. The summary gives the count, the rings, the domains and services that hold the
@@ -42,15 +42,17 @@ the reconciler recorded. A click on a node in the risk list selects it.
   steps, and the edges walked.
 - `impactSummary(focus, impact, { nodeById, parents, layers, edges })` and `DEPENDENCY_WALK`.
 - `contractImpactSummary(focus, impact, { edges, contracts })` and `CONTRACT_WALK`.
-- `IMPACT_VIEW`, `RING_TONES`, `ringOf(distance)`.
+- `IMPACT_VIEW`, `ringOf(distance)`. The ring tones, `RING_TONES`, are read from `site-shared`'s
+  `theme-tokens` since BDL-080 S2a, where the viewer's stylesheet and the impact summary's legend
+  both read them; this slice no longer exports them.
 - `ImpactButton` (Vue component): prop `active`, event `toggle`.
 - `ImpactSummary` (Vue component): props `summary` and `source`, event `select(id)`.
 
 ## Depends on
 
-- `site-graph-node`, `site-graph-edge`, `site-layer`, `site-landscape-data` (entities).
-- `site-shared`, for `breadthFirst`, `shellQuote`, the theme variables of the ring swatches and
-  `CopyCommand`.
+- `site-graph-nodes`, `site-graph-edges`, `site-layers`, `site-landscape-data` (entities).
+- `site-shared`, for `breadthFirst`, `shellQuote`, `RING_TONES` and the theme variables of the
+  ring swatches, and `CopyCommand`.
 
 ## Tests
 

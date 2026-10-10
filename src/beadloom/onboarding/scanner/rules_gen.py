@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from beadloom.graph.rules.loader import AUTHORING_KEYS
-from beadloom.infrastructure.atomic_io import write_yaml_atomic
+from beadloom.infrastructure.atomic_io import write_text_atomic, write_yaml_atomic
+from beadloom.onboarding.presets import FSD_LAYERS
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -77,6 +78,139 @@ def generate_rules(
     data: dict[str, Any] = {"version": 1, "rules": rules}
     write_yaml_atomic(rules_path, data, default_flow_style=False, allow_unicode=True)
     return len(rules)
+
+
+#: The cohesion signal per FSD layer: the most symbols one slice (or one segment of
+#: ``app`` and ``shared``) owns before ``check`` reports it. Measured on Beadloom's own
+#: portal after its viewer was cut into FSD slices (BDL-080 S2, RFC D3): the largest
+#: widget owns 65 symbols, so widgets get 80 and every other layer 60. A signal, not a
+#: target: shape comes first, and a project recalibrates these with a stated reason.
+#: The number is the one that portal's ``rules.yml`` states beside the same limits,
+#: with the commit it was measured at; a self-check holds the two to one number.
+FSD_COHESION_LIMITS: dict[str, int] = {
+    "app": 60,
+    "pages": 60,
+    "widgets": 80,
+    "features": 60,
+    "entities": 60,
+    "shared": 60,
+}
+
+#: The layers that hold slices; ``app`` and ``shared`` hold segments.
+_SLICED_LAYERS: tuple[str, ...] = ("pages", "widgets", "features", "entities")
+
+_FSD_HEADER = """\
+# The rules `beadloom init` wrote for a Feature-Sliced Design frontend (preset `fsd`).
+#
+# Steiger, the official FSD linter, is the reference for them: its `recommended` set
+# judges files (forbidden-imports, public-api, no-public-api-sidestep,
+# insignificant-slice, no-layer-public-api), and these rules judge the graph the
+# portal draws. Run both: `npm run lint:fsd` is Steiger. Folders beside the layers
+# are nodes tagged `fsd-legacy` and stand outside every rule below, so the graph
+# shows them without judging them.
+version: 3
+rules:
+"""
+
+_FSD_LAYERS_RULE = """\
+  # FSD's layers belong to one application root: a rule stratifies the slices of the
+  # frontend service that holds them, and a layer imports only the layers below it.
+  # Cross imports inside one layer are forbidden by the rule, as FSD prescribes: two
+  # slices of one layer do not know each other (Steiger: forbidden-imports). There is
+  # no node per layer, so two slices of one layer are never internal to one container;
+  # `app` and `shared` hold segments, which import one another freely.
+  - name: fsd-layers
+    title: "FSD architecture"
+    description: "The frontend's Feature-Sliced layers import downward: {layer_names}"
+    severity: error
+    scope: {frontend}
+    layers:
+{layer_lines}    enforce: top-down
+    allow_skip: true
+    edge_kind: depends_on
+"""
+
+_FSD_PUBLIC_API_RULE = """\
+  # A slice is entered through its public API, the index at its top. An import that
+  # reaches past another slice's index is a finding (Steiger: no-public-api-sidestep;
+  # its public-api reports a slice with no index), judged on the imports the reindex
+  # resolved, aliases included.
+  - name: fsd-public-api
+    description: "An import into a slice from outside it lands on the slice's index"
+    severity: error
+    slice_public_api:
+      tags: [{slice_tags}]
+"""
+
+_FSD_SHAPE_RULE = """\
+  # FSD gives no file count; it gives the shape: a slice is one business entity or
+  # feature, with the standard segments (ui, model, lib, api, config) and a public API
+  # in index. A slice whose lib/ or model/ grows past the standard segments is a
+  # finding; so is a code file at its top that is not its index.
+  - name: fsd-slice-shape
+    description: "A slice's top holds its standard segments and its index"
+    severity: warn
+    slice_shape:
+      tags: [{slice_tags}]
+      segments: [ui, model, lib, api, config]
+"""
+
+_FSD_COHESION_COMMENT = """\
+  # The rule judges shape first and keeps a calibrated symbol-count signal second -- a
+  # signal, not a target: the symbols one slice (or one segment of app and shared)
+  # owns. Calibrated on Beadloom's own FSD portal, whose largest widget owns 65
+  # symbols: 80 for widgets, 60 for every other layer. A slice past it is a candidate
+  # for a split by responsibility; a limit is recalibrated here with its reason.
+"""
+
+_FSD_COHESION_RULE = """\
+  - name: fsd-cohesion-{layer}
+    description: "A slice of the {layer} layer owns at most {limit} symbols"
+    severity: warn
+    check:
+      for: {{ kind: component, tag: fsd-{layer} }}
+      max_symbols: {limit}
+"""
+
+
+def fsd_rules_text(frontend: str) -> str:
+    """The ``rules.yml`` text :func:`generate_fsd_rules` writes for *frontend*."""
+    slice_tags = ", ".join(f"fsd-{layer}" for layer in _SLICED_LAYERS)
+    layer_lines = "".join(
+        f"      - name: {layer}\n        tag: fsd-{layer}\n" for layer in FSD_LAYERS
+    )
+    return "".join(
+        (
+            _FSD_HEADER,
+            _FSD_LAYERS_RULE.format(
+                layer_names=", ".join(FSD_LAYERS), frontend=frontend, layer_lines=layer_lines
+            ),
+            "\n",
+            _FSD_PUBLIC_API_RULE.format(slice_tags=slice_tags),
+            "\n",
+            _FSD_SHAPE_RULE.format(slice_tags=slice_tags),
+            "\n",
+            _FSD_COHESION_COMMENT,
+            *(
+                _FSD_COHESION_RULE.format(layer=layer, limit=limit)
+                for layer, limit in FSD_COHESION_LIMITS.items()
+            ),
+        )
+    )
+
+
+def generate_fsd_rules(frontend: str, rules_path: Path) -> int:
+    """Write the FSD rules for the frontend service *frontend*; return how many.
+
+    BDL-080 S3c, RFC D4: the layer order scoped to *frontend* and titled
+    ``FSD architecture`` for the portal, ``slice_public_api``, ``slice_shape`` and one
+    cohesion ``check`` per layer (:data:`FSD_COHESION_LIMITS`). Written as text, so
+    the owner's reason for each rule stands beside it in the file an adopter edits.
+    The count is read back from the text written, so it cannot drift from it.
+    """
+    text = fsd_rules_text(frontend)
+    write_text_atomic(rules_path, text)
+    return len(yaml.safe_load(text)["rules"])
 
 
 #: The authoring keys whose label in the agent instructions is not the key

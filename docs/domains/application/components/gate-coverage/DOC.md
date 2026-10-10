@@ -41,14 +41,18 @@ A hand-written sentence ("this gate does not run pytest") is the defect one leve
 `^(src|tests)/` filter and the filter, not the derivation, decided the answer. So the claim
 here is a property of the step list, and nothing in this module names a step of the gate.
 
-On this repository the run reports three:
+On this repository the run reports four:
 
 ```
 Not run by this gate:
   the test suite — `uv run pytest --cov=beadloom --cov-report=term-missing --cov-fail-under=80` (.github/workflows/ci.yml: tests)
   the style linter — `uv run ruff check src/ tests/` (.github/workflows/ci.yml: tests)
   the type checker — `uv run mypy src/` (.github/workflows/ci.yml: tests)
+  the FSD linter — `npm run lint:fsd` (.github/workflows/ci.yml: site-build)
 ```
+
+The fourth arrived with BDL-080 S2c, when the `site-build` job gained the step "Lint the theme's
+slices (Steiger)" over the portal it builds.
 
 The second and third are the ones nobody had filed. The gate's own step is named `lint` and
 checks the **architecture boundaries**, not the source style, so `[PASS] lint` beside a green
@@ -57,9 +61,14 @@ duty to `ruff`/`style`/`format` and deliberately not to `lint`.
 
 ## The vocabulary decides whether anything is said, never what is claimed
 
-`DUTIES` recognises `pytest`; `ruff`, `flake8`, `pylint`; `mypy`, `pyright`. A command is
-matched by its tool token after any runner prefix, so `uv run pytest --cov`, `python -m
-pytest` and `poetry run mypy src` are one answer and `uv sync --extra dev` is none.
+`DUTIES` recognises `pytest`; `ruff`, `flake8`, `pylint`; `mypy`, `pyright`; and, since BDL-080
+S2b, the FSD linter: `steiger`, or the `lint:fsd` script `beadloom init` writes for a
+Feature-Sliced frontend. Steiger judges a slice file by file, which the gate's graph lint does
+not, so a pipeline that runs it is told the gate did not. A command is matched by its tool token
+after any runner prefix, so `uv run pytest --cov`, `python -m pytest` and `poetry run mypy src`
+are one answer and `uv sync --extra dev` is none. `npm`, `pnpm` and `yarn` are runner prefixes
+too: `npm run lint:fsd` and `yarn lint:fsd` answer `lint:fsd`, and `npm ci` answers `ci`, which
+performs no duty. A gate step named `steiger`, `lint-fsd` or `fsd-lint` would perform it.
 
 A project that verifies under a name this list does not hold is told the population is empty,
 with the list named — never that nothing is left to run. That is the same distinction this
@@ -133,6 +142,13 @@ this component reports, which is still only what a gate run declared and did not
 - the MCP `complete_bead` tool — `not_run`, on both the PASS and the FAIL payload. That tool
   runs the suite itself when `run_tests=True`, and passes `performed_elsewhere=("tests",)` to
   the gate so one run cannot report the suite as not run while that run ran it.
+
+## Tests
+
+`tests/test_gate_not_run.py` holds the two sides and the four statements.
+`tests/unit/application/test_the_gate_names_the_fsd_linter_it_did_not_run.py` (BDL-080 S2b)
+holds the FSD linter duty: a pipeline running Steiger has it named with its command, the block
+names the job that runs it, and an `npm` command that is not Steiger performs no duty.
 
 ## Related
 

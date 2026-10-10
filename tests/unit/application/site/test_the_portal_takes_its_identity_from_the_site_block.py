@@ -168,13 +168,26 @@ def test_the_generated_module_carries_the_identity_and_nothing_else(tmp_path: Pa
         base="/orders/",
         repo_url="https://gitlab.com/acme/orders",
     )
-    value = _module_value(render_site_module(config))
+    value = _module_value(render_site_module(config, tmp_path))
     assert value == {
         "title": 'Acme "Orders"',
         "description": "Orders",
         "base": "/orders/",
         "repoUrl": "https://gitlab.com/acme/orders",
         "repoIcon": "gitlab",
+        "logo": "",
+        "logoMonochrome": False,
+        "favicons": [
+            {"href": "/brand/beadloom-favicon.svg", "type": "image/svg+xml"},
+            {"href": "/brand/beadloom-favicon.png", "type": "image/png", "sizes": "32x32"},
+            {
+                "href": "/brand/beadloom-favicon-dark.png",
+                "type": "image/png",
+                "sizes": "32x32",
+                "media": "(prefers-color-scheme: dark)",
+            },
+        ],
+        "poweredBy": True,
     }
 
 
@@ -184,13 +197,17 @@ def test_the_generated_module_carries_the_identity_and_nothing_else(tmp_path: Pa
         ("https://github.com/acme/orders", "github"),
         ("https://gitlab.com/acme/orders", "gitlab"),
         ("https://bitbucket.org/acme/orders", "bitbucket"),
-        ("https://codeberg.org/acme/orders", "gitea"),
+        # Codeberg's own mark, by the owner's ruling of 2026-10-09 (BDL-080 S4d);
+        # it was Gitea's, the software Codeberg runs, before.
+        ("https://codeberg.org/acme/orders", "codeberg"),
         ("https://dev.azure.com/acme/orders/_git/orders", "azuredevops"),
         ("https://git.acme.example/orders", "git"),
         ("", ""),
     ],
     ids=["github", "gitlab", "bitbucket", "codeberg", "azure", "self-hosted", "none"],
 )
-def test_the_repository_icon_follows_the_forge_the_link_points_at(url: str, icon: str) -> None:
+def test_the_repository_icon_follows_the_forge_the_link_points_at(
+    url: str, icon: str, tmp_path: Path
+) -> None:
     config = SiteConfig(title="t", description="d", base="/", repo_url=url)
-    assert _module_value(render_site_module(config))["repoIcon"] == icon
+    assert _module_value(render_site_module(config, tmp_path))["repoIcon"] == icon

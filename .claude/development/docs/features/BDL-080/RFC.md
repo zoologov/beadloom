@@ -40,8 +40,9 @@ The decisions D1–D8 below, each with the alternative it rejects.
   node declarations land before any later viewer bead is launched.
 - FSD best practice is read from Steiger's `recommended` set (the official FSD linter, which one
   of the owner's projects already runs): `forbidden-imports` (no cross-import inside a layer, no
-  upward import), `public-api` (a slice is entered through its `index`), `insignificant-slice`,
-  `no-layer-public-api`. Beadloom judges the graph and shows the portal; Steiger stays the
+  upward import), `no-public-api-sidestep` (a slice is entered through its `index`; `public-api` only reports
+  a slice with no `index`), `insignificant-slice` (off in this repository by the owner's ruling
+  of 2026-10-09: the cut exists for parallel beads, not reuse), `no-layer-public-api`. Beadloom judges the graph and shows the portal; Steiger stays the
   file-level linter where a project has it.
 
 ### Affected Areas
@@ -49,7 +50,7 @@ The decisions D1–D8 below, each with the alternative it rejects.
 `graph-loader` (kind alias), `rule-engine` (`scope:`, a tag-prefix matcher, two new rule
 types), `import-resolver` (aliases, platform suffixes, `.mjs/.cjs`), `site-generation` (the
 data file, the Source link, lint totals, debt roll-up), `agent-prime` / `onboarding` (the FSD
-preset, rules generation, the role overlays), `site-layer`, `site-graph-viewer`, `site-graph-edge`,
+preset, rules generation, the role overlays), `site-layers`, `site-graph-viewer`, `site-graph-edges`,
 `site-node-card`, `site-filter-graph` (the viewer), the adopter fixtures and the CI matrix.
 
 ## Axes
@@ -64,7 +65,7 @@ preset, rules generation, the role overlays), `site-layer`, `site-graph-viewer`,
 | callers | reindex (`test_index.py`) | no | card_activity caller only |
 | branches | site-generation (`_declared_layer_rule`, `_layer_view`, `_node_dict`, `source_url`, `card_fields`) | yes | D2, D7, D8 |
 | branches | onboarding (`detect_preset`, `classify_dir`), agent-prime (`generate_rules`, `bootstrap_project`) | yes | D4 |
-| JS (by file) | site-graph-viewer, site-layer, site-graph-edge, site-node-card, site-filter-graph | yes | D2, D3, D8 |
+| JS (by file) | site-graph-viewer, site-layers, site-graph-edges, site-node-card, site-filter-graph | yes | D2, D3, D8 |
 | kind `site` readers | graph-loader, rule-engine (`types.py`), site-generation (pages, nav, view, landscape), doc-generator | yes | D1 |
 
 ## Proposed Solution
@@ -112,7 +113,7 @@ From the import graph of the 43 files (brief Q4), ten slices, every one importin
 | `shared/bundling` (bundleDrawing, buses, joins, trunks, headRuns, bundles) | 6 | 53 |
 | `shared/grid-routing` (overviewGrid, overviewRoutes) | 2 | 28 |
 | `shared/map-levels` (levels, mapMarks, loopLines; `GEOMETRY`, `drawnSizeOf`, `rimOf`, `OWN_LINE` move here) | 3 | 48 |
-| `entities/graph-edge` (+ heads, lineMarks, edgePalette) | +3 | +29 |
+| `entities/graph-edges` (+ heads, lineMarks, edgePalette) | +3 | +29 |
 | `features/follow-edge` (followedOverlay, sharedLines) | 2 | 16 |
 | `features/overview-map` (overviewPlan, mapTitles, aggregateElements, mapExtras; `FIT_*` moved to shared) | 4 | 18 |
 | `features/edge-pills` (pillOverlay) | 1 | 3 |
@@ -125,6 +126,13 @@ and it runs where `ruff` runs: in the CI `site-build` job and in the STACK compl
 with the Gate's verdict naming it among what the Gate did not run (the Gate judges graph and
 documents; the style linters are the suite's). The FSD preset writes the same `lint:fsd` script
 for an adopter whose project has no Steiger yet.
+
+**Steiger by the owner's ruling** (2026-10-09, S2c `beadloom-af99.8`): `fsd/insignificant-slice` is
+switched off in `steiger.config.js` with its reason written there, because the cut exists so
+that beads can run in parallel on disjoint nodes, not for reuse. `fsd/inconsistent-naming` asked
+for plural `entities` slices (three of six were plural, and a tie prefers plural), so
+`graph-edge`, `graph-node` and `layer` became `graph-edges`, `graph-nodes` and `layers`, with
+the nodes `site-graph-edges`, `site-graph-nodes` and `site-layers`. Every other rule stays on.
 
 Four moves make the layering clean: `GEOMETRY`/`drawnSizeOf`/`rimOf` out of `stylesheet.js`,
 `FIT_*` out of `navigate-graph`, `OWN_LINE` out of `aggregateElements`, `RING_TONES` out of

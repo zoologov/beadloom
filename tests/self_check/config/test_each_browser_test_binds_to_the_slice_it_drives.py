@@ -30,17 +30,21 @@ _E2E = "src/beadloom/site_scaffold/e2e"
 
 #: Each spec and the slice whose behaviour it drives.
 SPEC_SLICE = {
+    # The footer, the favicon, the nav logo and the header's repository icon (BDL-080 S4d).
+    "brand.spec.js": "site-powered-by",
     # Trunks and buses drawn over ELK's routes (BDL-077 E3).
     "bundles.spec.js": "site-graph-viewer",
     "card.spec.js": "site-node-card",
     "colours.spec.js": "site-graph-viewer",
     # One count per node and per line, and a click on a box (BDL-078, beadloom-btkd.7).
     "counts.spec.js": "site-graph-viewer",
+    # Rule findings bound to no node and the page map on the dashboard (BDL-080 S4a).
+    "dashboard.spec.js": "site-dashboard",
     "data-version.spec.js": "site-architecture-data",
     # Nodes named `__proto__`, `constructor` and the like drawn like any other (BDL-078 F-ytcg).
     "data-ids.spec.js": "site-graph-viewer",
     "diagram-links.spec.js": "site-diagram-viewer",
-    "edges.spec.js": "site-graph-edge",
+    "edges.spec.js": "site-graph-edges",
     "filters.spec.js": "site-filter-graph",
     "fullscreen.spec.js": "site-fullscreen",
     "graph-viewer-instances.spec.js": "site-graph-viewer",
@@ -49,7 +53,7 @@ SPEC_SLICE = {
     "impact.spec.js": "site-impact-view",
     "landscape-impact.spec.js": "site-impact-view",
     "landscape.spec.js": "site-landscape-page",
-    "layers.spec.js": "site-layer",
+    "layers.spec.js": "site-layers",
     # The boxes a layer rule scoped to a box draws inside it, at the map's levels (BDL-080 S1c).
     "layer-boxes.spec.js": "site-graph-viewer",
     # When a box opens, what an open box draws, "+N", a selection framed readably (BDL-078 V3).
@@ -65,7 +69,7 @@ SPEC_SLICE = {
     "navigation.spec.js": "site-navigate-graph",
     "neighbourhood.spec.js": "site-select-neighbourhood",
     "node-page.spec.js": "site-architecture-page",
-    "node-status.spec.js": "site-graph-node",
+    "node-status.spec.js": "site-graph-nodes",
     # The overview's own routes, pills, titles and calm hover (BDL-078 V2).
     "overview.spec.js": "site-graph-viewer",
     # Frame time and the first drawing, timed per environment (BDL-077 review M1).

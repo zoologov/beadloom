@@ -5,12 +5,127 @@
 // every line faded towards its source; now every line has one weight and one
 // colour from end to end, and kinds differ by colour and dash alone.
 //
-// Every case reads the edges at full detail, every box open: at the whole-graph
-// fit the viewer draws aggregated edges between closed boxes (`map.spec.js`).
+// Every case but the legend's reads the edges at full detail, every box open: at
+// the whole-graph fit the viewer draws aggregated edges between closed boxes
+// (`map.spec.js`). The legend is read at every level a reader reaches, because it
+// names what the canvas draws there, aggregated lines included: a legend derived
+// from the data file once left the overview drawing an indigo solid line the
+// dotted `uses` sample did not describe. A line of the map's that carries edges
+// of several kinds is drawn solid in the colour of the kind it carries most, and
+// the legend says so with an entry of its own, at the levels such a line is drawn
+// at and only there (the owner's ruling, 2026-10-10).
 
 import { test, expect } from "@playwright/test";
 import { architectureData, openArchitecture, openEveryBox, serveEveryEdgeKind, viewer } from "./support/viewer.js";
 import { channelDistance, finalRunGroups, hasTargetHead } from "./support/look.js";
+import { centreOn, settled } from "./support/levels.js";
+import { treeOf } from "./support/map.js";
+import { requireShape } from "./support/shape.js";
+
+/** How many presses of "Zoom in" the legend is read over at most, from the whole-graph fit: past the most the view zooms in. */
+const LEGEND_ZOOM_STEPS = 30;
+
+/** A dash pattern's proportion, dash to gap, or "solid": a dash is drawn in pixels on screen, so its proportion is what a zoom keeps. */
+const proportionOf = (dash) => (dash.length ? (dash[0] / dash[1]).toFixed(2) : "solid");
+
+/** The style key the viewer draws an edge of the architecture's data file with: the violation's, else its kind. */
+const styleKeyOfEdge = (edge) => (edge.kind === "depends_on" && edge.violation === true ? "violation" : edge.kind);
+
+/** The legend's entries as the browser paints them: `{ key: { colour, dash } }`, `dash` the sample's pattern, empty when solid. */
+async function legendEntries(page) {
+  const items = await page.locator("[data-legend-edge]").evaluateAll((items) =>
+    items.map((item) => {
+      const line = getComputedStyle(item.querySelector("[data-legend-line]"));
+      return { key: item.dataset.legendEdge, colour: line.stroke, dash: line.strokeDasharray };
+    })
+  );
+  return Object.fromEntries(items.map(({ key, colour, dash }) => [key, { colour, dash: dash === "none" ? [] : (dash.match(/[\d.]+/g) || []).map(Number) }]));
+}
+
+/** The ids of the map's lines drawn now that carry edges of more than one style, by `styleOf` (an edge's key to its style). */
+async function linesOfSeveralStyles(page, styleOf) {
+  const lines = [...(await viewer(page, "aggregatedEdges")), ...(await viewer(page, "ownLines"))].filter((line) => line.drawn);
+  return new Set(lines.filter((line) => new Set([...line.forwardKeys, ...line.backwardKeys].map((key) => styleOf.get(key))).size > 1).map((line) => line.id));
+}
+
+/** Whether the legend holds its entry for a line of several kinds, and the sample's dash: `{ shown, dash }`. */
+async function severalEntry(page) {
+  const item = page.locator("[data-legend-several]");
+  if ((await item.count()) === 0) return { shown: false, dash: null };
+  return { shown: true, dash: await item.locator("[data-legend-line]").evaluate((line) => getComputedStyle(line).strokeDasharray) };
+}
+
+/**
+ * What disagrees, at the level drawn now, between the lines on the canvas and the
+ * edge legend: a line whose style has no entry, or is drawn in another colour or
+ * dash than its entry's sample, and an entry no line is drawn in. A line of the
+ * map's that carries edges of more than one style is drawn solid in the style it
+ * carries most (RFC D8): its colour is its entry's, its dash solid, and the
+ * legend's entry for a line of several kinds is there exactly while one is drawn.
+ * `{ wrong, lines, keys }`, `keys` the styles drawn.
+ */
+async function legendAgainstCanvas(page, styleOf) {
+  const looks = (await viewer(page, "lineLooks")).filter((look) => look.styleKey);
+  const several = await linesOfSeveralStyles(page, styleOf);
+  const legend = await legendEntries(page);
+  const keys = [...new Set(looks.map((look) => look.styleKey))].sort();
+  const wrong = new Set(Object.keys(legend).filter((key) => !keys.includes(key)).map((key) => `the legend's ${key}: no line is drawn in it`));
+  const { shown } = await severalEntry(page);
+  if (shown !== several.size > 0) wrong.add(several.size ? `${several.size} line(s) of several kinds drawn, and no entry for them` : "the entry for a line of several kinds, and none is drawn");
+  for (const look of looks) {
+    const entry = legend[look.styleKey];
+    if (!entry) {
+      wrong.add(`${look.styleKey}: drawn, and not in the legend`);
+      continue;
+    }
+    if (channelDistance(look.colour, entry.colour) > 1) wrong.add(`${look.styleKey}: drawn ${look.colour}, its sample ${entry.colour}`);
+    const wanted = several.has(look.id) ? "solid" : proportionOf(entry.dash);
+    if (proportionOf(look.dash) !== wanted) wrong.add(`${look.styleKey}${look.aggregated ? " (aggregated)" : ""}: drawn ${proportionOf(look.dash)}, ${several.has(look.id) ? "a line of several styles" : "its sample"} ${wanted}`);
+  }
+  return { wrong: [...wrong], lines: looks.length, keys };
+}
+
+/**
+ * Read the legend against the canvas at every level a reader reaches: the
+ * whole-graph fit, each level the presses of "Zoom in" towards the largest
+ * top-level box draw, up to the most the view zooms in, every box open with the
+ * edges drawn as the map draws them at rest, and every edge drawn as itself.
+ * `{ wrong, read }`, `read` what each level drew.
+ */
+async function legendAtEveryLevel(page, data) {
+  const styleOf = new Map(data.edges.map((edge) => [`${edge.kind}:${edge.src}->${edge.dst}`, styleKeyOfEdge(edge)]));
+  const tree = treeOf(data);
+  const wrong = [];
+  const read = [];
+  const levelNow = async () => JSON.stringify([await viewer(page, "openBoxes"), (await viewer(page, "lineLooks")).length]);
+  const look = async (state) => {
+    await settled(page);
+    const found = await legendAgainstCanvas(page, styleOf);
+    const open = (await viewer(page, "openBoxes")).length;
+    read.push(`${state}: ${found.lines} line(s), ${open} box(es) open, ${found.keys.join(" ") || "no style"}`);
+    wrong.push(...found.wrong.map((w) => `${state}: ${w}`));
+  };
+  await look("at the fit");
+  const held = (box) => Object.keys(tree.parents).filter((id) => tree.parents[id] === box).length;
+  const target = [...tree.topBoxes].sort((a, b) => held(b) - held(a) || (a < b ? -1 : 1))[0];
+  if (target) await centreOn(page, target);
+  let last = await levelNow();
+  for (let step = 0; step < LEGEND_ZOOM_STEPS; step += 1) {
+    const zoom = await viewer(page, "zoom");
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await settled(page);
+    if ((await viewer(page, "zoom")) === zoom) break;
+    // A press that opens no box and draws no other line draws the level read last.
+    const level = await levelNow();
+    if (level !== last) await look(`zoom in ${step + 1}`);
+    last = level;
+  }
+  await openEveryBox(page, { edges: false });
+  await look("every box open");
+  await openEveryBox(page);
+  await look("every edge as itself");
+  return { wrong, read };
+}
 
 /** The legend keys the data file calls for: each drawn edge kind, plus `violation`. */
 function expectedKeys(data) {
@@ -34,6 +149,57 @@ test("the legend lists exactly the edge kinds that are drawn", async ({ page, re
     .locator("[data-legend-edge]")
     .evaluateAll((items) => items.map((item) => item.dataset.legendEdge).sort());
   expect(legend).toEqual(drawn);
+});
+
+for (const served of ["as served", "with every edge kind"]) {
+  test(`at every level the legend names each line drawn, in its colour and its dash, and nothing else, on the graph ${served}`, async ({ page, request }) => {
+    const data = served === "as served" ? await architectureData(request) : await serveEveryEdgeKind(page, request);
+    requireShape(data.edges.some((edge) => edge.kind !== "part_of"), "no edge drawn as a line");
+    await openArchitecture(page);
+    const { wrong, read } = await legendAtEveryLevel(page, data);
+    test.info().annotations.push({ type: "measured", description: read.join("; ") });
+
+    expect(wrong).toEqual([]);
+  });
+}
+
+test("the legend names a line of several kinds, solid, at a level that draws one, and not at a level that draws none", async ({ page, request }) => {
+  const data = await architectureData(request);
+  const styleOf = new Map(data.edges.map((edge) => [`${edge.kind}:${edge.src}->${edge.dst}`, styleKeyOfEdge(edge)]));
+  await openArchitecture(page);
+  const atFit = await linesOfSeveralStyles(page, styleOf);
+  requireShape(atFit.size > 0, "no line at the whole-graph fit carries edges of two kinds");
+  const fit = await severalEntry(page);
+  // Every edge drawn as itself: no line of the map's is drawn, so none carries several kinds.
+  await openEveryBox(page);
+  await settled(page);
+  const full = await linesOfSeveralStyles(page, styleOf);
+  const detail = await severalEntry(page);
+  test.info().annotations.push({ type: "measured", description: `at the fit ${atFit.size} line(s) of several kinds (${[...atFit].join(", ")}); every edge as itself ${full.size}` });
+
+  expect({ fit, detail: detail.shown, full: full.size }).toEqual({ fit: { shown: true, dash: "none" }, detail: false, full: 0 });
+});
+
+test("an aggregated line that carries edges of one kind keeps that kind's dash, as its legend sample is drawn", async ({ page, request }) => {
+  // Every edge of the served graph made a `uses` edge: each line the overview aggregates carries one kind.
+  const data = await architectureData(request);
+  const drawn = data.edges.filter((edge) => edge.kind !== "part_of");
+  requireShape(drawn.length > 0, "no edge drawn as a line");
+  for (const edge of drawn) {
+    edge.kind = "uses";
+    delete edge.violation;
+  }
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  await openArchitecture(page);
+
+  const aggregated = (await viewer(page, "lineLooks")).filter((look) => look.aggregated);
+  requireShape(aggregated.length > 0, "no aggregated line at the whole-graph fit");
+  const { uses } = await legendEntries(page);
+  expect(uses).toBeTruthy();
+  const wrong = aggregated.filter((look) => look.styleKey !== "uses" || proportionOf(look.dash) !== proportionOf(uses.dash)).map((look) => `${look.id}: ${look.styleKey} ${proportionOf(look.dash)}`);
+  test.info().annotations.push({ type: "measured", description: `${aggregated.length} aggregated line(s) at the fit; the sample's dash ${proportionOf(uses.dash)}` });
+
+  expect(wrong).toEqual([]);
 });
 
 test("each edge kind has its own line style, and a violation is red and dashed, at the weight of every other line", async ({

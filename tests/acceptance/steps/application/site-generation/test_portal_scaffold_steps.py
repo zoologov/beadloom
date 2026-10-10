@@ -17,8 +17,9 @@ import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.application.site.generate import SiteResult, generate_site
-from beadloom.application.site.scaffold import read_marker
+from beadloom.application.site.scaffold import mark, read_marker
 from beadloom.application.site.site_config import SiteConfigError
+from tests.support.footer_link import without_the_footer_link
 from tests.support.scaffold_node_ids import node_ids_named, scaffold_node_ids
 from tests.support.tiered_project import write_zoned_import_project
 
@@ -129,6 +130,19 @@ def _ai_runs(world: dict[str, Any]) -> None:
     )
 
 
+#: A slice folder 8.0.0's scaffold wrote and the current one does not ship.
+_EARLIER_SLICE = ".vitepress/theme/entities/graph-edge"
+_EARLIER_FILES = (f"{_EARLIER_SLICE}/model/edgeKinds.js", f"{_EARLIER_SLICE}/lib/edgeLabel.js")
+
+
+@given("the portal holds a slice folder an earlier version of the scaffold wrote")
+def _earlier_slice(world: dict[str, Any]) -> None:
+    for rel in _EARLIER_FILES:
+        path = world["site"] / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(mark(rel, "export const kinds = [];\n", "8.0.0"), encoding="utf-8")
+
+
 @when("the site is generated for the project")
 def _generate_step(world: dict[str, Any]) -> None:
     world["result"] = _generate(world)
@@ -179,7 +193,8 @@ def _no_leak(world: dict[str, Any]) -> None:
     for path in world["site"].rglob("*"):
         if not path.is_file():
             continue
-        text = path.read_text(encoding="utf-8", errors="replace")
+        # The footer's link to Beadloom's repository is the one mention allowed (BDL-080 S4d).
+        text = without_the_footer_link(path.read_text(encoding="utf-8", errors="replace"))
         leaks.extend((path.name, token) for token in _OUR_IDENTITY if token in text)
     assert leaks == []
 
@@ -267,3 +282,16 @@ def _no_panel(world: dict[str, Any]) -> None:
 @then("the dashboard page mounts the AI tech-writer panel")
 def _panel(world: dict[str, Any]) -> None:
     assert "<AiTechwriterActivity />" in _dashboard(world)
+
+
+@then("the earlier version's slice folder is gone from the portal")
+def _earlier_slice_gone(world: dict[str, Any]) -> None:
+    assert not (world["site"] / _EARLIER_SLICE).exists()
+    assert (world["site"] / ".vitepress/theme/entities").is_dir()
+
+
+@then("the generation reports that folder among the folders it retired")
+def _earlier_slice_reported(world: dict[str, Any]) -> None:
+    report = world["result"].scaffold
+    assert set(_EARLIER_FILES) <= set(report.retired), report.retired
+    assert _EARLIER_SLICE in report.retired_folders, report.retired_folders

@@ -51,10 +51,15 @@ Frozen set of file extensions scanned for code symbols:
 
 ```python
 _CODE_EXTENSIONS = frozenset({
-    ".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".go", ".rs",
+    ".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".go", ".rs",
     ".kt", ".kts", ".java", ".swift", ".m", ".mm", ".c", ".h", ".cpp", ".hpp",
 })
 ```
+
+`.mjs` and `.cjs` joined in BDL-080 S3a (closing `beadloom-zd4m`). The reindex and the change
+detector both read this one set, so a `.mjs` file is indexed, hashed and re-read like a `.js`
+one. Measured on this repository: the four `.mjs` files under `site_scaffold` became indexed
+and paired with `docs/services/vitepress-site.md`.
 
 #### `_EXT_TO_LANG`
 
@@ -63,7 +68,8 @@ Mapping of file extensions to language labels for route extraction:
 ```python
 _EXT_TO_LANG: dict[str, str] = {
     ".py": "python", ".ts": "typescript", ".tsx": "typescript",
-    ".js": "javascript", ".jsx": "javascript", ".go": "go",
+    ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
+    ".go": "go",
     ".java": "java", ".kt": "kotlin", ".kts": "kotlin",
     ".graphql": "graphql", ".gql": "graphql", ".proto": "protobuf",
 }
@@ -98,7 +104,7 @@ wholesale rather than tracking it in `file_index`: the planning tree is
 small, and the two reindex paths disagreeing about what is in the index is a
 defect class this project has already paid for twice (BDL-UX #142, #146).
 | 5 | Extract and index code symbols from source files | `context_oracle.code_indexer.extract_symbols` |
-| 5b | Extract code imports and create `depends_on` edges | `graph.import_resolver.index_imports` |
+| 5b | Extract code imports and create `depends_on` edges, then the Expo bridge `uses` edges; the `imports.aliases:` pairs are read here (`application.import_aliases.import_aliases`) and passed as `aliases=` | `graph.import_resolver.index_imports` |
 | 5c | Load architecture rules from `.beadloom/_graph/rules.yml` | `graph.rule_engine.load_rules` |
 | 5e | Analyze git activity (changed lines, roll-up into boxes, relative levels, the project's `activity.exclude` patterns) and store in `nodes.extra` | `_store_git_activity` |
 | 5f | Extract API routes and store in `nodes.extra` | `_extract_and_store_routes` |
@@ -222,12 +228,12 @@ placement; `beadloom init` prints them under its own `Tests:` line.
    - The index predates derived-edge provenance (`meta.import_edge_provenance` absent or older). One rebuild is required because a derived `depends_on` edge is otherwise indistinguishable from a graph-declared one, so refreshing the first would delete the second.
    - The index predates the test tables (`meta.test_index_version` absent or not `1`, `needs_full_test_reindex`). Only a full rebuild reads the `tests:` declarations.
    - Any graph YAML file changed, detected via `_graph_yaml_changed()` which directly compares hashes for files with `kind == "graph"` (belt-and-suspenders check that catches changes even when `file_index` is stale).
-4. **Early return** if no files changed, no import manifest changed (`graph.import_manifests.manifests_changed`: a `go.mod`, `go.work` or `Package.swift` an import is resolved through, compared by the fingerprint `meta.import_manifests` holds; BDL-078 `beadloom-jcng`) and the test index matches the test files on disk (`is_test_index_current`; test files under the roots are not in `file_index`, so a test-only change is detected by hashing the files under the roots and test trees, and a test layout that differs from the one `meta.test_layout` records is a change too) (sets `nothing_changed=True`, updates meta timestamp, takes health snapshot).
+4. **Early return** if no files changed, no import manifest changed (`graph.import_manifests.manifests_changed`: a `go.mod`, `go.work` or `Package.swift` an import is resolved through, and since BDL-080 S3a/S3b a tsconfig/jsconfig, an `imports.aliases:` entry or an `expo-module.config.json`, compared by the fingerprint `meta.import_manifests` holds; BDL-078 `beadloom-jcng`; the aliases are read once per run and passed both to `manifests_changed(..., aliases=)` and to `reindex_file_imports(..., aliases=)`) and the test index matches the test files on disk (`is_test_index_current`; test files under the roots are not in `file_index`, so a test-only change is detected by hashing the files under the roots and test trees, and a test layout that differs from the one `meta.test_layout` records is a change too) (sets `nothing_changed=True`, updates meta timestamp, takes health snapshot).
 5. **True incremental path**:
    - Snapshot `symbols_hash` from `sync_state` before modifications for drift preservation.
    - Delete old data for changed and deleted files (from `docs`, `code_symbols`, `sync_state`).
    - Re-index changed and added files individually.
-   - **Re-extract imports** for the code files touched, forget those deleted, **re-resolve every stored import of the files not touched** (a file added or removed changes what an untouched importer resolves to; BDL-078 `beadloom-nh7h`), then rebuild the derived `depends_on` edge set (`reindex_file_imports`). A manifest change alone re-resolves every stored import without re-reading a file (`_refresh_imports(..., manifests_moved=True)`), since what a file imports does not depend on a manifest. An incremental index and a fresh reindex of the same tree resolve every import identically. Without this step `code_imports` — and therefore every `forbid_import`, cycle and layer rule — described the tree as it was at the last FULL rebuild, so the documented `reindex && lint` loop reported a clean boundary over a real violation (BDL-UX #142).
+   - **Re-extract imports** for the code files touched, forget those deleted, **re-resolve every stored import of the files not touched** (a file added or removed changes what an untouched importer resolves to; BDL-078 `beadloom-nh7h`), then rebuild the derived `depends_on` edge set and the Expo bridge `uses` edges (`reindex_file_imports`). A manifest change alone re-resolves every stored import without re-reading a file (`_refresh_imports(..., manifests_moved=True)`), since what a file imports does not depend on a manifest. An incremental index and a fresh reindex of the same tree resolve every import identically. Without this step `code_imports` — and therefore every `forbid_import`, cycle and layer rule — described the tree as it was at the last FULL rebuild, so the documented `reindex && lint` loop reported a clean boundary over a real violation (BDL-UX #142).
    - Re-extract API routes and update `nodes.extra`.
    - Rebuild `sync_state` from scratch (full table delete + rebuild) with preserved `symbols_hash`.
    - Rebuild FTS5 search index.
@@ -380,7 +386,7 @@ def _load_rules_into_db(
 ) -> None
 ```
 
-Load architecture rules from `rules.yml` into the `rules` table. `_serialize_rule` covers **every** rule type the loader produces — deny, require, cycle, import-boundary, forbid-edge, layer, cardinality, unregistered-feature-candidate, module-coverage, scenario-coverage, doc-area-coherence, summary-facts, and since BDL-074 C3 the three suite rules — and raises `TypeError` on a type it does not know, so a rule type added to the loader without a serializer fails loudly instead of vanishing from the `rules` table. Each rule is stored WHOLE: a `forbid_import` exemption, a `scenario_coverage.non_behavioural` declaration and a `doc_area_coherence` threshold are all part of what the rule currently means, and a reader of the table must not see a stricter rule than the one that runs. `summary_facts` stores an empty definition because it has no configuration to store. A layer rule's `exempt:` entries are stored for the same reason, and since BDL-070 B4 there is a reader that needs them: the architecture view reads its layer rule from this table and asks that rule which edges to draw red, so an index without the entries would make the site flag crossings the Gate excuses. The key is written only when the rule declares entries, so the row of a project that excuses none is unchanged. Since BDL-080 a layer rule's `scope` (S1b) and `title` (S1e) are stored the same way, each only when declared: the architecture view reads both from this table, the scope to judge inside it and the title to show the rule by, and an index without them shows the wider verdict and the rule's name until the next reindex. The suite rules are stored whole by `_serialize_suite_rule`, with their exemptions for the same reason: `test_binding` as `{files?, for?, exempt?}`, where each `exempt` entry carries `files` or `nodes` with its `reason` and `until`; `test_import_boundary` as `{from_glob, to_glob, of?, exempt?}`, with `forbid_import`'s `{from, to, reason, until}` entries; and `scenario_binding` as `{features, exempt?}`. A key marked `?` is written only when the rule declares it.
+Load architecture rules from `rules.yml` into the `rules` table. `_serialize_rule` covers **every** rule type the loader produces — deny, require, cycle, import-boundary, forbid-edge, layer, cardinality, unregistered-feature-candidate, module-coverage, scenario-coverage, doc-area-coherence, summary-facts, since BDL-074 C3 the three suite rules, and since BDL-080 S3c the two slice rules — and raises `TypeError` on a type it does not know, so a rule type added to the loader without a serializer fails loudly instead of vanishing from the `rules` table. Each rule is stored WHOLE: a `forbid_import` exemption, a `scenario_coverage.non_behavioural` declaration and a `doc_area_coherence` threshold are all part of what the rule currently means, and a reader of the table must not see a stricter rule than the one that runs. `summary_facts` stores an empty definition because it has no configuration to store. A layer rule's `exempt:` entries are stored for the same reason, and since BDL-070 B4 there is a reader that needs them: the architecture view reads its layer rule from this table and asks that rule which edges to draw red, so an index without the entries would make the site flag crossings the Gate excuses. The key is written only when the rule declares entries, so the row of a project that excuses none is unchanged. Since BDL-080 a layer rule's `scope` (S1b) and `title` (S1e) are stored the same way, each only when declared: the architecture view reads both from this table, the scope to judge inside it and the title to show the rule by, and an index without them shows the wider verdict and the rule's name until the next reindex. The suite rules are stored whole by `_serialize_suite_rule`, with their exemptions for the same reason: `test_binding` as `{files?, for?, exempt?}`, where each `exempt` entry carries `files` or `nodes` with its `reason` and `until`; `test_import_boundary` as `{from_glob, to_glob, of?, exempt?}`, with `forbid_import`'s `{from, to, reason, until}` entries; and `scenario_binding` as `{features, exempt?}`. A key marked `?` is written only when the rule declares it. The two slice rules are stored as `slice_public_api` `{tags}` and `slice_shape` `{tags, segments}`, the segments written even when defaulted, so a reader of the table sees the shape that runs without knowing the default. Every node matcher a rule carries is stored by `_serialize_node_matcher` as the fields it sets, among `ref_id`, `kind`, `tag`, `tag_prefix` and `exclude`; `tag_prefix` is written since BDL-080 S2b and only when the matcher sets it, so the row of a rule that selects by `tag` alone is unchanged.
 
 ### Activity Settings
 
@@ -399,6 +405,25 @@ Module `src/beadloom/application/activity_settings.py` (BDL-078 `beadloom-btkd.1
 A pattern without `/` matches a file name in any folder; a pattern with `/` matches the whole
 path from the project root, and `*` crosses directories (unlike `.gitignore`, where it stops at
 `/`). `beadloom config-check` and the Gate's `config-check` step block on the refusals.
+
+### Import Aliases
+
+Module `src/beadloom/application/import_aliases.py` (BDL-080 S3a `beadloom-cwzc`, annotated
+`feature=reindex`) reads the `imports:` block of `.beadloom/config.yml`:
+
+- `IMPORTS_KEY` -- `"imports"`.
+- `read_import_aliases(project_root) -> tuple[tuple[tuple[str, str], ...], tuple[Refusal, ...]]`
+  -- the usable `(alias, folder)` pairs of `imports.aliases` and a `Refusal` for each key the
+  block does not read, an `aliases:` that is not a mapping, an alias that is empty, a pattern
+  (`*`) or a relative or absolute path, and a value that is not a path to something in the
+  project. A trailing `/` on an alias is dropped; a value of `.` is the project root (`""`).
+- `import_aliases(project_root) -> tuple[tuple[str, str], ...]` -- the usable pairs only, as
+  the full and the incremental reindex pass them to the import resolver.
+
+The block belongs to the reindex rather than to the graph domain: the resolver takes the pairs
+as a parameter, because `graph` importing the `doc_sync.declarations` reader would be a
+peer-domain crossing the `architecture-layers` rule flags. `beadloom config-check` and the
+Gate's `config-check` step (rule `import-aliases`) block on the refusals.
 
 ### Test Index Functions
 
@@ -610,7 +635,15 @@ Test files bound to `reindex` (110 tests in 12 files, measured by `beadloom rein
 `test_a_build_tools_test_tree_is_indexed_by_its_mirror.py`, BDL-074 G2) and
 `tests/unit/application/reindex/`
 (`test_a_graph_change_is_detected_by_its_hashes.py`,
-`test_the_reindex_hub_keeps_its_exports.py`). The CLI surface is tested in
+`test_the_reindex_hub_keeps_its_exports.py`, and since BDL-080 S2b
+`test_a_matchers_tag_prefix_is_written_to_the_index.py`, which holds `tag_prefix` in the `rules`
+table). BDL-080 S3a added
+`tests/integration/application/reindex/test_a_tsconfig_and_the_aliases_are_inputs_of_the_imports.py`
+(an edit to a tsconfig or to `imports.aliases:` alone re-resolves on an incremental reindex),
+`tests/integration/application/reindex/test_the_six_fixtures_index_as_before_aliases_were_read.py`
+(the six adopter fixtures of that time keep identical import rows and edges) and
+`tests/unit/application/test_import_aliases.py` (the block's readings and refusals). The CLI
+surface is tested in
 `tests/test_cli_reindex.py`, which binds to no node yet (placement `unplaced`). The `Tests:`
 line's kinds are tested in
 `tests/integration/services/commands/index_ops/test_the_tests_line_names_each_kind.py`, bound

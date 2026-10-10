@@ -6,7 +6,9 @@ The node card links a node's ``source`` to its repository (BDL-076 A3). The
 address comes from the project's declaration or its own ``origin`` remote, never
 from a constant, because the same generator writes an adopter's portal; and the
 revision is the commit the site was generated from, so a link shows the source
-the page describes rather than whatever the branch holds later.
+the page describes rather than whatever the branch holds later. A commit no
+remote branch holds is on no forge either, so its links name a branch the
+remote holds instead (BDL-080 S4c, :mod:`beadloom.application.site.source_ref`).
 
 A remote git can reach but a browser cannot (a path on disk, ``file://``) gives
 no address, and the card then shows the source without a link; so does a remote
@@ -43,7 +45,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
-from beadloom.application.site.forge_routes import VSTS_SSH_HOST, VSTS_SUFFIX, forge_for
+from beadloom.application.site.forge_routes import (
+    VSTS_SSH_HOST,
+    VSTS_SUFFIX,
+    forge_for,
+    on_branch,
+)
+from beadloom.application.site.source_ref import SourceRef, source_ref_of
 from beadloom.graph.federation import current_commit_sha
 
 if TYPE_CHECKING:
@@ -82,12 +90,16 @@ class RepositoryLink:
     ``url`` and ``ref`` are empty when nothing states them: a project outside
     git, or one whose ``origin`` has no web address and that declares none.
     ``forges`` are the hosts the project declares a forge for (``site.forges``),
-    keyed lower-case.
+    keyed lower-case. ``source`` says which commit the site was built from and
+    whether ``ref`` names it or a branch standing in for it (BDL-080 S4c);
+    ``None`` when no commit or no address is known, and then ``ref`` names a
+    commit.
     """
 
     url: str = ""
     ref: str = ""
     forges: Mapping[str, Forge] = field(default_factory=dict, hash=False)
+    source: SourceRef | None = None
 
     def source_url(self, source: str) -> str:
         """The page the forge serves for *source*, a directory or a file, or ``""``.
@@ -113,6 +125,8 @@ class RepositoryLink:
         forge = forge_for(self.url, self.forges)
         if forge is None or not self.ref or not path:
             return ""
+        if self.source is not None and self.source.on_branch:
+            forge = on_branch(forge)
         return forge.link(route, self.url, self.ref, path)
 
 
@@ -235,10 +249,16 @@ def repository_of(
     :func:`~beadloom.graph.federation.current_commit_sha` applies. A declared
     repository without a revision keeps its address, so a link to the
     repository itself still goes somewhere true, and links no path.
+
+    A commit no remote branch holds is linked through a branch the remote does
+    hold, when there is one (:mod:`beadloom.application.site.source_ref`).
     """
     declared = dict(forges or {})
-    ref = current_commit_sha(project_root)
-    if ref is None:
+    commit = current_commit_sha(project_root)
+    if commit is None:
         return RepositoryLink(url=declared_url, forges=declared)
     url = declared_url or web_url_of_remote(origin_remote(project_root))
-    return RepositoryLink(url=url, ref=ref if url else "", forges=declared)
+    if not url:
+        return RepositoryLink(forges=declared)
+    source = source_ref_of(project_root, commit)
+    return RepositoryLink(url=url, ref=source.linked, forges=declared, source=source)

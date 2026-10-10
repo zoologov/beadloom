@@ -94,19 +94,31 @@ def matches_import_target(target_as_path: str, glob: str) -> bool:
 
 @dataclass(frozen=True)
 class NodeMatcher:
-    """Matches graph nodes by ref_id, kind, and/or tag."""
+    """Matches graph nodes by ref_id, kind, tag and/or the beginning of a tag.
+
+    ``tag_prefix`` (BDL-080 S2b) selects a node carrying ANY tag that begins with
+    it, so one rule covers a family of tags: ``fsd-`` selects a slice of every
+    Feature-Sliced layer, where ``tag`` would need one rule per layer.
+    """
 
     ref_id: str | None = None
     kind: str | None = None
     tag: str | None = None
     exclude: tuple[str, ...] | None = None
+    tag_prefix: str | None = None
+
+    @property
+    def reads_tags(self) -> bool:
+        """Whether a node's tags decide the match, so an evaluator must load them."""
+        return self.tag is not None or self.tag_prefix is not None
 
     def matches(self, node_ref_id: str, node_kind: str, *, tags: set[str] | None = None) -> bool:
         """Return True if this matcher matches the given node.
 
         The *tags* parameter is optional for backward compatibility.
-        When *tags* is ``None`` and ``self.tag`` is set, the tag check
-        is skipped (i.e. old callers that do not pass tags are not broken).
+        When *tags* is ``None`` and ``self.tag`` or ``self.tag_prefix`` is set,
+        the tag check is skipped (i.e. old callers that do not pass tags are not
+        broken); a caller that judges by tags reads :attr:`reads_tags`.
 
         The *exclude* field, when set, causes ``matches()`` to return
         ``False`` for any ``node_ref_id`` listed in the tuple.
@@ -117,15 +129,22 @@ class NodeMatcher:
             return False
         if self.kind is not None and self.kind != node_kind:
             return False
-        return not (self.tag is not None and tags is not None and self.tag not in tags)
+        if tags is None:
+            return True
+        if self.tag is not None and self.tag not in tags:
+            return False
+        prefix = self.tag_prefix
+        return prefix is None or any(tag.startswith(prefix) for tag in tags)
 
     def describe(self) -> str:
         """How the matcher reads in a finding, so an author can see what selected nothing."""
-        parts = [
-            f"{field}={value}"
-            for field, value in (("ref_id", self.ref_id), ("kind", self.kind), ("tag", self.tag))
-            if value is not None
-        ]
+        fields = (
+            ("ref_id", self.ref_id),
+            ("kind", self.kind),
+            ("tag", self.tag),
+            ("tag_prefix", self.tag_prefix),
+        )
+        parts = [f"{field}={value}" for field, value in fields if value is not None]
         return ", ".join(parts) if parts else "everything"
 
 
@@ -617,6 +636,72 @@ class ScenarioBindingRule:
     severity: str = "warn"
 
 
+#: The standard segments of a Feature-Sliced Design slice, in FSD's own order: what a
+#: slice's top may hold besides its ``index`` (BDL-080 S3c).
+DEFAULT_SLICE_SEGMENTS: tuple[str, ...] = ("ui", "model", "lib", "api", "config")
+
+
+@dataclass(frozen=True)
+class SlicePublicApiRule:
+    """An import into a slice from outside it lands on the slice's ``index`` (BDL-080 S3c).
+
+    Feature-Sliced Design enters a slice through its public API, the ``index`` file at
+    the top of its folder; Steiger's ``fsd/no-public-api-sidestep`` reports reaching
+    past it (its ``public-api`` reports a slice with no ``index`` at all). A *slice*
+    is a node carrying one of ``tags`` whose ``source`` is a folder.
+
+    **Over resolved imports, not import paths.** ``forbid_import`` matches globs
+    against import paths, and no glob says "inside this slice but not its index":
+    ``@/features/auth`` and ``@/features/auth/model/session`` differ by a suffix only an
+    alias table can interpret. So the rule reads ``code_imports``, where the reindex has
+    already decided which node each import reached, and asks only where inside that
+    slice's folder the imported file is: a relative specifier is completed from the
+    importing file's folder, any other is matched against the slice's folder by its
+    longest trailing path that names a file there. A file other than the slice's
+    ``index`` is a finding; so is an import into a slice that has no ``index`` at all,
+    which has no public API to enter. An import from inside the slice is not judged.
+
+    YAML::
+
+        - name: fsd-public-api
+          severity: error
+          slice_public_api:
+            tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
+    """
+
+    name: str
+    description: str
+    tags: tuple[str, ...]
+    severity: str = "error"
+
+
+@dataclass(frozen=True)
+class SliceShapeRule:
+    """A slice's top holds its segments and its ``index`` (BDL-080 S3c).
+
+    FSD gives a slice its shape rather than a size: the standard segments
+    (:data:`DEFAULT_SLICE_SEGMENTS`) and a public API in ``index``. For each slice — a
+    node carrying one of ``tags`` whose ``source`` is a folder on disk — a folder at
+    its top whose name is not in ``segments`` is a finding, and so is a code file
+    there that is not its ``index``. Hidden entries and files that are not code
+    (``README.md``) are not judged.
+
+    YAML::
+
+        - name: fsd-slice-shape
+          severity: warn
+          slice_shape:
+            tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
+            segments: [ui, model, lib, api, config]   # optional; these five by default
+    """
+
+    name: str
+    description: str
+    tags: tuple[str, ...]
+    segments: tuple[str, ...] = DEFAULT_SLICE_SEGMENTS
+    severity: str = "error"
+
+
 Rule = (
     DenyRule
     | RequireRule
@@ -633,6 +718,8 @@ Rule = (
     | TestBindingRule
     | TestImportBoundaryRule
     | ScenarioBindingRule
+    | SlicePublicApiRule
+    | SliceShapeRule
 )
 
 

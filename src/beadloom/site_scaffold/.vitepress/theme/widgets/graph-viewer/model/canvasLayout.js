@@ -8,9 +8,9 @@
 //
 // The answer is drawn as ELK computed it. Every leaf stands at the centre of its
 // ELK box, through a `preset` layout; every compound is sized to its ELK box; and
-// every edge follows its ELK route with its node's fans bundled (`lib/bundles.js`),
+// every edge follows its ELK route with its node's fans bundled (`shared/bundling/bundles.js`),
 // its ends and corners given relative to the centres of its nodes
-// (`lib/routes.js`). An edge into a box that holds its other end is the
+// (`shared/geometry/routes.js`). An edge into a box that holds its other end is the
 // exception: Cytoscape always draws it as a loop inside the box.
 //
 // The bundling reads one layout and the graph it was computed for, and is kept
@@ -18,9 +18,9 @@
 // draws the same bundles without computing them again.
 
 import { idRecord } from "../../../shared/ids/index.js";
-import { bundleRoutes } from "../lib/bundles.js";
-import { centreOf, compoundSizeOf, pathOf, segmentsOf } from "../lib/routes.js";
-import { STACK_LANES } from "../lib/levels.js";
+import { bundleRoutes } from "../../../shared/bundling/index.js";
+import { centreOf, compoundSizeOf, pathOf, segmentsOf } from "../../../shared/geometry/index.js";
+import { STACK_LANES } from "../../../shared/map-levels/index.js";
 
 /** Node sizes as Cytoscape lays them out: the shape, without the label. */
 const LAYOUT_DIMENSIONS = Object.freeze({ nodeDimensionsIncludeLabels: false });
@@ -139,7 +139,7 @@ function drawingOf(cy, geometry) {
 }
 
 /**
- * The routes of `cy` with its fans bundled from `geometry`'s (`lib/bundles.js`):
+ * The routes of `cy` with its fans bundled from `geometry`'s (`shared/bundling/bundles.js`):
  * `{ paths, trunks, buses, ms }`, `ms` the time the bundling took when it ran.
  */
 function bundlesOf(cy, geometry) {

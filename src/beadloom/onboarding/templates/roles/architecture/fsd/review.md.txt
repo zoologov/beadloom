@@ -3,9 +3,11 @@
 
 Verify the change respects FSD layering:
 ```
-app → processes → pages → widgets → features → entities → shared
+app → pages → widgets → features → entities → shared
 ```
-- No import from a lower layer to a **higher** one; no cross-slice import within the same layer (must go through a public API / a lower layer); cross-slice access uses the slice `index.ts`, not deep paths.
-- Segments stay within their role (`ui` / `model` / `api` / `lib` / `config`); business logic lives in `model`, IO in `api`.
-- Every new module is placed in the right layer/slice/segment **and** carries the correct `beadloom:domain` (layer) / `beadloom:feature` (slice) / `beadloom:component` (segment) annotation, and a new slice has a doc — else `module-coverage` (error) and `lint --strict` go red. Illegal import or missing annotation/doc → **Major**.
+- No import from a lower layer to a **higher** one; no cross-slice import within the same layer (must go through a public API / a lower layer).
+- **Public API:** another slice is entered through its `index` only; an import past it is a finding (`slice_public_api`; Steiger `no-public-api-sidestep`, while its `public-api` reports a slice with no `index`) → **Major**.
+- Segments stay within their role (`ui` / `model` / `api` / `lib` / `config`); business logic lives in `model`, IO in `api`; a slice's top holds its segments and its `index` (`slice_shape`).
+- **Cohesion:** a slice holds one nameable responsibility, and its layer's `check` rule (`max_symbols`) is its signal. A slice re-tagged into another layer to pass, or a limit raised in `rules.yml` without the measurement and the reason, is gaming → **Major**; a slice cut into fragments with no responsibility of their own is shatter → **Major**.
+- Every new slice is a `component` node tagged with its layer (`fsd-<layer>`), `part_of` the frontend service (a segment of `shared`/`app` is `part_of` that layer's container), its modules carry `beadloom:component=<slice-ref>`, and it has a doc — else `module-coverage` (error) and `lint --strict` go red. Illegal import or missing annotation/doc → **Major**.
 

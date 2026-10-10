@@ -1,0 +1,16 @@
+  # BDL-080 S2a (`beadloom-7jgr`): the viewer cut by cohesion into Feature-Sliced
+  # slices (RFC D3). A segment of the site's `shared` layer is a node of its own,
+  # `part_of site-shared` and tagged `fsd-shared`: two segments importing each
+  # other are peers inside one tagged container, which `site-fsd-layers` allows.
+nodes:
+  - ref_id: site-shared-bundling
+    kind: component
+    summary: "A node's edges drawn as trunks, buses and joins instead of a staircase, rewritten from ELK's own routes, and the last run into a node lengthened so an arrowhead fits"
+    source: src/beadloom/site_scaffold/.vitepress/theme/shared/bundling/
+    tags: [fsd-shared]
+    docs:
+      - docs/services/vitepress-site/shared-bundling.md
+edges:
+  - src: site-shared-bundling
+    dst: site-shared
+    kind: part_of

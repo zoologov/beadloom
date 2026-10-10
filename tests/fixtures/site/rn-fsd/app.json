@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "Moss Trail",
+    "slug": "moss-trail",
+    "scheme": "mosstrail",
+    "platforms": ["ios", "android", "web"],
+    "plugins": ["expo-router"]
+  }
+}

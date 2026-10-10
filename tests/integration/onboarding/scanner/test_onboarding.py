@@ -28,6 +28,8 @@ from beadloom.onboarding.scanner import non_interactive_init
 if TYPE_CHECKING:
     from pathlib import Path
 
+    import pytest
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1280,6 +1282,20 @@ class TestDetectProjectName:
         from beadloom.onboarding.scanner import _detect_project_name
 
         assert _detect_project_name(tmp_path) == tmp_path.name
+
+    def test_a_relative_project_path_is_named_after_the_folder_it_names(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # BDL-080 S3e: `init --project .` named the root service '' (`Path('.').name`),
+        # and on a project whose manifest names nothing every domain then failed
+        # `domain-needs-parent`.
+        import pathlib
+
+        from beadloom.onboarding.scanner import _detect_project_name
+
+        monkeypatch.chdir(tmp_path)
+
+        assert _detect_project_name(pathlib.Path()) == tmp_path.name
 
     def test_priority_pyproject_over_package_json(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "from-pyproject"\n')

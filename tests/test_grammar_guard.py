@@ -24,10 +24,14 @@ from beadloom.context_oracle.code_indexer import get_lang_config
 
 # Optional-extra language extensions whose tests are skip-gated. Python's grammar
 # is a core dependency (always present) and is excluded — these are exactly the
-# grammars shipped by the ``languages`` extra in pyproject.toml.
+# grammars shipped by the ``languages`` extra in pyproject.toml. ``.mjs`` and ``.cjs`` load
+# through their own loader entries (BDL-080 S3a, ``beadloom-cwzc``), so each is guarded as
+# its own row: a loader entry the guard does not list is how a grammar goes unguarded.
 _REQUIRED_EXTENSIONS: tuple[str, ...] = (
     ".ts",
     ".tsx",
+    ".mjs",
+    ".cjs",
     ".go",
     ".rs",
     ".kt",
@@ -87,5 +91,3 @@ def test_grammar_guard_covers_every_optional_grammar() -> None:
         f"loaders={sorted(distinct_grammar_extensions)}, "
         f"guarded={sorted(_REQUIRED_EXTENSIONS)}"
     )
-
-

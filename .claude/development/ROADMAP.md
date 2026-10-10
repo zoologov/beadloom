@@ -2,7 +2,7 @@
 
 > **Current version: 8.0.0** (PyPI, published 2026-10-08, verified on the wheel downloaded from PyPI: 11 of 11 checks).
 >
-> Rewritten 2026-10-05 against the tracker, brought up to date 2026-10-08. This file answers one question: what to do next,
+> Rewritten 2026-10-05 against the tracker, brought up to date 2026-10-10. This file answers one question: what to do next,
 > and why that and not something else. It holds open work only. What shipped is in the GitHub
 > releases and in `CHANGELOG.md`; the previous revision of this file, with its records of why,
 > is `archive/ROADMAP-until-2026-10-05.md`. Open defects are in `BDL-UX-Issues.md`.
@@ -45,12 +45,16 @@ item below is ranked by what it does for those three. Project names stay out of 
 ### BDL-080 — the portal is a service, and the viewer serves a Feature-Sliced frontend
 
 Work item `.claude/development/docs/features/BDL-080/`, branch `features/BDL-080`. Folds
-`beadloom-be6e` and `beadloom-pre3`. Four slices, one PR each: S1 the site as a service and every
-layer rule drawn; S2 the viewer cut by cohesion and the cohesion rule in the roles; S3 the
-resolver's gaps for Vue and React Native (tsconfig paths, aliases, platform suffixes, `.mjs`,
-the Expo module bridge), the `init` FSD preset with Steiger's rules, two fixtures shaped like the
-owner's projects; S4 every population named (lint reach, debt inside, legend from the canvas,
-the Source link). Then a MINOR release.
+`beadloom-be6e` and `beadloom-pre3`. Four slices: S1 the site as a service and every layer rule
+drawn — **merged** (PR #96, 2026-10-09); S2 the viewer cut by cohesion and the cohesion rule in
+the roles — **done on the branch**; S3 the resolver's gaps for Vue and React Native (tsconfig
+paths, aliases, platform suffixes, `.mjs`, the Expo module bridge, Expo Router), the `init` FSD
+preset with Steiger's rules, two fixtures shaped like the owner's projects — **done on the
+branch**; S4 every population named (lint reach, debt inside, legend from the canvas, the Source
+link) plus the portal's brand (the square icon, `site.logo`, the footer) — **review and docs
+left** (2026-10-10). The owner ruled **one PR for S2 + S3 + S4** after S4's docs, then a
+**MAJOR** release (a `kind: site` node is now judged by the service rules). Filed along the way,
+all under Debt to zero: BDL-UX #309–#314.
 
 ---
 
@@ -69,6 +73,26 @@ Beadloom for more (item 4). Each adoption is a work item of its own: `init`, the
 the owner, `lint --strict` over the FSD rules, the portal published, the findings filed as
 BDL-UX issues. What those two find is what ranks the rest of this list.
 
+### 1c. `beadloom-nbpb` — the setup wizard, a main-loop skill (P1, not started; between the two adoptions — owner, 2026-10-10)
+
+A skill, not a subagent: it needs the person's decisions, like `/task-init`. It walks a person
+through adopting Beadloom — detect the stack, `init`, read the graph together, declare the site
+and the forge, hooks, CI, branch protection, the roles in `flow.yml` — as a thin protocol over
+`init`, `config-check`, `doctor` and `setup-*`, every step's options enumerated, the report
+naming what it set up and what it did not. It knows nothing by prose: the keys live in
+`config-check`, the sequence lives in its checklist, which closes #218 (`init`'s three
+hand-written step sequences). Place: after the first adoption writes the real checklist, before
+the second checks it. Ships via `setup-agentic-flow` with a Cursor adapter. **Needs `/task-init`.**
+
+### 1b. `beadloom-mnuu` — pages and routes are first-class nodes (P1, not started; right after BDL-080 — owner, 2026-10-09)
+
+The graph is built from code, so a site's or an app's screens — generated Markdown, Expo Router
+`app/` files, a Vue Router config — are islands or absent: on this portal only two pages have
+code, and the dashboard, docs, about and 130 node pages are invisible in the site's box. A node
+kind `page` with a reader per framework and edges to the components a page mounts, drawn in the
+FSD `pages` layer. Serves all three projects. **Needs `/task-init`.** (BDL-080 S4 does the cheap
+half first: a page map on the dashboard and the site service's doc listing its pages.)
+
 ### 1a. `beadloom-ba9w` — Debt to zero (P1, not started; right after BDL-080, before the rules epic — owner, 2026-10-08)
 
 Owner, 2026-10-08, reading the 8.0.0 dashboard (Lint 70 warnings, Debt 42.5 high, Doctor 262
@@ -77,7 +101,28 @@ files bound to no node (`beadloom-k6ou`, each excused — the reason the impact 
 bound tests" and the debt report says "not counted"); 49 features with no acceptance scenario;
 262 documents with no `ref_id`; complexity smells 35 of the 42.5 points (oversized 9, high
 fan-out 10, dormant 14). Four slices, each with its own measure (A tests, B scenarios, C docs,
-D smells); BDL-080 S2 takes `site-graph-viewer`'s oversized smell. **Needs `/task-init`.**
+D smells); BDL-080 S2 takes `site-graph-viewer`'s oversized smell.
+
+Owner, 2026-10-09, three more slices, agreed with two conditions: **E the Beads upgrade** —
+every claim the composed CLAUDE.md measured on bd 1.0.4 (the merge-slot forms, `--suggest-next`'s
+16-of-23 shapes, the `bd list` caps) is re-measured on the new version and confirmed or
+rewritten, in a claim / was / is table; **F the agents' capability check** — Claude Code and
+Cursor against their current docs (agent frontmatter, hooks, skills, MCP), the deltas applied to
+the role templates and `setup-agentic-flow`; **G dependencies** — Python, the portal scaffold
+(VitePress, Cytoscape, elkjs, Playwright) and GitHub Actions, each major verified by the full tree
+and the six adopter stacks. The conditions: the work recurs, so the one-off pass lives here and
+the recurrence goes into the flow (Dependabot or Renovate for dependencies; a "tooling baseline"
+duty in the release role); the epic stays sliced, one PR per slice, never a bag.
+Owner, 2026-10-10, slice **H context rot** (`beadloom-ba9w.8`, BDL-UX #156): the composed CLAUDE.md and
+the role files are split by function — a short imperative core that survives a long session,
+the narrative rationale in referenced companions — every role declares the size and shape of
+its hand-back, and `config-check` names a role without that contract; measured by the composed
+files' length before and after. The owner: «важный момент».
+Owner, 2026-10-09, the template slice (`beadloom-cnty`) covers all six flow documents, not
+ACTIVE alone: header fields with a fixed vocabulary (`Status`, `Approval: approved|delegated by
+the owner on <date>`), no quotations in metadata, the section set and order enforced by the
+Gate — the files are filled by template, without free prose.
+**Needs `/task-init`.**
 
 ### 2. `beadloom-j4gi` — the rules leave the graph folder and are decomposed (P1, not started; the second epic, with `beadloom-tvjp`)
 
@@ -170,11 +215,17 @@ with the coordinator and nothing of what the coordinator tells its subagents. Tw
 re-derived before `/task-init`: scope drift overlaps item 7, and the brief delta is the inspection
 item 8 declares uninspected. Everything here raises detectability and prevents nothing.
 
-### 12. `beadloom-uxqc` — `doctor` audits the produced graph, not only the code (P1, #162)
+### 12. `beadloom-uxqc` + `beadloom-e6s2` — `doctor` audits the produced graph, and the graph reviewer judges it (P1, #162; one epic — owner, 2026-10-10)
 
 Four graph defects shipped past every role and a green Gate, and each was found by a person
 clicking a node. The bead turns those hand audits into checks: an island, an unexplained leaf, a
-claim without evidence.
+claim without evidence. On top of the mechanics, a **graph reviewer role** (`beadloom-e6s2`): read-only,
+run at the close of a work item before its PR and after `init` on a new project, judging the graph
+as a whole — kinds, `part_of`, derived vs authored edges, layers and tags against the code — with
+a verdict, findings and a named population; graph edits are a dev bead's. A separate role, not an
+extension of the code reviewer: the code review's unit is a bead's diff, so the graph is judged
+only where code changed, which is how those four defects slipped past. Ships via
+`setup-agentic-flow` with a Cursor adapter. **Needs `/task-init`.**
 
 ### 13. Follow-ups filed by BDL-074 to BDL-077 (P2 and P3)
 
@@ -188,9 +239,9 @@ claim without evidence.
 - `beadloom-s34t`: `issue-number check` reads only column-0 entries.
 - `beadloom-j1ke`: `impact` reads Python only, though the index holds JS and Vue imports.
 - `beadloom-v4ql`: an index built without the languages extra silently holds no JS or Vue symbols.
-- `beadloom-zd4m`: `.mjs` and `.cjs` are not code extensions of the reindex.
+- `beadloom-zd4m`: `.mjs` and `.cjs` — **done in BDL-080 S3a**.
 - `beadloom-ikj6`: precomputed code-level impact in the viewer (feature).
-- `beadloom-0e3m`: `init --project .` writes a root node with an empty `ref_id`.
+- `beadloom-0e3m`: `init --project .` writes a root node with an empty `ref_id` — **fixed in BDL-080 S3e** (#313 is the same defect, refiled).
 - `beadloom-55x2`: `reindex` with `scan_paths: ['.']` reads `node_modules`.
 - `beadloom-y1ew`: `sync-update --pair` crashes when the pair's code file was deleted.
 - `beadloom-gvdy`: grammar-cache fixtures leak a loader swap into the next test file.

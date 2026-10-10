@@ -354,6 +354,20 @@ class TestTheSwiftInitDoesNotRead:
 
         assert unread_swift(tmp_path, layout).files == ()
 
+    def test_swift_in_a_folder_another_layout_reads_is_not_named(self, tmp_path: Path) -> None:
+        """BDL-080 S3b: an Expo module's ``ios/`` is read by the Expo layout."""
+        layout = _tree(
+            tmp_path,
+            {
+                "modules/pulse/ios/PulseModule.swift": "",
+                "App/AppMain.swift": "",
+            },
+        )
+
+        unread = unread_swift(tmp_path, layout, read=("modules/pulse",))
+
+        assert unread.files == ("App/AppMain.swift",)
+
     def test_a_project_without_swift_has_nothing_to_name(self, tmp_path: Path) -> None:
         layout = _tree(tmp_path, {"src/app.py": "", "web/index.ts": ""})
 

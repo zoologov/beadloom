@@ -71,6 +71,7 @@ from beadloom.application.site.dashboard import (
     render_dashboard_md,
     serialize_dashboard_data,
 )
+from beadloom.application.site.favicon import uses_beadloom_favicon, write_beadloom_favicon
 from beadloom.application.site.landscape_map import (
     build_landscape_data,
     render_landscape_md,
@@ -80,6 +81,7 @@ from beadloom.application.site.landscape_view import (
     render_landscape_view_md,
     serialize_landscape_view,
 )
+from beadloom.application.site.lint_reach import LintReach, lint_reach_of
 from beadloom.application.site.mermaid_guard import MermaidIssue, validate_mermaid
 from beadloom.application.site.metrics_history import (
     MetricsPoint,
@@ -93,6 +95,7 @@ from beadloom.application.site.node_pages import (
     node_page_urls,
     render_all_pages,
 )
+from beadloom.application.site.page_map import page_map_of
 from beadloom.application.site.project_text import render_project_text
 from beadloom.application.site.published_docs import (
     build_published_docs,
@@ -102,6 +105,7 @@ from beadloom.application.site.published_docs import (
 from beadloom.application.site.repository_link import RepositoryLink, repository_of
 from beadloom.application.site.scaffold import ScaffoldReport, write_scaffold
 from beadloom.application.site.site_config import render_site_module, site_config_of
+from beadloom.application.site.site_logo import copy_logo
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
 
 if TYPE_CHECKING:
@@ -109,6 +113,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from beadloom.application.site.markdown_links import PortalLinks
+    from beadloom.application.site.source_ref import SourceRef
 
 logger = logging.getLogger(__name__)
 
@@ -133,12 +138,15 @@ class SiteResult:
     """The outcome of a site generation: every file written, sorted.
 
     ``scaffold`` is what the scaffold writer did with each shipped file,
-    including the ones it kept because they are not beadloom's.
+    including the ones it kept because they are not beadloom's. ``source_ref``
+    is the revision the source links name, ``None`` when they name none
+    (BDL-080 S4c): ``docs site`` warns when it is not a pushed commit.
     """
 
     out_dir: Path
     written: tuple[Path, ...]
     scaffold: ScaffoldReport
+    source_ref: SourceRef | None = None
 
 
 @dataclass(frozen=True)
@@ -195,23 +203,27 @@ def _top_level_diagram(conn: sqlite3.Connection) -> str:
     return render_c4_mermaid(nodes, rels)
 
 
-def _lint_findings(project_root: Path) -> dict[str, list[NodeFinding]] | None:
-    """Each node's lint findings — rule, severity, message — or ``None``.
+def _lint_verdicts(
+    project_root: Path,
+) -> tuple[dict[str, list[NodeFinding]] | None, LintReach | None]:
+    """Each node's lint findings — rule, severity, message — and lint's reach.
 
-    Runs the SAME ``beadloom lint`` gate the dashboard/CI use, then projects the
-    violations to their source node (``from_ref_id``). Until BDL-076 A1 this
-    kept only the set of those nodes, so the view could say THAT a node was
-    found against and not by which rule or why. Returns ``None`` (honest
-    degradation — the view OMITS the findings and the lint-clean flag rather
-    than fake a "clean" verdict) when lint cannot run (e.g. no project graph in
-    a test root).
+    Runs the SAME ``beadloom lint`` gate the dashboard/CI use, once, and
+    projects its violations two ways: to their source node (``from_ref_id``) for
+    each card, and to the project's totals and the findings bound to no node
+    (BDL-080 S4a), which a card's "none" is read against. Until BDL-076 A1 this
+    kept only the set of nodes, so the view could say THAT a node was found
+    against and not by which rule or why. Returns ``(None, None)`` (honest
+    degradation — the view OMITS the findings, the lint-clean flag and the
+    totals rather than fake a "clean" verdict) when lint cannot run (e.g. no
+    project graph in a test root).
     """
     from beadloom.graph.linter import lint
 
     try:
         result = lint(project_root)
     except (OSError, ValueError):
-        return None
+        return None, None
     findings: dict[str, list[NodeFinding]] = {}
     for violation in result.violations:
         if violation.from_ref_id is None:
@@ -223,7 +235,7 @@ def _lint_findings(project_root: Path) -> dict[str, list[NodeFinding]] | None:
                 message=violation.message,
             )
         )
-    return findings
+    return findings, lint_reach_of(result)
 
 
 def _node_debt(conn: sqlite3.Connection, project_root: Path) -> dict[str, NodeDebt]:
@@ -550,6 +562,10 @@ def generate_site(
     text_repository = repository if identity.repo_url else RepositoryLink()
     nodes = load_nodes(conn)
     written: list[Path] = []
+    # Each page by the sidebar section it belongs to, and each About page by its
+    # language: the dashboard's page map (BDL-080 S4a).
+    sections: dict[str, list[Path]] = {}
+    languages: dict[str, Path] = {}
     now_ts = now_ts or _now()
 
     # About home (EN) from README.md, with the architecture overview moved to
@@ -559,6 +575,8 @@ def generate_site(
     overview = _render_index(conn, nodes)
     about_en = _render_about_page(project_root / "README.md", portal, "")
     _write(out_dir / "index.md", about_en if about_en is not None else overview, written)
+    sections["about"] = [out_dir / "index.md"]
+    languages["en"] = out_dir / "index.md"
 
     # Architecture: the PRIMARY page is now the interactive Cytoscape+ELK
     # compound graph (BDL-060 S4 ext) — a renderer-agnostic
@@ -568,16 +586,15 @@ def generate_site(
     # fetch), and `architecture.md` mounts the client-side <ArchitectureMap>. The
     # original Mermaid overview is demoted to a static fallback at
     # `architecture-diagram.md` (no dead link; readable Mermaid was the problem).
+    findings, lint_reach = _lint_verdicts(project_root)
     arch_data = build_architecture_view_data(
         conn,
         pages=node_page_urls(conn),
         published_doc_slugs=slugs,
-        verdicts=NodeVerdicts(
-            findings=_lint_findings(project_root),
-            debt=_node_debt(conn, project_root),
-        ),
+        verdicts=NodeVerdicts(findings=findings, debt=_node_debt(conn, project_root)),
         generated_at=now_ts,
         repository=repository,
+        lint=lint_reach,
     )
     _write(
         out_dir / "public" / "architecture.data.json",
@@ -586,14 +603,18 @@ def generate_site(
     )
     _write(out_dir / "architecture.md", render_architecture_view_md(arch_data), written)
     _write(out_dir / "architecture-diagram.md", overview, written)
+    sections["architecture"] = [out_dir / "architecture.md", out_dir / "architecture-diagram.md"]
 
     # RU About (locale root) from README.ru.md — skipped if absent (no failure).
     about_ru = _render_about_page(project_root / "README.ru.md", portal, "ru")
     if about_ru is not None:
         _write(out_dir / "ru" / "index.md", about_ru, written)
+        sections["about"].append(out_dir / "ru" / "index.md")
+        languages["ru"] = out_dir / "ru" / "index.md"
 
     for page in render_all_pages(conn, portal):
         _write(out_dir / page.rel_path, page.body, written)
+        sections.setdefault("nodes", []).append(out_dir / page.rel_path)
 
     # Showcase A — the metrics dashboard (machine data + human page). Numbers
     # come from the same code paths as the gates (honest by construction).
@@ -604,16 +625,8 @@ def generate_site(
     dashboard_data = build_dashboard_data(
         conn, project_root=project_root, federated=federated
     )
-    # NOTE: the data file goes under `public/` so VitePress copies it verbatim
-    # into the built `dist/` root (it does NOT copy arbitrary srcDir files), so
-    # the widgets' runtime `withBase("/dashboard.data.json")` fetch resolves in
-    # the static build — not just under the dev server (BDL-043).
-    _write(
-        out_dir / "public" / "dashboard.data.json",
-        serialize_dashboard_data(dashboard_data),
-        written,
-    )
     _write(out_dir / "dashboard.md", render_dashboard_md(dashboard_data), written)
+    sections["dashboard"] = [out_dir / "dashboard.md"]
 
     # Showcase B — the 🌟 cross-service landscape map. The PRIMARY view is now
     # interactive (Cytoscape + ELK, BDL-060 S4 G2): a renderer-agnostic
@@ -641,6 +654,7 @@ def generate_site(
         render_landscape_md(landscape_data, pages=landscape_pages),
         written,
     )
+    sections["landscape"] = [out_dir / "landscape.md", out_dir / "landscape-diagram.md"]
 
     # Showcase C — the published validated docs. Copy the REAL docs/ tree into
     # site/docs/ preserving structure (source never mutated) and inject a
@@ -648,6 +662,7 @@ def generate_site(
     # sync-check). Badges land only in the copy under out_dir.
     published = publish_docs(conn, out_dir, project_root=project_root, portal=portal)
     written.extend(published)
+    sections["docs"] = list(published)
     # Replace the flat docs landing publish_docs emits with a grouped overview
     # (Domains / Services / Guides …). The path is already recorded by
     # publish_docs, so overwrite its body in place — exactly one docs/index.md.
@@ -657,12 +672,35 @@ def generate_site(
         _guard_diagrams(docs_index, overview_md)
         docs_index.write_text(overview_md, encoding="utf-8")
 
+    # The dashboard's data file is written once every page is, so its page map
+    # names them all. NOTE: it goes under `public/` so VitePress copies it
+    # verbatim into the built `dist/` root (it does NOT copy arbitrary srcDir
+    # files), so the widgets' runtime `withBase("/dashboard.data.json")` fetch
+    # resolves in the static build — not just under the dev server (BDL-043).
+    dashboard_data["pages"] = page_map_of(out_dir, sections, languages=languages)
+    _write(
+        out_dir / "public" / "dashboard.data.json",
+        serialize_dashboard_data(dashboard_data),
+        written,
+    )
+
     _write(
         out_dir / ".vitepress" / "config.generated.mjs",
         render_nav_config(conn, project_root),
         written,
     )
-    _write(out_dir / ".vitepress" / "site.generated.mjs", render_site_module(identity), written)
+    _write(
+        out_dir / ".vitepress" / "site.generated.mjs",
+        render_site_module(identity, project_root),
+        written,
+    )
+    # The project's own logo for the nav (BDL-080 S4d), copied as it is; it is
+    # the favicon too, unless the portal shows Beadloom's (S4e).
+    logo = copy_logo(project_root, identity.logo, out_dir)
+    if logo is not None:
+        written.append(logo)
+    if uses_beadloom_favicon(project_root, identity.logo):
+        written.extend(write_beadloom_favicon(out_dir))
 
     # The scaffold last but one, the project's overrides last of all: a file
     # under .beadloom/site/ replaces whatever this run wrote at its path.
@@ -671,5 +709,8 @@ def generate_site(
         written.append(out_dir / rel)
 
     return SiteResult(
-        out_dir=out_dir, written=tuple(sorted(set(written))), scaffold=scaffold
+        out_dir=out_dir,
+        written=tuple(sorted(set(written))),
+        scaffold=scaffold,
+        source_ref=repository.source,
     )

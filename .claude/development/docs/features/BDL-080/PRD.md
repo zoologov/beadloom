@@ -91,7 +91,7 @@ hand-written rule; every number and colour on a card or legend names its populat
    and the fixture's portal is green under the browser suite.
 5. **Every population is named.** The Source link resolves on a build from an unpushed commit
    (branch or default branch, with a note on the card); `Rule findings` names lint's reach
-   (`none — this project: 0 errors, 70 warnings on 28 nodes`) and node-less findings have a home
+   (`none — this project: 0 errors, 69 warnings — 33 on 27 nodes, 36 on none`; the owner's wording of 2026-10-10) and node-less findings have a home
    on the project box's card and the dashboard; a box's card shows debt own and inside, by
    reason; the legend names every stroke colour and dash on the canvas at every level, and an
    aggregated line of one kind keeps that kind's dash. *Done when* a case holds "every colour

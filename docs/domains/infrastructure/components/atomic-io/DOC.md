@@ -57,6 +57,18 @@ not over-rely on it.
   `dump_kwargs` (e.g. `sort_keys=False`, `default_flow_style=False`,
   `allow_unicode=True`) are passed through verbatim so the emitted bytes are
   **identical** to the prior direct-dump call-site (behavior-preserving).
+- `write_text_atomic(path, text)` (BDL-080 S3c) — write `text` to `path` by the same commit
+  steps: a temp file in the same directory, `flush` + `fsync`, one `Path.replace`, the temp file
+  removed on any error. It exists for a file whose comments are part of what is written:
+  `init`'s FSD `rules.yml` carries the owner's reason beside each rule, and `yaml.dump` writes
+  no comment. The steps repeat `write_yaml_atomic`'s rather than sharing a helper on purpose:
+  that body's calls are the shape `beadloom impact` seeds on
+  (`tests/test_the_derivations_hold_as_shapes.py`).
+
+**Permissions.** Both writers create the temp file with `tempfile.mkstemp`, so a file they
+replace ends with mode `0600`, whatever mode it had (measured by S3f: a `0644` file read back as
+`0o100600`). `steiger_script` restores `package.json`'s mode itself after the write; whether the
+writers should keep a replaced file's mode is a question open to the owner.
 
 ## Collaborators
 
@@ -64,7 +76,10 @@ not over-rely on it.
 - `services/commands/index_ops.py` — the `link` add/remove patcher.
 - `onboarding/scanner/bootstrap.py` — writes `services.yml` + `config.yml`.
 - `onboarding/scanner/doc_classify.py` — writes `imported.yml`.
-- `onboarding/scanner/rules_gen.py` — writes `rules.yml`.
+- `onboarding/scanner/rules_gen.py` — writes `rules.yml`; the FSD rules through
+  `write_text_atomic`.
+- `onboarding/scanner/steiger_script.py` — writes `package.json` back through
+  `write_text_atomic` (BDL-080 S3f).
 - `onboarding/doc_generator.py` — the `_patch_docs_field` writer.
 
 > Component doc (BDL-060 S1 / G6). Public surface verified against

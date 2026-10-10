@@ -13,7 +13,11 @@ layer rule are described in [the site's page](../vitepress-site.md).
 `<ClientOnly>`. It is a thin page over the graph viewer: it renders `GraphViewer` in architecture
 mode and fills the viewer's `panel` slot with the node card of the selected node, passing the
 slot's `parents` on to the card so a box's card can say what it holds (BDL-078). The page
-composes the two widgets, because a widget does not import another.
+composes the two widgets, because a widget does not import another. Since BDL-080 S4a and S4c
+it reads the data file itself (`useArchitectureData`) and hands the card the top-level `lint`
+and `source_ref` (`:lint`, `:source-ref`, `null` when the file carries neither), so a card's
+findings are said against lint's reach over the project, and a card says when its source links
+do not name the built commit.
 
 A node page mounts it as `<ArchitectureMap focus="<ref>" :depth="1" height="60vh" />`, in the
 place the scoped Mermaid diagram had. The viewer opens with the page's node selected, framed,
@@ -29,6 +33,7 @@ architecture page has. A node of any kind has a page, `other/` included.
 ## Depends on
 
 - `site-graph-viewer`, `site-node-card` (widgets).
+- `site-architecture-data` (entities), for `useArchitectureData`.
 
 ## Tests
 

@@ -310,7 +310,12 @@ self-check. Its budget is 10 minutes on `ubuntu-latest`. A run over the budget p
 and does not fail, and the job's timeout is 30 minutes. `beadloom-paze` measured it on PR #86,
 the largest change this project will send (57 functions, 1 578 mutants): 980 s from the job's
 first step on the first run and 632 s on the third. A typical pull request has not been timed
-against the budget yet.
+against the budget yet. PR #98 (BDL-080, 1 168 mutants) was cancelled at the 30-minute limit
+with 931 judged, so since BDL-080 S4i (`beadloom-af99.17`) a run measures at most
+`MUTANT_BUDGET` (350) mutants: whole functions, the largest first, each one that still fits. The
+select step and the judge name every function left out with its count, in the log and in the
+job's summary, and the floor holds over what was measured. The workflow's header derives 350
+from 3.0 s per mutant of the functions the cap takes, measured on 600 of PR #98's.
 
 **Weekly.** The `mutation-sample` job runs on Monday at 03:17 UTC and by hand. It draws 150
 mutants at random from the whole declared scope, seeded by the ISO week so a week's sample can be

@@ -49,7 +49,7 @@ export function polylineOf(sections) {
 /**
  * The route `points` with its last bend, and the corner before it, moved `by`
  * back along its last run: the change the viewer may make to give an arrowhead
- * room (`lib/headRuns.js`).
+ * room (`shared/bundling/headRuns.js`).
  */
 export function lastBendMovedBack(points, by) {
   const n = points.length;

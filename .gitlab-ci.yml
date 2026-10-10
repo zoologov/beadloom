@@ -65,7 +65,8 @@ tests:
 # --------------------------------------------------------------------------- #
 # site-build — regenerate + build the VitePress site on every MR (mirror of
 # ci.yml's `site-build` job). The BUILD half (no Pages deploy) — catches
-# VitePress/mermaid/interpolation breaks BEFORE they land on the trunk.
+# VitePress/mermaid/interpolation breaks BEFORE they land on the trunk. It
+# lints the theme's slices with Steiger first (`npm run lint:fsd`), as ci.yml does.
 # --------------------------------------------------------------------------- #
 site-build:
   stage: verify
@@ -81,7 +82,7 @@ site-build:
     - uv sync --extra dev --extra languages
     - uv run beadloom reindex
     - uv run beadloom docs site --out site
-    - cd site && npm ci && npm run docs:build
+    - cd site && npm ci && npm run lint:fsd && npm run docs:build
 
 # --------------------------------------------------------------------------- #
 # ai-techwriter — runs ONLY after gate + tests + site-build are green

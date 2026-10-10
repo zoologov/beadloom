@@ -33,7 +33,7 @@ project declares the forge that serves it (``site.forges``, BDL-076
 from __future__ import annotations
 
 import string
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Literal
 from urllib.parse import quote, urlsplit
 
@@ -311,6 +311,40 @@ def forge_for(web_url: str, declared: Mapping[str, Forge] | None = None) -> Forg
         return KNOWN_FORGES[_AZURE]
     kind = _PUBLIC_HOSTS.get(host)
     return None if kind is None else KNOWN_FORGES[kind]
+
+
+#: How a known forge names a branch where its routes name a commit (BDL-080 S4c,
+#: ``beadloom-e1xo``). GitHub, GitLab and Bitbucket take either at the same place;
+#: Gitea names the kind of revision in the path (``src/commit/`` against
+#: ``src/branch/``: ``raw/commit/main`` was measured a 404 on gitea.com), and Azure
+#: DevOps in the query (``GC`` against ``GB``, ``versionType``).
+_BRANCH_SPELLINGS: Mapping[str, tuple[tuple[str, str], ...]] = {
+    _GITEA: (("/commit/{ref}", "/branch/{ref}"),),
+    _AZURE: (
+        ("version=GC{ref}", "version=GB{ref}"),
+        ("versionType=commit", "versionType=branch"),
+    ),
+}
+
+
+def on_branch(forge: Forge) -> Forge:
+    """*forge* with every route naming its revision as a branch rather than a commit.
+
+    A forge a project describes by a template is returned as it is: its ``{ref}``
+    is given the branch's name, and the template says where that goes.
+    """
+    spellings = _BRANCH_SPELLINGS.get(forge.kind, ())
+    if not spellings:
+        return forge
+
+    def respelled(template: str) -> str:
+        for commit, branch in spellings:
+            template = template.replace(commit, branch)
+        return template
+
+    return replace(
+        forge, tree=respelled(forge.tree), blob=respelled(forge.blob), raw=respelled(forge.raw)
+    )
 
 
 def _azure_items(url: str) -> str:

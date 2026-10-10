@@ -2,7 +2,7 @@
 
 > **Status:** Done
 > **Created:** 2026-10-05
-> **Approval:** delegated by the owner on 2026-10-05 ("Утверждаю, дальше веди сам") after the PRD and its fourteen rulings.
+> **Approval:** delegated by the owner on 2026-10-05.
 
 ---
 

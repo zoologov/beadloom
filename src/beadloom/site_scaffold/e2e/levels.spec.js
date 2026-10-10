@@ -36,6 +36,7 @@ import {
 import { degreesOf } from "./support/map.js";
 import { boxOnScreen, rectsOverlap, segmentInRect, segmentsOf } from "./support/overview.js";
 import { drag } from "./support/pointer.js";
+import { layerScopesOf } from "./support/layers.js";
 import { requireShape } from "./support/shape.js";
 import { architectureData, openArchitecture, openEveryBox, viewer, withAncestors } from "./support/viewer.js";
 
@@ -48,10 +49,15 @@ const ON_BORDER = 0.5;
 
 const sorted = (ids) => [...ids].sort();
 
-/** The top-level box holding the most nodes, the one a reader is likeliest to open; the case is skipped without one. */
+/**
+ * The top-level box holding the most nodes, the one a reader is likeliest to open; the case is skipped without one.
+ * A box holding a scoped rule's layer boxes is not one: it holds layer boxes rather than nodes and opens only where
+ * they are readable, also when tapped, which `layer-boxes.spec.js` holds (`layerScopesOf`).
+ */
 function largestTopBox(data, tree) {
   const inside = (box) => data.nodes.filter((n) => withAncestors([n.id], tree.parents).has(box)).length;
-  const box = [...tree.topBoxes].sort((a, b) => inside(b) - inside(a) || (a < b ? -1 : 1))[0];
+  const scopes = layerScopesOf(data);
+  const box = [...tree.topBoxes].filter((id) => !scopes.has(id)).sort((a, b) => inside(b) - inside(a) || (a < b ? -1 : 1))[0];
   requireShape(Boolean(box), "no box at the top of the containment tree");
   return box;
 }

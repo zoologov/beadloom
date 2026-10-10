@@ -316,6 +316,12 @@ jobs:
   # site-build — regenerate + build the VitePress site on every PR (G3, closes
   # beadloom-wozp). The BUILD half of deploy-site (NO Pages deploy) — catches
   # VitePress/mermaid/interpolation breaks BEFORE they land on main.
+  #
+  # It also runs Steiger, Feature-Sliced Design's own linter, over the portal's
+  # theme (`npm run lint:fsd`, BDL-080 RFC D3): the theme's style linter, run in
+  # the one job that installs the scaffold's Node dependencies. The gate judges
+  # the graph, not the files, so its "Not run by this gate" block names this
+  # step, read from here.
   # ---------------------------------------------------------------------- #
   site-build:
     runs-on: ubuntu-latest
@@ -344,6 +350,10 @@ jobs:
 
       - name: Install site dependencies
         run: npm ci
+        working-directory: site
+
+      - name: Lint the theme's slices (Steiger)
+        run: npm run lint:fsd
         working-directory: site
 
       - name: Build the VitePress site

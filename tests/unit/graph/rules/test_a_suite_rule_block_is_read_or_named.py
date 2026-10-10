@@ -159,7 +159,7 @@ class TestAMalformedTestBindingIsRefusedByName:
             ValueError,
             match=exactly(
                 "Rule 'suite' test_binding.for: node matcher must have at least one of "
-                "'ref_id', 'kind', or 'tag'"
+                "'ref_id', 'kind', 'tag', or 'tag_prefix'"
             ),
         ):
             load_rules(path)

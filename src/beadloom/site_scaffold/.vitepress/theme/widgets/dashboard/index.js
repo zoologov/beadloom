@@ -8,3 +8,5 @@ export { default as CategoryChart } from "./ui/CategoryChart.vue";
 export { default as TrendCharts } from "./ui/TrendCharts.vue";
 export { default as Recommendations } from "./ui/Recommendations.vue";
 export { default as AiTechwriterActivity } from "./ui/AiTechwriterActivity.vue";
+export { default as RuleFindings } from "./ui/RuleFindings.vue";
+export { default as PageMap } from "./ui/PageMap.vue";

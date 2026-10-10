@@ -46,7 +46,9 @@ writes the portal's scaffold (see [The portal for your project](#the-portal-for-
 | `landscape-diagram.md` | **B — 🌟 landscape map** | The same contract graph as a Mermaid diagram with pan, zoom and full screen. |
 | `docs/**` + `docs/index.md` | **C — published validated docs** | The real `docs/` tree, each document as [project text](#project-text-on-the-portal), with per-doc freshness/reference badges. `docs/index.md` is a descriptive Documentation **Overview** (intro + per-section descriptions), not a flat link wall. |
 | `.vitepress/config.generated.mjs` | — | Nav/sidebar config imported by the shipped `config.mjs`. The top nav is empty; the left sidebar is a single ordered EN tree (see [Information architecture](#information-architecture)). |
-| `.vitepress/site.generated.mjs` | — | The portal's identity from the [`site:` block](#configuration-reference-site): title, description, base, repository link and its icon. |
+| `.vitepress/site.generated.mjs` | — | The portal's identity from the [`site:` block](#configuration-reference-site): title, description, base, repository link and its icon, the nav logo's address and whether it is drawn in the text's colour, the favicons and the footer switch. |
+| `public/logo.svg` or `public/logo.png` | — | The project's own logo, copied byte for byte from `site.logo`, only when the project declares one. |
+| `public/brand/beadloom-favicon.svg`, `.png` + `-dark.png` | — | Beadloom's favicon, written only when the portal shows it: without a logo of the project's own. |
 
 ### Showcase A — interactive ECharts metrics dashboard
 
@@ -63,6 +65,15 @@ single presentation surface:
   shown IFF something is wrong (an empty list = the all-clear state). `status_cards`
   is one threshold-coloured card per metric group (`ok`/`warn`/`error`, the
   severity computed deterministically in Python — the front-end only paints it).
+- **`RuleFindings`** (BDL-080) — the population lint's numbers were counted over: lint's totals
+  with how many of them sit on how many nodes and how many on none, on this repository's portal
+  `This project: 0 errors, 69 warnings — 33 on 27 nodes, 36 on none.`, then every finding
+  bound to no node with its rule, severity, message and `file:line`. A node's own findings are
+  on its card.
+- **`PageMap`** (BDL-080) — the pages the `docs site` run wrote: `beadloom docs site wrote 297
+  pages; the About page in en (index.md), ru (ru/index.md).` on this repository's portal, then
+  each section's pages in the sidebar's order (about, dashboard, architecture, nodes,
+  landscape, docs). A file you place under `.beadloom/site/` is on the portal and not counted.
 - **`HealthGauges`** — gauges for lint, debt, coverage %, and freshness %.
 - **`CategoryChart`** — debt-by-category and lint-by-severity breakdowns.
 - **`TrendCharts`** — line charts over the recorded `trends` series; with fewer
@@ -219,11 +230,14 @@ no bridges, no dots where lines part and no colour gradient along a line any mor
   line from the node to the box's border.
 - **Labels on hover.** A line's kind is shown only while the pointer is on it. Counts are on pills
   (below).
-- **The legend** under the canvas lists the layers, the node statuses (each as a small card with
-  its mark) and the edge kinds actually drawn, each sample in the colour the canvas uses, so it
-  never names something the canvas does not show. Where two or more layer rules are drawn, the
-  layers are grouped per rule under the rule's `title:` (its name where it declares none), each
-  group top to bottom.
+- **The legend** under the canvas lists the layers, the node statuses (each as a small card
+  with its mark) and the line styles drawn at the level on the canvas now, each sample in the
+  colour the canvas uses, so it never names something the canvas does not show. A line of the
+  map that carries one kind of edge keeps that kind's dash. A line that carries several kinds
+  is drawn solid in the colour of the kind it carries most, and while one is drawn the legend
+  adds the entry "several kinds: solid, in the colour of the kind it carries most". Where two
+  or more layer rules are drawn, the layers are grouped per rule under the rule's `title:` (its
+  name where it declares none), each group top to bottom.
 - **Layer boxes.** A layer rule scoped to a box inside the project, such as a Feature-Sliced
   frontend's rule scoped to its service, draws one box per layer inside that box, each holding the
   parts the rule places in that layer, stacked top to bottom. A layer box is no node: it has no
@@ -413,15 +427,19 @@ risk through an unverified contract.
 The panel shows a card for the selected node, one kind per mode.
 
 - **The architecture card:** the node's id and summary; kind, lifecycle, tags; its layer and
-  whether that is its own tag or inherited from its container; its source; its activity; its debt
-  with the reasons; its docs, each with its sync status and a
-  link to the published copy when there is one; its bound tests with their count, placement
-  and the files bound to the node itself; its first 50 public symbols and how many more there
-  are; its edges by kind and direction, where a click selects the other end; its rule
-  findings with their severity; a link to its page; `beadloom ctx <ref>` and
-  `beadloom why <ref>` to copy; for a box, what it holds and how many of its edges go out to and
-  come in from each neighbour. "None" means the data file holds nothing for the field; "not
-  recorded" means the file does not carry the field at all.
+  whether that is its own tag or inherited from its container; its source; its activity; its
+  debt with the reasons; its docs, each with its sync status and a link to the published copy
+  when there is one; its bound tests with their count, placement and the files bound to the
+  node itself; its first 50 public symbols and how many more there are; its edges by kind and
+  direction, where a click selects the other end; its rule findings with their severity, said
+  against lint's reach over the whole project, on this repository's portal
+  `none — this project: 0 errors, 69 warnings — 33 on 27 nodes, 36 on none`, so "none" is not
+  read as "lint never ran"; a link to its page; `beadloom ctx <ref>` and `beadloom why <ref>`
+  to copy; for a box, what it holds and how many of its edges go out to and come in from each
+  neighbour, and its debt said twice, its own and the debt of the nodes inside it by reason.
+  The card of the box that holds the whole project also lists the findings bound to no node,
+  with the file and line each points at. "None" means the data file holds nothing for the field; "not recorded" means
+  the file does not carry the field at all.
 - **Activity** counts changed lines (added plus deleted) over the last 30 days, not commits, so a
   squash-merged history reads the same as any other: `412 lines changed in 30 days, hot`. The
   levels are relative to your project: among the nodes changed in 30 days, the busiest tenth is
@@ -441,6 +459,29 @@ The panel shows a card for the selected node, one kind per mode.
   [`site.forges`](#forges-a-self-hosted-forge). For any other host the card shows the source as
   plain text, because a guessed address would be a dead link. Nothing else from the git remote
   is published.
+
+  A portal built from a commit that no branch of `origin` holds, such as a local build before a
+  push, would link every node to a page that does not exist, since the forge has never seen
+  that commit. Its links name a branch `origin` holds instead: the upstream of the branch the
+  commit is on when that upstream is on `origin`, else `origin`'s branch of the same name, else
+  `origin`'s default branch (`origin/HEAD`). With none of them they keep the commit. Only
+  `origin` counts, because without `site.repo_url` the links name `origin`'s address: a commit
+  or an upstream that only a fork holds would be a 404 there too (BDL-080 S4h). The stand-in
+  branch and `pushed` are judged by `origin`'s branches even when `site.repo_url` names a
+  repository on another forge, a decision of BDL-080 that may be revisited. A path that exists
+  only in the unpublished commit is still missing on the branch. The card says `built from an
+  unpublished commit; links point at main` under the link, and `docs site` warns on stderr,
+  naming the fix when no branch stands in:
+
+  ```text
+  Warning: the portal was built from 39f9247dddfd, which is on no branch of origin, so its source
+  links point at main instead; a path that exists only in that commit is not there. Push the
+  commit and run `beadloom docs site` again for links to it.
+  ```
+
+  Only the refs the clone already holds are read, and the remote is never contacted. A CI
+  checkout of a pushed branch holds the commit it builds under a remote-tracking ref of
+  `origin`, so a portal built there links the commit.
 - **The service card** on the landscape: the service's kind, health, number of contracts and page,
   then every contract it produces or consumes, with its verdict, protocol, routing, the fields or
   the message body each side declares ("undeclared" when a side declared none) and, for a
@@ -575,14 +616,14 @@ under `e2e/`. One beadloom version means one theme: there is no separate npm pac
 step. The run says what it did with the scaffold:
 
 ```text
-Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 copied from .beadloom/site/
+Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 copied from .beadloom/site/
 ```
 
 ### The marker, upgrades and hand edits
 
 Every scaffold file carries one marker line: the beadloom version that wrote it and a SHA-256
-of the rest of the file — a comment in `.js`, `.mjs`, `.vue` and `.css`, a `"//"` key on the
-second line of a `.json` file. The marker is how beadloom tells its own files from yours, so
+of the rest of the file — a comment in `.js`, `.mjs`, `.vue`, `.css` and `.svg`, a `"//"` key on
+the second line of a `.json` file. The marker is how beadloom tells its own files from yours, so
 each run does this:
 
 | The file in the portal | What the run does |
@@ -592,6 +633,7 @@ each run does this:
 | marker intact, the installed beadloom ships another body or version | rewrites it (`updated`) — this is how an upgrade reaches the portal |
 | no marker, or edited after beadloom wrote it | never overwrites it, and names it on stderr with the remedy (`kept`); the exit code stays 0 |
 | marker intact, and the installed beadloom no longer ships it | removes it (`retired`), so a retired browser test does not keep running |
+| a folder that the removed files leave empty | removes it too (`empty folders retired`), so a renamed slice leaves no empty tree; a folder you made, or one still holding anything, stays |
 
 ```text
 Kept 1 file(s) under site that beadloom did not write or that were edited by hand; the shipped version was not written over them:
@@ -614,7 +656,8 @@ yours to keep in step with later beadloom versions.
 
 - the graph and the index (run `beadloom reindex` first);
 - `README.md`, `README.ru.md` and `docs/**`, as [project text](#project-text-on-the-portal);
-- the [`site:` block](#configuration-reference-site) of `.beadloom/config.yml`;
+- the [`site:` block](#configuration-reference-site) of `.beadloom/config.yml`, and the logo
+  file `site.logo` names;
 - the `origin` remote, only for the card's source links when no `site.repo_url` is declared,
   and for the [base warning](#the-base-path-and-github-pages). Nothing else from the remote is
   published.
@@ -700,6 +743,7 @@ site:
   description: Orders, payments and stock
   base: /orders/
   repo_url: https://github.com/acme/orders
+  logo: docs/assets/orders-logo.svg
 ```
 
 | Key | Default | What it sets | Refused when |
@@ -709,6 +753,9 @@ site:
 | `base` | `/` | the path the portal is served under; VitePress prefixes every link and asset with it | it does not start and end with `/`, or it holds a GitHub Actions expression opener (a workflow would evaluate it) |
 | `repo_url` | none: no repository link | the repository link in the nav bar, the repository the card's source links and the project text's file links go to | it is not an `http` or `https` address with a host; it carries a user, a password, a query or a fragment, which the portal would publish; on a host whose forge is known, it stops before a repository (a host or an owner alone, an Azure DevOps project with no `_git/<repository>`) or runs past the repository into one of the forge's pages (`…/tree/main`, `…/pulls` on GitHub) |
 | `forges` | none: only public forge hosts are recognised | the forge serving each host, below | see below |
+| `repo_icon` | read from the host of `repo_url`, below | the icon beside the repository link in the nav bar | it is not one of `github`, `gitlab`, `bitbucket`, `codeberg`, `gitea`, `azuredevops`, `git` |
+| `logo` | none: no logo in the nav bar | the project's logo in the nav bar, beside the title, and the portal's favicon: an SVG or a PNG named by its path relative to the project root, copied into the portal as `public/logo.svg` or `public/logo.png` | it is not a non-empty string; it is an absolute path; its suffix is not `.svg` or `.png`; it resolves outside the project root; no file is there |
+| `powered_by` | `true` | the footer of every page, below | it is not `true` or `false` |
 
 `repo_url` is stored in one spelling: the scheme and the host lower-cased, a trailing `/` and one
 `.git` removed, the port and the case of the path kept. A key the block does not read is refused
@@ -732,6 +779,64 @@ Error: the `site:` block of .beadloom/config.yml cannot be used:
   - site.base: `site.base` is `orders`, and a base path starts and ends with `/`
     -> write `base:` as the path the portal is served under, e.g. `/orders/`
 ```
+
+### The nav bar and the footer
+
+The nav bar shows the project's own logo when `logo` names one, and nothing in its place when it
+does not. An SVG logo drawn in `currentColor` is drawn in the colour of the title beside it, dark
+on the light theme and light on the dark one, at 32 by 32 pixels: as an image it could not take
+the page's colour and would be black on the dark theme. Every other logo is drawn as it is, in
+its own colours and proportions, 32 pixels high as well, so every portal's nav bar holds its
+logo at one height.
+
+The favicon is the project's logo when it declares one of its own, the same file as it is, an
+SVG or a PNG. Without one it is Beadloom's square icon, theme-adaptive: an SVG,
+`public/brand/beadloom-favicon.svg`, whose `prefers-color-scheme` query draws the glyph dark
+(`#3c3c43`) on a light browser and light (`#dfdfd6`) on a dark one, and two 32 by 32 pixel PNGs
+for the browsers that take no SVG favicon, such as Safari. A PNG cannot adapt, so there is one
+per scheme: `public/brand/beadloom-favicon.png` carries the dark glyph, and
+`public/brand/beadloom-favicon-dark.png` the light glyph, linked behind the media query
+`(prefers-color-scheme: dark)`.
+
+A logo that is Beadloom's own icon, byte for byte, is not a logo of the project's own: it takes
+Beadloom's favicon too, as this repository's portal does. The rule compares the file with the
+square icon the installed package ships, byte for byte, so a copy of that icon gets the
+theme-adaptive favicon where the icon as it is would draw a black square on a dark tab. The copy
+`docs site` writes into a portal's `public/brand/` carries the generated marker and is not that
+icon. A logo that differs by one byte is the project's own, and is its favicon as it is.
+
+Without `repo_url` the nav bar has no repository link, and `beadloom config-check` says so on a
+project that declares a `site:` block, without blocking:
+
+```text
+  ! site.repo_url: `site.repo_url` is not declared, so the portal's header has no repository link
+    -> declare `repo_url:` under `site:` to link the repository from the header
+```
+
+The icon beside the repository link is read from the host of `repo_url`, and `repo_icon` names it
+where the host says nothing, as a self-hosted instance's host often does:
+
+| Host of `repo_url` | Icon |
+|--------------------|------|
+| `github.com` | `github` |
+| `gitlab.com`, or a host whose first label is `gitlab` (`gitlab.acme.example`) | `gitlab` |
+| `bitbucket.org` | `bitbucket` |
+| `codeberg.org` | `codeberg` |
+| `gitea.com`, or a host whose first label is `gitea` | `gitea` |
+| a host declared under `forges` as a kind | that kind's icon (`azure` draws `azuredevops`) |
+| `dev.azure.com`, `*.visualstudio.com` | `azuredevops` |
+| any other host | `git` |
+
+A declared `repo_icon` wins over every row; it takes one of `github`, `gitlab`, `bitbucket`,
+`codeberg`, `gitea`, `azuredevops` and `git`. `azuredevops` names a self-hosted Azure DevOps
+Server, whose host says nothing.
+
+Every page ends with a footer about Beadloom rather than about the project. Its first line is
+Beadloom's small icon and "Powered by Beadloom", without a link; its second line is "MIT" and a
+link to Beadloom's repository drawn with the GitHub mark. `powered_by: false` removes the footer
+whole. On a portal with a logo of its own, the footer is the one place Beadloom's icon appears.
+The scaffold ships one brand file, `public/brand/beadloom-icon.svg`: the square icon that is
+Beadloom's only mark, which the footer draws.
 
 ### `forges`: a self-hosted forge
 
@@ -803,6 +908,17 @@ npm run docs:preview          # or `npm run docs:dev` for a live-reload dev serv
 architecture page in Chromium (after `npx playwright install chromium`), and fails on any page
 error. The shipped config pre-bundles `mermaid` and the layout engine's worker for the dev server,
 which a page with a diagram needs under `vitepress dev` (BDL-078).
+
+`npm run lint:fsd` runs Steiger, Feature-Sliced Design's own linter, over `.vitepress/theme`
+(BDL-080). The scaffold pins `steiger` and `@feature-sliced/steiger-plugin` exactly as
+development dependencies and ships `steiger.config.js`: the plugin's `recommended` set with one
+rule off, `fsd/insignificant-slice`, and the reason written beside the switch. The theme is cut
+so that pieces of work touching disjoint slices can run in parallel, not for reuse, so a feature
+that only the graph viewer uses is the intended shape. The pinned Steiger declares a later
+Node.js release than the scaffold's own `engines` floor, and on an earlier one it still ran,
+with an npm `EBADENGINE` warning (measured by BDL-080 S2a). It is
+a style linter: `beadloom lint` judges the graph's slices and their imports, Steiger judges the
+files, and `beadloom ci` names it under "Not run by this gate" when a pipeline runs it.
 
 Everything under the portal directory is output: `beadloom init` ignores `/site/` in
 `.gitignore` (see [Getting Started](../getting-started.md#what-init-writes)), and nothing there

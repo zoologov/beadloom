@@ -10,6 +10,8 @@ responsibility (BDL-059 S3, cohesion-driven):
   (YAML -> typed rules + DB validation).
 - :mod:`.evaluators` — per-rule-type evaluation
   (deny/require/import/forbid/layer/cardinality/coverage).
+- :mod:`.slices` — the two Feature-Sliced Design slice rules (``slice_public_api``,
+  ``slice_shape``).
 - :mod:`.cycles` — colored (WHITE/GREY/BLACK) cycle detection + edge-liveness SQL helpers.
 
 This ``__init__`` owns the :func:`evaluate_all` orchestration (dispatch by rule
@@ -85,6 +87,12 @@ from beadloom.graph.rules.scenario_coverage import (
     SCENARIO_COVERAGE_RULE_TYPE,
     evaluate_scenario_coverage_rules,
 )
+from beadloom.graph.rules.slices import (
+    SLICE_PUBLIC_API_RULE_TYPE,
+    SLICE_SHAPE_RULE_TYPE,
+    evaluate_slice_public_api_rules,
+    evaluate_slice_shape_rules,
+)
 from beadloom.graph.rules.summary_facts import (
     SUMMARY_FACTS_RULE_TYPE,
     evaluate_summary_facts_rules,
@@ -126,6 +134,8 @@ from beadloom.graph.rules.types import (
     Rule,
     ScenarioBindingRule,
     ScenarioCoverageRule,
+    SlicePublicApiRule,
+    SliceShapeRule,
     SummaryFactsRule,
     TestBindingRule,
     TestImportBoundaryRule,
@@ -190,6 +200,17 @@ def _remediation_for(rule_type: str, violation: Violation) -> str | None:
         # on WHICH of the three bindings is missing, and a hint derived from the
         # rule kind alone could only restate the message.
         return None
+    if rule_type == SLICE_PUBLIC_API_RULE_TYPE:
+        loc = violation.file_path or src
+        return (
+            f"import `{dst}` through its index in `{loc}`, and export what the import "
+            f"needs from that index if it does not yet"
+        )
+    if rule_type == SLICE_SHAPE_RULE_TYPE:
+        return (
+            f"move what the finding names into one of `{src}`'s segments, or into a "
+            f"slice of its own when it is a business entity or feature of its own"
+        )
     if rule_type == "module_coverage":
         loc = violation.file_path or src
         return (
@@ -246,6 +267,8 @@ def evaluate_all(
     test_binding_rules: list[TestBindingRule] = []
     test_import_rules: list[TestImportBoundaryRule] = []
     scenario_binding_rules: list[ScenarioBindingRule] = []
+    slice_public_api_rules: list[SlicePublicApiRule] = []
+    slice_shape_rules: list[SliceShapeRule] = []
 
     for rule in rules:
         if isinstance(rule, DenyRule):
@@ -278,6 +301,10 @@ def evaluate_all(
             test_import_rules.append(rule)
         elif isinstance(rule, ScenarioBindingRule):
             scenario_binding_rules.append(rule)
+        elif isinstance(rule, SlicePublicApiRule):
+            slice_public_api_rules.append(rule)
+        elif isinstance(rule, SliceShapeRule):
+            slice_shape_rules.append(rule)
 
     violations = (
         evaluate_deny_rules(conn, deny_rules)
@@ -305,6 +332,10 @@ def evaluate_all(
         + evaluate_scenario_binding_rules(
             conn, scenario_binding_rules, project_root=project_root
         )
+        + evaluate_slice_public_api_rules(
+            conn, slice_public_api_rules, project_root=project_root
+        )
+        + evaluate_slice_shape_rules(conn, slice_shape_rules, project_root=project_root)
         # Last: what the rules above could NOT look at. A rule with an empty
         # candidate set contributes 0 violations and 1 to `N rules evaluated`,
         # which reads exactly like a rule that passed (BDL-UX #172 / .48).
@@ -334,6 +365,8 @@ __all__ = [
     "MATCHING_FORM_HINT",
     "SCENARIO_BINDING_RULE_TYPE",
     "SCENARIO_COVERAGE_RULE_TYPE",
+    "SLICE_PUBLIC_API_RULE_TYPE",
+    "SLICE_SHAPE_RULE_TYPE",
     "SUITE_POPULATION_RULE_TYPE",
     "SUMMARY_FACTS_RULE_TYPE",
     "SUPPORTED_SCHEMA_VERSIONS",
@@ -364,6 +397,8 @@ __all__ = [
     "Rule",
     "ScenarioBindingRule",
     "ScenarioCoverageRule",
+    "SlicePublicApiRule",
+    "SliceShapeRule",
     "SummaryFactsRule",
     "SuppressedCrossing",
     "TestBindingRule",
@@ -384,6 +419,8 @@ __all__ = [
     "evaluate_rule_liveness",
     "evaluate_scenario_binding_rules",
     "evaluate_scenario_coverage_rules",
+    "evaluate_slice_public_api_rules",
+    "evaluate_slice_shape_rules",
     "evaluate_summary_facts_rules",
     "evaluate_test_binding_rules",
     "evaluate_test_import_boundary_rules",
