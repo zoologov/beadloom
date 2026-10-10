@@ -14,7 +14,7 @@ from beadloom.services.cli import main
 
 
 class TestVersion:
-    """Verify the version is 8.0.0, and that the CLI reports the same one.
+    """Verify the version is 9.0.0, and that the CLI reports the same one.
 
     The literal is deliberate and has to be edited every release: it is what
     turns an ACCIDENTAL version change into a red test rather than a silent
@@ -24,12 +24,12 @@ class TestVersion:
     """
 
     def test_version_string(self) -> None:
-        assert __version__ == "8.0.0"
+        assert __version__ == "9.0.0"
 
     def test_cli_version(self) -> None:
         runner = CliRunner()
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "8.0.0" in result.output
+        assert "9.0.0" in result.output
 
 

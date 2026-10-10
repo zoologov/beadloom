@@ -31,7 +31,7 @@ from tests.release.verify_the_release import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-_RELEASE = "8.0.0"
+_RELEASE = "9.0.0"
 
 
 def _report(*outcomes: tuple[str, str]) -> Report:
@@ -44,19 +44,19 @@ def _report(*outcomes: tuple[str, str]) -> Report:
 
 class TestTheArtifactArgument:
     def test_an_exact_pin_names_its_version(self) -> None:
-        assert parse_artifact("beadloom==8.0.0") == Artifact(
-            "beadloom==8.0.0", "8.0.0", is_wheel=False
+        assert parse_artifact("beadloom==9.0.0") == Artifact(
+            "beadloom==9.0.0", "9.0.0", is_wheel=False
         )
 
     def test_a_wheel_names_the_version_in_its_file_name(self, tmp_path: Path) -> None:
-        wheel = tmp_path / "beadloom-8.0.0-py3-none-any.whl"
+        wheel = tmp_path / "beadloom-9.0.0-py3-none-any.whl"
         wheel.write_bytes(b"")
 
         artifact = parse_artifact(str(wheel))
 
-        assert (artifact.claimed_version, artifact.is_wheel) == ("8.0.0", True)
+        assert (artifact.claimed_version, artifact.is_wheel) == ("9.0.0", True)
 
-    @pytest.mark.parametrize("argument", ["beadloom>=7", "beadloom", "other==8.0.0"])
+    @pytest.mark.parametrize("argument", ["beadloom>=7", "beadloom", "other==9.0.0"])
     def test_anything_but_an_exact_pin_or_a_wheel_cannot_run(self, argument: str) -> None:
         with pytest.raises(CannotRunError) as raised:
             parse_artifact(argument)
@@ -65,7 +65,7 @@ class TestTheArtifactArgument:
 
     def test_a_wheel_path_with_no_file_cannot_run(self, tmp_path: Path) -> None:
         with pytest.raises(CannotRunError, match="no wheel"):
-            parse_artifact(str(tmp_path / "beadloom-8.0.0-py3-none-any.whl"))
+            parse_artifact(str(tmp_path / "beadloom-9.0.0-py3-none-any.whl"))
 
 
 class TestTheExitCode:
@@ -120,12 +120,12 @@ class TestAStepThatFailsAfterTheChecksStarted:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        wheel = tmp_path / "beadloom-8.0.0-py3-none-any.whl"
+        wheel = tmp_path / "beadloom-9.0.0-py3-none-any.whl"
         wheel.write_bytes(b"")
         record = tmp_path / "record.json"
 
         def ran_the_versions(room: Room, artifact: Artifact, report: Report) -> None:
-            report.record("version: beadloom --version", "version", passed=True, detail="8.0.0")
+            report.record("version: beadloom --version", "version", passed=True, detail="9.0.0")
 
         def project_cannot_be_committed(room: Room, report: Report) -> None:
             raise CannotRunError("git commit exited 128: fatal: unable to write")
@@ -160,12 +160,12 @@ def _verify(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Report:
     """A run whose environment is taken as prepared and whose version checks hold."""
 
     def ran_the_versions(room: Room, artifact: Artifact, report: Report) -> None:
-        report.record("version: beadloom --version", "version", passed=True, detail="8.0.0")
+        report.record("version: beadloom --version", "version", passed=True, detail="9.0.0")
 
     monkeypatch.setattr(harness, "prepare", lambda *_args: None)
     monkeypatch.setattr(harness, "check_versions", ran_the_versions)
     return harness.verify(
-        Artifact("beadloom==8.0.0", "8.0.0", is_wheel=False),
+        Artifact("beadloom==9.0.0", "9.0.0", is_wheel=False),
         release=_RELEASE,
         python="3.12",
         node_bin=None,
@@ -226,7 +226,7 @@ class _PrintsNoJson(Room):
 
     def run(self, command: list[str], cwd: Path, env: dict[str, str] | None = None) -> Done:
         if command[-1] == "--version":
-            return Done(0, "beadloom, version 8.0.0\n", "")
+            return Done(0, "beadloom, version 9.0.0\n", "")
         if command[0].endswith("python") and "_graph" in command[-1]:
             return Done(0, '{"src/quayside/dock": "quayside-dock"}', "")
         return Done(0, "Warning: the index is older than the graph\n", "")
@@ -238,7 +238,7 @@ class TestAChildThatPrintsNoJson:
     ) -> None:
         report = _report()
 
-        check_versions(_PrintsNoJson(tmp_path, None), Artifact("x", "8.0.0", False), report)
+        check_versions(_PrintsNoJson(tmp_path, None), Artifact("x", "9.0.0", False), report)
 
         probed = [check for check in report.checks if "__version__" in check.name]
         assert [check.status for check in probed] == ["FAIL"]

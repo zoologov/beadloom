@@ -109,8 +109,8 @@ the foreign-subject face of #190). Eight went inert when the rule landed, measur
 |----------|--------------|---------|
 | `Measured on bd 1.0.4` | `bd` | the tracker's release |
 | `Every verdict on CPython 3.13.7` | `cpython` | the interpreter's release |
-| `The current release is 8.0.0` | none | this project's version |
-| `bd 1.0.4 answers and beadloom 8.0.0 asks` | `bd`, then `beadloom` | one each |
+| `The current release is 9.0.0` | none | this project's version |
+| `bd 1.0.4 answers and beadloom 9.0.0 asks` | `bd`, then `beadloom` | one each |
 
 **The vocabulary is derived where a project already declares it** and configured where it
 cannot be: every distribution in `pyproject.toml`, `package.json` or `Cargo.toml`; the

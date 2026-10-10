@@ -7,37 +7,139 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-BDL-080: the portal is a service, every layer rule is drawn, and the viewer serves a
-Feature-Sliced frontend. **The next version is major** (owner, 2026-10-09): one change under
-Breaking can move `lint`'s exit code on a project nobody edited, which the public API guide
-classes MAJOR. Everything else adds; nothing is removed or renamed, the data file stays schema
-2, and `kind: site` stays accepted. Each line names its bead; the pull request is to be opened.
+## [9.0.0] - 2026-10-10
+
+**This release makes the portal a service, draws every layer rule, and serves a Feature-Sliced
+frontend: `init` reads one, the import resolver reads its JavaScript and TypeScript, and the
+viewer is cut into slices itself.** The version is major because a project nobody edited can get
+a different exit code, in five ways listed under *Breaking*: a node declared `kind: site` is
+judged as a service, imports 8.0.0 did not resolve now resolve, role files composed by 8.0.0
+drift, `init` reads a Feature-Sliced tree with a different preset, and configuration 8.0.0
+accepted by ignoring it is now read or refused.
+
+Every line is classified against the public API declared in
+[`docs/guides/public-api.md`](docs/guides/public-api.md). Each exit code below was measured on
+2026-10-10 on Darwin arm64 under CPython 3.12, with 8.0.0 installed from PyPI and 9.0.0 built
+from this release's tree, the two run on identical files. Removed or renamed by this release:
+42 files of the portal scaffold's theme (internal paths, under *Changed*), one generated page
+and one JSON key (both under *Breaking*). No command is added, removed or renamed, and one option
+gains a value (`init --preset fsd`). The MCP tools and their schemas are unchanged, and so are
+the runtime dependencies. `.beadloom/config.yml` only gains keys, and the portal data file stays
+schema 2 and only gains keys. BDL-080 landed in #96 (slice 1) and #98 (slices 2 to 4), and
+BDL-081 in the pull request this release is cut from. Each line names its bead.
 
 ### Breaking
 
-- **A node declared `kind: site` is judged as a `service` (`beadloom-je0i`).** A rule whose
-  matcher names `kind: service` now selects such a node — `service-needs-parent`, a `layers`
-  rule tagging services, a `check` over services — where before no rule could match the kind.
-  On a project that declares a `kind: site` node and such a rule, `beadloom lint --strict` can
-  exit 1 where it exited 0, and the Gate with it; the data file and `ctx --json` show the node's
-  `kind` as `service`. Nothing else is removed or renamed. Measured on this repository, where the
-  node was moved to `kind: service` and tagged `layer-service`: 0 errors before and after, and
-  `architecture-layers` judges 425 of 434 live `depends_on` edges, up from 381.
+- **A node declared `kind: site` is read as a `service` (`beadloom-je0i`).** The graph loader
+  reads `site` as an alias of `service`, so every output that carries a node's kind says
+  `service`: `ctx --json` (`focus.kind`, `graph.nodes[].kind`), the MCP `get_context` tool,
+  `export` (`nodes[].kind`), the portal data file (`nodes[].kind`) and
+  `docs polish --format json`. `status --json` no longer carries the key `by_kind.site`, and the
+  node is counted under `by_kind.service`: on this repository at `v8.0.0`, `by_kind` holds
+  `service: 4, site: 1` under 8.0.0 and `service: 5` under 9.0.0. `landscape.data.json`, which
+  carries no promise, moves the node from the group `other` to the services group. The node's
+  page moves from `other/<ref>.md` to `services/<ref>.md`: this repository's
+  `other/vitepress-site.md` became `services/vitepress-site.md`. A rule whose matcher names
+  `kind: service` now selects the node. Measured on a project with a `kind: site` node and a
+  `require` rule over `kind: service`: 8.0.0 reports that the rule matches none of the nodes, a
+  warning, and `lint --strict` exits 0; 9.0.0 reports the node as a `require` error and exits 1,
+  and `ci` moves from 0 to 1 with it. *Upgrade:* steps 1, 2, 6 and 7.
+- **Imports 8.0.0 did not resolve now resolve, so `lint --strict` can exit 1 on an unedited
+  JavaScript or TypeScript project (`beadloom-cwzc`).** Three readings are new: the ES module
+  imports of a `.mjs` or `.cjs` file, which 8.0.0 indexed as an import target only; a specifier
+  read through the `compilerOptions.paths` and `baseUrl` of a tsconfig or jsconfig; and React
+  Native's platform files, where `./Button` names `Button.ios.tsx`, `Button.android.tsx`,
+  `Button.native.tsx` or `Button.web.tsx`. Each resolved import derives a `depends_on` edge, and
+  every rule that judges such edges sees it. Measured on a two-module project whose `deny` rule
+  says `ui` must not depend on `store`, one case per reading: with a `.mjs` file in `ui`
+  importing `store`, 8.0.0 derives 2 edges and exits 0, and 9.0.0 derives 3 and exits 1 with
+  `ui-not-store` at `src/ui/a.mjs:1`; with the import read through tsconfig `paths`, 0 → 1; with
+  `../store/Button` where only `Button.ios.tsx` exists, 0 → 1. An alias of the new
+  `imports.aliases` key resolves only once the block is written, so it moves nothing by itself.
+  The counts that move with these readings are under *Changed*. *Upgrade:* steps 1 and 2.
+- **Role files composed by 8.0.0 drift against 9.0.0's role templates, so `config-check` and the
+  Gate exit 1 until `setup-agentic-flow` runs (`beadloom-5wh2`).** The coordinator declares the
+  cohesion duty and the dev, explore and review roles carry it, and the `fsd` overlay is
+  rewritten (under *Changed*). `config-check` compares each composed file with what the
+  installed version composes. Measured on this repository at `v8.0.0`, unedited: `config-check`
+  and `ci` exit 0 under 8.0.0 and 1 under 9.0.0. The Gate's step reads `config-check FAIL: 4
+  drifted artifact(s)` and names `.claude/agents/dev.md`, `explore.md`, `review.md` and
+  `.claude/commands/coordinator.md`, each with "composed body is stale". This is the first
+  release since the public API was declared whose role templates changed. *Upgrade:* step 3.
+- **`init` reads a Feature-Sliced frontend with the new `fsd` preset, where 8.0.0 read it as a
+  monolith (`beadloom-5t8d`, `beadloom-af99.14`).** The same tree gets a different graph: each
+  slice a `component` tagged `fsd-<layer>`, nine rules in `rules.yml`, an `imports.aliases`
+  block when the bundler's configuration declares aliases, and a `lint:fsd` script in
+  `package.json`. When the code fails the rules `init` wrote, `init` says so and exits 1.
+  Measured on the two Feature-Sliced adopter fixtures: on `vue-fsd`, 8.0.0 chooses `monolith`
+  and exits 0, and 9.0.0 chooses `fsd` and exits 1 with `fsd-layers: features-apply-coupon;
+  fsd-public-api: src/widgets/product-grid/ui/ProductGrid.vue:3`; on `rn-fsd` both exit 0. On
+  each, 9.0.0 writes 21 document skeletons fewer than 8.0.0 (`docs/domains/*/README.md` and
+  `docs/services/shared*.md`), because a layer or a slice is no longer written as a domain or a
+  service. The old reading was wrong: it judged a Feature-Sliced tree by no Feature-Sliced
+  rule. A tree whose folders share the layer names but hold no frontend is still read as 8.0.0
+  read it (under *Fixed*). *Upgrade:* step 4.
+- **Configuration 8.0.0 accepted by ignoring it is now read or refused (`beadloom-cwzc`,
+  `beadloom-kgh6`, `beadloom-af99.2`, `beadloom-5wh2`).** Four places, each measured on the same
+  files under both versions:
+  - **An `imports:` block.** 8.0.0 read none. 9.0.0 reads `imports.aliases` and refuses an
+    unknown key, a pattern, a path as an alias and an alias that names nothing: `config-check`
+    and the Gate move from 0 to 1 on `imports: {foo: 1}` ("`foo:` is not a key of `imports:`")
+    and on an alias whose folder does not exist ("`nowhere` names nothing in the project").
+  - **`scope:` on a `layers` rule.** 8.0.0 judged the whole graph. 9.0.0 judges only the edges
+    inside the named node's `part_of` subtree, and a scope that names no node makes the rule
+    inert with a warning. With a crossing outside the scope, or a scope naming no node,
+    `lint --strict` moves from 1 to 0.
+  - **`title:` on a `layers` rule.** An empty or non-string title is refused at load:
+    `lint --strict` moves from 0 to 2 with "'title' must be a non-empty string".
+  - **`tag_prefix:` beside `kind` in a node matcher.** 8.0.0 ignored the prefix and matched by
+    the kind alone. 9.0.0 matches both, so a prefix no tag begins with makes the rule inert. On
+    `{kind: component, tag_prefix: zzz}` under a `require` rule, `lint --strict` moves from 1,
+    with two `require` errors, to 0, with a warning that the rule matches nothing.
+
+  8.0.0 listed the same class, an unread `site:` or `activity:` block refused, under *Breaking*.
+  *Upgrade:* steps 2 and 5.
 
 ### Upgrading — what to check
 
-1. **Reindex**, so the rules index carries a layer rule's `scope` and `title`. An index written
-   before them gives the portal the wider verdict and the rule's name until it is rebuilt.
-2. **If the graph declares a `kind: site` node**, run `beadloom lint --strict` once on the new
-   version and read what the service rules now report on it (see Breaking); give the node the
-   tags a service of the project carries, or move it to `kind: service` outright.
+1. **Reindex.** `.mjs` and `.cjs` files are now read, so the parser fingerprint changes and the
+   first reindex is a full one. It also stores a layer rule's `scope` and `title` in the rules
+   index: until the index is rebuilt, the portal shows the rule's wider verdict and its name.
+   The reindex prints an `[info]` line for each node read through the `kind: site` alias.
+2. **Run `beadloom lint --strict` once on the new version and read what it reports**, before the
+   Gate runs it for you. On a node declared `kind: site`, read what the service rules now report
+   on it, and give it the tags a service of the project carries or move it to `kind: service`
+   outright. On JavaScript and TypeScript code, read the crossings the new import readings find:
+   fix the import, or declare a crossing you keep on the rule that caught it, with an `exempt:`
+   entry carrying a `reason` and an `until` on `forbid_import` and `layers`, or `unless_edge` on
+   `deny`. Read the verdict of each `layers` rule that carries `scope:` or `title:`, and of each
+   matcher that sets `tag_prefix` beside `kind`.
+3. **If the project composes its role files with `beadloom setup-agentic-flow`, run it again**
+   and commit the files it rewrites. Until it runs, `config-check` and the Gate exit 1 on each
+   composed file that drifted.
+4. **If you run `init` on a Feature-Sliced frontend**, expect the `fsd` preset. Read the nine
+   rules it writes and, when it exits 1, the crossings it names: they are the code's, not the
+   scaffold's. `init --preset` chooses another preset by name.
+5. **If `.beadloom/config.yml` holds an `imports:` block**, run `beadloom config-check`. A key
+   the block does not read, or an alias that names nothing, now blocks `config-check` and the
+   Gate.
+6. **If you publish a portal, run `docs site` with 9.0.0 over it.** The run retires the scaffold
+   files 8.0.0 wrote and 9.0.0 no longer ships, the folders they leave empty, and the page of a
+   `kind: site` node under `other/`, and its summary line counts each. Measured on this
+   repository's portal written by 8.0.0: `67 written, 51 updated, 91 unchanged, 42 retired, 9
+   empty folders retired, 1 moved pages retired`. A link of your own to `other/<ref>.md` now
+   needs `services/<ref>.md`.
+7. **If you read a node's kind**, match `service` where you matched `site`: in `ctx --json`,
+   `export`, the MCP `get_context` tool and the portal data file. In `status --json`, read the
+   node under `by_kind.service`, since `by_kind.site` is gone.
 
 ### Added
 
 - **`kind: site` is accepted as an alias of `service` (`beadloom-je0i`).** The graph loader
   reads it as `service`, so the rules, the portal's pages, nav and views, `docs generate`,
   `doctor` and the impact boundary treat a portal as the service it is. `beadloom reindex`
-  prints an `[info]` line for each node read through the alias.
+  prints an `[info]` line for each node read through the alias. What the alias does to an exit
+  code and to every output that carries a kind is under *Breaking*.
 - **Every layer rule in the portal data file (`beadloom-kgh6`, `beadloom-af99.2`).**
   `architecture.data.json` gains a top-level `layer_rules` (each rule's `name`, `title`, `scope`,
   `edge_kind` and `layers`) and, per node, `layer_rule` and `layer_rule_rank`: the rule that
@@ -48,11 +150,12 @@ classes MAJOR. Everything else adds; nothing is removed or renamed, the data fil
   edges with both ends in that node's `part_of` subtree, counts only those in its population
   line, and reads no tag outside it. A scope naming no node is a `validate_rules` warning and
   makes the rule inert. Without `scope:` the portal derives the container the rule stratifies.
-  Where the first rule by name declares a scope, the original layer keys follow it.
+  Where the first rule by name declares a scope, the original layer keys follow it. 8.0.0
+  accepted `scope:` and ignored it; what reading it does to an exit code is under *Breaking*.
 - **`title:` on a `layers` rule (`beadloom-af99.2`)**, the name the portal shows the rule by in
   the legend, the Layer filter, the card and the impact summary. The rule's `name` stays its
   identifier in lint, in exemptions and in the portal's URL. An empty or non-string title is
-  refused at load.
+  refused at load, where 8.0.0 accepted any title and ignored it (under *Breaking*).
 - **The viewer draws every layer rule (`beadloom-i3zs`, `beadloom-af99.2`, `beadloom-af99.3`).**
   The legend has one group per rule, headed by its title; the Layer filter offers each rule's
   layers by title, while its value and the URL carry `<rule>: <layer>`, and a link naming a bare
@@ -68,7 +171,8 @@ classes MAJOR. Everything else adds; nothing is removed or renamed, the data fil
   `deny`, `forbid`, `scenario_coverage`), so one rule covers a family of tags such as `fsd-*`.
   It combines with `kind`, `ref_id`, `tag` and `exclude`; an empty or non-string prefix is
   refused at load, a prefix no tag begins with makes the rule inert and says so, and the
-  `rules` index stores it.
+  `rules` index stores it. Beside `kind`, 8.0.0 accepted the prefix and ignored it (under
+  *Breaking*).
 - **The Gate names Steiger among what it did not run (`beadloom-5wh2`).** A pipeline step that
   runs `steiger`, or the `lint:fsd` script, is listed under `Not run by this gate:` as the FSD
   linter with its command and job. `npm`, `pnpm` and `yarn` are read as runners in front of a
@@ -122,7 +226,6 @@ classes MAJOR. Everything else adds; nothing is removed or renamed, the data fil
   without changing its exit code. Measured on this repository, built from the unpushed
   `8dbe844c`: the links to the commit answered 404; of the 139 links to `main`, 127 answered
   200 and 12 answered 404, each of the 12 a folder that `origin/main` does not hold yet.
-
 - **The portal carries a logo, a footer and its forge's icon (`beadloom-af99.7`,
   `beadloom-af99.9`).** Three keys
   join the `site:` block of `.beadloom/config.yml`, each refused by name by `docs site`,
@@ -165,7 +268,8 @@ classes MAJOR. Everything else adds; nothing is removed or renamed, the data fil
   `tsconfig.app.json` counts; JSON with comments; relative `extends` followed), then through
   `imports.aliases:`, then under `baseUrl`. Only when none of them names a file does the old
   reading of `@/` and `~/` as `src/` answer. An Expo app whose `@/*` names the project root got
-  no edge for those imports before.
+  no edge for those imports before. What the new edges do to `lint --strict` is under
+  *Breaking*.
 - **`imports.aliases` in `.beadloom/config.yml` (`beadloom-cwzc`).** A mapping of an import alias
   to a folder or file relative to the project root, for the aliases Babel `module-resolver` and
   Vite `resolve.alias` apply and no tsconfig carries; the longest alias a specifier is, or starts
@@ -173,18 +277,19 @@ classes MAJOR. Everything else adds; nothing is removed or renamed, the data fil
   `babel.config.*`, `.babelrc` and `vite.config.*`, which it does not run, and prints the
   aliases it wrote and those it would not (a regular expression, a value with no string
   literal) for you to confirm. An unknown key, a pattern, a path as an alias and a folder that
-  names nothing are refused by name by `config-check` and the Gate (rule `import-aliases`).
+  names nothing are refused by name by `config-check` and the Gate (rule `import-aliases`); 8.0.0
+  ignored an `imports:` block, so the refusal is under *Breaking*.
   Editing the block, or a tsconfig, re-resolves on the next incremental reindex. Measured on a
   synthetic Vue 3 FSD tree: Vite aliases resolved 0 of 4 before and 4 of 4 after; on an
   Expo-like tree, Babel aliases 2 of 9 before and 10 of 10 after.
 - **React Native's platform files resolve (`beadloom-cwzc`).** `./Button` names
   `Button.ios.tsx`, `Button.android.tsx`, `Button.native.tsx` or `Button.web.tsx`, tried in that
   order before the plain extension, for relative and aliased specifiers and for a folder's
-  `index`. A module that exists only in those forms was unresolved before.
+  `index`. A module that exists only in those forms was unresolved before (under *Breaking*).
 - **`.mjs` and `.cjs` files are read (`beadloom-cwzc`, closing `beadloom-zd4m`).** Both are
   parsed as JavaScript: their symbols are indexed and their ES module imports become edges, where
   before they were import targets only. The parser fingerprint changes, so the first reindex
-  after the upgrade is a full one.
+  after the upgrade is a full one. What the new edges do to `lint --strict` is under *Breaking*.
 - **The `fsd` preset: `init` reads a Feature-Sliced frontend slice by slice (`beadloom-5t8d`).**
   Detected before every other preset when three of `app`, `pages`, `widgets`, `features`,
   `entities`, `shared` are folders under `src/` or at the root of a frontend, or chosen with
@@ -195,7 +300,8 @@ classes MAJOR. Everything else adds; nothing is removed or renamed, the data fil
   (widgets 80 symbols, the others 60) at `warn`; a `lint:fsd` script running Steiger into
   `package.json` unless one runs it already; and no import edge into the graph YAML, since the
   reindex derives them from the code. When the rules it wrote find the code's own crossings,
-  `init` says the code fails them, not the scaffold, and exits 1.
+  `init` says the code fails them, not the scaffold, and exits 1. On a tree 8.0.0 read as a
+  monolith, the detection is under *Breaking*.
 - **Two rule types, `slice_public_api` and `slice_shape` (`beadloom-5t8d`).** `slice_public_api:
   {tags: [...]}` reports an import into a slice (a node carrying one of the tags whose source is
   a folder) from outside it that lands on a file other than the slice's `index`, and an import
@@ -224,6 +330,22 @@ classes MAJOR. Everything else adds; nothing is removed or renamed, the data fil
 
 ### Changed
 
+- **The portal scaffold's theme renames or moves 42 files (`beadloom-7jgr`, `beadloom-af99.8`).**
+  Measured against 8.0.0's scaffold: 189 files outside the page folders before and 217 after, 70
+  added and 42 removed or renamed. Renamed: `entities/graph-edge/` to `entities/graph-edges/` (5
+  files), `entities/graph-node/` to `entities/graph-nodes/` (3) and `entities/layer/` to
+  `entities/layers/` (3). Moved: 31 files of `widgets/graph-viewer/lib/` and `model/` into
+  `shared/` (`bundling`, `geometry`, `grid-routing`, `map-levels`, `canvas-marks`), `features/`
+  (`edge-pills`, `follow-edge`, `overview-map`) and `entities/graph-edges/lib`. They are not
+  under *Breaking* because the promise on files `docs site` generates covers the files a
+  project uses — `package.json`, the data files and the pages — and not the theme's internal
+  paths, which would make every refactoring of the viewer a major release (owner's ruling,
+  2026-10-10). `docs site` retires the old files from a portal written by 8.0.0.
+- **Counts move on a project nobody edited (`beadloom-cwzc`, `beadloom-wbqd`).** Measured on this repository at
+  `v8.0.0`, 8.0.0 against 9.0.0: files scanned 478 → 482, symbols 3952 → 3956, imports resolved
+  1757 → 1759, sync pairs 743 → 747; edges, lint findings and the debt score are unchanged. On
+  the two Feature-Sliced fixtures initialised by 8.0.0 and reindexed by 9.0.0, edges move
+  48 → 50 (`rn-fsd`) and 54 → 55 (`vue-fsd`).
 - **Beadloom's mark is the square icon (`beadloom-af99.9`).** The lettered mark is retired, and
   `.github/social-preview.svg` is the square icon's version, approved by the owner on 2026-10-09.
   Beadloom ships no colour brand asset (`beadloom-e1xo`): the sources, the colour icon and the
@@ -264,7 +386,9 @@ classes MAJOR. Everything else adds; nothing is removed or renamed, the data fil
   `component` tagged with its layer and `part_of` the frontend service, and `shared` and `app`
   are containers of segment components — the graph `beadloom init` writes. The overlay states
   the slice's public API, its shape and its size signal, drops the deprecated `processes`
-  layer from the chain, and puts Steiger in the commands a bead completes with.
+  layer from the chain, and puts Steiger in the commands a bead completes with. It is not under
+  *Breaking*: the overlay described a graph `init` did not write before this release (owner's
+  ruling, 2026-10-10).
 - **The `fsd` overlays and the rules `init` writes name Steiger's `no-public-api-sidestep`
   (`beadloom-af99.10`).** They cited `public-api` for an import that lands past another slice's
   `index`. In `@feature-sliced/steiger-plugin` 0.8.0 that import is reported by
@@ -277,7 +401,7 @@ classes MAJOR. Everything else adds; nothing is removed or renamed, the data fil
   files and kept `entities/graph-edge`, `graph-node` and `layer` as empty trees. A folder a
   retired file sat in, or one above it, is now removed when nothing is left in it; a folder the
   project made, or one that still holds a file beadloom did not write, stays. The scaffold line
-  gains the count: `N retired, M empty folders retired, N copied from .beadloom/site/`.
+  gains the count, `N retired, M empty folders retired`; its full form is under *Fixed*.
 - **This repository's portal is judged by `slice_public_api` and `slice_shape`
   (`beadloom-af99.10`).** `.beadloom/_graph/rules.yml` declares `site-fsd-public-api` (error)
   and `site-fsd-slice-shape` (warn) over the four sliced layers, the rules `init` writes for an
@@ -291,10 +415,20 @@ classes MAJOR. Everything else adds; nothing is removed or renamed, the data fil
 - **Cohesion is a declared duty of the dev, explore and review roles (`beadloom-5wh2`).** The
   coordinator declares it and each core carries it, so `config-check` reports a role that loses
   it. The `ddd` overlay states it for Python packages, and the explorer writes a size finding
-  on the row of the node it names.
+  on the row of the node it names. Role files composed by 8.0.0 drift as a result, which is
+  under *Breaking*.
 
 ### Fixed
 
+- **`docs site` retires the page a node left for another section (`beadloom-ehts`).** Over a
+  portal an earlier version wrote, `docs site` removes a node page it wrote under a section the
+  node's page has left: a `kind: site` node's page moved from `other/` to `services/`, and an
+  8.0.0 portal rewritten in place kept `other/<ref>.md` beside the new page. Only a page with
+  the front matter and heading `docs site` writes on a node page is removed, never a path
+  `.beadloom/site/` provides, and the scaffold line counts it: `..., N empty folders retired, M
+  moved pages retired, K copied from .beadloom/site/`. Measured on this repository's portal
+  written by the released 8.0.0: `67 written, 51 updated, 91 unchanged, 42 retired, 9 empty
+  folders retired, 1 moved pages retired`, and `other/vitepress-site.md` is gone.
 - **A JS/TS specifier names a file by its exact case, on every filesystem (`beadloom-af99.12`).**
   On a filesystem that folds case (macOS) `./app` beside `src/App.vue` and `src/app/index.ts`
   resolved to `App.vue`: `src/app.vue` answered for `App.vue`, and the `.vue` candidate precedes
@@ -352,6 +486,16 @@ classes MAJOR. Everything else adds; nothing is removed or renamed, the data fil
   no edge and no symbol, so a `.cjs` or `.js` file written in CommonJS is an import target only
   and its own dependencies draw nothing. In a Feature-Sliced frontend CommonJS lives in
   configuration files, not in layer code.
+- **A portal's Source link stands in for an unpublished commit with a branch of `origin` only
+  (`beadloom-e1xo`).** `source_ref`'s `pushed` and `linked` are judged by `origin`'s branches,
+  even when `site.repo_url` names a repository on another forge, so a commit or an upstream
+  that only a fork or another remote holds is linked as the commit. This is a decision of
+  BDL-080 that may be revisited.
+- **Steiger's `fsd/insignificant-slice` is switched off for the portal's theme
+  (`beadloom-af99.8`).** The scaffold's `steiger.config.js` turns it off and says why: the theme
+  is cut so that beads can run in parallel on disjoint graph nodes, and a feature one widget
+  uses is the intended shape. `npm run lint:fsd` on a portal therefore does not report a slice
+  with a single consumer; every other rule of the `recommended` set is on.
 - **Not read by the resolver or by `init`:** a folder's `package.json` `main`/`exports`;
   `.mts`, `.cts` and `.d.ts` targets; Babel `module-resolver`'s `root:` and regular-expression
   aliases; tsconfig `references` to another folder, `include`/`exclude` and `rootDirs`; an Expo

@@ -1,6 +1,8 @@
 # Beadloom Roadmap
 
-> **Current version: 8.0.0** (PyPI, published 2026-10-08, verified on the wheel downloaded from PyPI: 11 of 11 checks).
+> **Current version: 9.0.0** (being released by BDL-081; not yet verified on the wheel downloaded
+> from PyPI). The release before it, 8.0.0, is the latest on PyPI, published 2026-10-08 and
+> verified on the wheel downloaded from PyPI: 11 of 11 checks.
 >
 > Rewritten 2026-10-05 against the tracker, brought up to date 2026-10-10 (BDL-080 shipped). This file answers one question: what to do next,
 > and why that and not something else. It holds open work only. What shipped is in the GitHub

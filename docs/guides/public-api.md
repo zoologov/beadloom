@@ -20,13 +20,13 @@ makes it.
 1. **The commands, their options and their exit codes.** Every `beadloom` command and subcommand,
    every option it accepts, and the exit code it returns for a given input. The reference is
    [`docs/services/cli.md`](../services/cli.md) and `beadloom <command> --help`.
-   Added since 8.0.0 (MINOR, BDL-080 S3c): the value `fsd` of `init --preset`, beside
+   Added since 9.0.0 (MINOR, BDL-080 S3c): the value `fsd` of `init --preset`, beside
    `monolith`, `microservices` and `monorepo`.
 2. **The keys of `.beadloom/config.yml`.** Every key a command reads, and the values each key
    accepts. A key is documented in the reference of the node whose code reads it: `tests:` in the
    [test-mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md), `site:` in the
    [site-generation SPEC](../domains/application/features/site-generation/SPEC.md).
-   Keys added since 8.0.0 (MINOR, BDL-080 S4d): `site.logo`, the path of the project's SVG or
+   Keys added since 9.0.0 (MINOR, BDL-080 S4d): `site.logo`, the path of the project's SVG or
    PNG logo relative to its root, shown in the portal's nav; `site.powered_by`, `true` or
    `false`, the "Powered by Beadloom" footer; and `site.repo_icon`, the icon beside the
    header's repository link. `site.repo_icon` takes a value vocabulary: `github`, `gitlab`,
@@ -36,7 +36,7 @@ makes it.
    portal's favicon too (BDL-080 S4e); without it, or when the file is Beadloom's own square
    icon byte for byte, the favicon is Beadloom's (the owner accepted that rule on 2026-10-10,
    `beadloom-e1xo`): the theme-adaptive SVG and a PNG per colour scheme under `public/brand/`.
-   Key added since 8.0.0 (MINOR, BDL-080 S3a): `imports.aliases`, a mapping of an import alias
+   Key added since 9.0.0 (MINOR, BDL-080 S3a): `imports.aliases`, a mapping of an import alias
    to a folder or file relative to the project root (`.` for the root), read by the reindex
    ([reindex SPEC](../domains/application/features/reindex/SPEC.md#import-aliases)) for the
    import resolver, whose
@@ -55,7 +55,7 @@ makes it.
 5. **The portal data file's schema**: the `schema_version` the generator writes and the keys under
    it. The reference is
    [`docs/services/vitepress-site/architecture-data.md`](../services/vitepress-site/architecture-data.md).
-   Key added since 8.0.0 (MINOR, BDL-080 S4c): the top-level `source_ref`, the revision the
+   Key added since 9.0.0 (MINOR, BDL-080 S4c): the top-level `source_ref`, the revision the
    source links name, present when the file carries source links. It is
    `{commit, linked, pushed}`: `commit` is the full hash the portal was built from; `pushed` is
    `true` or `false`, and `false` only when git says no branch of `origin` holds the commit;
@@ -65,7 +65,7 @@ makes it.
    `origin`'s default branch). Both are judged by `origin`'s branches only, even when
    `site.repo_url` names a repository on another forge (a decision of BDL-080 that may be
    revisited).
-   Keys added since 8.0.0 (MINOR, BDL-080 S4a): the top-level `lint`, lint's reach over the whole
+   Keys added since 9.0.0 (MINOR, BDL-080 S4a): the top-level `lint`, lint's reach over the whole
    project, `{errors, warnings, nodes_with_findings, nodeless}`, where each entry of `nodeless`
    is `{rule, severity, message, file, line}` and `severity` takes the vocabulary `error`,
    `warn`; it is omitted when lint did not run. And a node's `debt.inside`, the debt of the
@@ -77,7 +77,7 @@ makes it.
 6. **The files generated for an adopter**: what `init`, `docs site`, `docs generate`,
    `setup-agentic-flow`, `setup-rules`, `setup-mcp` and `install-hooks` write into a project,
    their paths and what they mean to the project that receives them.
-   Added since 8.0.0 (MINOR, BDL-080 S3): for a Feature-Sliced frontend, `init` writes nine rules
+   Added since 9.0.0 (MINOR, BDL-080 S3): for a Feature-Sliced frontend, `init` writes nine rules
    into `.beadloom/_graph/rules.yml`, two of them of rule types new in this release,
    `slice_public_api: {tags}` and `slice_shape: {tags, segments}` (the
    [rule-engine SPEC](../domains/graph/features/rule-engine/SPEC.md) is their reference); a
