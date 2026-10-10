@@ -76,3 +76,11 @@ def test_a_root_part_of_itself_is_a_box_only_by_what_it_holds() -> None:
     inside = debt_inside(debt, {"root": "root", "leaf": "leaf", "part": "root"})
 
     assert inside == {"root": DebtInside(nodes=0, score=0.0, by_reason={})}
+
+
+def test_a_part_of_cycle_above_an_indebted_leaf_counts_the_leaf_once_in_each_box_of_it() -> None:
+    inside = debt_inside(
+        {"leaf": _debt("leaf", 1.0, "dormant")}, {"leaf": "a", "a": "b", "b": "a"}
+    )
+
+    assert (inside["a"].nodes, inside["b"].nodes) == (1, 1)

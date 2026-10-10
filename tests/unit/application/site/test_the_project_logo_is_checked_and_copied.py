@@ -58,6 +58,38 @@ def test_a_value_of_the_wrong_shape_is_refused_by_name(value: object, word: str)
     assert word in refusals[0].why
 
 
+#: What every refusal of ``site.logo``'s shape tells the reader to write instead.
+_LOGO_REMEDIATION = (
+    "write `logo:` as the path of an SVG or a PNG file relative to the project root, "
+    "e.g. `docs/assets/logo.svg`"
+)
+
+
+@pytest.mark.parametrize(
+    ("value", "why"),
+    [
+        ("", "`site.logo` is an empty string"),
+        (7, "`site.logo` is a number"),
+        (
+            "/srv/logo.svg",
+            "`site.logo` is an absolute path, and a logo is named from the project root",
+        ),
+        (
+            "art/logo.jpg",
+            "`site.logo` names `art/logo.jpg`, and the portal's logo is an SVG or a PNG file",
+        ),
+    ],
+)
+def test_a_refused_shape_says_what_the_value_is_and_how_to_write_a_logo(
+    value: object, why: str
+) -> None:
+    _, refusals = read_logo(value, "site.logo")
+
+    assert [(refusal.why, refusal.remediation) for refusal in refusals] == [
+        (why, _LOGO_REMEDIATION)
+    ]
+
+
 def test_a_logo_that_is_not_there_is_refused_and_left_out(tmp_path: Path) -> None:
     root = _project(tmp_path, "site:\n  logo: art/logo.svg\n")
     config, refusals = read_site_config(root)

@@ -27,6 +27,7 @@ import pytest
 from click.testing import CliRunner
 
 from beadloom.services.cli import main
+from tests.support.footer_link import without_the_footer_link
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -55,7 +56,9 @@ _MODULES = {
     ),
 }
 
-#: This repository's identity, as the portal used to carry it.
+#: This repository's identity, as the portal used to carry it. The footer's link to
+#: Beadloom's repository is the one mention allowed (BDL-080 S4d, S4e), and is removed
+#: before the search by :func:`tests.support.footer_link.without_the_footer_link`.
 _OUR_IDENTITY = ("zoologov", "/beadloom/", "<title>Beadloom")
 
 
@@ -140,7 +143,7 @@ def test_an_adopter_builds_its_portal_from_docs_site(tmp_path: Path, npm: str) -
         (path.name, token)
         for path in built
         for token in _OUR_IDENTITY
-        if token in path.read_text(encoding="utf-8")
+        if token in without_the_footer_link(path.read_text(encoding="utf-8"))
     ]
     assert leaks == []
 

@@ -8,6 +8,7 @@ count as a stand-in, and the routes a branch is linked by on every known forge.
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -109,3 +110,54 @@ def test_a_declared_template_gets_the_branch_in_its_ref() -> None:
 def test_a_pushed_commit_and_no_commit_get_no_warning() -> None:
     assert unpublished_warning(None) is None
     assert unpublished_warning(SourceRef("a" * 40, "a" * 40, pushed=True)) is None
+
+
+def test_the_upstream_of_the_branch_built_from_stands_in_while_another_branch_has_its_own(
+    repository: Path,
+) -> None:
+    _git(repository, "update-ref", "refs/remotes/origin/release", "HEAD~1")
+    _git(repository, "update-ref", "refs/remotes/origin/another", "HEAD~1")
+    _git(repository, "branch", "-q", "a-side", "HEAD~1")
+    _git(repository, "branch", "-q", "--set-upstream-to=origin/another", "a-side")
+    _git(repository, "branch", "-q", "--set-upstream-to=origin/release", "work")
+    commit = _head(repository)
+
+    assert source_ref_of(repository, commit) == SourceRef(commit, "release", pushed=False)
+
+
+def test_without_git_the_links_keep_the_commit_and_the_debug_log_says_why(
+    repository: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    commit = _head(repository)
+    monkeypatch.setenv("PATH", str(repository / "no-git-here"))
+    caplog.set_level(logging.DEBUG, logger="beadloom.application.site.source_ref")
+
+    found = source_ref_of(repository, commit)
+
+    assert found == SourceRef(commit, commit, pushed=True)
+    messages = [record.getMessage() for record in caplog.records]
+    assert len(messages) == 1
+    assert messages[0].startswith("git is not available to read the remote branches: ")
+    assert "git" in messages[0].removeprefix("git is not available to read the remote branches: ")
+
+
+def test_the_warning_on_a_branch_says_where_the_links_point_and_how_to_link_the_commit() -> None:
+    warning = unpublished_warning(SourceRef("0123456789abcdef" * 2, "main", pushed=False))
+
+    assert warning == (
+        "Warning: the portal was built from 0123456789ab, which is on no remote branch, "
+        "so its source links point at main instead; a path that exists only in that commit "
+        "is not there. Push the commit and run `beadloom docs site` again for links to it."
+    )
+
+
+def test_the_warning_without_a_stand_in_says_the_links_stay_dead_and_how_to_name_one() -> None:
+    commit = "0123456789abcdef" * 2
+    warning = unpublished_warning(SourceRef(commit, commit, pushed=False))
+
+    assert warning == (
+        "Warning: the portal was built from 0123456789ab, which is on no remote branch, "
+        "and no branch of the remote stands in for it, so its source links point at "
+        "0123456789ab and stay dead until it is pushed. Push it, or record the remote's default "
+        "branch with `git remote set-head origin --auto`, and run `beadloom docs site` again."
+    )

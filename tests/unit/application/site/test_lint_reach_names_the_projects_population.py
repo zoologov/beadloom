@@ -107,3 +107,17 @@ def test_a_clean_run_is_zeros_not_an_absence() -> None:
     assert lint_reach_of(_result()) == LintReach(
         errors=0, warnings=0, nodes_with_findings=0, nodeless=()
     )
+
+
+def test_node_less_findings_in_one_file_are_ordered_by_line_one_without_a_line_first() -> None:
+    reach = lint_reach_of(
+        _result(
+            _violation("scenarios", "warn", None, "a: names line one", file_path="PRD.md", line=1),
+            _violation("scenarios", "warn", None, "z: names no line", file_path="PRD.md"),
+        )
+    )
+
+    assert [(finding.line, finding.message) for finding in reach.nodeless] == [
+        (None, "z: names no line"),
+        (1, "a: names line one"),
+    ]
