@@ -89,7 +89,7 @@ test("Pages names every page the run wrote, by section, and the language of each
   const panel = page.getByTestId("page-map");
 
   // The count is what the run wrote: a file the project adds under `.beadloom/site/` is
-  // on the portal and not counted, so the line names the run, not the portal (beadloom-af99.16).
+  // on the portal and not counted, so the line names the run, not the portal.
   const said = panel.locator("[data-pages='count']");
   await expect(said).toContainText(`beadloom docs site wrote ${countOf(data.pages.count, "page", "pages")}`);
   await expect(said).not.toContainText("This portal");

@@ -802,8 +802,8 @@ test("the overview's lines keep below a box's title room by the room ELK keeps i
   page,
 }) => {
   await openThemeModules(page);
-  // The S4 review's M2 (beadloom-af99.16): the overview restated ELK's 12 as a number of
-  // its own, so a change to the layout's padding would have moved the lines' frame silently.
+  // The overview once restated ELK's 12 as a number of its own, so a change to the
+  // layout's padding would have left the lines' frame where it was, silently.
   const found = await page.evaluate(async () => {
     const { BOX_SIDE, elkGraphOf } = await import("/shared/elk/index.js");
     const { GEOMETRY } = await import("/shared/map-levels/index.js");
