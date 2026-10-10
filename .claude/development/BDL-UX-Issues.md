@@ -45,6 +45,7 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 315 | 2026-10-10 | medium | `sync-update <ref> --yes --pair <doc> --code <file>` reports 2 pairs attested and clears the doc's pairs with five other code files nobody read |
 | 314 | 2026-10-10 | medium | `write_text_atomic` and `write_yaml_atomic` leave every file they write at mode 0600, so a 0644 file edited by `init` becomes owner-only and `rules.yml` is born unreadable to the group |
 | 312 | 2026-10-10 | medium | a rule-level `scope:` is read only by `layers` rules and accepted without a word on every other rule type — a setting that looks configured and does nothing |
 | 311 | 2026-10-10 | medium | `clean-room` installs with `uv pip install -e`, ignoring `uv.lock`, so a room resolves dependencies CI never sees (gherkin 42 vs 29) |
@@ -132,6 +133,14 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+315. [2026-10-10] [MEDIUM] `sync-update <ref> --yes --pair <doc> --code <file>` clears pairs it was not asked to attest
+
+    **Severity:** medium (an attestation nobody made; the class of #163)
+    **Command:** `beadloom sync-update site-generation --yes --pair docs/domains/application/features/site-generation/SPEC.md --code src/beadloom/application/site/moved_pages.py` (and `scaffold.py`)
+    **Context:** BDL-081 R2 changed one sentence of the SPEC and attested its two pairs with the files it read. The command said "2 pairs attested"; the re-check then showed the SPEC's pairs with `node_pages.py`, `generate.py`, `architecture_card.py`, `forge_routes.py` and `site_config.py` fresh too, which nobody had read.
+    **Issue:** narrowing by `--code` records the attestation per document (or re-baselines the document's hash), so every pair of that document goes fresh, and the count the command prints names only the pairs it was asked about.
+    **Expected:** an attestation narrowed by `--code` touches only the named pairs, and the summary names what it cleared. Found by R2 (`beadloom-ehts`); for Debt to zero (`beadloom-ba9w`).
 
 314. [2026-10-10] [MEDIUM] `write_text_atomic` and `write_yaml_atomic` leave every file they write at mode 0600
 
