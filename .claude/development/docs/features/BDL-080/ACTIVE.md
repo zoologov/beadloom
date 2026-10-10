@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** 2026-10-10 evening: four agents (S2R2, S3T, S4c, S4f) were cut by the session's usage limit mid-work and RESUMED by message with their context; their uncommitted edits stayed in the tree. S2W landed `f1689eba`; S2R2 `beadloom-af99.11` reviewing on its own worktree; S4c `beadloom-e1xo` on the shared tree; S4b landed `8dbe844c`; S3d closed; S3T `beadloom-hvnv` measuring on its own worktree of `8dbe844c`. S4f `beadloom-af99.13` on the viewer slices. Next: S3e `beadloom-af99.12` after S4c; S2R2 → S2 PR; S3R after S3e; S4T after S4c + S4f.
+**Bead:** S4R `beadloom-xkrn` reviewing on its own worktree of `1d71be89`; S4T landed `10fb8003`, S4g landed `1d71be89`; every dev and test bead of the epic is landed. S2 and S3 complete; the owner ruled ONE PR for S2+S3+S4 after S4W (`beadloom-3dqv`; jkqc and iapw folded). Next: S4R → S4W → the PR → the MAJOR release.
 **Goal:** the site a service, every layer rule drawn (S1); then S2, S3, S4.
 **Done when:** every PRD goal's *Done when* holds; four PRs merged; a MINOR release.
 
@@ -46,22 +46,24 @@
 | `beadloom-chdx` | S3D | ✓ done (commit `d99dfd0e`; fixtures `vue-fsd`, `rn-fsd`; matrix 8 legs; closed by its agent — see its COMPLETED comment) |
 | `beadloom-5pxv` | S4A | ✓ done | `lint_reach.py`, `page_map.py`; data file: top-level `lint` {errors, warnings, nodes_with_findings, nodeless[]}, `debt.inside` {nodes, score, by_reason}; dashboard `pages` + two panels; card «none — this project: 0 errors, 69 warnings on 27 nodes», box debt own/inside; 11 Playwright + 20 pytest cases; dump byte-identical; commit `35a69743`; 4 wording questions for the owner |
 | `beadloom-bjrw` | S4B | ✓ done (commit `8dbe844c`; legend from the drawn styles; one-kind aggregates keep their dash; pills placed around closed rooms; plate titles broken; the three S4d reds green; chromium 345/347 — metrics:335 ×2 red on HEAD too; 2 questions for the owner) |
-| `beadloom-af99.13` | S4F | in progress | the shipped browser suite green on vue-fsd (10 red) and rn-fsd (17 red) — S3d's gap 2, classes A–E |
-| `beadloom-e1xo` | S4C | in progress | Source link; `source_ref`; the owner's 2026-10-10 rulings A–D (brand sources in `.github/brand/`, byte-identical-logo favicon rule documented, light PNG behind the dark media query, every nav logo 32 px) |
+| `beadloom-af99.13` | S4F | ✓ done (commit `e2d03791`; the suite green on all nine portals — this portal 364/364 incl. metrics:335; vue-fsd 321, rn-fsd 280, 0 failed; classes A–E fixed in the viewer + three measured spec relaxations; the 'several kinds' legend entry; 8729 passed on the tree; 3 questions for the owner) |
+| `beadloom-e1xo` | S4C | ✓ done (commit `558b67fb`; `source_ref` {commit, linked, pushed}; 127 of 139 links 200 on the remote, 12 are folders main lacks; card note + docs site warning; favicon dark PNG; brand sources in `.github/brand/`; 32 px every nav logo; 8642 passed on the tree, 2 reds from S4f's uncommitted spec; 3 questions for the owner) |
 | `beadloom-af99.7` | S4D | ✓ done (commits `afa468b5`, `43046bde`; brand files in `site_scaffold/public/brand/`; `site.logo`, `site.powered_by`, `site.repo_icon`; footer widget slice `site-powered-by`; 3 overview cases red from the extra slice → S4b/S4T) | the portal's logo: `site.logo`, `site.powered_by`, favicon, brand files (approved 2026-10-09; files parked in presentation/public/brand/ until it lands). Footer: icon + «Powered by Beadloom»; line 2: MIT + GitHub link with the header's GitHub icon. Header link = the adopter's `site.repo_url`, its icon derived from the host (github/gitlab/bitbucket/codeberg/gitea/generic git) with override `site.repo_icon` |
 | `beadloom-tnya` | S2T | ✓ done (commit `a266e99d`; goal 3 met: sizes 65/80, 56/60, 53/60; waves by substance 2-in-1; Playwright 350 = 335 + 5 known reds; Steiger rc 0; mutation 89.2% ≥ 0.88; full tree: unit 2678, integration 5901, acceptance 754, self_check 1015 + 10 known reds; BDL-UX #309–#311 filed) |
 | `beadloom-cp4u` | S2R | ✓ done — REVIEW PASSED: 0 major, 3 minor (liveness reason with tag+tag_prefix; Steiger rule name in the fsd overlays; this site lacks slice_public_api/slice_shape), 2 nits; stale docs listed for S2W |
 | `beadloom-af99.10` | S2D | ✓ done (commit `39f9247d`; liveness reason; Steiger `no-public-api-sidestep` in the overlays and rules_gen; `site-fsd-public-api` (error) + `site-fsd-slice-shape` (warn) over four layers, 0 findings; 65 in both files; 9 empty folders retired on upgrade; 20 cases; BDL-UX #312 filed on `scope:`) |
-| `beadloom-af99.11` | S2R2 | ISSUES: 1 major (S2d's calibration self-check counts its parents instead of `tests.support.repository_root` — one-line fix, S2d reopened), 2 minor (surface 800 vs 798 until S4c commits `source_ref.py`; #312 uncommitted at review time), 2 nits (RFC Steiger wording fixed by the coordinator; '118 written' example) — every S2R item re-checked fixed |
+| `beadloom-af99.11` | S2R2 | ✓ done — REVIEW PASSED after the fix cycle (major fixed `f721f985`; minors resolved; nit 5 '118 written' left, predates S2). S2 PR `beadloom-jkqc` ready — awaiting the owner's choice of PR shape |
 | `beadloom-s6mb` | S2W | ✓ done (commit `f1689eba`; 8 slice pages; vitepress-site.md 29 nodes + pages + Steiger; graph-viewer.md 37 paths; rule-engine SPEC 17 types + tag_prefix; surface 749 → 800; S2 refs ok; stale 302 → 254, the rest S3W/S4W) |
 | `beadloom-jkqc` | S2P | blocked | |
-| `beadloom-af99.12` | S3E | ready (after S4c) | Expo Router `app/` gets one node (fsd-app segment of the app layer); exact-case resolution — S3d's gaps 1 and 3 |
-| `beadloom-hvnv` | S3T | in progress | goal 4 measured on its own worktree of `8dbe844c`; import-form table; the full tree once |
-| `beadloom-jtki` | S3R | blocked | |
-| `beadloom-ql96` | S3W | blocked | |
+| `beadloom-af99.12` | S3E | ✓ done (commit `4b42e86f`; `app/` → one component `app-routes`, tag `fsd-app`, detected by `expo-router` in dependencies; rn-fsd fsd-layers 15 of 17; exact-case resolution via `graph/exact_case.py` (27–32 ms cached); `init --project .` fixed (#313); 18 cases; 2 questions for the owner) |
+| `beadloom-hvnv` | S3T | ✓ done (commit `1754ecf9`; goal 4: init no hand edit ✓, imports 49/49 + 33/33 ✓, Expo bridge ✓, matrix 8+projects ✓, browser suite ✗ vue 7 / rn 17 → S4f; expo walk 0.4% of a full reindex, 10% of a nothing-changed incremental; full tree: unit 2691, integration 5961, acceptance 763, self_check 1017 + known reds; BDL-UX #313 filed → S3e) |
+| `beadloom-jtki` | S3R | ✓ done — REVIEW PASSED after the fix cycle (S3f `b80520fb` + `7306a989`; every probe re-run by the reviewer) |
+| `beadloom-af99.14` | S3F | ✓ done (commit `b80520fb`; fsd preset needs JS/TS/Vue code or a package.json — the Python tree is monolith again; package.json keeps its indent, atomic; slice rule and resolver share `exact_case.first_existing_file`; one `project_walk` (incremental 388 → 334 ms); rule count read back; 33 cases; debt bead `beadloom-ba9w.5`; BDL-UX #314 filed (atomic writers → 0600); grammar guard fixed `7306a989`) |
+| `beadloom-ql96` | S3W | ✓ done (commit `71c2e4e6`; S3 refs 224 stale → 0; tree 281 → 57, all S4's; 21 documents; CHANGELOG Added + Known limitations; surface 806) |
 | `beadloom-iapw` | S3P | blocked | |
-| `beadloom-brgd` | S4T | blocked | |
-| `beadloom-xkrn` | S4R | blocked | |
+| `beadloom-af99.15` | S4G | ✓ done (commit `1d71be89`; card and dashboard read «… 69 warnings — 33 on 27 nodes, 36 on none»; no new key; dump byte-identical) | the card's Rule findings wording names both populations (owner, 2026-10-10) |
+| `beadloom-brgd` | S4T | ✓ done (commit `10fb8003`; goal 5 holds (a)–(h): legend at every level on nine portals; populations named; Source link 127/139 200 (12 folders main lacks); brand 8/8 ×9; suites 0 failed on all nine, this portal 364/364; footer-link allowance fixed; full tree green except 57 stale pairs → S4W; mutation 89.4 → 94.6%) |
+| `beadloom-xkrn` | S4R | in progress | review of S4a–S4g + S4T, bead id only, own worktree of `1d71be89` |
 | `beadloom-n644` | S4W | blocked | |
 | `beadloom-3dqv` | S4P | blocked | |
 

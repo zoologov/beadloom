@@ -37,7 +37,7 @@
 
 ## Open Issues
 
-> Last checked against the tracker on 2026-10-10. Two entries are about to close: 290 is fixed
+> Last checked against the tracker on 2026-10-10. Fixed on `features/BDL-080` and closing when its PR merges: 305 and 306 (S4a), 307 (S4c), 313 (S3e); 313 refiles `beadloom-0e3m`. Two entries are about to close: 290 is fixed
 > on `features/BDL-078` (`beadloom-nh7h`) and closes when it merges; the cause of 293 was removed
 > by BDL-074, and the entry holds itself open until about 2026-10-29.
 
@@ -45,6 +45,8 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 314 | 2026-10-10 | medium | `write_text_atomic` and `write_yaml_atomic` leave every file they write at mode 0600, so a 0644 file edited by `init` becomes owner-only and `rules.yml` is born unreadable to the group |
+| 313 | 2026-10-10 | medium | `init --project .` names the root service `''` (`Path('.').name`), so on a JVM or Swift project `init` exits 1 with `domain-needs-parent` |
 | 312 | 2026-10-10 | medium | a rule-level `scope:` is read only by `layers` rules and accepted without a word on every other rule type — a setting that looks configured and does nothing |
 | 311 | 2026-10-10 | medium | `clean-room` installs with `uv pip install -e`, ignoring `uv.lock`, so a room resolves dependencies CI never sees (gherkin 42 vs 29) |
 | 310 | 2026-10-10 | low | a verdict-room scenario assumes the run lacks the `search` extra, so `--all-extras` turns 8 tests red with one cause |
@@ -134,6 +136,22 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+314. [2026-10-10] [MEDIUM] `write_text_atomic` and `write_yaml_atomic` leave every file they write at mode 0600
+
+    **Severity:** medium (silent; a shared checkout or a CI cache loses group read on files Beadloom rewrote)
+    **Command:** `beadloom init`, and every command that writes through `infrastructure/atomic_io.py`
+    **Context:** BDL-080 S3f made `init` write an adopter's `package.json` atomically and measured the mode: 0644 became 0600; a `rules.yml` written by `init` is 0600 from birth. The temp file `mkstemp` creates is 0600 and the rename keeps it.
+    **Issue:** the atomic writers never copy the target's mode (or apply the umask) onto the temp file before the rename, so the write silently changes permissions.
+    **Expected:** an existing target keeps its mode; a new file gets `0666 & ~umask`. S3f restored `package.json`'s mode in `steiger_script` only; the fix belongs in `atomic_io.py` with a case per writer. Found by S3f (`beadloom-af99.14`); for Debt to zero (`beadloom-ba9w`).
+
+313. [2026-10-10] [MEDIUM] `init --project .` names the root service `''`, so on a JVM or Swift project `init` exits 1 with `domain-needs-parent`
+
+    **Severity:** medium (a common invocation; the failure names a rule, not the cause)
+    **Command:** `beadloom init --yes --project .`
+    **Context:** BDL-080 S3T ran `init` on scratch copies of the adopter fixtures; with `--project .` the java, kotlin and swift fixtures failed, with an absolute path they passed.
+    **Issue:** `project_scan._detect_project_name` takes `Path('.').name`, which is the empty string, so the root service gets no id and every domain's `part_of` points nowhere.
+    **Expected:** the project path is resolved before its name is taken; `init` says which name it chose. Found by S3T (`beadloom-hvnv`); fixed in S3e (`beadloom-af99.12`).
 
 312. [2026-10-10] [MEDIUM] a rule-level `scope:` is read only by `layers` rules and accepted without a word on every other rule type
 

@@ -30,7 +30,8 @@ graph TD
     S3d --> S3e[S3e Expo Router app/ node; exact-case resolution]
     S3d --> S3T[S3 test]
     S3e --> S3R[S3 review]
-    S3T --> S3R --> S3W[S3 docs] --> S3P[S3 PR]
+    S3T --> S3R
+    S3R --> S3f[S3f review findings] --> S3W --> S3W[S3 docs] --> S3P[S3 PR]
     S1P --> S4a[S4a lint totals, nodeless, debt inside in the data file + card]
     S1P --> S4b[S4b legend from the canvas; one-kind dash]
     S1P --> S4c[S4c Source link on an unpushed build]
@@ -42,10 +43,9 @@ graph TD
     S4e --> S4T
     S4b --> S4f[S4f suite green on the FSD portals]
     S4f --> S4T
+    S4T --> S4g[S4g card wording] --> S4R
     S4T --> S4R[S4 review] --> S4W[S4 docs] --> S4P[S4 PR]
-    S2P --> REL[release MINOR]
-    S3P --> REL
-    S4P --> REL
+    S4P[one PR for S2 + S3 + S4] --> REL[release MAJOR]
 ```
 
 Epic: `beadloom-af99`.
@@ -74,14 +74,19 @@ Epic: `beadloom-af99`.
 | S3c | `beadloom-5t8d` | dev: `init` fsd preset, legacy as nodes, rules_gen with `layers`+`scope`, `slice_public_api`, `slice_shape`, cohesion `check` | P0 | S3a |
 | S3d | `beadloom-chdx` | dev: fixtures `vue-fsd` and `rn-fsd`, `FIXTURES_BY_STACK`, matrix 8 legs | P0 | S3b, S3c |
 | S3e | `beadloom-af99.12` | dev: Expo Router `app/` owner node; exact-case resolution (S3d's gaps 1, 3; 2026-10-10) | P0 | S3d |
-| S3T/R/W/P | `beadloom-hvnv` `beadloom-jtki` `beadloom-ql96` `beadloom-iapw` | as S1 | P0 | chain (S3R after S3e) |
+| S3T/R | `beadloom-hvnv` `beadloom-jtki` | as S1 | P0 | chain (S3R after S3e) |
+| S3f | `beadloom-af99.14` | dev: the S3 review's findings (fsd preset evidence, package.json indent, slice rule resolution, one walk) | P0 | S3R |
+| S3W/P | `beadloom-ql96` `beadloom-iapw` | docs after S3f and the re-check; PR | P0 | S3f |
 | S4a | `beadloom-5pxv` | dev: `lint` totals and nodeless findings, debt inside — data file and card | P1 | S1P |
 | S4b | `beadloom-bjrw` | dev: legend from the canvas; one-kind aggregated dash | P1 | S1P |
 | S4c | `beadloom-e1xo` | dev: the Source link on an unpushed build; `source_ref`; the warning | P1 | S1P |
 | S4e | `beadloom-af99.9` | dev: brand corrections from the owner's look — the square icon is the only mark; theme-adaptive monochrome favicon; footer line 1 without a link; adopter favicon from site.logo (2026-10-09) | P1 | S4d |
 | S4d | `beadloom-af99.7` | dev: the portal's logo — `site.logo`, `site.powered_by`, the favicon, the brand files, the social preview (owner, 2026-10-09) | P1 | S1P |
 | S4f | `beadloom-af99.13` | dev: the shipped browser suite green on the two FSD portals (S3d's gap 2; 2026-10-10) | P0 | S4b |
-| S4T/R/W/P | `beadloom-brgd` `beadloom-xkrn` `beadloom-n644` `beadloom-3dqv` | as S1 | P1 | chain (S4T after S4c, S4e, S4f) |
+| S4T | `beadloom-brgd` | test: goal 5 on nine portals; the full tree once | P1 | S4a–S4f |
+| S4g | `beadloom-af99.15` | dev: the card's Rule findings wording names both populations (owner, 2026-10-10) | P1 | S4T |
+| S4R/W | `beadloom-xkrn` `beadloom-n644` | review; docs | P1 | S4g → S4R → S4W |
+| PR | `beadloom-3dqv` | coordinator: ONE PR for S2 + S3 + S4, merge on green (owner, 2026-10-10; `beadloom-jkqc` and `beadloom-iapw` folded in) | P0 | S4W |
 | REL | — | the MINOR release (its own /task-init, by BDL-079's recipe) | P1 | S2P, S3P, S4P |
 
 The sub-beads are created as one plan per slice when that slice starts (the tracker ids fill
