@@ -108,38 +108,40 @@ Beadloom keeps rules in an **architecture graph**. The graph is a description of
 
 The rule lives in the graph. There is a command over the graph. The command returns an exit code. An exit code is not forgotten — not by an agent, not by a person, not in CI.
 
-Every check converges into a single Gate. Here is its output on this repository at the 8.0.0 release, on 8 October 2026. Long lines are wrapped, and omitted text is marked with "…":
+Every check converges into a single Gate. Here is its output on this repository at the 9.0.0 release, on 10 October 2026. Long lines are wrapped, and omitted text is marked with "…":
 
 ```
 Beadloom CI gate
 
   [PASS] reindex: up to date
-  [PASS] lint: 0 error(s), 70 warning(s), 10 crossings suppressed by an exemption,
-         architecture-layers judged 381 of 434 live depends_on edge(s), …
-  [PASS] sync-check: 743 pair(s) fresh
-  [PASS] docs-audit: 20 mention(s) fresh; 4/9 declared fact(s) verified, NOT VERIFIED:
+  [PASS] lint: 0 error(s), 69 warning(s), 11 crossings suppressed by an exemption,
+         architecture-layers judged 461 of 470 live depends_on edge(s),
+         site-fsd-layers judged 78 of 470 live depends_on edge(s)
+  [PASS] sync-check: 809 pair(s) fresh
+  [PASS] docs-audit: 31 mention(s) fresh; 4/9 declared fact(s) verified, NOT VERIFIED:
          cli_command_count, edge_count, language_count, nodes_with_framework, test_count
-  [WARN] docs-quality: 317 document(s) read; … NO CHECK READS: PLAN, RND, SUMMARY; …
-  [PASS] issue-log: 113 entr(ies) uniquely numbered; … PARTLY CHECKED: 68 of 113 …
+  [WARN] docs-quality: 329 document(s) read; … NO CHECK READS: PLAN, RND, SUMMARY; …
+  [PASS] issue-log: 121 entr(ies) uniquely numbered; … PARTLY CHECKED: 68 of 121 …
   [PASS] readme-pair: 1 pair(s) held, 125 block(s) compared, 0 finding(s); …
-  [WARN] doc-spaces: to_be 250, as_is 146, working 69; …
-  [PASS] scope-check: 0 path(s) outside the axes BDL-079 declares (…); 1 judged, …
+  [WARN] doc-spaces: to_be 260, as_is 155, working 71; …
+  [PASS] scope-check: 5 path(s) outside the axes BDL-081 declares (…); 6 judged, …
   [PASS] config-check: no blocking drift; 1 artifact(s) reported (warn)
-  [PASS] doctor: 13 check(s): 0 error(s), 262 warning(s), 3 info
+  [PASS] doctor: 13 check(s): 0 error(s), 272 warning(s), 3 info
   …
 PASS — gate clean
 Room: Darwin arm64 · CPython 3.13.7 · 10 cores · extras … · locale utf-8
-  31 of 31 declared room(s) not entered by this run: …
+  33 of 33 declared room(s) not entered by this run: …
 Not run by this gate:
   the test suite — `uv run pytest --cov=beadloom …` (.github/workflows/ci.yml: tests)
   the style linter — `uv run ruff check src/ tests/` (.github/workflows/ci.yml: tests)
   the type checker — `uv run mypy src/` (.github/workflows/ci.yml: tests)
+  the FSD linter — `npm run lint:fsd` (.github/workflows/ci.yml: site-build)
 …
 ```
 
 What to look at here is not `PASS` but what stands next to it. Every step names **how much** it checked and **what it did not look at**. A check that had nothing to check does not read as a successful one — [a separate section](#when-a-check-cannot-answer-beadloom-says-so) is about that, and it is the main thing that separates Beadloom from a pile of linters.
 
-The last lines say the same about the Gate itself. It names the machine the run happened on, the CI environments the run did not enter, and the checks it did not run at all: the tests, the linter and the type checker. A green verdict is about that machine and the checks the Gate ran, not about the project as a whole.
+The last lines say the same about the Gate itself. It names the machine the run happened on, the CI environments the run did not enter, and the checks it did not run at all: the tests, the linter, the type checker and the portal's FSD linter. A green verdict is about that machine and the checks the Gate ran, not about the project as a whole.
 
 One Gate stands in three places: in the pre-push hook, in CI, and in an agent's hands. It does not matter which agent provider you use, because Beadloom is universal and is part of none of them. Claude Code, Cursor, an editor that speaks MCP, a CI job, a person at a keyboard — all of them meet the same `beadloom ci`.
 

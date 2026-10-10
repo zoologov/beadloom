@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from beadloom.application.doc_spaces import SpacesReport, TrackerRead
+    from beadloom.application.site.moved_pages import RetiredPages
     from beadloom.application.site.scaffold import ScaffoldReport
     from beadloom.application.site.source_ref import SourceRef
 
@@ -158,7 +159,7 @@ def docs_site(
             click.echo(f"    -> {refusal.remediation}", err=True)
         sys.exit(1)
     click.echo(f"Generated {len(result.written)} files under {out}")
-    _echo_scaffold_report(result.scaffold, out)
+    _echo_scaffold_report(result.scaffold, out, result.moved_pages)
     _warn_about_the_base(project_root)
     _warn_about_an_unpublished_commit(result.source_ref)
     if pages_workflow:
@@ -230,12 +231,23 @@ def _write_pages_workflow(project_root: Path, out: Path) -> None:
         click.echo(f"  -> {report.remediation}", err=True)
 
 
-def _echo_scaffold_report(report: ScaffoldReport, out: Path) -> None:
-    """Say what happened to each scaffold file, and name every one that was kept."""
+def _echo_scaffold_report(
+    report: ScaffoldReport, out: Path, moved: RetiredPages | None = None
+) -> None:
+    """Say what happened to each scaffold file, and name every one that was kept.
+
+    *moved* is the node pages removed from a section their node's page has left
+    (BDL-081 R2): counted on the same line, and a section they leave empty is
+    counted with the empty folders.
+    """
+    moved_pages = moved.pages if moved is not None else ()
+    moved_folders = moved.folders if moved is not None else ()
+    folders = len(report.retired_folders) + len(moved_folders)
     click.echo(
         f"Scaffold (beadloom {report.version}): {len(report.written)} written, "
         f"{len(report.updated)} updated, {len(report.unchanged)} unchanged, "
-        f"{len(report.retired)} retired, {len(report.retired_folders)} empty folders retired, "
+        f"{len(report.retired)} retired, {folders} empty folders retired, "
+        f"{len(moved_pages)} moved pages retired, "
         f"{len(report.overridden)} copied from .beadloom/site/"
     )
     if not report.kept:

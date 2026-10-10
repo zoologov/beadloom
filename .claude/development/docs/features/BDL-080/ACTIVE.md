@@ -1,22 +1,22 @@
 # ACTIVE: BDL-080 — The portal is a service, and the viewer serves a Feature-Sliced frontend
 
 > **Last updated:** 2026-10-10
-> **Phase:** Development
+> **Phase:** Completed
 
 ---
 
 ## Current Bead
 
-**Bead:** `beadloom-3dqv` — PR #98 open from `features/BDL-080-s2-s4` (the remote `features/BDL-080` kept S1's pre-merge commits; no force-push, a fresh branch instead; #97 closed as opened by mistake); CI: required checks green except `ai-techwriter` (self-hosted runner offline — the owner's VPS); advisory reds fixed by S4i `be84eb96`, pushed to the PR; CI re-run pending. Merge on green; then the MAJOR release by BDL-079's recipe. Coordinator state committed `39b01cd9`. S2 and S3 complete; the owner ruled ONE PR for S2+S3+S4 after S4W (`beadloom-3dqv`; jkqc and iapw folded). Next: the S4R re-check of S4h + S4W → the ONE PR (`beadloom-3dqv`) → the MAJOR release.
+**Bead:** none — shipped. S1 merged as PR #96 (`977b0614`, 2026-10-09); S2 + S3 + S4 as one PR #98 (`290507b2`, 2026-10-10). The MAJOR release is its own work item (BDL-081).
 **Goal:** the site a service, every layer rule drawn (S1); then S2, S3, S4.
-**Done when:** every PRD goal's *Done when* holds; four PRs merged; a MINOR release.
+**Done when:** every PRD goal's *Done when* holds; the slices merged (two PRs, by the owner's ruling of 2026-10-10); the MAJOR release follows as BDL-081.
 
 ## Progress
 
 - [x] PRD, RFC, CONTEXT, PLAN approved (2026-10-08)
 - [x] S1a, S1b, S1c, S1d landed
 - [x] S1 test, S1e (owner's look), reviews, docs, PR #96 merged 2026-10-09
-- [ ] S2, S3, S4
+- [x] S2, S3, S4 landed, tested, reviewed, documented; PR #98 merged 2026-10-10
 
 ## Results
 

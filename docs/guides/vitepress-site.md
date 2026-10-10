@@ -616,7 +616,7 @@ under `e2e/`. One beadloom version means one theme: there is no separate npm pac
 step. The run says what it did with the scaffold:
 
 ```text
-Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 copied from .beadloom/site/
+Scaffold (beadloom <version>): 209 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 moved pages retired, 0 copied from .beadloom/site/
 ```
 
 ### The marker, upgrades and hand edits
@@ -634,6 +634,7 @@ each run does this:
 | no marker, or edited after beadloom wrote it | never overwrites it, and names it on stderr with the remedy (`kept`); the exit code stays 0 |
 | marker intact, and the installed beadloom no longer ships it | removes it (`retired`), so a retired browser test does not keep running |
 | a folder that the removed files leave empty | removes it too (`empty folders retired`), so a renamed slice leaves no empty tree; a folder you made, or one still holding anything, stays |
+| a node page `docs site` wrote under a section the node's page has left | removes it (`moved pages retired`), so a portal an earlier version wrote does not keep `other/<ref>.md` beside `services/<ref>.md` for a node declared `kind: site`; a section it leaves empty is counted with the empty folders. A page is `docs site`'s by its opening (front matter with `title: <ref>` and a `kind:` line, then `# <ref>`); a page that opens otherwise, a path under `.beadloom/site/`, and the page of a node this run writes no page for all stay |
 
 ```text
 Kept 1 file(s) under site that beadloom did not write or that were edited by hand; the shipped version was not written over them:

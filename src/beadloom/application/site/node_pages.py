@@ -42,6 +42,12 @@ _KIND_DIR: dict[str, str] = {
     "feature": "features",
 }
 
+#: The section a node of a kind with no directory of its own is written under.
+_OTHER_DIR = "other"
+
+#: Every section a node page can be written under, sorted.
+NODE_PAGE_SECTIONS: tuple[str, ...] = tuple(sorted({*_KIND_DIR.values(), _OTHER_DIR}))
+
 # Edge kinds rendered on a node page, in stable display order.
 _EDGE_KINDS: tuple[str, ...] = ("part_of", "depends_on", "uses")
 
@@ -58,10 +64,15 @@ class NodeRow:
 
 @dataclass(frozen=True)
 class NodePage:
-    """A rendered node page: its relative output path + Markdown body."""
+    """A rendered node page: its relative output path + Markdown body, and whose it is.
+
+    ``ref_id`` is the node's id as declared, which may hold a ``/`` and then nests
+    the page: the path cannot be read back into the id, so the page carries it.
+    """
 
     rel_path: str  # e.g. "domains/application.md"
     body: str
+    ref_id: str
 
 
 def load_nodes(conn: sqlite3.Connection) -> list[NodeRow]:
@@ -82,7 +93,7 @@ def load_nodes(conn: sqlite3.Connection) -> list[NodeRow]:
 
 def _kind_dir(kind: str) -> str:
     """Map a node kind to its output sub-directory (default: 'other')."""
-    return _KIND_DIR.get(kind, "other")
+    return _KIND_DIR.get(kind, _OTHER_DIR)
 
 
 def node_page_path(kind: str, ref_id: str) -> str:
@@ -346,7 +357,25 @@ def render_node_page(
     lines.extend(_graph_section(node.ref_id))
 
     rel_path = f"{node_page_path(node.kind, node.ref_id)}.md"
-    return NodePage(rel_path=rel_path, body="\n".join(lines) + "\n")
+    return NodePage(rel_path=rel_path, body="\n".join(lines) + "\n", ref_id=node.ref_id)
+
+
+def is_page_of(text: str, ref_id: str) -> bool:
+    """*text* is a page :func:`render_node_page` wrote for *ref_id*, by any version.
+
+    Node pages carry no generated marker, so the evidence is the opening every
+    version since BDL-040 writes: front matter of ``title: <ref>`` and a ``kind:``
+    line, then the ``# <ref>`` heading. A page written by hand rarely opens that way.
+    """
+    lines = text.split("\n", 6)[:6]
+    return (
+        len(lines) == 6
+        and lines[0] == "---"
+        and lines[1] == f"title: {ref_id}"
+        and lines[2].startswith("kind: ")
+        and lines[3] == "---"
+        and lines[5] == f"# {ref_id}"
+    )
 
 
 def render_all_pages(

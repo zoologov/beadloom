@@ -877,9 +877,13 @@ and writes under `--out` (default `site/`, the directory `beadloom init` ignores
   never overwritten and is reported. `.beadloom/site/` is copied last.
 
 ```text
-Generated 144 files under /home/me/tidewater/site
-Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 copied from .beadloom/site/
+Generated 515 files under <out>
+Scaffold (beadloom 9.0.0): 209 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 moved pages retired, 0 copied from .beadloom/site/
 ```
+
+That is this repository's own portal written by 9.0.0 into an empty directory, `<out>`.
+`Generated` counts every file the run wrote, the scaffold's included, so the first number is
+never smaller than the second.
 
 A kept file is named on stderr with the reason and the remedy, and the exit code stays 0. A
 `site:` value the portal cannot use exits 1 before anything is written, each refusal printed as
@@ -956,8 +960,8 @@ enforceable for a project that wants it.
 **Whose version a version is.** A semantic version is attributed to the nearest subject NAME
 to its left inside its own clause, and only a version whose nearest name is this project's --
 or that has no name at all -- is compared against this project's version. So
-`Measured on bd 1.0.4` states the release of the tracker and `The current release is 8.0.0`
-states this project's, and each number in `bd 1.0.4 answers and beadloom 8.0.0 asks` goes to
+`Measured on bd 1.0.4` states the release of the tracker and `The current release is 9.0.0`
+states this project's, and each number in `bd 1.0.4 answers and beadloom 9.0.0 asks` goes to
 the name beside it. The tokens given to another product are counted with their subjects in the
 audit's own output, and carried in `--json` under `attributed_versions` with the vocabulary
 that decided them under `version_subjects`, so the exemption is visible rather than silent.

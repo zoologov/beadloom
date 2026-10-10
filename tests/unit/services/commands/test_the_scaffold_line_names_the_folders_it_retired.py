@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from beadloom.application.site.moved_pages import RetiredPages
 from beadloom.application.site.scaffold import ScaffoldReport
 from beadloom.services.commands.docs import _echo_scaffold_report
 
@@ -34,7 +35,7 @@ def test_the_line_counts_the_folders_retired_beside_the_files(
 
     assert capsys.readouterr().out == (
         "Scaffold (beadloom 9.0.0): 0 written, 0 updated, 1 unchanged, 2 retired, "
-        "3 empty folders retired, 0 copied from .beadloom/site/\n"
+        "3 empty folders retired, 0 moved pages retired, 0 copied from .beadloom/site/\n"
     )
 
 
@@ -44,3 +45,17 @@ def test_a_run_that_retired_no_folder_says_zero(
     _echo_scaffold_report(ScaffoldReport(version="9.0.0"), tmp_path)
 
     assert "0 retired, 0 empty folders retired, " in capsys.readouterr().out
+
+
+def test_the_line_counts_the_node_pages_retired_from_a_section_they_left(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """BDL-081 R2 (``beadloom-ehts``): the old page of a node whose page moved is counted."""
+    moved = RetiredPages(pages=("other/portal.md",), folders=("other",))
+
+    _echo_scaffold_report(ScaffoldReport(version="9.0.0", retired=("a/x.js",)), tmp_path, moved)
+
+    assert capsys.readouterr().out == (
+        "Scaffold (beadloom 9.0.0): 0 written, 0 updated, 0 unchanged, 1 retired, "
+        "1 empty folders retired, 1 moved pages retired, 0 copied from .beadloom/site/\n"
+    )

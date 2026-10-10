@@ -299,10 +299,17 @@ Releases are cut by a maintainer (trunk-based; `main` is always green):
        --release X.Y.Z --node-bin <a Node 22+ bin directory>
    ```
 
-   The script installs the artifact into a fresh environment with `UV_NO_CACHE=1`, writes a
-   throwaway adopter project and runs the release's behaviour on it. Exit 0 means every check
-   holds; 3 means a version check failed; 4 means a behaviour check failed; 2 means the run
-   could not start or a step could not run, so the checks it did not reach were not judged.
+   The script installs the artifact with its `languages` extra into a fresh environment with
+   `UV_NO_CACHE=1`, writes a throwaway adopter project and runs the release's behaviour on it.
+   Exit 0 means every check that ran holds. The three npm checks (`portal build`,
+   `portal assets`, `portal lint:fsd`) need Node 22 or later and npm. Without `--node-bin`
+   they run only when `PATH` holds both, and otherwise they are skipped: left out of the
+   verdict, which then reads `VERDICT: N of N checks that ran hold (exit 0)`, and named under
+   it as `Not run by this run: … (<reason>)`. Steps 4 and 7 pass `--node-bin`, which keeps the
+   npm checks required in a release: a directory without a Node 22+ and npm stops the run with
+   exit 2. Exit 3 means a version check failed; 4 means a behaviour check failed; 2 means the
+   run could not start or a step could not run, so the checks it did not reach were not
+   judged.
    When a run has more than one, the exit is the first of 3, 4, 2: a check that ran and failed
    already settles that the artifact is not the release. So an exit 2 means no check that ran
    failed, and the run is repeated once the step it names can run. Pass `--release`: its

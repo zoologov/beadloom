@@ -347,12 +347,13 @@ def _retire(out_dir: Path, keep: set[str]) -> list[str]:
     return retired
 
 
-def _retire_emptied_folders(out_dir: Path, retired: list[str]) -> list[str]:
+def retire_emptied_folders(out_dir: Path, retired: list[str]) -> list[str]:
     """Remove every folder the retired files leave empty, deepest first, sorted for the report.
 
     The candidates are the folders the retired files sat in and the folders above them,
     never the portal's root: a folder no retired file sat in is the project's, and a
     folder that still holds anything, a file beadloom did not write included, stays.
+    The node pages a run retires from a section they left go the same way (BDL-081 R2).
     """
     candidates = {
         parent
@@ -391,7 +392,7 @@ def write_scaffold(
         if rel not in overrides:
             _place(rel, mark(rel, body, version), out_dir, tally)
     retired = _retire(out_dir, set(shipped) | set(overrides)) if out_dir.is_dir() else []
-    retired_folders = _retire_emptied_folders(out_dir, retired)
+    retired_folders = retire_emptied_folders(out_dir, retired)
     for rel, path in overrides.items():
         target = out_dir / rel
         target.parent.mkdir(parents=True, exist_ok=True)

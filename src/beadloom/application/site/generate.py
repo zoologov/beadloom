@@ -48,7 +48,7 @@ tests): it stamps the metrics-history point and ``architecture.data.json``'s
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -88,6 +88,7 @@ from beadloom.application.site.metrics_history import (
     append_metrics_point,
     backfill_structural_history,
 )
+from beadloom.application.site.moved_pages import RetiredPages, retire_moved_pages
 from beadloom.application.site.nav import human_label, render_nav_config
 from beadloom.application.site.node_pages import (
     NodeRow,
@@ -138,7 +139,9 @@ class SiteResult:
     """The outcome of a site generation: every file written, sorted.
 
     ``scaffold`` is what the scaffold writer did with each shipped file,
-    including the ones it kept because they are not beadloom's. ``source_ref``
+    including the ones it kept because they are not beadloom's. ``moved_pages``
+    names the node pages removed from a section their node's page has left
+    (BDL-081 R2). ``source_ref``
     is the revision the source links name, ``None`` when they name none
     (BDL-080 S4c): ``docs site`` warns when it is not a pushed commit.
     """
@@ -147,6 +150,7 @@ class SiteResult:
     written: tuple[Path, ...]
     scaffold: ScaffoldReport
     source_ref: SourceRef | None = None
+    moved_pages: RetiredPages = field(default_factory=RetiredPages)
 
 
 @dataclass(frozen=True)
@@ -612,7 +616,8 @@ def generate_site(
         sections["about"].append(out_dir / "ru" / "index.md")
         languages["ru"] = out_dir / "ru" / "index.md"
 
-    for page in render_all_pages(conn, portal):
+    node_pages = render_all_pages(conn, portal)
+    for page in node_pages:
         _write(out_dir / page.rel_path, page.body, written)
         sections.setdefault("nodes", []).append(out_dir / page.rel_path)
 
@@ -707,10 +712,15 @@ def generate_site(
     scaffold = write_scaffold(out_dir, project_root=project_root, version=__version__)
     for rel in (*scaffold.written, *scaffold.updated, *scaffold.overridden):
         written.append(out_dir / rel)
+    # A node page an earlier version wrote under a section its node has left.
+    moved_pages = retire_moved_pages(
+        out_dir, node_pages, keep=set(scaffold.overridden)
+    )
 
     return SiteResult(
         out_dir=out_dir,
         written=tuple(sorted(set(written))),
         scaffold=scaffold,
         source_ref=repository.source,
+        moved_pages=moved_pages,
     )

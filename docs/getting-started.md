@@ -49,7 +49,7 @@ import from a file in any other language, so no edge is drawn from that code, an
 you unless the run finds no symbol at all. Install the extra for a project in any other
 language.
 
-The current release is **8.0.0**. `beadloom --version` reports the build you actually
+The current release is **9.0.0**. `beadloom --version` reports the build you actually
 installed. This line is the one place a document states the version as a claim, and
 `beadloom docs audit` compares it against `pyproject.toml` on every run — so a release that
 bumps the manifest and forgets the prose is reported instead of merely being wrong. Every
@@ -538,12 +538,16 @@ cd site && npm ci && npm run docs:build # site/.vitepress/dist is the static sit
 npm run docs:preview                    # look at it locally
 ```
 
-`docs site` reports what it wrote:
+`docs site` reports what it wrote. Measured on this repository:
 
 ```text
-Generated 144 files under /home/me/tidewater/site
-Scaffold (beadloom <version>): 118 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 copied from .beadloom/site/
+Generated 515 files under <out>
+Scaffold (beadloom 9.0.0): 209 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 moved pages retired, 0 copied from .beadloom/site/
 ```
+
+That is this repository's own portal written by 9.0.0 into an empty directory, `<out>`.
+`Generated` counts every file the run wrote, the scaffold's included, so the first number is
+never smaller than the second.
 
 **Give the portal your project's identity** in `.beadloom/config.yml`. Without it the title is
 the directory's name, the base is `/` and the portal links to no repository:
