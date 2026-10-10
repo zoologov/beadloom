@@ -51,6 +51,7 @@ import {
 } from "./support/metrics.js";
 import { withTwoMoreEdges } from "./support/perturbedGraph.js";
 import { requireShape } from "./support/shape.js";
+import { WIDE_FONT, drawInFont } from "./support/fonts.js";
 import { architectureData, openArchitecture, openEveryBox, viewer, withAncestors } from "./support/viewer.js";
 import { layerBoxesOf, layerScopesOf } from "./support/layers.js";
 
@@ -158,6 +159,16 @@ const LAYOUTS = [
 ];
 
 /**
+ * The served layout drawn in a wider font than the portal's: a title the
+ * portal's font fits in its box at the smallest size may fit in none in another
+ * font, as Linux's DejaVu and Liberation measured on CI, and the floor holds
+ * whatever font the reader's system draws in. The font is set by the case, over
+ * the portal's own CSS variable, before the page is loaded: nothing in the
+ * viewer reads a switch for it.
+ */
+const IN_A_WIDE_FONT = { name: ", in a wide font", served: true, font: WIDE_FONT, data: (request) => architectureData(request) };
+
+/**
  * The least size on screen a title of the smallest size may be drawn at at the
  * fit, as the map draws its marks: one size on screen within half of the step
  * its scale is restyled at, a power of 1.25 near 1 / zoom, and laid out at the
@@ -170,9 +181,10 @@ async function smallestTitleOnScreen(page) {
   return (SMALLEST_TITLE_PX * shrink) / half;
 }
 
-/** Open the architecture page over `layout`'s `data`: the served file as it is, or `data` served in its place. */
+/** Open the architecture page over `layout`'s `data`: the served file as it is, or `data` served in its place; in `layout`'s font where it names one. */
 async function openLayout(page, layout, data) {
   if (!layout.served) await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+  if (layout.font) await drawInFont(page, layout.font);
   await openArchitecture(page);
 }
 
@@ -348,7 +360,7 @@ test.describe("on this portal's architecture graph", () => {
     expect({ covers: real, single }).toEqual({ covers: [], single: [] });
   });
 
-  for (const layout of LAYOUTS) {
+  for (const layout of [...LAYOUTS, IN_A_WIDE_FONT]) {
     test(`at the whole-graph fit every closed box and top-level node is titled at 10 px within a step of the map's scale, inside its box or on the plate the plan stood it on${layout.name}`, async ({ page, request }) => {
       const data = await layout.data(request);
       const tree = treeOf(data);
@@ -379,7 +391,9 @@ test.describe("on this portal's architecture graph", () => {
 
       expect(wrong).toEqual([]);
     });
+  }
 
+  for (const layout of LAYOUTS) {
     test(`opening a box at the whole-graph fit moves no line between top-level ends and no pill, and draws no line of the file out of the box${layout.name}`, async ({ page, request }) => {
       const data = await layout.data(request);
       const tree = treeOf(data);

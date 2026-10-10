@@ -45,6 +45,19 @@ draws are described under "The map" and "The overview" in [the viewer's page](gr
     so a change to ELK's padding moves the band with it;
   - `linesOf(id, hidden, broken)` is an input, `titleOf` takes a fourth argument, `broken`, and
     the planner returns `hiddenOf(id)`, how many of a node's lines the overview leaves out.
+  Since BDL-080 S4i (`beadloom-af99.17`) the plan's scale is the one the viewer's fit lands on
+  once the plan is drawn. The fit measures the drawn shapes, and a box the plan drew larger past
+  the project box grew that box on both sides: on the `vue-fsd` portal the laid-out extent of
+  812.6 units fitted at 1.25 and the drawn one of 845.1 units at 1.5625, so titles laid out at
+  1.25 read 0.868 of their size, and a 10 px title under Linux's wider fonts read 8.57 px, under
+  the floor (PR #98's CI). Every box the plan draws larger now keeps within
+  `scaleKeepingBoxOf(unit)`, the laid-out extent grown on each side by half of what the fit takes
+  before its zoom drops past the least one `scaleAt` gives the unit at (`leastZoomAt`); a title
+  that box does not hold is broken or stands on a plate. As a second guard the plan is made
+  again at the fit's scale of what it drew (`drawnExtentOf`: the boxes, the grown ones, the
+  project box grown around them, every routed and own line), a step coarser each time and at
+  most `REFITS` (3) times. Neither this repository's portal nor the two Feature-Sliced fixtures
+  needed it, and the test handle reads the same on this portal before and after.
 - `model/mapTitles.js` — `titleLooks(cy, { nodes, tree, geometry })`, how each title would be
   drawn, which the plan is made with, now with `linesOf`; `titleDresser(looks, planner, tree,
   geometry)`, which dresses the nodes with what the plan decided, a plate's title broken where

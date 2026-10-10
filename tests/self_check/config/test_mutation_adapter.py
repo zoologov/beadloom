@@ -153,6 +153,58 @@ class TestTheChangedFunctionsBecomeExactNames:
         assert picked.counts == ((POSTING, "absent", 0),)
 
 
+class TestARunIsCappedToItsBudget:
+    """A change larger than the job's room is measured in part, and says which part.
+
+    PR #98 (BDL-080, 36 commits) selected 1 168 mutants of 32 functions; the job
+    reached 931 of them in 24.5 minutes and was cancelled at its 30-minute limit,
+    so the judge never ran and the run said nothing (`beadloom-af99.17`). A budget
+    of mutants keeps the run inside the limit: whole functions, the largest first,
+    each one that still fits, and every function left out named with its count.
+    """
+
+    _FUNCTIONS: ClassVar[list[dict[str, str]]] = [
+        {"path": POSTING, "name": "reverse"},
+        {"path": POSTING, "name": "post"},
+        {"path": POSTING, "name": "Account.deposit"},
+        {"path": PACKAGE, "name": "_remediation_for"},
+    ]
+
+    def test_a_change_within_its_budget_is_measured_whole(self, tmp_path: Path) -> None:
+        metas = adapter.read_metas(_mutants(tmp_path, _ALL))
+        budgeted = adapter.budgeted_names(self._FUNCTIONS, metas, 5)
+        assert budgeted.measured == adapter.names_for_functions(self._FUNCTIONS, metas)
+        assert budgeted.left == ()
+
+    def test_no_budget_measures_the_whole_change(self, tmp_path: Path) -> None:
+        metas = adapter.read_metas(_mutants(tmp_path, _ALL))
+        assert adapter.budgeted_names(self._FUNCTIONS, metas, None).left == ()
+
+    def test_the_largest_functions_are_measured_first_and_whole(self, tmp_path: Path) -> None:
+        """`post` (2) first; then the 1-mutant functions in the plan's order."""
+        metas = adapter.read_metas(_mutants(tmp_path, _ALL))
+        budgeted = adapter.budgeted_names(self._FUNCTIONS, metas, 3)
+        assert budgeted.measured.names == (REVERSE_1, POST_1, POST_2)
+        assert budgeted.left == (
+            (POSTING, "Account.deposit", 1),
+            (PACKAGE, "_remediation_for", 1),
+        )
+
+    def test_a_function_over_what_is_left_gives_way_to_a_smaller_one(self, tmp_path: Path) -> None:
+        metas = adapter.read_metas(_mutants(tmp_path, _ALL))
+        functions = [{"path": POSTING, "name": "post"}, {"path": POSTING, "name": "reverse"}]
+        budgeted = adapter.budgeted_names(functions, metas, 1)
+        assert budgeted.measured.names == (REVERSE_1,)
+        assert budgeted.left == ((POSTING, "post", 2),)
+
+    def test_a_function_with_no_mutant_costs_nothing_and_is_measured(self, tmp_path: Path) -> None:
+        metas = adapter.read_metas(_mutants(tmp_path, _ALL))
+        functions = [{"path": POSTING, "name": "absent"}, {"path": POSTING, "name": "post"}]
+        budgeted = adapter.budgeted_names(functions, metas, 1)
+        assert budgeted.measured.counts == ((POSTING, "absent", 0),)
+        assert budgeted.left == ((POSTING, "post", 2),)
+
+
 class TestTheTestsARunIsGiven:
     """Each kind of test file is chosen by what it is (BDL-074 G1, review M2).
 
@@ -370,6 +422,20 @@ class TestTheJudgeTellsAJudgedRunFromASilentOne:
     def test_no_selected_mutant_is_silent(self, tmp_path: Path) -> None:
         assert adapter.judge(0, self._stats(tmp_path, total=0, not_checked=0))[0] == "silent"
 
+    def test_a_capped_run_is_judged_over_what_it_measured_and_names_the_rest(
+        self, tmp_path: Path
+    ) -> None:
+        """The floor holds over the measured mutants; the remainder is a named
+        population, never a silence."""
+        stats = self._stats(tmp_path, total=3, killed=3, not_checked=0)
+        left = ((POSTING, "Account.deposit", 1), (PACKAGE, "_remediation_for", 4))
+        verdict, detail = adapter.judge(3, stats, left)
+        assert verdict == "judged"
+        assert "3 mutant(s) judged" in detail
+        assert "5 mutant(s) of 2 function(s) not measured" in detail
+        assert "Account.deposit (1)" in detail
+        assert "_remediation_for (4)" in detail
+
 
 class TestTheCommandLine:
     def test_an_empty_change_generates_nothing_and_says_so(
@@ -432,6 +498,73 @@ class TestTheCommandLine:
             "tests/unit/test_p.py",
         ]
         assert "mutants=2" in (tmp_path / "o").read_text(encoding="utf-8")
+
+    def test_a_capped_change_writes_the_measured_names_and_names_the_rest(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(adapter, "prepare_mutants", lambda *_: _mutants(tmp_path, _ALL))
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT, encoding="utf-8")
+        plan = {
+            "change": {
+                "empty": False,
+                "functions": [
+                    {"path": POSTING, "name": "post", "node": "posting"},
+                    {"path": POSTING, "name": "reverse", "node": "posting"},
+                ],
+                "nodes": [{"node": "posting", "bound_tests": ["tests/unit/test_p.py"]}],
+                "unplaced_tests": [],
+            }
+        }
+        (tmp_path / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+        code = adapter.main(
+            [
+                "select",
+                "--plan",
+                "plan.json",
+                "--names-out",
+                "names.txt",
+                "--github-output",
+                "o",
+                "--budget",
+                "2",
+                "--left-out",
+                "left.txt",
+            ]
+        )
+        assert code == 0
+        assert (tmp_path / "names.txt").read_text(encoding="utf-8").split() == [POST_1, POST_2]
+        outputs = (tmp_path / "o").read_text(encoding="utf-8").split()
+        assert "mutants=2" in outputs
+        assert "unmeasured=1" in outputs
+        assert adapter.read_left(tmp_path / "left.txt") == ((POSTING, "reverse", 1),)
+        said = capsys.readouterr().out
+        assert "not measured: reverse (src/ledger/posting.py), 1 mutant(s)" in said
+        assert "2 of 3 mutant(s) of 2 function(s) measured" in said
+        assert "the budget of 2" in said
+
+    def test_the_judge_reads_the_remainder_select_wrote(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (tmp_path / "names.txt").write_text(f"{POST_1}\n{POST_2}\n", encoding="utf-8")
+        stats = tmp_path / "stats.json"
+        stats.write_text(json.dumps({"total": 2, "killed": 2, "not_checked": 0}), "utf-8")
+        adapter.write_left(tmp_path / "left.txt", ((POSTING, "reverse", 1),))
+        code = adapter.main(
+            [
+                "judge",
+                "--names",
+                str(tmp_path / "names.txt"),
+                "--stats",
+                str(stats),
+                "--left",
+                str(tmp_path / "left.txt"),
+            ]
+        )
+        assert code == 0
+        said = capsys.readouterr().out
+        assert "verdict=judged" in said
+        assert "1 mutant(s) of 1 function(s) not measured" in said
 
     def test_a_change_with_no_test_to_run_is_refused(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

@@ -31,7 +31,9 @@ cut the viewer into slices (RFC D3). How the viewer uses each part is described 
   `routesAlong`), read from the routes alone, so a filter that hides a member leaves it out.
 - `grownBoxes.js` — the overview's top-level nodes drawn larger than their layout to hold their
   titles: `grownBoxesOf`, `drawnBoxOf`, `crossesAny`, and `pathOutside`, where a line into a
-  grown box stops.
+  grown box stops. `grownBoxesOf` takes `limit` (BDL-080 S4i), a box no drawn box passes,
+  even where the box that holds them all (`within`) is given up: the overview's plan names the
+  box past which the whole-graph fit would land a step of the map's scale coarser.
 - `aggregateRoutes.js` — `aggregateRouteOf(members, fromBox, toBox, closed)`: an aggregated
   line's route, the medoid of its members' ELK routes clipped between the two boxes, its last run
   into a closed box straightened where it was a short dogleg (`straightenedInto`).

@@ -35,7 +35,11 @@
 // from the overview whatever level is drawn, so a zoom or a box opened
 // moves no line between two top-level nodes: such a line keeps the plan's route
 // at every level. It is made again only when what it reads changes: the edges
-// the filters show, or the scale of the fit when the canvas is resized.
+// the filters show, or the scale of the fit when the canvas is resized. That
+// scale is the one the viewer's fit lands on once the plan is drawn: a box drawn
+// larger keeps within the room past which the fit would step coarser
+// (`scaleKeepingBoxOf`), so a title sized at the plan's scale reads within half
+// a step of its size on screen, in any font.
 //
 // The box that holds everything is titled at the top, inside, at the size of
 // a node's title in the graph's units: at the fit of a large graph that is a
@@ -80,6 +84,39 @@ export const PROJECT_PLATE_SIDE = "above";
 
 /** The least rectangle that holds rectangles `a` and `b`. */
 const unionOf = (a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) });
+
+/** The least rectangle that holds every rectangle of `boxes` and every point of `points`. */
+function extentOf(boxes, points) {
+  let [x1, y1, x2, y2] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const box of boxes) [x1, y1, x2, y2] = [Math.min(x1, box.x1), Math.min(y1, box.y1), Math.max(x2, box.x2), Math.max(y2, box.y2)];
+  for (const point of points) [x1, y1, x2, y2] = [Math.min(x1, point.x), Math.min(y1, point.y), Math.max(x2, point.x), Math.max(y2, point.y)];
+  return { x1, y1, x2, y2 };
+}
+
+/** How much larger than the plan's scale the fit's must be to count as a step coarser: more than rounding. */
+const COARSER = 1e-9;
+
+/** How many times the least zoom of a scale is halved towards (`leastZoomAt`): past a double's precision. */
+const HALVINGS = 60;
+
+/**
+ * The least zoom at which `scaleAt` gives `unit`, between `lowest` and 1 / `unit`,
+ * found by halving: below it the map's scale is a step coarser. A hair above
+ * the boundary, so a fit at it lands on `unit` whatever the rounding.
+ */
+function leastZoomAt(unit, scaleAt, lowest) {
+  let [below, at] = [lowest, 1 / unit];
+  if (scaleAt(below) <= unit * (1 + COARSER)) return below;
+  for (let halving = 0; halving < HALVINGS; halving += 1) {
+    const middle = (below + at) / 2;
+    if (scaleAt(middle) > unit * (1 + COARSER)) below = middle;
+    else at = middle;
+  }
+  return at * (1 + COARSER);
+}
+
+/** How many times the plan is made again at a coarser scale, when what it draws widens the fit past a step (`settledLayOut`). */
+const REFITS = 3;
 
 /** Whether rectangles `a` and `b` are one, within a hair of rounding. */
 const sameBox = (a, b) => ["x1", "y1", "x2", "y2"].every((side) => Math.abs(a[side] - b[side]) < 1e-9);
@@ -153,19 +190,52 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
   const extras = new Map();
 
   /**
-   * The map's scale at the zoom that fits every box in the canvas, as the
-   * viewer's fit does: `{ unit, clamped }`, `clamped` when that zoom is held at
-   * the smallest and the top level does not fit the canvas.
+   * The map's scale at the zoom that fits `extent` (`{ x1, y1, x2, y2 }`, layout
+   * units) in the canvas, as the viewer's fit does: `{ unit, clamped }`,
+   * `clamped` when that zoom is held at the smallest and the top level does not
+   * fit the canvas. By default the extent is every box as it is laid out.
    */
-  function fitScale() {
-    let [x1, y1, x2, y2] = [Infinity, Infinity, -Infinity, -Infinity];
-    for (const box of Object.values(geometry.boxes)) {
-      [x1, y1, x2, y2] = [Math.min(x1, box.x1), Math.min(y1, box.y1), Math.max(x2, box.x2), Math.max(y2, box.y2)];
-    }
+  function fitScale(extent = extentOf(Object.values(geometry.boxes), [])) {
+    const { x1, y1, x2, y2 } = extent;
     const [width, height] = [cy.width() - 2 * FIT_PADDING, cy.height() - 2 * FIT_PADDING];
     if (!(width > 0 && height > 0 && x2 > x1 && y2 > y1)) return { unit: scaleAt(cy.zoom()), clamped: false };
     const zoom = Math.min(width / (x2 - x1), height / (y2 - y1), FIT_MAX_ZOOM, cy.maxZoom());
     return { unit: scaleAt(Math.max(zoom, cy.minZoom())), clamped: zoom < cy.minZoom() };
+  }
+
+  /**
+   * The box every box the plan draws larger keeps within at `unit`, in layout
+   * units, so the whole-graph fit still lands on `unit`: the laid-out extent
+   * grown on both sides of each axis by half of what the fit can take before its
+   * zoom drops past the least one `scaleAt` gives `unit` at. A box that reaches
+   * out of the box that holds everything draws that box as much larger on both
+   * sides (`heldBoxOf`), so a reach of that half keeps the fit on `unit`.
+   * Null where the canvas has no size.
+   */
+  function scaleKeepingBoxOf(unit) {
+    const laid = extentOf(Object.values(geometry.boxes), []);
+    const [width, height] = [cy.width() - 2 * FIT_PADDING, cy.height() - 2 * FIT_PADDING];
+    if (!(width > 0 && height > 0)) return null;
+    const zoom = leastZoomAt(unit, scaleAt, cy.minZoom());
+    const dx = Math.max(0, (width / zoom - (laid.x2 - laid.x1)) / 2);
+    const dy = Math.max(0, (height / zoom - (laid.y2 - laid.y1)) / 2);
+    return { x1: laid.x1 - dx, y1: laid.y1 - dy, x2: laid.x2 + dx, y2: laid.y2 + dy };
+  }
+
+  /**
+   * What the viewer's fit measures over the overview `made` draws, in layout
+   * units: every box, the boxes it draws larger than their layout and the box
+   * that holds everything grown around them, and every point of every line
+   * drawn between top-level nodes, its own routes and the lines drawn as
+   * themselves (`features/navigate-graph`, `shapesBoxOf`). A title's plate is a
+   * label, which the fit leaves out.
+   */
+  function drawnExtentOf(made) {
+    const grown = [...made.grown.values()].map((entry) => entry.box);
+    const reach = grown.reduce((a, b) => (a ? unionOf(a, b) : b), null);
+    const held = tree.wrapper && reach ? [heldBoxOf(geometry.boxes[tree.wrapper], reach)] : [];
+    const lines = [...made.paths.values(), ...made.fallbacks.values(), ...overview.originals.map(routePointsOf).filter(Boolean)];
+    return extentOf([...Object.values(geometry.boxes), ...grown, ...held], lines.flat());
   }
 
   /**
@@ -191,6 +261,7 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
       gaps: GROWN_GAPS.map((gap) => gap * unit),
       lines,
       within: tree.wrapper ? geometry.boxes[tree.wrapper] : null,
+      limit: scaleKeepingBoxOf(unit),
     };
     const grown = grownBoxesOf(ids.filter((id) => !ownOf(id).length), boxes, options);
     const placed = { ...boxes, ...Object.fromEntries([...grown].map(([id, entry]) => [id, entry.box])) };
@@ -277,10 +348,34 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
     const signature = `${unit}\n${signatureOf(drawn)}`;
     if (plan.signature === signature) return plan;
     const started = performance.now();
-    const made = layOut(unit, drawn, hiddenAt, clamped);
-    plan = { signature, ...made, ms: performance.now() - started, unit, hiddenAt };
+    const { made, at } = settledLayOut(unit, drawn, hiddenAt, clamped);
+    plan = { signature, ...made, ms: performance.now() - started, unit: at, hiddenAt };
     extras.clear();
     return plan;
+  }
+
+  /**
+   * The plan laid out at the scale the viewer's fit lands on once it is drawn:
+   * `{ made, at }`. The fit measures what the plan draws, and a box the plan
+   * draws larger, or the box that holds everything grown around it, can widen
+   * the fit past a step of the map's scale: the titles, laid out at the plan's
+   * scale, then read a step smaller than every other mark, under the smallest
+   * size a title is drawn at in a wider font (vue-fsd on Linux: 8.57 px for 10).
+   * The boxes drawn larger keep within `scaleKeepingBoxOf`, so the fit stays on
+   * `unit`; should what the plan drew still move it, the plan is made again at
+   * the fit's scale of what it drew, a step coarser each time, at most `REFITS`
+   * times. A fit held at the smallest zoom is left as it was.
+   */
+  function settledLayOut(unit, drawn, hiddenAt, clamped) {
+    let at = unit;
+    let made = layOut(at, drawn, hiddenAt, clamped);
+    for (let refit = 0; refit < REFITS && !clamped; refit += 1) {
+      const fit = fitScale(drawnExtentOf(made));
+      if (fit.clamped || !(fit.unit > at * (1 + COARSER))) break;
+      at = fit.unit;
+      made = layOut(at, drawn, hiddenAt, clamped);
+    }
+    return { made, at };
   }
 
   /**

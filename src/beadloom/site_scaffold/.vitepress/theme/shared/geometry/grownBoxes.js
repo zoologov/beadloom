@@ -7,9 +7,11 @@
 // keeps clear of every other box and inside the box that holds it, centred where
 // its layout put it, so no node moves. Where no size keeps inside the box that
 // holds it, the size that reaches out of it least is taken, and that box is
-// drawn as much larger around it (`routes.js`, `compoundSizeOf`). A node no such
-// box fits around keeps its laid-out box, and its title stands on a plate
-// beside it.
+// drawn as much larger around it (`routes.js`, `compoundSizeOf`) — never past
+// the box the overview's plan keeps every drawn box in (`limit`), past which the
+// whole-graph fit would land a step of the map's scale coarser than the one the
+// titles were sized at. A node no such box fits around keeps its laid-out box,
+// and its title stands on a plate beside it.
 //
 // The drawn box is sized in pixels on screen at the scale the overview is
 // planned at, and the overview's lines are routed around it, each reaching it
@@ -79,17 +81,18 @@ export function crossesAny(box, paths) {
  * `sizes` the title sizes tried, largest first; `gaps` the room kept from every
  * other box, in layout units, tried in turn; `lines` the polylines of lines drawn
  * as themselves, which no drawn box may cover; `within` the box that holds them
- * all, or null.
+ * all, or null; `limit` a box no drawn box passes, or null.
  *
  * A node takes the first gap, and within it the largest size, at which its box
  * keeps that room from every other box, those already drawn larger included,
  * covers no line and stays within `within`; failing that, the first gap and the
- * smallest size at which it does all but the last; a node that takes none is
- * not in the map. A box no larger than the laid-out one keeps its layout, which
- * needs no room it does not have: `leastBoxOf` may hold a title another way,
- * broken onto two lines, that fits the node as laid out.
+ * smallest size at which it does all but the last; every box it takes stays
+ * within `limit`; a node that takes none is not in the map. A box no larger than
+ * the laid-out one keeps its layout, which needs no room it does not have:
+ * `leastBoxOf` may hold a title another way, broken onto two lines, that fits the
+ * node as laid out.
  */
-export function grownBoxesOf(candidates, boxes, { leastBoxOf, sizes, gaps, lines = [], within = null }) {
+export function grownBoxesOf(candidates, boxes, { leastBoxOf, sizes, gaps, lines = [], within = null, limit = null }) {
   const drawn = new Map(Object.entries(boxes));
   const grown = new Map();
   for (const id of candidates) {
@@ -103,7 +106,7 @@ export function grownBoxesOf(candidates, boxes, { leastBoxOf, sizes, gaps, lines
     let found = null;
     for (const { gap, px, held } of tries) {
       const box = grownAround(laid, leastBoxOf(id, px));
-      if (same(box, laid) || (clear(box, gap) && (!held || inside(box, within)))) {
+      if (same(box, laid) || (clear(box, gap) && inside(box, limit) && (!held || inside(box, within)))) {
         found = { px, box };
         break;
       }

@@ -331,6 +331,15 @@ classes MAJOR. Everything else adds; nothing is removed or renamed, the data fil
   its relaxed pass, priced as eight refusals, where a crossing had shrunk a planned line's head
   to 3.57 px; lines keep below the frame's title band; and a resize alone no longer resizes the
   boxes, which had moved the fit by 0.2 % on `rn-fsd`.
+- **A title at the overview is never drawn under 10 px, in any font (`beadloom-af99.17`).**
+  The overview's plan sized its titles at the scale of the laid-out boxes' fit, while the viewer
+  fits the boxes it draws, and a box the plan drew larger past the project box widened that fit
+  a step coarser: the titles then read 0.868 of their size, and two titles of the `vue-fsd`
+  portal read 8.57 px under Linux's fonts on CI. A box the plan draws larger now keeps the fit
+  on the plan's scale, so a title that does not fit is broken or stands on a plate, and the plan
+  is made again at the fit's scale should what it drew still move the fit. The browser suite's
+  title-floor case also runs in a wider font (Verdana, or DejaVu Sans on Linux), and this
+  portal's viewer reads the same before and after.
 - **`init` keeps the indentation of the `package.json` it adds `lint:fsd` to
   (`beadloom-af99.14`).** It rewrote the file with a fixed two-space indent, so on a
   tab-indented file every line changed. It now writes in the indentation the file already has

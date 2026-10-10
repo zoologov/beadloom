@@ -2308,7 +2308,11 @@ jobs:
 - `mutation-per-change` runs on every pull request. `--changed-since origin/<base>` states the
   population, repository tooling that is never shipped (`.github/scripts/mutmut_adapter.py`)
   turns the touched functions into mutmut's exact mutant names and a per-run test selection,
-  and the command scores the run with `--survivors` at `--min-score 0.88`.
+  and the command scores the run with `--survivors` at `--min-score 0.88`. A change of more
+  than `MUTANT_BUDGET` (350) mutants is measured in part, whole functions and the largest
+  first, and the adapter names every function left out (BDL-080 S4i, `beadloom-af99.17`).
+  The command's own report still says the change's functions were judged: the adapter's
+  lines in the job's summary are what name the part that was not.
 - `mutation-sample` runs weekly (cron `17 3 * * 1`, Monday 03:17 UTC) and by hand. It draws
   150 mutants from the whole declared scope, seeded by the ISO week (`2026-W40`) so a week's
   sample is reproducible from the commit and the seed, and scores them over every declared

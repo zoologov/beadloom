@@ -269,6 +269,11 @@ does not ask the viewer to grade itself:
   and its box say, and of every PRD criterion measured together.
 - `perturbedGraph.js`: `withTwoMoreEdges(data)`, the served graph with two edges more, a third
   graph for the arrowhead and title cases.
+- `fonts.js` (BDL-080 S4i): `drawInFont(page, family)` sets the portal's font variable,
+  `--vp-font-family-base`, before a page loads, and `WIDE_FONT` names Verdana or, on Linux,
+  DejaVu Sans. The case sets it over the portal's own stylesheet, and nothing in the viewer
+  reads a switch for it. The title-floor case of `metrics.spec.js` runs a third time in that
+  font, since Linux's fonts drew two titles of the `vue-fsd` portal at 8.57 px on CI.
 
 `support/bridges.js` and `bridges.spec.js` were removed with the bridges (BDL-078).
 - `pointer.js`: drags and long presses on a reachable leaf, and every toolbar button pressed.
