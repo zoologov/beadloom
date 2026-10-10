@@ -218,7 +218,7 @@ One feature node covers the cooperating modules below (all annotated
   differs; a file with no marker, or whose body no longer matches its marker, is never
   overwritten and is reported as a `KeptFile` with its remedy. A file with an intact marker that
   the installed version no longer ships is removed (`retired`). Since BDL-080 S2d a folder those
-  removals leave empty is removed with them (`retired_folders`, `_retire_emptied_folders`),
+  removals leave empty is removed with them (`retired_folders`, `retire_emptied_folders`),
   deepest first: the candidates are the folders a retired file sat in and the folders above them,
   never the portal's root, so a folder the project made is never touched and one that still
   holds anything, a file beadloom did not write included, stays. Without it a slice the scaffold
@@ -226,6 +226,10 @@ One feature node covers the cooperating modules below (all annotated
   rewritten after the S2c renames kept six empty leaf folders under `entities/` (measured by
   S2d: `42 retired, 9 empty folders retired`, 0 empty folders left). `.beadloom/site/` (`OVERRIDE_DIR`)
   is copied last and verbatim, and a shipped path it provides is not written at all.
+  Since BDL-081 R2 `moved_pages.retire_moved_pages` then removes a node page beadloom wrote
+  (`node_pages.is_page_of`: front matter `title: <ref>` and `kind:`, then `# <ref>`) under a
+  section the same ref's page has left, never a path `.beadloom/site/` provides, and the line
+  counts it as `N moved pages retired` (a portal 8.0.0 wrote loses `other/vitepress-site.md`).
   `shipped_files()` returns each body without the lines that are only a graph annotation
   (`without_annotations`), so a portal never names this repository's nodes; the marker hashes
   the body as written. `marker_line(body, version, note)` and `place_marked(target, expected)` are
