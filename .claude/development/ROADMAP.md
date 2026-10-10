@@ -1,6 +1,6 @@
 # Beadloom Roadmap
 
-> **Current version: 9.0.0** (being released by BDL-081; not yet verified on the wheel downloaded
+> **Current version: 9.0.0** (PyPI, published 2026-10-10, verified on the wheel downloaded from PyPI: 24 of 24 checks).
 > from PyPI). The release before it, 8.0.0, is the latest on PyPI, published 2026-10-08 and
 > verified on the wheel downloaded from PyPI: 11 of 11 checks.
 >
@@ -44,12 +44,8 @@ item below is ranked by what it does for those three. Project names stay out of 
 
 ## In progress
 
-### BDL-081 — the MAJOR release after BDL-080
-
-Its own work item by BDL-079's recipe (`/task-init`, Explore measuring `v8.0.0..main` per
-surface). MAJOR because a `kind: site` node is now judged by the service rules, so `lint`'s exit
-code can move on an unedited project. BDL-080 shipped 2026-10-10: S1 as PR #96, S2 + S3 + S4 as
-PR #98 (`290507b2`); its findings are BDL-UX #309–#314, all under Debt to zero.
+Nothing. BDL-081 released 9.0.0 on 2026-10-10 (PR #99, Release `v9.0.0`, the harness green on the
+downloaded wheel). Next by this list: item 1, adoption on the Vue frontend.
 
 ---
 
