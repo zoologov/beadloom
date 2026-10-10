@@ -3,23 +3,29 @@
 Usage::
 
     python3 tests/release/verify_the_release.py <wheel path | beadloom==X.Y.Z>
-        [--release 8.0.0] [--node-bin DIR] [--python 3.12] [--keep] [--record-json PATH]
+        [--release 9.0.0] [--node-bin DIR] [--python 3.12] [--keep] [--record-json PATH]
 
-The artifact is either a built wheel or an exact PyPI pin. It is installed into a FRESH
-virtual environment made by ``uv`` in a new temporary directory, with ``UV_NO_CACHE=1``
-and ``--refresh``, so the verdict is about that artifact and not about whatever the machine
-already held. The checks then run that environment's ``beadloom`` on a throwaway adopter
-project the script writes itself: three modules with imports between them, a README, a
-``docs/`` folder, a test, and a git history dated so that the three modules fall into three
-different activity levels.
+The artifact is either a built wheel or an exact PyPI pin. It is installed with its
+``languages`` extra, so TypeScript and Vue are parsed, into a FRESH virtual environment made
+by ``uv`` in a new temporary directory, with ``UV_NO_CACHE=1`` and ``--refresh``, so the
+verdict is about that artifact and not about whatever the machine already held. The checks
+then run that environment's ``beadloom`` on two throwaway projects the script writes itself.
+The first is a Python adopter: three modules with imports between them, a README, a ``docs/``
+folder, a test, a node declared ``kind: site``, and a git history dated so that the three
+modules fall into three different activity levels. The second is a Feature-Sliced Vue
+frontend with three planted violations, the tree ``tests/support/fsd_tree.py`` holds; it is
+copied here because this script imports nothing of the suite.
 
 The checks, in the order they run and are reported:
 
 * **version** -- ``beadloom --version``, ``beadloom.__version__`` and the installed
   distribution's metadata read ``--release``; the imported module is the one inside the
   fresh environment; a wheel's file name states the same version as its metadata.
+* **languages** -- the fresh environment imports the TypeScript parser the extra installs.
 * **init** and **reindex** exit 0; on a full history the reindex prints no shallow-history
   line.
+* **site alias** -- the node declared ``kind: site`` is ``service`` in ``ctx --json``, and the
+  reindex prints an ``[info]`` line naming it as read through the alias.
 * **activity** -- ``ctx --json`` carries ``activity.level`` from the five levels (hot, warm,
   cool, quiet, dormant) and an integer ``lines_30d`` for every node that owns a source
   directory (the root, whose source is the whole project, carries none), and the dated history
@@ -29,9 +35,27 @@ The checks, in the order they run and are reported:
   naming the shallow history.
 * **portal scaffold** -- ``docs site --out`` writes ``package.json``, ``.vitepress/`` and
   ``e2e/``.
+* **portal steiger** -- it writes ``steiger.config.js`` and a ``lint:fsd`` script.
+* **portal brand** -- it writes ``public/brand/`` with Beadloom's icon, the SVG favicon and
+  the two PNG favicons.
+* **portal footer** -- it writes the ``widgets/powered-by/`` slice of the theme.
 * **portal build** -- ``npm ci`` and ``npm run docs:build`` succeed under Node 22 or later.
+* **portal assets** -- the built portal serves the brand files, links the SVG favicon and
+  draws "Powered by Beadloom".
+* **portal lint:fsd** -- ``npm run lint:fsd`` (Steiger) passes on the scaffold as shipped.
 * **pages workflow** -- ``docs site --pages-workflow`` writes
   ``.github/workflows/beadloom-portal.yml`` with ``fetch-depth: 0``.
+* **fsd init** -- on the Feature-Sliced project ``init --yes`` exits 1 and names the planted
+  cross-import among the code's crossings of the rules it wrote.
+* **fsd preset**, **fsd rules**, **fsd steiger** -- it writes ``preset: fsd``, the nine FSD
+  rules into ``rules.yml`` and a ``lint:fsd`` script into the project's ``package.json``.
+* **fsd lint** -- ``lint --strict`` exits 1 and reports the planted cross-import
+  ``features-cart -> features-auth``, which only the Vite alias ``init`` read resolves.
+
+The three npm checks need Node 22+ and npm. With ``--node-bin`` they are required, and a
+directory that holds neither stops the run before it starts. Without it they run when ``PATH``
+holds both, and are otherwise ``SKIPPED``: not counted in the verdict, and named under it with
+the reason, so a run on a machine with no usable Node says what it did not run.
 
 The report names every check, and the FIRST that did not pass. A check whose step it depends
 on failed is listed as ``NOT RUN`` with the reason: the project's checks after a failed
@@ -42,15 +66,17 @@ that fails while the project is written or committed stops every project check n
 reached, and each is listed as ``NOT RUN``. A child that exits 0 and prints no JSON where JSON
 was asked for fails its check, and the detail quotes what it printed.
 
-Exit codes: 0 every check holds; 2 the run could not start (an unpinned or unknown artifact,
-no ``uv``/``git``, a Node older than 22, an install that failed) or a step could not run, so
+Exit codes: 0 every check that ran holds, and the ones ``SKIPPED`` are named under the
+verdict; 2 the run could not start (an unpinned or unknown artifact, no ``uv``/``git``, a
+``--node-bin`` with no Node 22+ and npm, an install that failed) or a step could not run, so
 the verdict is incomplete; 3 a version check failed, or the index serves no such pin; 4 a
 behaviour check failed and every version check held. When a run has several, the order is
 3, then 4, then 2: a check that ran and failed already settles that the artifact is not the
 release, and the checks an incomplete run did not reach cannot overturn that.
 
-It uses the standard library only, so any Python 3.10+ can run it, and it needs ``uv``,
-``git`` and ``node``/``npm`` on ``PATH`` (``--node-bin`` puts a Node directory first).
+It uses the standard library only, so any Python 3.10+ can run it, and it needs ``uv`` and
+``git`` on ``PATH``, and ``node``/``npm`` for the portal build (``--node-bin`` puts a Node
+directory first).
 """
 
 from __future__ import annotations
@@ -69,7 +95,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 #: The release this script verifies when ``--release`` is not given.
-DEFAULT_RELEASE = "8.0.0"
+DEFAULT_RELEASE = "9.0.0"
 
 #: The five activity levels a node can carry.
 ACTIVITY_LEVELS = frozenset({"hot", "warm", "cool", "quiet", "dormant"})
@@ -85,6 +111,49 @@ PAGES_WORKFLOW = Path(".github") / "workflows" / "beadloom-portal.yml"
 
 #: What the portal scaffold holds at the top of the output directory.
 SCAFFOLD_ENTRIES = (("package.json", "file"), (".vitepress", "dir"), ("e2e", "dir"))
+
+#: The extra the artifact is installed with: the parsers of TypeScript, Vue and the rest.
+LANGUAGES_EXTRA = "languages"
+
+#: Steiger's configuration in the portal scaffold, and the script that runs it.
+STEIGER_CONFIG = "steiger.config.js"
+LINT_FSD = "lint:fsd"
+
+#: The brand files ``docs site`` writes, relative to the portal; the built portal serves
+#: them under ``brand/``.
+BRAND_FILES = (
+    "public/brand/beadloom-icon.svg",
+    "public/brand/beadloom-favicon.svg",
+    "public/brand/beadloom-favicon.png",
+    "public/brand/beadloom-favicon-dark.png",
+)
+
+#: The theme's slice that draws the "Powered by Beadloom" footer, entered through its index.
+FOOTER_WIDGET = ".vitepress/theme/widgets/powered-by"
+
+#: What the built portal's index page carries when the brand and the footer were built.
+FAVICON_LINK = "brand/beadloom-favicon.svg"
+POWERED_BY = "Powered by Beadloom"
+
+#: The node the adopter declares ``kind: site``, and the kind it must be read as.
+PORTAL_NODE = "quayside-portal"
+SITE_ALIAS_TARGET = "service"
+
+#: The nine rules ``init`` writes for a Feature-Sliced frontend.
+FSD_RULES = (
+    "fsd-layers",
+    "fsd-public-api",
+    "fsd-slice-shape",
+    "fsd-cohesion-app",
+    "fsd-cohesion-pages",
+    "fsd-cohesion-widgets",
+    "fsd-cohesion-features",
+    "fsd-cohesion-entities",
+    "fsd-cohesion-shared",
+)
+
+#: The cross-import planted inside the features layer, through the Vite alias ``@features``.
+PLANTED_CROSSING = ("features-cart", "features-auth")
 
 #: An exact pin of the one distribution this script verifies.
 _PIN = re.compile(r"^beadloom==(\d+\.\d+\.\d+(?:[a-z]+\d+)?)$")
@@ -113,6 +182,10 @@ _EXIT_BEHAVIOUR = 4
 #: The status of a check whose own step failed for a reason outside the artifact.
 _CANNOT_RUN = "CANNOT RUN"
 
+#: The status of a check this run was not equipped to make, such as the portal build on a
+#: machine with no Node 22+: not counted in the verdict, and named under it.
+_SKIPPED = "SKIPPED"
+
 #: How much of a child's output a check's detail quotes.
 _EXCERPT = 300
 
@@ -121,12 +194,22 @@ _EXCERPT = 300
 _PROJECT_STAGES = (
     "init",
     "reindex",
+    "site alias",
     "activity",
     "shallow history",
     "portal scaffold",
+    "portal steiger",
+    "portal brand",
+    "portal footer",
     "portal build",
+    "portal assets",
+    "portal lint:fsd",
     "pages workflow",
 )
+
+#: The Feature-Sliced project's checks in the order they run, by the stage each name begins
+#: with.
+_FSD_STAGES = ("fsd init", "fsd preset", "fsd rules", "fsd steiger", "fsd lint")
 
 
 class CannotRunError(Exception):
@@ -148,10 +231,13 @@ class Artifact:
 
 @dataclass
 class Check:
-    """One assertion and its outcome: ``PASS``, ``FAIL``, ``NOT RUN`` or ``CANNOT RUN``.
+    """One assertion and its outcome: ``PASS``, ``FAIL``, ``NOT RUN``, ``CANNOT RUN`` or
+    ``SKIPPED``.
 
     ``NOT RUN`` is a check skipped because a check or a step it depends on did not pass;
-    ``CANNOT RUN`` is a check whose own step failed for a reason outside the artifact.
+    ``CANNOT RUN`` is a check whose own step failed for a reason outside the artifact;
+    ``SKIPPED`` is a check this run was not equipped to make, which the verdict does not
+    count and names under it.
     """
 
     name: str
@@ -179,12 +265,23 @@ class Report:
     def cannot_run(self, name: str, kind: str, why: str) -> None:
         self.checks.append(Check(name, kind, _CANNOT_RUN, why))
 
+    def skipped(self, name: str, kind: str, why: str) -> None:
+        self.checks.append(Check(name, kind, _SKIPPED, why))
+
+    def ran(self) -> list[Check]:
+        """The checks this run made: every check but the ones ``SKIPPED``."""
+        return [check for check in self.checks if check.status != _SKIPPED]
+
+    def not_asked(self) -> list[Check]:
+        """The checks this run was not equipped to make."""
+        return [check for check in self.checks if check.status == _SKIPPED]
+
     def first_failure(self) -> Check | None:
-        return next((check for check in self.checks if check.status != "PASS"), None)
+        return next((check for check in self.ran() if check.status != "PASS"), None)
 
     def exit_code(self) -> int:
         """3, then 4, then 2: a check that ran and failed outranks an incomplete run."""
-        failed = [check for check in self.checks if check.status != "PASS"]
+        failed = [check for check in self.ran() if check.status != "PASS"]
         if any(check.kind == "version" for check in failed):
             return _EXIT_VERSION
         if any(check.status == "FAIL" for check in failed):
@@ -215,6 +312,14 @@ class Done:
         return self.stdout + self.stderr
 
 
+def install_spec(artifact: Artifact) -> str:
+    """What ``uv pip install`` is given: the artifact with its ``languages`` extra."""
+    if artifact.is_wheel:
+        return f"{artifact.install}[{LANGUAGES_EXTRA}]"
+    name, version = artifact.install.split("==", 1)
+    return f"{name}[{LANGUAGES_EXTRA}]=={version}"
+
+
 def parse_artifact(argument: str) -> Artifact:
     """The artifact *argument* names: an existing wheel file, or an exact ``beadloom`` pin."""
     pinned = _PIN.match(argument.strip())
@@ -239,6 +344,8 @@ class Room:
 
     def __init__(self, workdir: Path, node_bin: Path | None) -> None:
         self.workdir = workdir
+        #: Why the npm checks are skipped, or empty when they run; :func:`prepare` decides.
+        self.npm_skip = ""
         self.venv = workdir / "venv"
         self.bin = self.venv / "bin"
         path = [str(self.bin)]
@@ -391,13 +498,155 @@ def write_project(room: Room, root: Path, now: int) -> None:
 
 
 def declare_portal(root: Path) -> None:
-    """What the adopter writes after ``init``: the portal's identity under ``site:``."""
+    """What the adopter writes after ``init``: the portal's identity under ``site:``, and the
+    portal as a node of the graph, declared ``kind: site`` as graphs before 9.0.0 declared it.
+    """
     _append(
         root,
         ".beadloom/config.yml",
         "site:\n  title: Quayside\n  base: /quayside/\n"
         "  repo_url: https://github.com/harbour-works/quayside\n",
     )
+    (root / ".beadloom" / "_graph" / "portal.yml").write_text(
+        f"nodes:\n  - ref_id: {PORTAL_NODE}\n    kind: site\n"
+        '    summary: "The project portal beadloom docs site writes"\n',
+        encoding="utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# The throwaway Feature-Sliced project
+# ---------------------------------------------------------------------------
+
+#: A synthetic Feature-Sliced Vue frontend: six layers under ``src/``, a tsconfig ``@/*``
+#: path, a Vite alias ``@features`` no tsconfig carries, two legacy folders, and three planted
+#: violations -- a deep import past ``features/auth``'s index, the cross-import
+#: ``features/cart -> features/auth`` through the Vite alias, and a ``helpers/`` folder that
+#: is no segment. A copy of ``tests/support/fsd_tree.py``'s tree, which a self-check holds
+#: equal to it: this script imports nothing of the suite.
+FSD_PROJECT_FILES: dict[str, str] = {
+    "package.json": (
+        "{\n"
+        '  "name": "orchard-web",\n'
+        '  "private": true,\n'
+        '  "scripts": {"dev": "vite"},\n'
+        '  "dependencies": {"vue": "3.5.0"},\n'
+        '  "devDependencies": {"vite": "6.0.0", "typescript": "5.6.0"}\n'
+        "}\n"
+    ),
+    "tsconfig.json": (
+        "{\n"
+        "  // the app's paths\n"
+        '  "compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["src/*"]}},\n'
+        "}\n"
+    ),
+    "vite.config.ts": (
+        "import { defineConfig } from 'vite'\n"
+        "export default defineConfig({\n"
+        "  resolve: { alias: { '@features': './src/features' } },\n"
+        "})\n"
+    ),
+    "src/main.ts": (
+        "import { createApp } from 'vue'\nimport { mountApp } from './app'\nmountApp(createApp)\n"
+    ),
+    "src/app/index.ts": (
+        "export { router } from './providers/router'\n"
+        "export function mountApp(f: unknown) { return f }\n"
+    ),
+    "src/app/providers/router.ts": (
+        "import { HomePage } from '@/pages/home'\n"
+        "import { ProfilePage } from '@/pages/profile'\n"
+        "export const router = [HomePage, ProfilePage]\n"
+    ),
+    "src/app/styles/theme.ts": ("export const theme = { dark: false }\n"),
+    "src/pages/home/index.ts": ("export { default as HomePage } from './ui/HomePage.vue'\n"),
+    "src/pages/home/ui/HomePage.vue": (
+        '<script setup lang="ts">\n'
+        "import { Header } from '@/widgets/header'\n"
+        "import { LoginForm } from '@/features/auth'\n"
+        "</script>\n"
+        "<template><Header /><LoginForm /></template>\n"
+    ),
+    "src/pages/profile/index.ts": ("export { ProfilePage } from './ui/ProfilePage'\n"),
+    "src/pages/profile/ui/ProfilePage.ts": (
+        "import { userName } from '@/entities/user'\n"
+        "export function ProfilePage() { return userName() }\n"
+    ),
+    "src/widgets/header/index.ts": ("export { Header } from './ui/Header'\n"),
+    # PLANTED: a deep import past features/auth's index (public API sidestep).
+    "src/widgets/header/ui/Header.ts": (
+        "import { currentSession } from '@/features/auth/model/session'\n"
+        "import { userName } from '@/entities/user'\n"
+        "export function Header() { return [currentSession(), userName()] }\n"
+    ),
+    "src/features/auth/index.ts": (
+        "export { LoginForm } from './ui/LoginForm'\n"
+        "export { currentSession } from './model/session'\n"
+    ),
+    "src/features/auth/ui/LoginForm.ts": (
+        "import { currentSession } from '../model/session'\n"
+        "import { Button } from '@/shared/ui'\n"
+        "export function LoginForm() { return [Button(), currentSession()] }\n"
+    ),
+    "src/features/auth/model/session.ts": (
+        "import { userName } from '@/entities/user'\n"
+        "import { client } from '@/shared/api'\n"
+        "export function currentSession() { return [userName(), client] }\n"
+    ),
+    "src/features/cart/index.ts": ("export { addToCart } from './model/cart'\n"),
+    # PLANTED: a cross-import inside the features layer, through the Vite alias.
+    "src/features/cart/model/cart.ts": (
+        "import { currentSession } from '@features/auth'\n"
+        "import { formatPrice } from '../helpers/format'\n"
+        "import { productTitle } from '@/entities/product'\n"
+        "export function addToCart() {\n"
+        "  return [currentSession(), formatPrice(1), productTitle()]\n"
+        "}\n"
+    ),
+    # PLANTED: `helpers/` is not one of FSD's standard segments.
+    "src/features/cart/helpers/format.ts": (
+        "export function formatPrice(n: number) { return `${n}` }\n"
+    ),
+    "src/entities/user/index.ts": ("export { userName } from './model/user'\n"),
+    "src/entities/user/model/user.ts": (
+        "import { capitalise } from '@/shared/lib'\n"
+        "export function userName() { return capitalise('ann') }\n"
+    ),
+    "src/entities/product/index.ts": ("export { productTitle } from './model/product'\n"),
+    "src/entities/product/model/product.ts": (
+        "import { capitalise } from '@/shared/lib'\n"
+        "export function productTitle() { return capitalise('pear') }\n"
+    ),
+    "src/shared/api/index.ts": ("export const client = { get: (u: string) => u }\n"),
+    "src/shared/lib/index.ts": (
+        "export function capitalise(s: string) { return s.toUpperCase() }\n"
+    ),
+    "src/shared/ui/index.ts": ("export { Button } from './button'\n"),
+    "src/shared/ui/button.ts": (
+        "import { capitalise } from '../lib'\n"
+        "export function Button() { return capitalise('ok') }\n"
+    ),
+    # Legacy folders beside the layers, from before the project moved to FSD.
+    "src/components/LegacyButton.ts": (
+        "import { Button } from '@/shared/ui'\n"
+        "export function LegacyButton() { return Button() }\n"
+    ),
+    "src/hooks/useCart.ts": (
+        "import { addToCart } from '@/features/cart'\n"
+        "export function useCart() { return addToCart() }\n"
+    ),
+}
+
+
+def write_fsd_project(room: Room, root: Path) -> None:
+    """The Feature-Sliced project, committed in one commit."""
+    for relative, text in FSD_PROJECT_FILES.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    room.git(root, "init", "-q")
+    room.git(root, "add", "-A")
+    room.git(root, "commit", "-q", "-m", "the frontend")
 
 
 # ---------------------------------------------------------------------------
@@ -471,6 +720,53 @@ def check_versions(room: Room, artifact: Artifact, report: Report) -> None:
         )
 
 
+def check_languages(room: Room, report: Report) -> None:
+    probe = "import tree_sitter_typescript; print(tree_sitter_typescript.__name__)"
+    done = room.run([str(room.bin / "python"), "-I", "-c", probe], room.workdir)
+    report.record(
+        f"languages: the {LANGUAGES_EXTRA} extra installed the TypeScript parser",
+        "behaviour",
+        passed=done.returncode == 0,
+        detail=(
+            "tree_sitter_typescript imports"
+            if done.returncode == 0
+            else f"rc {done.returncode}: {_last_line(done.stderr)}"
+        ),
+    )
+
+
+def _yaml_documents(room: Room, project: Path, *paths: Path) -> tuple[list[object] | None, str]:
+    """Each of *paths* read as YAML by the fresh environment's PyYAML (``None`` when absent)."""
+    probe = (
+        "import json, pathlib, sys, yaml\n"
+        "print(json.dumps([yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8'))"
+        " if pathlib.Path(p).is_file() else None for p in sys.argv[1:]]))\n"
+    )
+    command = [str(room.bin / "python"), "-I", "-c", probe, *map(str, paths)]
+    done = room.run(command, project)
+    if done.returncode != 0:
+        return None, f"the YAML probe exited {done.returncode}: {done.stderr[-_EXCERPT:]}"
+    try:
+        loaded = json.loads(done.stdout)
+    except json.JSONDecodeError as exc:
+        return None, f"the YAML probe printed no JSON ({exc}): {done.stdout[-_EXCERPT:]!r}"
+    if not isinstance(loaded, list) or len(loaded) != len(paths):
+        return None, f"the YAML probe printed {done.stdout[-_EXCERPT:]!r}"
+    return loaded, ""
+
+
+def _package_scripts(package: Path) -> tuple[dict[str, object], str]:
+    """The ``scripts`` of the ``package.json`` at *package*, or why there are none."""
+    if not package.is_file():
+        return {}, f"{package.name} absent"
+    try:
+        loaded = json.loads(package.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {}, f"{package.name} is no JSON ({exc})"
+    scripts = loaded.get("scripts") if isinstance(loaded, dict) else None
+    return (scripts, "") if isinstance(scripts, dict) else ({}, f"{package.name} has no scripts")
+
+
 def _graph_sources(room: Room, project: Path) -> tuple[dict[str, str], str]:
     """Each node's source directory mapped to its ref_id, or why the graph could not be read."""
     probe = (
@@ -504,6 +800,38 @@ def _activity(room: Room, project: Path, ref_id: str) -> tuple[dict[str, object]
     if not isinstance(activity, dict):
         return None, f"ctx {ref_id} --json carries no focus.activity"
     return activity, ""
+
+
+def check_site_alias(room: Room, project: Path, reindexed: str, report: Report) -> None:
+    """The node declared ``kind: site`` is read as a service, and the reindex said so."""
+    done = room.beadloom(project, "ctx", PORTAL_NODE, "--json", "--project", str(project))
+    loaded, why = (
+        _json_object(done.stdout, f"ctx {PORTAL_NODE} --json")
+        if done.returncode == 0
+        else (
+            None,
+            f"ctx {PORTAL_NODE} --json exited {done.returncode}: {_last_line(done.output)}",
+        )
+    )
+    focus = (loaded or {}).get("focus")
+    kind = focus.get("kind") if isinstance(focus, dict) else None
+    report.record(
+        f"site alias: ctx --json reads the kind: site node as a {SITE_ALIAS_TARGET}",
+        "behaviour",
+        passed=kind == SITE_ALIAS_TARGET,
+        detail=why or f"{PORTAL_NODE}: focus.kind {kind!r}, expected {SITE_ALIAS_TARGET!r}",
+    )
+    info = [
+        line.strip()
+        for line in reindexed.splitlines()
+        if "[info]" in line and f"'{PORTAL_NODE}'" in line
+    ]
+    report.record(
+        "site alias: reindex prints an [info] line for the node read through the alias",
+        "behaviour",
+        passed=any(f"read as '{SITE_ALIAS_TARGET}'" in line for line in info),
+        detail=info[0] if info else f"no [info] line names {PORTAL_NODE}",
+    )
 
 
 def check_activity(room: Room, project: Path, report: Report) -> None:
@@ -583,10 +911,65 @@ def _last_line(text: str) -> str:
     return next((line.strip() for line in reversed(text.splitlines()) if line.strip()), "")
 
 
+def check_scaffold_surfaces(site: Path, report: Report) -> None:
+    """What 9.0.0 added to the scaffold: Steiger, the brand files and the footer's slice."""
+    scripts, unread = _package_scripts(site / "package.json")
+    steiger = (site / STEIGER_CONFIG).is_file()
+    lint_fsd = scripts.get(LINT_FSD)
+    report.record(
+        f"portal steiger: docs site writes {STEIGER_CONFIG} and a {LINT_FSD} script",
+        "behaviour",
+        passed=steiger and isinstance(lint_fsd, str),
+        detail=(
+            f"{STEIGER_CONFIG} {'present' if steiger else 'absent'}; "
+            f"{LINT_FSD}: {lint_fsd!r}{f' ({unread})' if unread else ''}"
+        ),
+    )
+    absent = [relative for relative in BRAND_FILES if not (site / relative).is_file()]
+    report.record(
+        "portal brand: docs site writes Beadloom's icon, the SVG favicon and two PNG favicons",
+        "behaviour",
+        passed=not absent,
+        detail=f"absent: {absent}" if absent else ", ".join(BRAND_FILES),
+    )
+    index = f"{FOOTER_WIDGET}/index.js"
+    footer = (site / index).is_file()
+    report.record(
+        "portal footer: docs site writes the powered-by widget of the theme",
+        "behaviour",
+        passed=footer,
+        detail=f"{index} {'present' if footer else 'absent'}",
+    )
+
+
+def check_built_portal(site: Path, report: Report) -> None:
+    """The built portal serves the brand files, links the SVG favicon and draws the footer."""
+    dist = site / ".vitepress" / "dist"
+    page = dist / "index.html"
+    html = page.read_text(encoding="utf-8", errors="replace") if page.is_file() else ""
+    absent = [
+        f"brand/{name}"
+        for name in (relative.rsplit("/", 1)[-1] for relative in BRAND_FILES)
+        if not (dist / "brand" / name).is_file()
+    ]
+    if FAVICON_LINK not in html:
+        absent.append(f"the favicon link to {FAVICON_LINK} in index.html")
+    if POWERED_BY not in html:
+        absent.append(f"{POWERED_BY!r} in index.html")
+    report.record(
+        "portal assets: the built portal serves the brand files and the footer",
+        "behaviour",
+        passed=not absent,
+        detail=f"absent: {absent}" if absent else f"dist/brand/ served; {POWERED_BY!r} drawn",
+    )
+
+
 def check_portal(room: Room, project: Path, report: Report) -> None:
     site = project / "site"
     scaffold = "portal scaffold: docs site --out writes package.json, .vitepress/, e2e/"
     build = f"portal build: npm ci and npm run docs:build under Node {NODE_MAJOR}+"
+    assets = "portal assets: the built portal serves the brand files and the footer"
+    lint = f"portal {LINT_FSD}: npm run {LINT_FSD} (Steiger) passes on the scaffold"
     done = room.beadloom(project, "docs", "site", "--out", str(site), "--project", str(project))
     absent = [
         f"{entry}/" if kind == "dir" else entry
@@ -600,23 +983,49 @@ def check_portal(room: Room, project: Path, report: Report) -> None:
         detail=f"rc {done.returncode}; absent: {absent or 'none'}; {_first_line(done.output)}",
     )
     if not written:
-        report.not_run(build, "behaviour", "the scaffold was not written")
+        report.not_reached(
+            ("portal steiger", "portal brand", "portal footer"), "the scaffold was not written"
+        )
+        for name in (build, assets, lint):
+            report.not_run(name, "behaviour", "the scaffold was not written")
         return
-    for step in (["npm", "ci", "--no-audit", "--no-fund"], ["npm", "run", "docs:build"]):
-        done = room.run(step, site)
-        if done.returncode != 0:
-            report.record(
-                build,
-                "behaviour",
-                passed=False,
-                detail=f"{' '.join(step)} exited {done.returncode}: {done.output.strip()[-600:]}",
-            )
-            return
-    report.record(
+    check_scaffold_surfaces(site, report)
+    if room.npm_skip:
+        for name in (build, assets, lint):
+            report.skipped(name, "behaviour", room.npm_skip)
+        return
+    done = room.run(["npm", "ci", "--no-audit", "--no-fund"], site)
+    if done.returncode != 0:
+        report.record(
+            build,
+            "behaviour",
+            passed=False,
+            detail=f"npm ci exited {done.returncode}: {done.output.strip()[-600:]}",
+        )
+        report.not_run(assets, "behaviour", "npm ci failed")
+        report.not_run(lint, "behaviour", "npm ci failed")
+        return
+    done = room.run(["npm", "run", "docs:build"], site)
+    if report.record(
         build,
         "behaviour",
-        passed=(site / ".vitepress" / "dist" / "index.html").is_file(),
-        detail="built .vitepress/dist/index.html",
+        passed=done.returncode == 0 and (site / ".vitepress" / "dist" / "index.html").is_file(),
+        detail=(
+            "built .vitepress/dist/index.html"
+            if done.returncode == 0
+            else f"npm run docs:build exited {done.returncode}: {done.output.strip()[-600:]}"
+        ),
+    ):
+        check_built_portal(site, report)
+    else:
+        report.not_run(assets, "behaviour", "the portal was not built")
+    done = room.run(["npm", "run", LINT_FSD], site)
+    said = _last_line(done.output) if done.returncode == 0 else _first_line(done.stderr)
+    report.record(
+        lint,
+        "behaviour",
+        passed=done.returncode == 0,
+        detail=f"rc {done.returncode}: {said or _last_line(done.output)}",
     )
 
 
@@ -665,10 +1074,108 @@ def check_project(room: Room, report: Report) -> None:
         passed=done.returncode == 0 and not activity_lines,
         detail=f"rc {done.returncode}; Activity lines: {activity_lines or 'none'}",
     )
+    check_site_alias(room, project, done.output, report)
     check_activity(room, project, report)
     check_shallow_history(room, project, report)
     check_portal(room, project, report)
     check_pages_workflow(room, project, report)
+
+
+def check_fsd_init(room: Room, project: Path, report: Report) -> None:
+    """``init --yes`` exits 1, naming the planted cross-import among the code's crossings."""
+    done = room.beadloom(project, "init", "--yes", "--project", str(project))
+    named = f"fsd-layers: {PLANTED_CROSSING[0]}"
+    report.record(
+        "fsd init: init --yes exits 1 and names the code's crossing of the rules it wrote",
+        "behaviour",
+        passed=done.returncode == 1 and named in done.output,
+        detail=(
+            f"rc {done.returncode}; {named!r} {'named' if named in done.output else 'not named'}"
+            f"; {_first_line(done.output[done.output.find('Graph:') :])}"
+        ),
+    )
+
+
+def check_fsd_scaffold(room: Room, project: Path, report: Report) -> None:
+    """What ``init`` wrote: ``preset: fsd``, the nine rules, and the ``lint:fsd`` script."""
+    beadloom = project / ".beadloom"
+    documents, unread = _yaml_documents(
+        room, project, beadloom / "config.yml", beadloom / "_graph" / "rules.yml"
+    )
+    config, rules = documents if documents is not None else (None, None)
+    preset = config.get("preset") if isinstance(config, dict) else None
+    report.record(
+        "fsd preset: init --yes writes preset: fsd",
+        "behaviour",
+        passed=preset == "fsd",
+        detail=unread or f"preset {preset!r} in .beadloom/config.yml",
+    )
+    listed = rules.get("rules") if isinstance(rules, dict) else None
+    names = [str(rule.get("name")) for rule in listed or [] if isinstance(rule, dict)]
+    missing = [name for name in FSD_RULES if name not in names]
+    report.record(
+        f"fsd rules: init writes the {len(FSD_RULES)} FSD rules into rules.yml",
+        "behaviour",
+        passed=not unread and not missing,
+        detail=unread
+        or (f"missing: {missing}; written: {names}" if missing else ", ".join(names)),
+    )
+    scripts, absent = _package_scripts(project / "package.json")
+    lint_fsd = scripts.get(LINT_FSD)
+    report.record(
+        f"fsd steiger: init writes a {LINT_FSD} script into the project's package.json",
+        "behaviour",
+        passed=isinstance(lint_fsd, str),
+        detail=absent or f"{LINT_FSD}: {lint_fsd!r}",
+    )
+
+
+def check_fsd_lint(room: Room, project: Path, report: Report) -> None:
+    """``lint --strict`` exits 1 and reports the cross-import planted through the alias."""
+    name = "fsd lint: lint --strict reports the planted cross-import {} -> {}".format(
+        *PLANTED_CROSSING
+    )
+    done = room.beadloom(
+        project, "lint", "--strict", "--format", "json", "--project", str(project)
+    )
+    loaded, why = _json_object(done.stdout, "lint --strict --format json")
+    if loaded is None:
+        report.record(name, "behaviour", passed=False, detail=f"rc {done.returncode}; {why}")
+        return
+    listed = loaded.get("violations")
+    violations = (
+        [found for found in listed if isinstance(found, dict)] if isinstance(listed, list) else []
+    )
+    crossing = [
+        found
+        for found in violations
+        if found.get("rule_name") == "fsd-layers"
+        and found.get("severity") == "error"
+        and (found.get("from_ref_id"), found.get("to_ref_id")) == PLANTED_CROSSING
+    ]
+    seen = [
+        f"{found.get('rule_name')}:{found.get('from_ref_id')}->{found.get('to_ref_id')}"
+        for found in violations
+    ]
+    report.record(
+        name,
+        "behaviour",
+        passed=done.returncode == 1 and bool(crossing),
+        detail=f"rc {done.returncode}; {len(violations)} violation(s): {seen}",
+    )
+
+
+#: What a failure while the Feature-Sliced project is written and committed is reported as.
+_FSD_STEP = "fsd project: the Feature-Sliced project is written and committed"
+
+
+def check_fsd_project(room: Room, report: Report) -> None:
+    project = room.workdir / "orchard"
+    project.mkdir()
+    write_fsd_project(room, project)
+    check_fsd_init(room, project, report)
+    check_fsd_scaffold(room, project, report)
+    check_fsd_lint(room, project, report)
 
 
 # ---------------------------------------------------------------------------
@@ -676,26 +1183,43 @@ def check_project(room: Room, report: Report) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _node_major(room: Room) -> tuple[int, str]:
+def find_npm(room: Room, *, asked: bool) -> tuple[str, str]:
+    """The Node the npm checks run under, and why they are skipped (empty when they run).
+
+    When *asked* (``--node-bin`` was given), a directory without a Node 22+ and npm stops the
+    run: the operator asked for the build. Otherwise what ``PATH`` holds decides, and a missing
+    or old Node, or a missing npm, skips the npm checks with the reason.
+    """
+    hint = f"pass --node-bin with a Node {NODE_MAJOR}+ bin directory"
     node = shutil.which("node", path=room.env["PATH"])
     if node is None:
-        raise CannotRunError("no node on PATH; pass --node-bin with a Node 22+ bin directory")
+        if asked:
+            raise CannotRunError(f"no node on PATH; {hint}")
+        return "absent", f"no node on PATH; {hint}"
     done = room.run([node, "--version"], room.workdir)
     version = done.stdout.strip()
     try:
-        return int(version.lstrip("v").split(".")[0]), f"{version} ({node})"
+        major = int(version.lstrip("v").split(".")[0])
     except ValueError as exc:
         raise CannotRunError(f"{node} --version printed {version!r}") from exc
+    described = f"{version} ({node})"
+    if major < NODE_MAJOR:
+        if asked:
+            raise CannotRunError(f"node {described} is older than {NODE_MAJOR}; {hint}")
+        return described, f"node {described} is older than {NODE_MAJOR}; {hint}"
+    if shutil.which("npm", path=room.env["PATH"]) is None:
+        if asked:
+            raise CannotRunError(f"no npm beside node {described}")
+        return described, f"no npm beside node {described}; {hint}"
+    return described, ""
 
 
-def prepare(room: Room, artifact: Artifact, python: str, report: Report) -> None:
+def prepare(room: Room, artifact: Artifact, python: str, report: Report, asked: bool) -> None:
     """Check the tools, then create the fresh environment and install the artifact into it."""
     for tool in ("uv", "git"):
         if shutil.which(tool, path=room.env["PATH"]) is None:
             raise CannotRunError(f"no {tool} on PATH")
-    major, node = _node_major(room)
-    if major < NODE_MAJOR:
-        raise CannotRunError(f"node {node} is older than {NODE_MAJOR}; pass --node-bin")
+    node, room.npm_skip = find_npm(room, asked=asked)
     done = room.run(["uv", "venv", "-q", "--python", python, str(room.venv)], room.workdir)
     if done.returncode != 0:
         raise CannotRunError(f"uv venv exited {done.returncode}: {done.output.strip()}")
@@ -707,7 +1231,7 @@ def prepare(room: Room, artifact: Artifact, python: str, report: Report) -> None
             "--refresh",
             "--python",
             str(room.bin / "python"),
-            artifact.install,
+            install_spec(artifact),
         ],
         room.workdir,
     )
@@ -726,6 +1250,7 @@ def prepare(room: Room, artifact: Artifact, python: str, report: Report) -> None
         "platform": f"{platform.system()} {platform.machine()}",
         "python": interpreter.stdout.strip().split()[0] if interpreter.stdout else python,
         "node": node,
+        "npm checks": f"skipped ({room.npm_skip})" if room.npm_skip else "run",
         "workdir": str(room.workdir),
     }
 
@@ -739,13 +1264,19 @@ def verify(
 ) -> Report:
     room = Room(workdir, node_bin)
     report = Report(artifact=artifact.install, release=release)
-    prepare(room, artifact, python, report)
+    prepare(room, artifact, python, report, node_bin is not None)
     check_versions(room, artifact, report)
+    check_languages(room, report)
     try:
         check_project(room, report)
     except CannotRunError as exc:
         report.cannot_run(_PROJECT_STEP, "behaviour", str(exc))
         report.not_reached(_PROJECT_STAGES, "the project step could not run")
+    try:
+        check_fsd_project(room, report)
+    except CannotRunError as exc:
+        report.cannot_run(_FSD_STEP, "behaviour", str(exc))
+        report.not_reached(_FSD_STAGES, "the Feature-Sliced project step could not run")
     return report
 
 
@@ -759,18 +1290,24 @@ def render(report: Report) -> str:
     lines += [
         f"{check.status:<8} {check.name}\n         {check.detail}" for check in report.checks
     ]
-    failed = [check for check in report.checks if check.status != "PASS"]
+    ran = report.ran()
+    failed = [check for check in ran if check.status != "PASS"]
     first = report.first_failure()
+    counted = "checks that ran" if report.not_asked() else "checks"
     lines.append("")
     if first is None:
-        lines.append(f"VERDICT: {len(report.checks)} of {len(report.checks)} checks hold (exit 0)")
+        lines.append(f"VERDICT: {len(ran)} of {len(ran)} {counted} hold (exit 0)")
     else:
         incomplete = any(check.status == _CANNOT_RUN for check in failed)
         lines.append(
-            f"VERDICT: {len(failed)} of {len(report.checks)} checks fail "
+            f"VERDICT: {len(failed)} of {len(ran)} {counted} fail "
             f"(exit {report.exit_code()}); the first: {first.name}"
             + ("; a step could not run, so the verdict is incomplete" if incomplete else "")
         )
+    reasons: dict[str, list[str]] = {}
+    for check in report.not_asked():
+        reasons.setdefault(check.detail, []).append(check.name.split(": ", 1)[0])
+    lines += [f"Not run by this run: {', '.join(names)} ({why})" for why, names in reasons.items()]
     return "\n".join(lines) + "\n"
 
 
@@ -778,8 +1315,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verify a Beadloom wheel or PyPI pin on a throwaway adopter project.",
         epilog=(
-            "usage example: python3 tests/release/verify_the_release.py beadloom==8.0.0 "
-            "--node-bin $HOME/.nvm/versions/node/v22.9.0/bin"
+            "usage example: python3 tests/release/verify_the_release.py "
+            f"beadloom=={DEFAULT_RELEASE} --node-bin $HOME/.nvm/versions/node/v22.9.0/bin"
         ),
     )
     parser.add_argument("artifact", help="a beadloom-*.whl path, or an exact pin beadloom==X.Y.Z")
@@ -809,7 +1346,11 @@ def main(argv: list[str] | None = None) -> int:
             shutil.rmtree(workdir, ignore_errors=True)
     sys.stdout.write(render(report))
     if options.record_json is not None:
-        payload = {**asdict(report), "exit": report.exit_code()}
+        payload = {
+            **asdict(report),
+            "skipped": [check.name for check in report.not_asked()],
+            "exit": report.exit_code(),
+        }
         options.record_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return report.exit_code()
 
