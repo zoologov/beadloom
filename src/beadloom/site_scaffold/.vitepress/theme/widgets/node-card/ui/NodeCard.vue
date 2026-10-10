@@ -109,12 +109,18 @@ const activityLine = computed(() => {
   return level ? `${said}, ${level}` : said;
 });
 
-// Lint's totals for the project: "this project: 0 errors, 70 warnings on 28 nodes".
+// Lint's totals for the project and the two populations they hold, the findings
+// on nodes and the findings on none:
+// "this project: 0 errors, 69 warnings — 33 on 27 nodes, 36 on none".
+// The totals count every finding, so the ones on nodes are the totals less the
+// node-less ones; the data file stores no third number.
 const reach = computed(() => {
   const lint = props.lint;
   if (!lint) return "";
   const totals = `${countOf(lint.errors, "error", "errors")}, ${countOf(lint.warnings, "warning", "warnings")}`;
-  return `this project: ${totals} on ${countOf(lint.nodes_with_findings, "node", "nodes")}`;
+  const onNone = (lint.nodeless || []).length;
+  const onNodes = `${lint.errors + lint.warnings - onNone} on ${countOf(lint.nodes_with_findings, "node", "nodes")}`;
+  return `this project: ${totals} — ${onNodes}, ${onNone} on none`;
 });
 // The findings bound to no node, listed on the card of the box that holds the
 // whole project and on no other.

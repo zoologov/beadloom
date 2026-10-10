@@ -392,23 +392,50 @@ for (const { state, sourceRef } of [
 
 // Every count on the card names what it was counted over. "none" under Rule
 // findings is said against lint's totals for the project, so it is not read as
-// "lint never ran"; the box holding the whole project lists the findings lint
-// binds to no node; a box's debt is its own and what is inside.
+// "lint never ran", and the totals name both populations they hold: the findings
+// on nodes, with how many nodes carry them, and the findings on none (the
+// owner's wording of 2026-10-10). The box holding the whole project lists the
+// findings lint binds to no node; a box's debt is its own and what is inside.
 
 /** `count` followed by `one` when it is 1, and by `many` otherwise. */
 const countOf = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
+/** `count` findings lint binds to no node, each one its own. */
+const nodelessFindings = (count) =>
+  Array.from({ length: count }, (_, index) => ({
+    rule: "inert-rule",
+    severity: "warn",
+    message: `cannot fire ${index}`,
+    file: "",
+    line: null,
+  }));
+
+/** Lint's reach as the card says it, from the data file's `lint`. */
+function reachSaid({ errors, warnings, nodes_with_findings: nodes, nodeless }) {
+  const totals = `${countOf(errors, "error", "errors")}, ${countOf(warnings, "warning", "warnings")}`;
+  const onNodes = errors + warnings - nodeless.length;
+  return `this project: ${totals} — ${onNodes} on ${countOf(nodes, "node", "nodes")}, ${nodeless.length} on none`;
+}
+
+/** The richest node that is not the project's own box, whose card lists no node-less finding. */
+function richestOutsideTheProjectBox(data) {
+  const box = projectBoxOf(data);
+  return richest({ nodes: data.nodes.filter((n) => n !== box) });
+}
+
 const REACHES = [
-  { lint: { errors: 0, warnings: 70, nodes_with_findings: 28 }, says: "0 errors, 70 warnings on 28 nodes" },
-  { lint: { errors: 1, warnings: 1, nodes_with_findings: 1 }, says: "1 error, 1 warning on 1 node" },
+  // This portal's own numbers as S4T measured them.
+  { lint: { errors: 0, warnings: 69, nodes_with_findings: 27 }, nodeless: 36, says: "0 errors, 69 warnings — 33 on 27 nodes, 36 on none" },
+  { lint: { errors: 1, warnings: 1, nodes_with_findings: 1 }, nodeless: 0, says: "1 error, 1 warning — 2 on 1 node, 0 on none" },
+  { lint: { errors: 1, warnings: 0, nodes_with_findings: 0 }, nodeless: 1, says: "1 error, 0 warnings — 0 on 0 nodes, 1 on none" },
 ];
 
-for (const { lint, says } of REACHES) {
+for (const { lint, nodeless, says } of REACHES) {
   test(`a card with no finding reads "none — this project: ${says}"`, async ({ page, request }) => {
     const data = await architectureData(request);
-    const node = richest(data);
+    const node = richestOutsideTheProjectBox(data);
     Object.assign(node, { findings: [], lint_clean: true });
-    data.lint = { ...lint, nodeless: [] };
+    data.lint = { ...lint, nodeless: nodelessFindings(nodeless) };
     await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
 
     await openArchitecture(page, `?focus=${node.id}`);
@@ -417,16 +444,31 @@ for (const { lint, says } of REACHES) {
   });
 }
 
+test("under a card's own findings the same line names both populations", async ({ page, request }) => {
+  const data = await architectureData(request);
+  const node = richestOutsideTheProjectBox(data);
+  Object.assign(node, {
+    findings: [{ rule: "tier-order", severity: "warn", message: "reaches up" }],
+    lint_clean: false,
+  });
+  data.lint = { errors: 0, warnings: 69, nodes_with_findings: 27, nodeless: nodelessFindings(36) };
+  await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
+
+  await openArchitecture(page, `?focus=${node.id}`);
+
+  await expect(field(page, "findings").locator("p.bl-card-note")).toHaveText(
+    "this project: 0 errors, 69 warnings — 33 on 27 nodes, 36 on none"
+  );
+});
+
 test("the card says the project's lint totals as they are in the data file", async ({ page, request }) => {
   const data = await architectureData(request);
   requireShape(data.lint, "the data file carries no lint totals; it was written before they were carried");
   const node = richestWithFindings(data);
-  const { errors, warnings, nodes_with_findings: nodes } = data.lint;
-  const reach = `this project: ${countOf(errors, "error", "errors")}, ${countOf(warnings, "warning", "warnings")} on ${countOf(nodes, "node", "nodes")}`;
 
   await openArchitecture(page, `?focus=${node.id}`);
 
-  await expect(field(page, "findings")).toContainText(reach);
+  await expect(field(page, "findings")).toContainText(reachSaid(data.lint));
 });
 
 /** The one node that holds every other, as the viewer draws the project's box; null when there is none. */

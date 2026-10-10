@@ -1,8 +1,8 @@
 <script setup>
 // beadloom:component=site-dashboard
 // RuleFindings — lint's reach over the whole project, from
-// `dashboard.data.json.lint`: its totals, how many nodes carry a finding, and
-// every finding bound to no node, with the file and line it points at. A node's
+// `dashboard.data.json.lint`: its totals, how many of them sit on how many nodes
+// and how many on none, and every finding bound to no node, with the file and line it points at. A node's
 // findings are on its card; these are the ones no card holds. A data file
 // written before the reach was carried shows nothing here.
 
@@ -19,12 +19,17 @@ const lint = computed(() => {
 /** `count` followed by `one` when it is 1, and by `many` otherwise. */
 const countOf = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
+// The totals and the two populations they hold, as the node card says them:
+// "0 errors, 69 warnings — 33 on 27 nodes, 36 on none". The totals count every
+// finding, so the ones on nodes are the totals less the node-less ones.
 const totals = computed(() => {
   const value = lint.value;
   if (!value) return "";
+  const onNone = value.nodeless.length;
   return (
-    `${countOf(value.errors, "error", "errors")}, ${countOf(value.warnings, "warning", "warnings")} ` +
-    `on ${countOf(value.nodes_with_findings, "node", "nodes")}`
+    `${countOf(value.errors, "error", "errors")}, ${countOf(value.warnings, "warning", "warnings")} — ` +
+    `${value.errors + value.warnings - onNone} on ${countOf(value.nodes_with_findings, "node", "nodes")}, ` +
+    `${onNone} on none`
   );
 });
 

@@ -1,7 +1,8 @@
 // The dashboard names the populations its numbers were counted over.
 //
-// Beside the status cards, "Rule findings" says lint's totals for the project and
-// lists every finding lint binds to no node — no node card holds them — and
+// Beside the status cards, "Rule findings" says lint's totals for the project,
+// split into the findings on nodes and the findings on none, and lists every
+// finding lint binds to no node — no node card holds them — and
 // "Pages" names the pages `beadloom docs site` wrote, by section, with the
 // language of each About page. Both read `dashboard.data.json`; a file written
 // before either was carried shows neither.
@@ -24,6 +25,13 @@ async function openDashboard(page, data) {
 /** `count` followed by `one` when it is 1, and by `many` otherwise. */
 const countOf = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
+/** Lint's reach as the panel says it, from the data file's `lint`. */
+function totalsSaid({ errors, warnings, nodes_with_findings: nodes, nodeless }) {
+  const totals = `${countOf(errors, "error", "errors")}, ${countOf(warnings, "warning", "warnings")}`;
+  const onNodes = errors + warnings - nodeless.length;
+  return `This project: ${totals} — ${onNodes} on ${countOf(nodes, "node", "nodes")}, ${nodeless.length} on none.`;
+}
+
 const NODELESS = [
   { rule: "inert-rule", severity: "error", message: "cannot fire", file: "", line: null },
   { rule: "scenario-coverage", severity: "warn", message: "names no scenario", file: "docs/PRD.md", line: 12 },
@@ -36,7 +44,7 @@ test("Rule findings says the project's totals and lists every finding bound to n
   await openDashboard(page, data);
   const panel = page.getByTestId("rule-findings");
 
-  await expect(panel.locator("[data-reach='totals']")).toHaveText("This project: 1 error, 69 warnings on 28 nodes.");
+  await expect(panel.locator("[data-reach='totals']")).toHaveText("This project: 1 error, 69 warnings — 68 on 28 nodes, 2 on none.");
   await expect(panel.locator("[data-reach='nodeless']")).toHaveText("2 findings are bound to no node:");
   const listed = panel.locator("[data-nodeless-finding]");
   await expect(listed).toHaveCount(2);
@@ -50,6 +58,9 @@ test("Rule findings says when no finding is bound to no node", async ({ page, re
 
   await openDashboard(page, data);
 
+  await expect(page.getByTestId("rule-findings").locator("[data-reach='totals']")).toHaveText(
+    "This project: 0 errors, 1 warning — 1 on 1 node, 0 on none."
+  );
   await expect(page.getByTestId("rule-findings").locator("[data-reach='nodeless']")).toHaveText(
     "0 findings are bound to no node."
   );
@@ -59,15 +70,12 @@ test("Rule findings says when no finding is bound to no node", async ({ page, re
 test("this portal's own Rule findings are the ones its data file holds", async ({ page, request }) => {
   const data = await dashboardData(request);
   requireShape(Array.isArray(data.lint?.nodeless), "the data file carries no node-less findings; it was written before they were carried");
-  const { errors, warnings, nodes_with_findings: nodes, nodeless } = data.lint;
 
   await openDashboard(page, data);
   const panel = page.getByTestId("rule-findings");
 
-  await expect(panel.locator("[data-reach='totals']")).toHaveText(
-    `This project: ${countOf(errors, "error", "errors")}, ${countOf(warnings, "warning", "warnings")} on ${countOf(nodes, "node", "nodes")}.`
-  );
-  await expect(panel.locator("[data-nodeless-finding]")).toHaveCount(nodeless.length);
+  await expect(panel.locator("[data-reach='totals']")).toHaveText(totalsSaid(data.lint));
+  await expect(panel.locator("[data-nodeless-finding]")).toHaveCount(data.lint.nodeless.length);
 });
 
 test("Pages names every page the run wrote, by section, and the language of each About page", async ({

@@ -121,3 +121,25 @@ def test_node_less_findings_in_one_file_are_ordered_by_line_one_without_a_line_f
         (None, "z: names no line"),
         (1, "a: names line one"),
     ]
+
+
+def test_every_finding_is_counted_once_on_a_node_or_on_none() -> None:
+    """The viewer says the findings on nodes as the totals less the node-less ones.
+
+    `0 errors, 69 warnings — 33 on 27 nodes, 36 on none` (the owner's wording of
+    2026-10-10, BDL-080 S4g) stores no count of its own for the findings on
+    nodes: it holds only while the totals count every finding, the node-less ones
+    among them, and each node-less finding is listed once.
+    """
+    reach = lint_reach_of(
+        _result(
+            _violation("tier-order", "error", "core", "core reaches up"),
+            _violation("tier-order", "warn", "store", "store reaches up"),
+            _violation("docs", "warn", "store", "store has no doc"),
+            _violation("inert", "error", None, "inert cannot fire"),
+            _violation("scenarios", "warn", None, "no scenario", file_path="PRD.md", line=12),
+        )
+    )
+
+    on_nodes = reach.errors + reach.warnings - len(reach.nodeless)
+    assert (on_nodes, reach.nodes_with_findings, len(reach.nodeless)) == (3, 2, 2)

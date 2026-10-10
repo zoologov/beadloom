@@ -84,8 +84,12 @@ names its bead; the pull request is to be opened.
   `nodes_with_findings` and `nodeless`, a list of findings each with `rule`, `severity`, `message`,
   `file` (`""` when the finding names none) and `line` (`null` when it names none); the key is
   omitted when lint did not run. `severity` takes lint's values, `error` and `warn`. A card with
-  no finding reads `none — this project: 0 errors, 69 warnings on 27 nodes`, and the card of the
-  box that holds the whole project lists the findings bound to no node.
+  no finding reads `none — this project: 0 errors, 69 warnings — 33 on 27 nodes, 36 on none`:
+  lint's totals, then the findings on nodes with how many nodes carry them, then the findings on
+  none (`beadloom-af99.15`; the findings on nodes are the totals less the node-less ones, so no
+  key stores them). The same line stands under a card's own findings, the dashboard's Rule
+  findings panel says it the same way, and the card of the box that holds the whole project
+  lists the findings bound to no node.
 - **A box's debt names the debt inside it (`beadloom-5pxv`).** A node that holds another gains
   `debt.inside` with `nodes` (its `part_of` descendants that carry debt), `score` (the sum of
   their own scores) and `by_reason` (per reason of the debt report, how many of them carry it).
