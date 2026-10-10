@@ -112,6 +112,16 @@ One feature node covers the cooperating modules below (all annotated
   scaffold
   (`scaffold.write_scaffold`, which copies `.beadloom/site/` last); `SiteResult.scaffold` is the
   `ScaffoldReport` of that write.
+
+  **The populations (BDL-080 S4a, S4c).** `beadloom lint` runs once (`_lint_verdicts`), and its
+  result is projected two ways: each node's findings for its card, and
+  `lint_reach.lint_reach_of` for the project's totals and the findings bound to no node, which
+  the data file carries as its top-level `lint`. The run records each page it writes under the
+  sidebar section it belongs to, and each About page under its language. It writes
+  `public/dashboard.data.json` after the published documentation, so the file's `pages` key
+  (`page_map.page_map_of`) names every page the run wrote; `dashboard.md` is still written
+  where it was. `SiteResult.source_ref` is the `SourceRef` the source links were built at, and
+  `docs site` reads it for its second warning.
 - **site_config.py** — the portal's identity, the `site:` block (BDL-076 B1, B4 and
   `beadloom-ujzb.20`). `read_site_config(project_root)` returns `(SiteConfig, refusals)` with a
   refused value replaced by its default, and `site_config_of(project_root)` raises
@@ -475,7 +485,13 @@ One feature node covers the cooperating modules below (all annotated
   site run computed and the `RepositoryLink` — and `card_fields(...)` projects one
   node's `source`, `source_url`, `lifecycle`, `tags`, `docs`, `tests`,
   `public_symbols` and `activity`, plus `findings` and `debt` when those were
-  computed. `architecture_view` merges the result into each node. `activity` is
+  computed. Since BDL-080 S4a `card_sources(..., parent=)` takes the `part_of` map, and
+  `debt_inside(debt, parent)` adds each indebted node's own debt to every container above it: a
+  `part_of` cycle is walked once, and a node `part_of` only itself is no box.
+  `DebtInside(nodes, score, by_reason)` counts the descendants carrying debt, sums their own
+  scores and counts, per reason, the descendants carrying it, so a reason a node carries twice
+  counts once. A box's `debt` gains `inside`; a leaf's is unchanged.
+  `architecture_view` merges the result into each node. `activity` is
   narrowed to `CARD_ACTIVITY_KEYS` (`commits_30d`, `lines_30d`, `level`) by `card_activity`: the
   reindex also records the names of a node's most frequent committers, and the data
   file is published, so a key reaches it only by being listed there (BDL-076 R1
@@ -502,13 +518,36 @@ One feature node covers the cooperating modules below (all annotated
   forge's branch routes (`forge_routes.on_branch`).
 - **source_ref.py** — which revision the source links name (BDL-080 S4c, `beadloom-e1xo`,
   BDL-UX #307). `source_ref_of(project_root, commit)` returns `SourceRef(commit, linked,
-  pushed)`: `pushed` and `linked == commit` when a remote-tracking ref holds the commit
-  (`git for-each-ref --contains`), or when git cannot say; otherwise `pushed` is `False` and
-  `linked` is the first of the branch's upstream on a remote that the clone holds, `origin`'s
-  branch of the same name and `origin/HEAD`, else the commit. Only refs the clone holds are read.
+  pushed)`: `pushed` and `linked == commit` when a branch of `origin` holds the commit
+  (`git for-each-ref --contains` over `refs/remotes/origin/`), or when git cannot say; otherwise
+  `pushed` is `False` and `linked` is the first of the branch's upstream when
+  `branch.<name>.remote` is `origin` and the clone holds it, `origin`'s branch of the same name
+  and `origin/HEAD`, else the commit. Only refs the clone holds are read. Since BDL-080 S4h
+  (`beadloom-af99.16`, the S4 review's M1) only `origin`'s branches count, because the links
+  name `origin`'s address: a commit only a fork holds, or an upstream on a fork, is a 404 there.
   `SourceRef.as_dict()` is the data file's `source_ref`; `unpublished_warning(source_ref)` is
   what `docs site` prints on stderr for an unpublished commit, naming
   `git remote set-head origin --auto` when no branch stands in.
+- **lint_reach.py** — lint's reach on the portal (BDL-080 S4a, RFC D8, BDL-UX #305): a card that
+  says `none` reads the same whether lint found nothing on the node or never ran, and a finding
+  bound to no node had no place on the portal. `lint_reach_of(result)` projects one `LintResult`
+  to `LintReach(errors, warnings, nodes_with_findings, nodeless)`: lint's own totals over every
+  finding, the number of distinct nodes carrying one (`from_ref_id`), and each finding bound to
+  no node as a `NodelessFinding(rule, severity, message, file, line)`, with `file` `""` and
+  `line` `None` when it names no place, sorted by rule, severity, file, line and message.
+  `architecture.data.json` carries it as the top-level `lint`; `dashboard.data.json` carries
+  `nodes_with_findings` and `nodeless` inside its `lint` section (`dashboard/gate_metrics`).
+  Which findings one node carries is `architecture_card`'s question.
+- **page_map.py** — the pages one `docs site` run wrote (BDL-080 S4a, the owner's note of
+  2026-10-09). `PAGE_SECTIONS` is `about`, `dashboard`, `architecture`, `nodes`, `landscape`,
+  `docs`, in the sidebar's order. `page_map_of(out_dir, written, *, languages)` returns the
+  dashboard data file's `pages`: `{count, sections: [{name, count, pages}], languages:
+  [{language, page}]}`. Only `.md` files are counted, each once, by their path under `out_dir`;
+  a section the run wrote nothing for is listed with 0. `languages` names the About pages, the
+  only localized ones: `en` for `index.md` from `README.md`, `ru` for `ru/index.md` from
+  `README.ru.md`. The generator states each page's section as it writes it, so no section is
+  guessed from a path. A file the project places under `.beadloom/site/` is copied after the
+  run and is not counted.
 - **node_pages.py** — per-node page rendering for `generate.py` (split out to stay under the
   domain-size limit). `render_all_pages(conn, portal=None)` returns sorted `NodePage`s, one per
   node of every kind; each page has summary (through `project_text.render_project_text` with
@@ -607,7 +646,11 @@ One feature node covers the cooperating modules below (all annotated
   in Python so the front-end only paints the color). `render_dashboard_md` emits only the page
   title + a short intro + the `<ClientOnly>` component mounts (no per-metric text dump, no
   `<noscript>` fallback) — the cards/widgets are the single presentation surface and read the
-  honest figures from `dashboard.data.json` (`build_dashboard_data`, unchanged).
+  honest figures from `dashboard.data.json` (`build_dashboard_data`, unchanged). Since BDL-080
+  S4a the `lint` section also carries `nodes_with_findings` and `nodeless` (`lint_reach_of`, the
+  architecture file's shape), `render_dashboard_md` mounts `<RuleFindings />` and `<PageMap />`
+  after `<StatusCards />`, and `generate.py` adds the top-level `pages` (`page_map_of`) once
+  every page is written.
 - **landscape_map.py** — Showcase B, the 🌟 cross-repo landscape map.
   `build_landscape_data(conn=None, *, federated=None)` returns a deterministic, JSON-safe dict
   (`scope`/`nodes`/`edges`) and `render_landscape_md(data, *, pages=None)` renders a
@@ -729,6 +772,16 @@ version 2:
   holding every node the rule places a layer on), else `""`. `layers` is the rule's layers top
   to bottom, each `{name, rank, tag, token}`, where `token` is the layer's NAME (`services`,
   `widgets`), unlike `layers[].token` above (`service`). `[]` when no layer rule is declared.
+- `lint` (BDL-080 S4a) — `{errors, warnings, nodes_with_findings, nodeless}` from
+  `lint_reach.lint_reach_of`: lint's totals over every finding, the number of nodes carrying
+  one, and each finding bound to no node as `{rule, severity, message, file, line}` (`severity`
+  `error` or `warn`; `file` `""` and `line` `null` when the finding names no place). Omitted when
+  lint did not run.
+- `source_ref` (BDL-080 S4c) — `{commit, linked, pushed}` from `source_ref.source_ref_of`,
+  present when the file carries source links: `commit` is the full hash the portal was built
+  from, `linked` the revision every `source_url` names (the commit, or the name of a branch the
+  remote holds), and `pushed` is `false` only when git says no branch of `origin` holds the
+  commit.
 
 **The original layer keys describe the first rule, inside its scope.** `layers`, `layer_order`
 and each node's `layer` and `layer_rank` keep the meaning they had in schema 2 before every rule
@@ -743,6 +796,7 @@ Nothing derived from the git remote is at the top level. A1 wrote a `project` na
 `repository {url, ref}`; no screen read either, and a remote could carry a credential or a
 `?token=` into both, so the re-review removed them (`beadloom-ujzb.10`). The remote reaches the
 file only as each node's `source_url`, and only when the project declares no `site.repo_url`.
+`source_ref` names a commit and a branch, never the remote's address.
 
 **Per node.** Version 1: `id`, `label`, `kind`, `summary`, `layer`, `layer_rank`, `group`,
 `symbols`, `doc_status`, `doc_links`, `url`, `parent`, `depends_on`, `depended_on_by`, `uses`,
@@ -769,7 +823,7 @@ Version 2 adds the card:
 | `public_symbols` | `{names, omitted}` — the first 50 public names and how many more | — |
 | `activity` | `{commits_30d, lines_30d, level}`, the keys of the activity the reindex recorded that the card shows | `null` when none was recorded, as on a shallow clone that does not reach back 90 days |
 | `findings` | `[{rule, severity, message}]` from `beadloom lint` | omitted when lint did not run |
-| `debt` | `{score, reasons}` from the debt report | `{score: 0.0, reasons: []}` for a node the report does not score; omitted when not computed |
+| `debt` | `{score, reasons}` from the debt report; on a box (a node another node is `part_of`) also `inside` `{nodes, score, by_reason}`, the debt of its descendants without its own (BDL-080 S4a) | `{score: 0.0, reasons: []}` for a node the report does not score; omitted when not computed; `inside` absent on a leaf |
 
 `lint_clean` is now the version-1 reading of `findings`: true when the list is empty. The viewer
 draws a node as a violation only for a finding of severity `error`.
@@ -802,7 +856,9 @@ points at a file, not at a node.
 
 Every key BDL-080 added is additive, and `schema_version` stays 2. A version-2 file written
 before it carries no `layer_rules`, `layer_rule` or `layer_rule_rank`, and the viewer then reads
-the first rule's `layers` and `layer_rank` as before.
+the first rule's `layers` and `layer_rank` as before. Without `lint` the card says nothing about
+lint's reach; without `debt.inside` a box shows its own debt only; without `source_ref` the card
+shows no note under the Source link.
 
 ### The landscape data file
 
@@ -869,6 +925,12 @@ carries it.
 - Beadloom's own repository appears in a portal only as the footer's link to it (BDL-080 S4d).
   The footer's component ships either way; `site.powered_by: false` keeps it from rendering.
 - `activity` in the data file carries only the keys in `CARD_ACTIVITY_KEYS`.
+- Lint's totals count every finding once, on a node or on none: `errors + warnings` equals the
+  findings on the nodes' cards plus `nodeless`, because a severity is `error` or `warn` only.
+  The viewer derives "on N nodes" from that and publishes no key for it (BDL-080 S4g), and
+  `test_every_finding_is_counted_once_on_a_node_or_on_none` pins it.
+- The page map counts the pages the run wrote, each once; a page a project adds under
+  `.beadloom/site/` is not among them.
 - `layers`, `layer_order`, `layer` and `layer_rank` describe the first `layers` rule by name,
   inside its `scope:`; every other rule reaches the file through `layer_rules`, `layer_rule`
   and `layer_rule_rank`. An edge carries `violation` only when a rule judged both ends.
@@ -877,7 +939,8 @@ carries it.
 
 Module `src/beadloom/application/site/generate.py`:
 - `SiteResult` — frozen dataclass: `out_dir`, `written` (sorted tuple of every written path),
-  `scaffold` (`ScaffoldReport`)
+  `scaffold` (`ScaffoldReport`), `source_ref` (`SourceRef | None`, BDL-080 S4c; `None` when the
+  links name no revision)
 - `MermaidValidationError` — raised when a generated page fails the Mermaid guard (carries
   `page` + `issues`)
 - `generate_site(conn, out_dir, *, project_root, federated=None, now_ts=None)` -> `SiteResult`
@@ -1019,6 +1082,18 @@ Module `src/beadloom/application/site/source_ref.py`:
 - `source_ref_of(project_root, commit)` -> `SourceRef`; `unpublished_warning(source_ref)` ->
   `str | None`; `SHORT_COMMIT` (12)
 
+Module `src/beadloom/application/site/lint_reach.py` (BDL-080 S4a):
+- `NodelessFinding` — frozen dataclass `rule`, `severity`, `message`, `file`, `line`;
+  `as_dict()`
+- `LintReach` — frozen dataclass `errors`, `warnings`, `nodes_with_findings`, `nodeless`;
+  `as_dict()`
+- `lint_reach_of(result)` -> `LintReach`
+
+Module `src/beadloom/application/site/page_map.py` (BDL-080 S4a):
+- `PAGE_SECTIONS` — `("about", "dashboard", "architecture", "nodes", "landscape", "docs")`
+- `page_map_of(out_dir, written, *, languages)` -> `dict[str, object]` — the dashboard data
+  file's `pages`
+
 Module `src/beadloom/application/site/forge_routes.py`:
 - `Forge(kind, tree, blob, raw)` with `link(route, url, ref, path)` and `route_segments`;
   `KNOWN_FORGES`; `PLACEHOLDERS` — `("url", "ref", "path")`
@@ -1090,12 +1165,14 @@ Module `src/beadloom/application/site/published_docs.py`:
 Module `src/beadloom/application/site/architecture_view.py`:
 - `ARCHITECTURE_SCHEMA_VERSION` — `2`
 - `build_architecture_view_data(conn, *, pages=None, published_doc_slugs=None, verdicts=None,
-  generated_at="", repository=None)` -> `dict` — the data file described above. `pages` gives a
-  node a non-empty `url` only when present; `published_doc_slugs` gates the doc links (`None`
-  skips the gate); a `verdicts` field left `None` is omitted from every node; `repository` is
-  the `RepositoryLink` each node's `source_url` is built from, and `None` gives every node an
-  empty link. Until A1 the lint input was `lint_violation_refs`, a set of node ids; it is
-  replaced by `verdicts`. The `project` parameter was removed with the top-level key.
+  generated_at="", repository=None, lint=None)` -> `dict` — the data file described above.
+  `lint` (a `LintReach`, BDL-080 S4a) becomes the top-level `lint`, omitted when `None`.
+  `pages` gives a node a non-empty `url` only when present; `published_doc_slugs` gates the doc
+  links (`None` skips the gate); a `verdicts` field left `None` is omitted from every node;
+  `repository` is the `RepositoryLink` each node's `source_url` is built from, and `None` gives
+  every node an empty link. Until A1 the lint input was `lint_violation_refs`, a set of node
+  ids; it is replaced by `verdicts`. The `project` parameter was removed with the top-level
+  key.
 - `serialize_architecture_view(data)` -> `str` — byte-stable JSON (`sort_keys`)
 - `render_architecture_view_md(data)` -> `str` — the `architecture.md` page
 
@@ -1115,9 +1192,13 @@ Module `src/beadloom/application/site/architecture_card.py`:
   `("commits_30d", "lines_30d", "level")`
 - `NodeFinding` — frozen dataclass `rule`, `severity`, `message`; `as_dict()`
 - `NodeVerdicts` — frozen dataclass `findings`, `debt`; `None` means not computed
+- `DebtInside` — frozen dataclass `nodes`, `score`, `by_reason`; `as_dict()` (BDL-080 S4a)
+- `debt_inside(debt, parent)` -> `dict[str, DebtInside]` — every box's debt inside it, keyed by
+  the box; a leaf has no entry
 - `CardSources` — frozen dataclass `tags`, `placements`, `test_owners`, `verdicts`,
-  `repository` (an empty `RepositoryLink` by default)
-- `card_sources(conn, *, tags, verdicts, repository=None)` -> `CardSources`
+  `repository` (an empty `RepositoryLink` by default), `debt_inside` (empty when debt was not
+  computed)
+- `card_sources(conn, *, tags, verdicts, repository=None, parent=None)` -> `CardSources`
 - `card_fields(conn, ref_id, *, source, lifecycle, raw_extra, sources)` -> `dict`
 - `doc_pairs(conn, ref_id)` -> `list[dict]` — each doc of the node with its worst pair status
 - `bound_tests(extra, sources, ref_id)` -> `dict | None` — the `tests` field
@@ -1158,6 +1239,18 @@ and `tests/unit/application/site/` — `test_site_about.py`, `test_site_mermaid_
 `test_a_source_links_to_its_forge_or_not_at_all.py` (the remote and the forge routes), and
 `test_a_contract_names_what_decided_its_verdict.py` (`verdict_basis`), and
 `layer_rules_view/test_an_unreadable_layer_rule_row_leaves_the_others_drawn.py` (BDL-080 S1T).
+
+BDL-080 S4, under `tests/unit/application/site/`:
+`test_lint_reach_names_the_projects_population.py` (the totals, the node-less findings and
+their order, and `test_every_finding_is_counted_once_on_a_node_or_on_none`),
+`test_a_boxs_debt_rolls_up_from_its_parts.py` (`debt_inside`, a cycle, a node `part_of`
+itself), `test_the_page_map_names_every_page_by_section.py`,
+`test_an_unpublished_commit_links_a_branch_the_remote_holds.py` (`source_ref_of`, the
+stand-ins, the branch routes per forge, both warnings verbatim),
+`test_beadloom_favicon_dark_png_is_the_dark_scheme_glyph.py`,
+`test_beadloom_favicon_is_written_where_the_portal_serves_it.py` and
+`test_the_brand_sources_are_kept_beside_what_ships_from_them.py` (the sources under
+`.github/brand/` and the shipped files equal to them).
 
 Slice 2 (BDL-076 B1–B4, `beadloom-ujzb.8`, `.11`–`.13`, `.18`, `.20`, `.21`), under
 `tests/unit/application/site/`: the `site:` block and the forges
@@ -1210,7 +1303,10 @@ remote), `layer_view_verdict.feature`, since BDL-080 `every_layer_rule_in_the_da
 and `a_site_node_is_a_service_on_the_portal.feature`, and since slice 2 `portal_scaffold.feature`,
 `pages_workflow.feature`, `pages_base_warning.feature`, `self_hosted_forge_links.feature`,
 `project_links_on_the_portal.feature` and `project_text_is_not_a_vue_template.feature`, with
-their steps under `tests/acceptance/steps/application/site-generation/`.
+their steps under `tests/acceptance/steps/application/site-generation/`. BDL-080 S4 added
+`populations_named_on_the_portal.feature` (lint's reach, the node-less findings, debt inside a
+box, the page map), `the_portal_carries_its_brand.feature` (the logo, the favicon, the footer,
+the header's icon) and `the_source_link_of_an_unpublished_commit.feature`.
 
 Unplaced, so bound to no node: `tests/test_site_generator.py`, `tests/test_site_dashboard.py`,
 `tests/test_site_published_docs.py`, `tests/test_site_coverage_edges.py`,

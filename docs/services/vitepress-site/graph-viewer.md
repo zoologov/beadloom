@@ -185,7 +185,16 @@ detail, and every node's border keeps 3:1 (`look.spec.js`, `metrics.spec.js`).
   nothing is in the way (`shared/bundling/headRuns.js`, below). The corner before a headed end is
   rounded only by what its run has to spare, every other corner at 6 px, so a branch leaves its
   trunk in a rounded merge on the stroke (ruling 2). A dashed line's pattern is shifted so a dash
-  ends inside the head (`dashOffsetOf`).
+  ends inside the head (`dashOffsetOf`); for an aggregated line, the head it is drawn with
+  (`AGGREGATE_ARROW`, a triangle) rather than its kind's. Without that a dotted aggregated line
+  stopped 0.93 px short of its head (measured by S4b on `heads.spec.js`).
+- **The legend is the canvas's** (BDL-080 S4b, S4f). After every drawing `useGraphCanvas` notes
+  the style keys of the lines shown (`drawnStyles`), the map's aggregated lines among them, and
+  whether one of them carries several styles (`drawnSeveral`); `GraphViewer` passes them to
+  `EdgeLegend` through `legendKeysOf` and its `several` prop. Before S4b the legend was made of
+  the data file's edges, so it listed `consumes` and `produces` at the overview, where no such
+  line is drawn. A line hidden by the filters or left outside a selection is not shown, and a
+  dimmed one is. See [Graph edges](graph-edges.md) for the "several kinds" entry.
 - **One head per shared last run** (ruling 10). Lines that reach one end along one final run end
   in one arrowhead: the loudest look draws it (a violation is never hidden under an import's
   head), then an edge of the file before a line of the map's, then the first by id; the others
@@ -275,8 +284,11 @@ set of open boxes and nothing is laid out again, so no box moves between levels.
   overview's plan (below), at every level; any other runs along the medoid of its members' ELK
   routes between the two boxes (`shared/geometry/aggregateRoutes.js`), its last run into a closed
   box straightened where it was a short dogleg (`straightenedInto`). It takes a violation's look
-  when one of its edges is one. Hovering it shows a note (`data-testid="aggregated-edge-note"`)
-  naming its edges each way by their ends.
+  when one of its edges is one, and otherwise the look of the style its edges are drawn in most.
+  Since BDL-080 S4b a line of one style keeps that style's dash, so `uses` is dotted at the
+  overview too, and a line of several styles carries `SEVERAL_STYLES` and is drawn solid in the
+  colour of the kind it carries most (RFC D8). Hovering it shows a note
+  (`data-testid="aggregated-edge-note"`) naming its edges each way by their ends.
 - **Budget.** A level draws at most 100 aggregated edges (`LEVEL_OPTIONS.budget`): the heaviest,
   ties broken by the pair's ends in code-unit order (`budgetOf`). Each drawn end of a left-out
   edge carries the count (`hiddenEdges`).
@@ -304,7 +316,10 @@ set of open boxes and nothing is laid out again, so no box moves between levels.
   (`ownLinesOf`), along the medoid of their drawn routes. The box-level line they belong to is
   not drawn twice. A line into an open box whose nodes the node's other lines run on into is
   their stub, with no head of its own (`STUB_AT`). The "+N", the hover and the click name the
-  same edges (`counts.spec.js`).
+  same edges (`counts.spec.js`). Since BDL-080 S4f a node's edges into an open box, which run on
+  the pair's line of the node and the box and end on the box's border, are drawn the same way
+  while the node is under the pointer or selected (`reachingOf`), to the end they reach inside
+  the box. No "+N" counts them, since the node's line carries them at rest.
 - **Loops** (the owner's ruling thirteen). An edge from a node to a box that holds it stays
   drawn, square along its route (`shared/map-levels/loopLines.js`), once both its ends are drawn
   and neither is a closed box. An edge onto the one root box that holds everything is not drawn
@@ -346,6 +361,14 @@ boxes; no box moves.
   the fit's scale on a resize, change; a line between two top-level nodes keeps the plan's route
   at every level, so a zoom or a box opened moves none of them. A line the budget left out and
   the pointer or a selection now draws is routed around the plan's lines and kept the same way.
+  The plan is made once per change: S4b made a second plan with the plate titles broken where a
+  line ran under a plate, and S4f removed it by the owner's ruling of 2026-10-10, since plate
+  titles now always break. The lines keep inside the frame below the band its title is drawn in
+  (`routedFrameOf`). A redraw for a resize alone keeps the frame its size: a box drawn larger
+  than its layout that changed size redraws the same boxes without sizing them anew
+  (`onLevel({ boxes: false })`); sized again at another scale, the frame came out one layout
+  unit narrower on each side and moved the fit by 0.2 % on the `rn-fsd` adopter portal
+  (measured by S4f).
 - **Titles** (`shared/map-levels/mapMarks.js`, `shared/geometry/grownBoxes.js`,
   `features/overview-map/model/mapTitles.js`). A closed box's or top-level node's title is drawn
   inside its box at 14, 12.5, 11 or 10 px, the largest that fits. Where none fits, a top-level
@@ -356,7 +379,13 @@ boxes; no box moves.
   slash, dot, colon or space (`brokenLabelOf`). Only a title neither fits stands on a plate with
   a border, above its box or on the side where it covers nothing (`plateOf`); the router prices a
   plate so no line runs under it and no line ends on it. The project box's title stands on a
-  plate above it while its own title would read smaller than 10 px.
+  plate above it while its own title would read smaller than 10 px. Since BDL-080 S4b a title on
+  a plate is broken onto two lines where its name breaks (`ai_` / `agents` on this repository's
+  portal), always since S4f, so the plate leaves the corridor beside it room for the lines.
+  Since S4f a plate also keeps off a line drawn as itself, which no route moves. A node that
+  such a line ends at is drawn larger only by a box that keeps the line outside it, its end on
+  the border (`keepsOutside`); otherwise its title, broken onto two lines, is drawn in its
+  laid-out box where it fits there.
 - **Calm by default.** Lines at rest are thin and light. Hovering or selecting a box brings its
   lines and pills forward (`is-in-front`) and fades the rest (`is-behind`), and the pointer gone,
   all are back at rest. A closed box large enough on screen says how many edges come in and go out
@@ -380,7 +409,12 @@ on the line, tried every 6 px from the middle out (`shared/geometry/pillPoints.j
 `candidatesOf`), clear of every node, title, arrowhead and other pill and far enough from the
 ends to leave the heads whole (`shared/geometry/pillPlaces.js`, `pillStagesOf`). The pills are
 placed in three stages: a node's own lines first, then the lines between top-level things, among
-what the top level draws alone, so opening a box moves none of them, then the rest. A line with
+what the top level draws alone, so opening a box moves none of them, then the rest. Since BDL-080
+S4b the second stage places them around every top-level box's closed room, its box or grown box
+with its border and its title's plate, whether the box is open or not (`closedRoomsOf`), with the
+overview's count of lines left out; and a box's own edge to the frame is drawn only while the box
+is open, so it is not of the top level. Before that, opening `ai_agents` moved the pills of
+`cli|doc-sync` and `cli|infrastructure` on this repository's portal (measured by S4b). A line with
 no free point has no pill, and its count is in the note shown on hover; a line asked to say its
 count says it anyway (`crowded`). A pill is placed once per step of the map's scale.
 
@@ -394,6 +428,12 @@ suite generates, in headless Chromium at 1400 x 900 on Darwin arm64, against the
 (25), the display's refresh cap in that run. A hover is drawn once per event in a microtask, so a
 `mouseout` and the `mouseover` after it cost one drawing. The CI bounds are set per environment;
 see [the site's page](../vitepress-site.md).
+
+Measured again by BDL-080 S4f at `e2d03791`, same machine and bounds, with the overview's plan
+made once: overview planning 33.9 ms (50), a zoom step 44.9 ms (60), a hover 29.4 ms (50),
+bundling 41.6 ms (50), the adopter-sized first drawing 5,979 ms (7,200). A second plan, made
+only where a line ran under a plate, measured 57 to 60 ms on this portal (S4b), over the 50 ms
+bound; plate titles always break instead.
 
 ### Test handle
 
@@ -446,20 +486,29 @@ What stays in `widgets/graph-viewer/`:
 
 - `index.js` — the public API: `GraphViewer`, `buildElements`, `buildStylesheet`, `CURVE_STYLE`.
 - `ui/GraphViewer.vue` — the component: toolbar, canvas, panel and legend, and the wiring of
-  every slice below.
+  every slice below. The edge legend's keys are `legendKeysOf(canvas.drawnStyles)` and its
+  `several` prop `canvas.drawnSeveral` (BDL-080 S4b, S4f).
 - `lib/elements.js` — `buildElements`: the data file as Cytoscape elements, and the boxes a
   scoped layer rule draws (`LAYER_BOX`); a scope box is marked `STACK_LANES`. An edge's id is
   `e<index>:<src>-><dst>` unless a node has that id, then primed (`freshId`).
 - `lib/stylesheet.js` — `buildStylesheet(tokens)`, `CURVE_STYLE`. It reads a node's sizes from
-  `GEOMETRY`, `drawnSizeOf` and `rimOf`, which moved to `shared/map-levels/nodeSizes.js`.
+  `GEOMETRY`, `drawnSizeOf` and `rimOf`, which moved to `shared/map-levels/nodeSizes.js`. Since
+  BDL-080 S4b an aggregated edge is no longer forced solid: it is drawn in its style's dash, and
+  solid only with `SEVERAL_STYLES`.
 - `model/useGraphCanvas.js` — the Cytoscape instance: mount, layout, hover, `showOnly`,
   `markSelection`, `reveal`; returns `layingOut`, `layout`, `bundles`, `hoveredEdges`,
-  `layoutError`, `pills()`, `tallies()` and `map()`.
+  `drawnStyles` and `drawnSeveral` (BDL-080 S4b, S4f), `layoutError`, `pills()`, `tallies()` and
+  `map()`.
 - `model/canvasLayout.js` — `layoutInputOf`, `applyGeometry`, `fitCompounds`, `isLoop`; a node's
   `stack` is read from `STACK_LANES`.
 - `model/canvasMap.js` — `canvasMap`, the level drawn on Cytoscape. Its parts were split out by
   job in `beadloom-btkd.17` and now live in `site-overview-map`; it re-exports none of their
-  names (`beadloom-btkd.20`).
+  names (`beadloom-btkd.20`). Since BDL-080 S4b it also returns `isTopBox(id)` and
+  `closedRoomsOf(id)`, which the pills are placed around, and `ofTopLevel` no longer counts a top
+  box's own edge to the frame. Since S4f a node's edges into an open box are among what it
+  draws when exposed (`reachingOf`), a node keeps a box the plan drew larger only while the box
+  covers none of its lines drawn as themselves (`coversOwnLine`), and `onLevel` is called with
+  `{ boxes: false }` when only a box drawn larger than its layout changed size.
 - `model/nodeCorners.js` — corners held at line ends.
 - `model/modes.js`, `model/testHandle.js`, `model/usePanelId.js`, `model/viewerKeys.js`.
 

@@ -22,7 +22,8 @@ from the map's lines.
 
 - `levels.js` — the levels, pure: the containment tree (`boxTreeOf`, `holdersOf`,
   `boxesHolding`, `boxesRevealing`, `isWithinAny`), the sibling rule (`levelOf`), a node's outward
-  edges and its own lines (`outwardOf`, `outwardOfOpen`, `ownLinesOf`), the budget (`budgetOf`),
+  edges and its own lines (`outwardOf`, `outwardOfOpen`, `ownLinesOf`), and since BDL-080 S4f a
+  node's edges into an open box (`reachingOf`, below), the budget (`budgetOf`),
   what is readable opens (`smallestChildOf`, `openInView`, `zoomDrawingOf`), and what a selection
   needs opened (`selectionReveals`). `LEVEL_OPTIONS`: a box opens when its smallest child is at
   least 24 px tall on screen (`readable`) and the zoom is past 1.3 times the whole-graph fit
@@ -33,6 +34,16 @@ from the map's lines.
   `LOOP_OF`, `LOOP_BOX`, `STUB_AT`, `OWN_LINE` and, since BDL-080 S4b, `SEVERAL_STYLES`, the data
   an aggregated edge carries when its edges are drawn in more than one style; and
   `endsOfLine(line)`.
+
+  `reachingOf(tree, open, edges, level)` returns `Map(node => [edge ids])`: the edges of a
+  drawn node that run into an open box on the line of the node and that box, ending on the
+  box's border while their other end is the box itself or is drawn inside it, such as a
+  top-level node's edge into a node of an open top-level box. They are not outward edges: the
+  node's line carries them at rest and no "+N" counts them. While the node is under the pointer
+  or selected they are drawn as its outward edges are (`ownLinesOf`), to the end they reach, so
+  a node is drawn with its own edges. Before it, such an edge stayed on the pair's line to the
+  box's border, which turned browser cases red on the two Feature-Sliced adopter portals
+  (S4f, class B).
 - `mapMarks.js` — the map's marks and the size each keeps on screen, pure: a title tried inside
   its box at 14, 12.5, 11 and 10 px (`MAP_MARKS.titleSizes`), a plate where none fits
   (`plateOf`, `PLATE_SIDES`), a name broken onto two lines (`brokenLabelOf`), the least box that
@@ -57,7 +68,8 @@ from the map's lines.
   `LAYER_BOX`, `LEVEL_OPTIONS`, `LOOP_BOX`, `LOOP_END`, `LOOP_OF`, `MAP_SCALE`, `OWN_LINE`,
   `PROJECT_BOX`, `SEVERAL_STYLES`, `STACK_LANES`, `STUB_AT`, `boxTreeOf`, `boxesHolding`, `boxesRevealing`,
   `budgetOf`, `endsOfLine`, `holdersOf`, `isWithinAny`, `levelOf`, `openInView`, `outwardOf`,
-  `outwardOfOpen`, `ownLinesOf`, `selectionReveals`, `smallestChildOf`, `zoomDrawingOf`.
+  `outwardOfOpen`, `ownLinesOf`, `reachingOf`, `selectionReveals`, `smallestChildOf`,
+  `zoomDrawingOf`.
 - `loopLines`.
 - From `mapMarks.js`: `MAP_BOX`, `MAP_MARKS`, `MAP_TITLE`, `OUTWARD`, `PLATE_SIDES`, `TALLY`,
   `boxMarkInsetOf`, `boxMarkOf`, `brokenLabelOf`, `mapTitleOf`, `plateLiftOf`, `plateOf`,
@@ -72,7 +84,8 @@ from the map's lines.
 Used by `site-graph-edges`, `site-navigate-graph`, `site-follow-edge`, `site-overview-map`,
 `site-edge-pills`, `site-node-card` (`boxTreeOf`) and `site-graph-viewer`. It is the largest
 shared segment: 56 owned symbols against the `shared` layer's cohesion limit of 60, measured by
-BDL-080 S2d at `d99dfd0e`.
+BDL-080 S2d at `d99dfd0e`. S4 added two exports, `SEVERAL_STYLES` and `reachingOf`, and
+`beadloom lint` reports no cohesion finding on the segment at `39b01cd9`.
 
 ## Tests
 

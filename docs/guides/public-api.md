@@ -58,10 +58,20 @@ makes it.
    Key added since 8.0.0 (MINOR, BDL-080 S4c): the top-level `source_ref`, the revision the
    source links name, present when the file carries source links. It is
    `{commit, linked, pushed}`: `commit` is the full hash the portal was built from; `pushed` is
-   `true` or `false`, and `false` only when git says no remote-tracking branch holds the commit;
+   `true` or `false`, and `false` only when git says no branch of `origin` holds the commit;
    `linked` is the revision every source link names, either the same hash as `commit` (a pushed
-   commit, or an unpublished one no branch stands in for) or the name of a branch on the remote
-   (the branch's upstream, the remote's branch of the same name, or the remote's default branch).
+   commit, or an unpublished one no branch stands in for) or the name of a branch on `origin`
+   (the branch's upstream when it is on `origin`, `origin`'s branch of the same name, or
+   `origin`'s default branch).
+   Keys added since 8.0.0 (MINOR, BDL-080 S4a): the top-level `lint`, lint's reach over the whole
+   project, `{errors, warnings, nodes_with_findings, nodeless}`, where each entry of `nodeless`
+   is `{rule, severity, message, file, line}` and `severity` takes the vocabulary `error`,
+   `warn`; it is omitted when lint did not run. And a node's `debt.inside`, the debt of the
+   nodes inside a box without the box's own, `{nodes, score, by_reason}`, where `by_reason`
+   is keyed by the debt report's reasons; it is present on a node another node is `part_of`.
+   `dashboard.data.json` is not this file and is not on this list: the keys BDL-080 added to it,
+   `lint.nodes_with_findings`, `lint.nodeless` and the top-level `pages`, are described in
+   [`dashboard-data.md`](../services/vitepress-site/dashboard-data.md) and carry no promise.
 6. **The files generated for an adopter**: what `init`, `docs site`, `docs generate`,
    `setup-agentic-flow`, `setup-rules`, `setup-mcp` and `install-hooks` write into a project,
    their paths and what they mean to the project that receives them.

@@ -25,17 +25,36 @@ Version 2 keeps every key of version 1 and adds what the viewer now reads:
 The generator decides it per forge and writes `""` for a host it does not recognise, so the viewer
 knows no forge. Nothing else from the git remote is in the file.
 
-Since BDL-080 S4c a commit no remote-tracking branch holds is linked through a branch the remote
+Since BDL-080 S4c a commit no branch of `origin` holds is linked through a branch `origin`
 holds, and the top-level `source_ref` says which revision the links name, present whenever the
 file carries source links: `{commit, linked, pushed}`. `commit` is the full hash the site was
-built from; `pushed` is `false` only when git says no remote-tracking branch holds it; `linked` is
-that hash, or the name of the branch on the remote that stands in for it (the branch's upstream,
-else `origin`'s branch of the same name, else `origin/HEAD`). The card shows "built from an
-unpublished commit; links point at <linked>" under a source link when `pushed` is `false`, with a
-hash cut to 12 characters. `activity` carries only
-`commits_30d` and `level`. `tests` is `{files, file_count, count, placement}`: `files` lists only
-the test files bound to the node itself, and the counts are taken over the node and its `part_of`
-descendants.
+built from; `pushed` is `false` only when git says no branch of `origin` holds it; `linked` is
+that hash, or the name of the branch on `origin` that stands in for it (the branch's upstream
+when it is on `origin`, else `origin`'s branch of the same name, else `origin/HEAD`). Only
+`origin` counts since BDL-080 S4h, because the links name `origin`'s address. The card shows
+"built from an unpublished commit; links point at <linked>" under a source link when `pushed`
+is `false`, with a hash cut to 12 characters. `activity` carries only `commits_30d`,
+`lines_30d` and `level`. `tests` is `{files, file_count, count, placement}`: `files` lists only
+the test files bound to the node itself, and the counts are taken over the node and its
+`part_of` descendants.
+
+Since BDL-080 S4a the file names the populations its counts were taken over:
+
+- at the top level, `lint`: `{errors, warnings, nodes_with_findings, nodeless}`. `errors` and
+  `warnings` are lint's own totals over every finding, `nodes_with_findings` is how many nodes
+  carry at least one, and `nodeless` lists each finding bound to no node as
+  `{rule, severity, message, file, line}` (`severity` `error` or `warn`; `file` `""` and `line`
+  `null` when it names no place). Every finding is on a node or on none, so the findings on
+  nodes are `errors + warnings` less `nodeless`, and the card derives that number rather than
+  reading a key. The key is omitted when lint did not run;
+- per node, on a box (a node another node is `part_of`), `debt.inside`:
+  `{nodes, score, by_reason}`, the descendants that carry debt, the sum of their own scores, and
+  per debt-report reason how many of them carry it. The box's own `score` and `reasons` are
+  unchanged beside it, and a leaf has no `inside`.
+
+On this repository's portal, measured on 2026-10-10, `lint` holds
+`{"errors": 0, "warnings": 69, "nodes_with_findings": 27}` with 36 entries in `nodeless`, and 13
+boxes carry `debt.inside`.
 
 Since BDL-080 S1 the file carries every layer rule the project declares, still as schema 2,
 because every key is added and none changes meaning for a project without `scope:`:

@@ -46,7 +46,9 @@ segment uses another only through that segment's `index.js`, as every other laye
   padding, `[top=boxTop, left=12, bottom=12, right=12]`: ELK's own 12 units on three sides and
   `boxTop` above its children, the room its title is drawn in, 12 when none is given (BDL-078
   `beadloom-btkd.6`; the viewer passes 36, `GEOMETRY.boxTitleRoom`), so no child stands under
-  an open box's title.
+  an open box's title. Those 12 units are `BOX_SIDE`, exported since BDL-080 S4h
+  (`beadloom-af99.16`) because the overview's plan keeps its lines below the frame's title band
+  by it (`site-overview-map`, `routedFrameOf`).
 
   **Partitions pin lanes among the root's children only.** Measured on elkjs 0.12 by BDL-080
   S1c: with `INCLUDE_CHILDREN`, ELK reads no partition of a node inside a box. Three children of
@@ -90,7 +92,7 @@ segment uses another only through that segment's `index.js`, as every other laye
 ## Public API
 
 - `shared/lib/index.js`, `shared/theme-tokens/index.js`, `shared/cytoscape/index.js`,
-  `shared/elk/index.js` (`elkGraphOf`, `LAYERED_OPTIONS`, `layOut`, `warmUpLayout`),
+  `shared/elk/index.js` (`BOX_SIDE`, `elkGraphOf`, `LAYERED_OPTIONS`, `layOut`, `warmUpLayout`),
   `shared/ids/index.js` (`freshId`, `idRecord`), `shared/echarts/index.js` and
   `shared/ui/index.js`, one public file per segment.
 

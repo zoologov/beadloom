@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-BDL-080 slice 1: the portal is a service, and every layer rule is drawn. **The next version is
-major** (owner, 2026-10-09): one change under Breaking can move `lint`'s exit code on a project
-nobody edited, which the public API guide classes MAJOR. Everything else adds; nothing is
-removed or renamed, the data file stays schema 2, and `kind: site` stays accepted. Each line
-names its bead; the pull request is to be opened.
+BDL-080: the portal is a service, every layer rule is drawn, and the viewer serves a
+Feature-Sliced frontend. **The next version is major** (owner, 2026-10-09): one change under
+Breaking can move `lint`'s exit code on a project nobody edited, which the public API guide
+classes MAJOR. Everything else adds; nothing is removed or renamed, the data file stays schema
+2, and `kind: site` stays accepted. Each line names its bead; the pull request is to be opened.
 
 ### Breaking
 
@@ -93,27 +93,35 @@ names its bead; the pull request is to be opened.
 - **A box's debt names the debt inside it (`beadloom-5pxv`).** A node that holds another gains
   `debt.inside` with `nodes` (its `part_of` descendants that carry debt), `score` (the sum of
   their own scores) and `by_reason` (per reason of the debt report, how many of them carry it).
-  A leaf's `debt` is unchanged. The card reads `own 0` and `inside 79.5 on 53 nodes: dormant 13,
-  …`, and the box's Inside section repeats the second line.
+  A leaf's `debt` is unchanged. On this repository's `beadloom` box the card reads `own 0` and
+  `inside 38.5 on 32 nodes: dormant 13, high_fan_out 10, oversized 8, undocumented 3`, and the
+  box's Inside section repeats the second line (measured on 2026-10-10 at `39b01cd9` with every
+  document fresh; a stale document adds a `stale_doc` reason, so the figure moves with the tree).
 - **The dashboard names what its numbers were counted over (`beadloom-5pxv`).** In
   `dashboard.data.json`, `lint` gains `nodes_with_findings` and `nodeless`, as above, and a
   top-level `pages` lists the pages the run wrote: `count`, `sections` (each with `name`, `count`
   and `pages`; names `about`, `dashboard`, `architecture`, `nodes`, `landscape`, `docs`, an empty
   section listed with 0) and `languages` (each About page's `language`, `en` or `ru`, and
   `page`). Two panels, Rule findings and Pages, follow the status cards; a data file without the
-  keys shows neither.
-- **The Source link of a portal built from an unpublished commit names a branch the remote holds
-  (`beadloom-e1xo`).** A local build from a commit that no remote-tracking branch holds linked
-  every node to a 404. Its links now name the branch's upstream, else `origin`'s branch of the
-  same name, else `origin`'s default branch, and keep the commit when none of them exists; Gitea
-  and Azure DevOps links take their branch routes (`src/branch/`, `GB`). `architecture.data.json`
-  gains a top-level `source_ref`, `{commit, linked, pushed}`, present when the file carries
-  source links: `pushed` is `false` only when no remote-tracking branch holds the commit, and
-  `linked` is the commit's hash or the branch's name. The card says `built from an unpublished
-  commit; links point at main` under the link, and `docs site` warns on stderr without changing
-  its exit code. Measured on this repository, built from the unpushed `8dbe844c`: the links to
-  the commit answered 404; of the 139 links to `main`, 127 answered 200 and 12 answered 404, each
-  of the 12 a folder that `origin/main` does not hold yet.
+  keys shows neither. Pages says what the run wrote, `beadloom docs site wrote 297 pages; the
+  About page in en (index.md), ru (ru/index.md).` on this repository's portal, since a file a
+  project places under `.beadloom/site/` is on the portal and is not counted
+  (`beadloom-af99.16`). The dashboard file is not on the public API list, so these keys carry no
+  promise; the architecture file's `lint`, `debt.inside` and `source_ref` do.
+- **The Source link of a portal built from an unpublished commit names a branch `origin` holds
+  (`beadloom-e1xo`, `beadloom-af99.16`).** A local build from a commit that no branch of
+  `origin` holds linked every node to a 404. Its links now name the branch's upstream when it
+  is on `origin`, else `origin`'s branch of the same name, else `origin`'s default branch, and
+  keep the commit when none of them exists; Gitea and Azure DevOps links take their branch
+  routes (`src/branch/`, `GB`). Only `origin`'s branches count, because the links name
+  `origin`'s address: a commit or an upstream only a fork holds would be a 404 there too.
+  `architecture.data.json` gains a top-level `source_ref`, `{commit, linked, pushed}`, present
+  when the file carries source links: `pushed` is `false` only when no branch of `origin` holds
+  the commit, and `linked` is the commit's hash or the branch's name. The card says `built from
+  an unpublished commit; links point at main` under the link, and `docs site` warns on stderr
+  without changing its exit code. Measured on this repository, built from the unpushed
+  `8dbe844c`: the links to the commit answered 404; of the 139 links to `main`, 127 answered
+  200 and 12 answered 404, each of the 12 a folder that `origin/main` does not hold yet.
 
 - **The portal carries a logo, a footer and its forge's icon (`beadloom-af99.7`,
   `beadloom-af99.9`).** Three keys
@@ -237,6 +245,20 @@ names its bead; the pull request is to be opened.
 - **Every adopter's portal gains the footer on upgrade (`beadloom-af99.7`).** It is on by
   default, so the next `docs site` adds it to a portal nobody edited; `site.powered_by: false`
   keeps the portal as it was.
+- **The legend names the lines drawn on the canvas, and a line of the map keeps its kind's dash
+  (`beadloom-bjrw`, `beadloom-af99.13`).** The edge legend was made of the data file's edges, so
+  at the overview it listed `consumes` and `produces`, which no line there draws; it now lists the
+  styles of the lines drawn at the level on the canvas, the map's aggregated lines among them.
+  An aggregated line that carries one kind keeps that kind's dash (`uses` is dotted at the
+  overview too), where every aggregated line was solid. One that carries several kinds stays
+  solid, in the colour of the kind it carries most, and while one is drawn the legend adds the
+  entry "several kinds: solid, in the colour of the kind it carries most" (the owner's ruling of
+  2026-10-10); this repository's portal draws 17 such lines at the whole-graph fit.
+- **A title on a plate is broken onto two lines where its name breaks (`beadloom-bjrw`,
+  `beadloom-af99.13`).** One more node in one box widened this repository's frame, the fit's
+  scale stepped, and three lines between other boxes ran under `ai_agents`'s plate; a plate one
+  line narrower leaves them room. The overview's plan is made once (the owner's ruling of
+  2026-10-10).
 - **The `fsd` role overlay maps a slice to a `component` (`beadloom-5wh2`).** It used to map a
   layer to a `domain`, a slice to a `feature` and a segment to a `component`. A slice is now a
   `component` tagged with its layer and `part_of` the frontend service, and `shared` and `app`
@@ -293,6 +315,22 @@ names its bead; the pull request is to be opened.
   the layout only when they hold JavaScript, TypeScript or Vue code, or when a `package.json`
   sits at the project root or in the FSD root. The two FSD adopter fixtures are still `fsd`,
   and the six others keep their presets.
+- **The viewer draws a node's edges into an open box as its own lines (`beadloom-af99.13`).**
+  While a node is under the pointer or selected, an edge from it into a box that is open, onto
+  the box or to a node inside it, stayed on the pair's line to the box's border; it is now drawn
+  to the end it reaches, as an outward edge is. With the other fixes below, the shipped browser
+  suite went from 7 failing cases to none on the `vue-fsd` portal and from 17 to none on
+  `rn-fsd`, measured locally on Darwin arm64 (not on the Linux CI legs, whose fonts differ).
+- **A pill keeps its place when a sibling box opens (`beadloom-bjrw`).** The pills of the lines
+  between top-level boxes are placed around each box's closed room, its title's plate included,
+  whether the box is open or not, so opening `ai_agents` no longer moves the pills of
+  `cli|doc-sync` and `cli|infrastructure`.
+- **The overview keeps lines off what no route moves (`beadloom-af99.13`).** A plate keeps off a
+  line drawn as itself; a box drawn larger for its title keeps such a line outside it, or the
+  title is broken in the laid-out box; the router crosses such a line near its arrowhead only on
+  its relaxed pass, priced as eight refusals, where a crossing had shrunk a planned line's head
+  to 3.57 px; lines keep below the frame's title band; and a resize alone no longer resizes the
+  boxes, which had moved the fit by 0.2 % on `rn-fsd`.
 - **`init` keeps the indentation of the `package.json` it adds `lint:fsd` to
   (`beadloom-af99.14`).** It rewrote the file with a fixed two-space indent, so on a
   tab-indented file every line changed. It now writes in the indentation the file already has

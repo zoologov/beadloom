@@ -867,7 +867,10 @@ and writes under `--out` (default `site/`, the directory `beadloom init` ignores
   `landscape-diagram.md`, the published `docs/**` with a freshness badge on each copy, and
   `.vitepress/config.generated.mjs` (nav and sidebar);
 - **the identity:** `.vitepress/site.generated.mjs`, from the `site:` block of
-  `.beadloom/config.yml` (title, description, base, repository link);
+  `.beadloom/config.yml` (title, description, base, repository link and its icon, the logo,
+  the footer switch, the favicons), the project's logo copied to `public/logo.svg` or
+  `public/logo.png` when `site.logo` names one, and Beadloom's favicon under `public/brand/`
+  when the portal shows it;
 - **the scaffold:** the theme, the viewer, `package.json`, `package-lock.json`,
   `.vitepress/config.mjs` and the browser tests, from the installed package. Each file carries a
   `beadloom:generated` marker; a file without the marker, or edited after it was written, is
@@ -883,6 +886,18 @@ A kept file is named on stderr with the reason and the remedy, and the exit code
 `site.<key>: <why>` with its remedy. When `site.base` is `/` and `origin` is a `github.com`
 project repository, a warning on stderr says that Pages serves it under `/<repo>/` and names the
 `site.base` to set; the exit code is unchanged.
+
+A second warning on stderr (BDL-080 S4c) names a portal built from a commit no branch of
+`origin` holds: its source links would be 404s, so they name a branch `origin` holds instead,
+the branch's upstream when it is on `origin`, else `origin`'s branch of the same name, else
+`origin/HEAD`, and the warning says which; a path that exists only in that commit is still not
+there. With no such branch the links keep the commit, and the warning names
+`git remote set-head origin --auto`. Only `origin` counts since BDL-080 S4h, because the links
+name `origin`'s address. The exit code is unchanged.
+
+```text
+Warning: the portal was built from 8dbe844c3a7a, which is on no branch of origin, so its source links point at main instead; a path that exists only in that commit is not there. Push the commit and run `beadloom docs site` again for links to it.
+```
 
 - `--federated FILE` -- a `beadloom federate` hub artifact for the Mermaid landscape diagram and
   the dashboard; the viewer's landscape always reads the project's own contracts.

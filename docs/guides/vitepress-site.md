@@ -65,6 +65,15 @@ single presentation surface:
   shown IFF something is wrong (an empty list = the all-clear state). `status_cards`
   is one threshold-coloured card per metric group (`ok`/`warn`/`error`, the
   severity computed deterministically in Python — the front-end only paints it).
+- **`RuleFindings`** (BDL-080) — the population lint's numbers were counted over: lint's totals
+  with how many of them sit on how many nodes and how many on none, on this repository's portal
+  `This project: 0 errors, 69 warnings — 33 on 27 nodes, 36 on none.`, then every finding
+  bound to no node with its rule, severity, message and `file:line`. A node's own findings are
+  on its card.
+- **`PageMap`** (BDL-080) — the pages the `docs site` run wrote: `beadloom docs site wrote 297
+  pages; the About page in en (index.md), ru (ru/index.md).` on this repository's portal, then
+  each section's pages in the sidebar's order (about, dashboard, architecture, nodes,
+  landscape, docs). A file you place under `.beadloom/site/` is on the portal and not counted.
 - **`HealthGauges`** — gauges for lint, debt, coverage %, and freshness %.
 - **`CategoryChart`** — debt-by-category and lint-by-severity breakdowns.
 - **`TrendCharts`** — line charts over the recorded `trends` series; with fewer
@@ -221,11 +230,14 @@ no bridges, no dots where lines part and no colour gradient along a line any mor
   line from the node to the box's border.
 - **Labels on hover.** A line's kind is shown only while the pointer is on it. Counts are on pills
   (below).
-- **The legend** under the canvas lists the layers, the node statuses (each as a small card with
-  its mark) and the edge kinds actually drawn, each sample in the colour the canvas uses, so it
-  never names something the canvas does not show. Where two or more layer rules are drawn, the
-  layers are grouped per rule under the rule's `title:` (its name where it declares none), each
-  group top to bottom.
+- **The legend** under the canvas lists the layers, the node statuses (each as a small card
+  with its mark) and the line styles drawn at the level on the canvas now, each sample in the
+  colour the canvas uses, so it never names something the canvas does not show. A line of the
+  map that carries one kind of edge keeps that kind's dash. A line that carries several kinds
+  is drawn solid in the colour of the kind it carries most, and while one is drawn the legend
+  adds the entry "several kinds: solid, in the colour of the kind it carries most". Where two
+  or more layer rules are drawn, the layers are grouped per rule under the rule's `title:` (its
+  name where it declares none), each group top to bottom.
 - **Layer boxes.** A layer rule scoped to a box inside the project, such as a Feature-Sliced
   frontend's rule scoped to its service, draws one box per layer inside that box, each holding the
   parts the rule places in that layer, stacked top to bottom. A layer box is no node: it has no
@@ -415,15 +427,19 @@ risk through an unverified contract.
 The panel shows a card for the selected node, one kind per mode.
 
 - **The architecture card:** the node's id and summary; kind, lifecycle, tags; its layer and
-  whether that is its own tag or inherited from its container; its source; its activity; its debt
-  with the reasons; its docs, each with its sync status and a
-  link to the published copy when there is one; its bound tests with their count, placement
-  and the files bound to the node itself; its first 50 public symbols and how many more there
-  are; its edges by kind and direction, where a click selects the other end; its rule
-  findings with their severity; a link to its page; `beadloom ctx <ref>` and
-  `beadloom why <ref>` to copy; for a box, what it holds and how many of its edges go out to and
-  come in from each neighbour. "None" means the data file holds nothing for the field; "not
-  recorded" means the file does not carry the field at all.
+  whether that is its own tag or inherited from its container; its source; its activity; its
+  debt with the reasons; its docs, each with its sync status and a link to the published copy
+  when there is one; its bound tests with their count, placement and the files bound to the
+  node itself; its first 50 public symbols and how many more there are; its edges by kind and
+  direction, where a click selects the other end; its rule findings with their severity, said
+  against lint's reach over the whole project, on this repository's portal
+  `none — this project: 0 errors, 69 warnings — 33 on 27 nodes, 36 on none`, so "none" is not
+  read as "lint never ran"; a link to its page; `beadloom ctx <ref>` and `beadloom why <ref>`
+  to copy; for a box, what it holds and how many of its edges go out to and come in from each
+  neighbour, and its debt said twice, its own and the debt of the nodes inside it by reason.
+  The card of the box that holds the whole project also lists the findings bound to no node,
+  with the file and line each points at. "None" means the data file holds nothing for the field; "not recorded" means
+  the file does not carry the field at all.
 - **Activity** counts changed lines (added plus deleted) over the last 30 days, not commits, so a
   squash-merged history reads the same as any other: `412 lines changed in 30 days, hot`. The
   levels are relative to your project: among the nodes changed in 30 days, the busiest tenth is
@@ -444,24 +460,26 @@ The panel shows a card for the selected node, one kind per mode.
   plain text, because a guessed address would be a dead link. Nothing else from the git remote
   is published.
 
-  A portal built from a commit that no remote-tracking branch holds, such as a local build
-  before a push, would link every node to a page that does not exist, since the forge has never
-  seen that commit. Its links name a branch the remote holds instead: the upstream of the
-  branch the commit is on,
-  else `origin`'s branch of the same name, else `origin`'s default branch (`origin/HEAD`). With
-  none of them they keep the commit. A path that exists only in the unpublished commit is still
-  missing on the branch. The card says `built from an unpublished commit; links point at main`
-  under the link, and `docs site` warns on stderr, naming the fix when no branch stands in:
+  A portal built from a commit that no branch of `origin` holds, such as a local build before a
+  push, would link every node to a page that does not exist, since the forge has never seen
+  that commit. Its links name a branch `origin` holds instead: the upstream of the branch the
+  commit is on when that upstream is on `origin`, else `origin`'s branch of the same name, else
+  `origin`'s default branch (`origin/HEAD`). With none of them they keep the commit. Only
+  `origin` counts, because the links name `origin`'s address: a commit or an upstream that only
+  a fork holds would be a 404 there too (BDL-080 S4h). A path that exists only in the
+  unpublished commit is still missing on the branch. The card says `built from an unpublished
+  commit; links point at main` under the link, and `docs site` warns on stderr, naming the fix
+  when no branch stands in:
 
   ```text
-  Warning: the portal was built from 39f9247dddfd, which is on no remote branch, so its source
+  Warning: the portal was built from 39f9247dddfd, which is on no branch of origin, so its source
   links point at main instead; a path that exists only in that commit is not there. Push the
   commit and run `beadloom docs site` again for links to it.
   ```
 
   Only the refs the clone already holds are read, and the remote is never contacted. A CI
-  checkout holds the commit it builds under a remote-tracking ref, so a portal built there links
-  the commit.
+  checkout of a pushed branch holds the commit it builds under a remote-tracking ref of
+  `origin`, so a portal built there links the commit.
 - **The service card** on the landscape: the service's kind, health, number of contracts and page,
   then every contract it produces or consumes, with its verdict, protocol, routing, the fields or
   the message body each side declares ("undeclared" when a side declared none) and, for a

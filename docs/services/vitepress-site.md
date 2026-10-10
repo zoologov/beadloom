@@ -40,6 +40,26 @@ layer:
 
 The About and documentation pages are Markdown that VitePress renders with the default theme.
 
+The page map (`page_map.page_map_of`, the `pages` key of `dashboard.data.json`) counts what
+the run wrote in each section, by the section the generator stated for each page as it wrote it:
+
+| Section | Pages |
+|---------|-------|
+| `about` | `index.md` from `README.md`, and `ru/index.md` from `README.ru.md` when it exists |
+| `dashboard` | `dashboard.md` |
+| `architecture` | `architecture.md` and its Mermaid fallback `architecture-diagram.md` |
+| `nodes` | one page per node, under `domains/`, `services/`, `features/` or `other/` |
+| `landscape` | `landscape.md` and its Mermaid fallback `landscape-diagram.md` |
+| `docs` | the published copy of every Markdown file under `docs/`, and the `docs/index.md` overview |
+
+Only Markdown pages are counted: the data files under `public/`, the scaffold and the generated
+`.vitepress/` modules are not pages. A file the project places under `.beadloom/site/` is copied
+after the run and is not counted either, which is why the dashboard says `beadloom docs site
+wrote N pages` rather than how many the portal has. Measured on this repository's portal by
+S4T on 2026-10-10: 297 pages (about 2, dashboard 1, architecture 2, nodes 139, landscape 2,
+docs 151), the About pages in `en` and `ru`; S4R found the same 297 equal to the `.md` files on
+disk outside `.vitepress/`, `e2e/` and `node_modules/`.
+
 ## What is scanned
 
 The scaffold lies under `src`, this repository's scan path, so its `.js`, `.mjs` and `.vue` files
@@ -113,9 +133,18 @@ re-exports the `app` layer; `.vitepress/config.mjs`, which reads the identity an
 logo (marked to be drawn in the text's colour when it is drawn in `currentColor`), the header's
 repository link with its icon, the footer switch and the favicons the identity names;
 `public/brand/beadloom-icon.svg`, Beadloom's square icon, its only mark, which the footer draws
-and VitePress copies to the site root (Beadloom's favicon, an SVG and a PNG, is package data
-under `beadloom/site_favicon/` that `docs site` writes beside it, because a PNG cannot carry the
-scaffold's marker); `.vitepress/generated.mjs`,
+and VitePress copies to the site root. Beadloom's favicon is package data under
+`beadloom/site_favicon/` that `docs site` writes beside it only when the portal shows it,
+because a PNG cannot carry the scaffold's marker: the theme-adaptive SVG
+`beadloom-favicon.svg`, and two 32 by 32 PNGs, `beadloom-favicon.png` with the light scheme's
+dark glyph (`#3c3c43`) and `beadloom-favicon-dark.png` with the dark scheme's light glyph
+(`#dfdfd6`), linked behind `media="(prefers-color-scheme: dark)"` (the owner's ruling of
+2026-10-10). A portal whose `site.logo` is a file of its own takes that file as its favicon, as
+it is. Every nav logo is drawn 32 px high, an image in colours of its own and an SVG in
+`currentColor` alike (`theme/app/styles/nav-logo.css`, `--vp-nav-logo-height`, the owner's
+ruling of 2026-10-10); an SVG in `currentColor` is drawn in the title's colour. The colour
+sources of the brand are kept, unshipped, under `.github/brand/` in this repository, with a
+README naming which file ships; `.vitepress/generated.mjs`,
 whose `importGenerated(url)` loads a generated module as `{}` with a warning when it is not there
 yet and throws any other load error; `package.json` (`engines.node: >=22`, every dependency
 pinned exactly) with its lockfile; and `scripts/`. The shipped config pre-bundles `mermaid` and
@@ -243,7 +272,37 @@ does not ask the viewer to grade itself:
 
 `support/bridges.js` and `bridges.spec.js` were removed with the bridges (BDL-078).
 - `pointer.js`: drags and long presses on a reachable leaf, and every toolbar button pressed.
+  Since BDL-080 S4f only nodes that are leaves before and after a gesture are compared: a
+  gesture's pan opens the readable boxes it brings into view, and an opened box is drawn around
+  its children, which read once as the `rn-fsd` portal's `app` box moving under a long press
+  while its place was unchanged (129.5, 330.5, measured by S4f).
 - `environment.js`: the environment a timed case runs in, and its bound there (below).
+
+**What BDL-080 S4 added, and what it relaxed.** `brand.spec.js` (bound to `site-powered-by`,
+eight cases): Beadloom's favicon, theme-adaptive, with its PNG; the PNG's glyph for each colour
+scheme; a project's own logo as its favicon, as it is; the nav logo when one is declared and
+none otherwise; every nav logo 32 px high; a logo in `currentColor` drawn in the text's colour
+in either theme; the footer on two lines unless switched off; the header's link with its
+forge's icon, or no link. `dashboard.spec.js` (bound to `site-dashboard`) holds the two
+population panels ([Dashboard](vitepress-site/dashboard.md)), and `card.spec.js` the card's
+reach line, node-less list, own and inside debt and unpublished-commit note
+([Node card](vitepress-site/node-card.md)). `edges.spec.js` holds the legend against the canvas
+at every level, the "several kinds" entry where such a line is drawn and not where none is, and
+an aggregated line of one kind keeping that kind's dash; `metrics.spec.js` that opening any
+top-level box at the fit moves no line and no pill of the other top-level nodes. Three cases
+accept less than before, each with its measurement; the owner accepted all three on
+2026-10-10:
+
+- the narrowest gap between two lines running beside each other is 7 px (`OWN_GAP_PX`) for the
+  lines the overview's router planned and 5 px (`GAP_PX`) for every pair: the bundling keeps 8
+  layout units for a head's run, which at the `rn-fsd` portal's fit zoom of 0.7218 is 5.77 px,
+  and the 7 px goal had been set on this repository's graph;
+- the 10 px floor of a title at the fit allows the half-step of the map's scale (10 / √1.25),
+  since an 11 px title drew at 9.93 px on a Feature-Sliced portal, and a title on the plate the
+  plan stood it on counts;
+- `look.spec.js` accepts a head shrunk where a line drawn as itself crosses a line's last run
+  within a head and a half of its tip, between two boxes too near for a way round (measured: a
+  4.55 px head, 6.83 px from the tip in a 20 px gap).
 
 **Timed cases.** `playwright.config.js` declares two projects. `chromium` runs every case but the
 timed ones, in parallel. `performance` runs `e2e/performance.spec.js` one case at a time, after
@@ -316,23 +375,31 @@ shape: python 75 passed and 26 skipped, go 88 and 13, typescript 94 and 7, java 
 **In CI.** The advisory `site-e2e` job runs the suite on this repository's portal after
 `site-build`, with `BEADLOOM_E2E_NO_SKIP=1`, so every case runs here, under the `ci` bounds. At
 `6b77893c` the suite held 294 cases in the `chromium` project and 10 in `performance`, measured
-locally on Darwin arm64 (`beadloom-btkd.15`). On PR #94 (head `038305af`, job 113056037571,
-a GitHub-hosted Ubuntu runner, two workers) it ran 318 cases, 308 in `chromium` and 10 in
+locally on Darwin arm64 (`beadloom-btkd.15`). On PR #94 (head `038305af`, job 113056037571, a
+GitHub-hosted Ubuntu runner, two workers) it ran 318 cases, 308 in `chromium` and 10 in
 `performance`: 318 passed and none skipped, in 25.4 minutes. It is not a required check. The
 `site-adopters` workflow builds the eight fixtures and runs the suite on each, on pull requests
-that change what it tests, weekly on `main` and on demand. It runs in nine legs, one per fixture
-and one for the slow tests that build a project of their own (`projects`), reported as the check
-runs `site-adopters (python)`, `(go)`, `(typescript)`, `(java)`, `(kotlin)`, `(swift)`,
-`(vue-fsd)`, `(rn-fsd)` and `(projects)`; none is a required check. `BEADLOOM_SLOW_PART` names a
-leg's part (`beadloom-m6k7.7`). Before the legs were split, the six suites of that time ran one
-after another, took about 14 minutes each on the runner, and the job was cancelled at its
-60-minute timeout during the third. The cases tagged `@adopter-sized` run on the first stack of
-each count of declared layers (python, go, typescript, and since BDL-080 S3d `vue-fsd`, the first
-with the six FSD layers `init` writes) and are left out on java, kotlin and swift, which declare
-none, like python, and on `rn-fsd`, which declares as many as `vue-fsd`; each would draw the same
-graph. At `8dbe844c` the shipped suite was not green on the two FSD portals: S3T measured 7
-failing cases on `vue-fsd` and 17 on `rn-fsd` (macOS, `Node.js 22`), viewer layout and
-selection cases that S4f (`beadloom-af99.13`) owns. What it tests is its
-`paths:` filter, and a self-check holds that filter to every file the slow tests read and every
-`src/beadloom` file their `init`, `reindex` and `docs site` steps enter, traced on each fixture in
-a fresh interpreter (`beadloom-ujzb.24`).
+that change what it tests, weekly on `main` and on demand. It runs in nine legs, one per
+fixture and one for the slow tests that build a project of their own (`projects`), reported as
+the check runs `site-adopters (python)`, `(go)`, `(typescript)`, `(java)`, `(kotlin)`,
+`(swift)`, `(vue-fsd)`, `(rn-fsd)` and `(projects)`; none is a required check.
+`BEADLOOM_SLOW_PART` names a leg's part (`beadloom-m6k7.7`). Before the legs were split, the
+six suites of that time ran one after another, took about 14 minutes each on the runner, and
+the job was cancelled at its 60-minute timeout during the third. The cases tagged
+`@adopter-sized` run on the first stack of each count of declared layers (python, go,
+typescript, and since BDL-080 S3d `vue-fsd`, the first with the six FSD layers `init` writes)
+and are left out on java, kotlin and swift, which declare none, like python, and on `rn-fsd`,
+which declares as many as `vue-fsd`; each would draw the same graph. At `8dbe844c` the shipped
+suite was not green on the two FSD portals: S3T measured 7 failing cases on `vue-fsd` and 17 on
+`rn-fsd` (macOS, `Node.js 22`), viewer layout and selection cases. S4f (`beadloom-af99.13`)
+fixed them in the viewer, and at `e2d03791` plus its files, on Darwin arm64 with `Node.js 22`
+and Chromium, the eight adopter portals measured, as passed and skipped with none
+failed: `vue-fsd` 321 and 43, `rn-fsd` 280 and 41, python 263 and 101, go 278 and 86,
+typescript 319 and 45, java 219 and 102, kotlin 214 and 107, swift 214 and 107, every skip
+named by shape (S4T re-measured the same counts). This repository's portal measured 364 of 364
+there (354 in `chromium`, 10 in `performance`, `BEADLOOM_E2E_NO_SKIP=1`), and 366 passed at
+`1d71be89` (S4R). These are local measurements, not a claim about the Linux CI legs, whose
+fonts differ: a title's width decides growth and breaks, so a plan may differ there. What it
+tests is its `paths:` filter, and a self-check holds that filter to every file the slow tests
+read and every `src/beadloom` file their `init`, `reindex` and `docs site` steps enter, traced
+on each fixture in a fresh interpreter (`beadloom-ujzb.24`).

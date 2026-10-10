@@ -30,6 +30,16 @@ were measured to change, are described under "The overview" in [the viewer's pag
   share their last run. `OVERVIEW_MARKS` holds the sizes at the fit: `pitch` 8, `halo` 14, `run`
   15, `corner` 6, `head` 6, `between` 2.
 
+  **A line drawn as itself keeps its head (BDL-080 S4f).** A fixed line, one the level draws as
+  itself and no route moves, is marked on the grid (`markFixed`) on the tracks within reach of
+  it and, where a planned line crossing it would run under an arrowhead, on the tracks on each
+  side of it as well: on a box's stem, and along its own last run, `run` back from its tip.
+  A planned line crosses it there only on the second, relaxed routing, priced as
+  `FIXED_HEAD_REFUSALS` (8) refusals, since a head shrunk or crossed reads worse than a detour
+  through halos and margins. Measured: before it, a crossing a few pixels from a tip left a
+  head of a planned line at 3.57 px on one portal; at a price of 3 refusals a line still
+  crossed a fixed line 10 layout units from its tip, and at 8 it went round.
+
 ## Public API
 
 `shared/grid-routing/index.js`: `OVERVIEW_MARKS`, `planOverview`.
