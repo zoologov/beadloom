@@ -20,43 +20,52 @@ makes it.
 1. **The commands, their options and their exit codes.** Every `beadloom` command and subcommand,
    every option it accepts, and the exit code it returns for a given input. The reference is
    [`docs/services/cli.md`](../services/cli.md) and `beadloom <command> --help`.
-   Added since 9.0.0 (MINOR, BDL-080 S3c): the value `fsd` of `init --preset`, beside
+   Added in 9.0.0 (BDL-080 S3c): the value `fsd` of `init --preset`, beside
    `monolith`, `microservices` and `monorepo`.
 2. **The keys of `.beadloom/config.yml`.** Every key a command reads, and the values each key
    accepts. A key is documented in the reference of the node whose code reads it: `tests:` in the
    [test-mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md), `site:` in the
    [site-generation SPEC](../domains/application/features/site-generation/SPEC.md).
-   Keys added since 9.0.0 (MINOR, BDL-080 S4d): `site.logo`, the path of the project's SVG or
+   Keys added in 9.0.0 (BDL-080 S4d): `site.logo`, the path of the project's SVG or
    PNG logo relative to its root, shown in the portal's nav; `site.powered_by`, `true` or
    `false`, the "Powered by Beadloom" footer; and `site.repo_icon`, the icon beside the
    header's repository link. `site.repo_icon` takes a value vocabulary: `github`, `gitlab`,
    `bitbucket`, `codeberg`, `gitea`, `azuredevops`, `git`. Without it the icon is read from the
    host of `site.repo_url`, which gives `azuredevops` for an Azure DevOps host as it has since
-   8.0.0; BDL-080 S4e let `site.repo_icon` name it for a self-hosted server. `site.logo` is the
-   portal's favicon too (BDL-080 S4e); without it, or when the file is Beadloom's own square
-   icon byte for byte, the favicon is Beadloom's (the owner accepted that rule on 2026-10-10,
-   `beadloom-e1xo`): the theme-adaptive SVG and a PNG per colour scheme under `public/brand/`.
-   Key added since 9.0.0 (MINOR, BDL-080 S3a): `imports.aliases`, a mapping of an import alias
+   the release that declared this API. BDL-080 S4e let `site.repo_icon` name it for a
+   self-hosted server. `site.logo` is the portal's favicon too (BDL-080 S4e); without it, or
+   when the file is Beadloom's own square icon byte for byte, the favicon is Beadloom's (the
+   owner accepted that rule on 2026-10-10, `beadloom-e1xo`): the theme-adaptive SVG and a PNG
+   per colour scheme under `public/brand/`.
+   Key added in 9.0.0 (BDL-080 S3a): `imports.aliases`, a mapping of an import alias
    to a folder or file relative to the project root (`.` for the root), read by the reindex
    ([reindex SPEC](../domains/application/features/reindex/SPEC.md#import-aliases)) for the
    import resolver, whose
    [SPEC](../domains/graph/features/import-resolver/SPEC.md#non-relative-jsts-specifiers) says
    how an alias is matched.
    An unknown key under `imports:`, an alias that is a pattern or a path, and a value that names
-   nothing in the project are refused by `config-check` and the Gate, with exit code 1; no
-   project declared the block before it existed, so no accepted configuration is refused.
+   nothing in the project are refused by `config-check` and the Gate, with exit code 1.
+   Earlier releases accepted an `imports:` block by ignoring it, so that refusal is a
+   configuration that was accepted and is now refused, and the change log of 9.0.0 lists it
+   under *Breaking*.
+   The same holds of every key a release accepts by ignoring it: the next major version may
+   read it or refuse it. 9.0.0 does so for four places, each under *Breaking*: the `imports:`
+   block, `scope:` and `title:` on a `layers` rule, and `tag_prefix` beside `kind` in a node
+   matcher.
 3. **The keys and the value vocabularies of the JSON outputs**: `ctx --json`, `status --json`,
    the debt report (`status --debt-report --json`) and `export`, whose artifact is JSON without
    an option. A vocabulary is the set of values a key can take. The activity level is one:
    `hot`, `warm`, `cool`, `quiet`, `dormant`. A script that matches on a value depends on the
-   vocabulary as much as on the key that carries it.
+   vocabulary as much as on the key that carries it. The portal's other JSON files,
+   `dashboard.data.json` and `landscape.data.json`, are not outputs on this list: their keys
+   carry no promise (item 5).
 4. **The MCP tools** the server lists, with their arguments and the keys of what they return. The
    reference is [`docs/services/mcp.md`](../services/mcp.md).
 5. **The portal data file's schema**: the `schema_version` the generator writes and the keys under
    it. The reference is
    [`docs/services/vitepress-site/architecture-data.md`](../services/vitepress-site/architecture-data.md).
-   Key added since 9.0.0 (MINOR, BDL-080 S4c): the top-level `source_ref`, the revision the
-   source links name, present when the file carries source links. It is
+   Key added in 9.0.0 (BDL-080 S4c): the top-level `source_ref`, the revision the source links
+   name, present when the file carries source links. It is
    `{commit, linked, pushed}`: `commit` is the full hash the portal was built from; `pushed` is
    `true` or `false`, and `false` only when git says no branch of `origin` holds the commit;
    `linked` is the revision every source link names, either the same hash as `commit` (a pushed
@@ -65,19 +74,30 @@ makes it.
    `origin`'s default branch). Both are judged by `origin`'s branches only, even when
    `site.repo_url` names a repository on another forge (a decision of BDL-080 that may be
    revisited).
-   Keys added since 9.0.0 (MINOR, BDL-080 S4a): the top-level `lint`, lint's reach over the whole
+   Keys added in 9.0.0 (BDL-080 S4a): the top-level `lint`, lint's reach over the whole
    project, `{errors, warnings, nodes_with_findings, nodeless}`, where each entry of `nodeless`
    is `{rule, severity, message, file, line}` and `severity` takes the vocabulary `error`,
    `warn`; it is omitted when lint did not run. And a node's `debt.inside`, the debt of the
    nodes inside a box without the box's own, `{nodes, score, by_reason}`, where `by_reason`
    is keyed by the debt report's reasons; it is present on a node another node is `part_of`.
-   `dashboard.data.json` is not this file and is not on this list: the keys BDL-080 added to it,
-   `lint.nodes_with_findings`, `lint.nodeless` and the top-level `pages`, are described in
-   [`dashboard-data.md`](../services/vitepress-site/dashboard-data.md) and carry no promise.
+   `dashboard.data.json` and `landscape.data.json` are not this file and are not on this list.
+   The keys BDL-080 added to the first, `lint.nodes_with_findings`, `lint.nodeless` and the
+   top-level `pages`, are described in
+   [`dashboard-data.md`](../services/vitepress-site/dashboard-data.md), the second is described
+   in [`landscape-data.md`](../services/vitepress-site/landscape-data.md), and neither carries a
+   promise.
 6. **The files generated for an adopter**: what `init`, `docs site`, `docs generate`,
    `setup-agentic-flow`, `setup-rules`, `setup-mcp` and `install-hooks` write into a project,
-   their paths and what they mean to the project that receives them.
-   Added since 9.0.0 (MINOR, BDL-080 S3): for a Feature-Sliced frontend, `init` writes nine rules
+   their paths and what they mean to the project that receives them. That covers every file
+   `init` writes, the role files `setup-agentic-flow` composes, and the portal's entry files
+   that `docs site` writes: `package.json`, the data files under `public/` and the pages. It
+   does not cover the internal paths of the scaffold's theme under `.vitepress/theme/`, which
+   follow the viewer's own slices and move when a slice is cut. A promise about them would make
+   every refactoring of the viewer a major release (owner's ruling, 2026-10-10), so the change
+   log of 9.0.0 lists the 42 theme files that release renamed or moved under *Changed*. A file
+   of yours under `.beadloom/site/` that replaces a theme file is tied to that file's path: it
+   is copied to the same path on every run whether or not the theme still ships a file there.
+   Added in 9.0.0 (BDL-080 S3): for a Feature-Sliced frontend, `init` writes nine rules
    into `.beadloom/_graph/rules.yml`, two of them of rule types new in this release,
    `slice_public_api: {tags}` and `slice_shape: {tags, segments}` (the
    [rule-engine SPEC](../domains/graph/features/rule-engine/SPEC.md) is their reference); a

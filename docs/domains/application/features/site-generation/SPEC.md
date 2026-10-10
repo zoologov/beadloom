@@ -235,6 +235,15 @@ One feature node covers the cooperating modules below (all annotated
   the body as written. `marker_line(body, version, note)` and `place_marked(target, expected)` are
   shared with the Pages workflow. `ScaffoldReport` counts `written`, `updated`, `unchanged`,
   `retired`, `retired_folders`, `kept` and `overridden`.
+- **moved_pages.py** — a node's page retired from a section the node's page has left (BDL-081
+  R2). `retire_moved_pages(out_dir, pages, *, keep=())` takes every node page the run wrote
+  (`<section>/<ref>.md`) and, for each other section of `NODE_PAGE_SECTIONS`, removes the file
+  of the same name when `node_pages.is_page_of` reads it as that ref's page. A symlink, a file
+  that cannot be read as text, a page that opens otherwise and a path in `keep` (the project's
+  `.beadloom/site/` overrides) stay. A section the removals leave empty goes through
+  `scaffold.retire_emptied_folders`. It returns `RetiredPages(pages, folders)`, both sorted,
+  which `generate_site` carries as `SiteResult.moved_pages` and the CLI counts on the scaffold
+  line, the folders with the empty folders.
 - **pages_workflow.py** — `docs site --pages-workflow` (BDL-076 B2, `beadloom-ujzb.13`, `.20`).
   `write_pages_workflow(project_root, *, out_dir, base, version, branch=None)` writes
   `.github/workflows/beadloom-portal.yml` (`PAGES_WORKFLOW_PATH`) under the scaffold's marker
@@ -576,7 +585,12 @@ One feature node covers the cooperating modules below (all annotated
   base-path rewrite learned `/other/`. The landscape map's own URL map, which covered three kinds
   only, is removed.
   `public_symbol_names(conn, ref_id)` lists the public names in the files the node owns; the
-  node page lists all of them and the node card the first 50.
+  node page lists all of them and the node card the first 50. Since BDL-081 R2
+  `NODE_PAGE_SECTIONS` names every section a node page can sit under (`domains`, `features`,
+  `other`, `services`), and `is_page_of(text, ref_id)` says whether a text is a page this module
+  wrote for the ref, by any version since BDL-040: front matter of `title: <ref>` and a `kind:`
+  line, then the `# <ref>` heading. Node pages carry no marker, so that opening is the evidence
+  `moved_pages` reads.
 - **nav.py** — the generated VitePress nav/sidebar tree builders for `generate.py` (split out
   to keep the generator small). `render_nav_config(conn, project_root)` emits the full
   `.vitepress/config.generated.mjs` module exporting **only** `nav` + `sidebar` (BDL-046
@@ -944,7 +958,8 @@ carries it.
 Module `src/beadloom/application/site/generate.py`:
 - `SiteResult` — frozen dataclass: `out_dir`, `written` (sorted tuple of every written path),
   `scaffold` (`ScaffoldReport`), `source_ref` (`SourceRef | None`, BDL-080 S4c; `None` when the
-  links name no revision)
+  links name no revision), `moved_pages` (`RetiredPages`, BDL-081 R2; empty when no node page
+  moved)
 - `MermaidValidationError` — raised when a generated page fails the Mermaid guard (carries
   `page` + `issues`)
 - `generate_site(conn, out_dir, *, project_root, federated=None, now_ts=None)` -> `SiteResult`
@@ -1031,6 +1046,16 @@ Module `src/beadloom/application/site/node_pages.py`:
   architecture data file and both landscape views link through it
 - `public_symbol_names(conn, ref_id)` -> `list[str]` — the public names in the files the node
   owns, sorted
+- `NODE_PAGE_SECTIONS` — `tuple[str, ...]`, every section a node page can be written under,
+  sorted (BDL-081 R2)
+- `is_page_of(text, ref_id)` -> `bool` — *text* opens as the page `render_node_page` writes for
+  *ref_id*, by any version since BDL-040 (BDL-081 R2)
+
+Module `src/beadloom/application/site/moved_pages.py`:
+- `RetiredPages(pages=(), folders=())` — frozen dataclass: the node pages one run removed and
+  the sections that left empty
+- `retire_moved_pages(out_dir, pages, *, keep=())` -> `RetiredPages` — remove the page each
+  node in *pages* has under another section, when beadloom wrote it and *keep* does not name it
 
 Module `src/beadloom/application/site/nav.py`:
 - `human_label(ref_id)` -> `str` — title-cased, hyphen→space label (`context-oracle` → `Context
@@ -1112,6 +1137,9 @@ Module `src/beadloom/application/site/scaffold.py`:
 - `SCAFFOLD_PACKAGE_DIR`, `OVERRIDE_DIR`, `MARKABLE_SUFFIXES`; `ScaffoldError`
 - `Marker`, `Placement`, `KeptFile`, `ScaffoldReport` — frozen dataclasses
 - `write_scaffold(out_dir, *, project_root, version, source=None)` -> `ScaffoldReport`
+- `retire_emptied_folders(out_dir, retired)` -> `list[str]` — remove every folder the retired
+  files leave empty, deepest first, never the portal's root (public since BDL-081 R2, which
+  reuses it for the moved node pages)
 - `shipped_files(source=None)` -> `dict[str, str]`; `without_annotations(body)` -> `str`
 - `mark(rel, body, version)` -> `str`; `read_marker(text)` -> `Marker | None`;
   `marker_line(body, version, note)` -> `str`; `place_marked(target, expected)` -> `Placement`
@@ -1255,6 +1283,15 @@ stand-ins, the branch routes per forge, both warnings verbatim),
 `test_beadloom_favicon_is_written_where_the_portal_serves_it.py` and
 `test_the_brand_sources_are_kept_beside_what_ships_from_them.py` (the sources under
 `.github/brand/` and the shipped files equal to them).
+
+BDL-081 R2: `tests/unit/application/site/test_a_page_its_node_left_is_retired.py`
+(seven cases: the page under the section the node left is removed, every section is looked
+in; a file beadloom did not write, an override path, the page of a node this run writes none
+for and a page outside the sections stay; the emptied section is removed) and the acceptance
+feature
+`tests/acceptance/application/site-generation/a_moved_node_page_is_retired_on_upgrade.feature`
+(two scenarios: an upgrade removes the page 8.0.0 wrote under `other/` and the scaffold line
+counts it; a page the project provides under `.beadloom/site/` stays).
 
 Slice 2 (BDL-076 B1–B4, `beadloom-ujzb.8`, `.11`–`.13`, `.18`, `.20`, `.21`), under
 `tests/unit/application/site/`: the `site:` block and the forges

@@ -108,38 +108,40 @@ Beadloom держит правила в **архитектурном графе*
 
 Правило лежит в графе. По графу есть команда. Команда возвращает код. Код возврата не забывается — ни агентом, ни человеком, ни в CI.
 
-Все проверки сходятся в один Gate. Вот его вывод на этом репозитории при выпуске версии 8.0.0, 8 октября 2026 года. Длинные строки перенесены, пропущенный текст отмечен знаком «…»:
+Все проверки сходятся в один Gate. Вот его вывод на этом репозитории при выпуске версии 9.0.0, 10 октября 2026 года. Длинные строки перенесены, пропущенный текст отмечен знаком «…»:
 
 ```
 Beadloom CI gate
 
   [PASS] reindex: up to date
-  [PASS] lint: 0 error(s), 70 warning(s), 10 crossings suppressed by an exemption,
-         architecture-layers judged 381 of 434 live depends_on edge(s), …
-  [PASS] sync-check: 743 pair(s) fresh
-  [PASS] docs-audit: 20 mention(s) fresh; 4/9 declared fact(s) verified, NOT VERIFIED:
+  [PASS] lint: 0 error(s), 69 warning(s), 11 crossings suppressed by an exemption,
+         architecture-layers judged 461 of 470 live depends_on edge(s),
+         site-fsd-layers judged 78 of 470 live depends_on edge(s)
+  [PASS] sync-check: 809 pair(s) fresh
+  [PASS] docs-audit: 31 mention(s) fresh; 4/9 declared fact(s) verified, NOT VERIFIED:
          cli_command_count, edge_count, language_count, nodes_with_framework, test_count
-  [WARN] docs-quality: 317 document(s) read; … NO CHECK READS: PLAN, RND, SUMMARY; …
-  [PASS] issue-log: 113 entr(ies) uniquely numbered; … PARTLY CHECKED: 68 of 113 …
+  [WARN] docs-quality: 329 document(s) read; … NO CHECK READS: PLAN, RND, SUMMARY; …
+  [PASS] issue-log: 121 entr(ies) uniquely numbered; … PARTLY CHECKED: 68 of 121 …
   [PASS] readme-pair: 1 pair(s) held, 125 block(s) compared, 0 finding(s); …
-  [WARN] doc-spaces: to_be 250, as_is 146, working 69; …
-  [PASS] scope-check: 0 path(s) outside the axes BDL-079 declares (…); 1 judged, …
+  [WARN] doc-spaces: to_be 260, as_is 155, working 71; …
+  [PASS] scope-check: 5 path(s) outside the axes BDL-081 declares (…); 6 judged, …
   [PASS] config-check: no blocking drift; 1 artifact(s) reported (warn)
-  [PASS] doctor: 13 check(s): 0 error(s), 262 warning(s), 3 info
+  [PASS] doctor: 13 check(s): 0 error(s), 272 warning(s), 3 info
   …
 PASS — gate clean
 Room: Darwin arm64 · CPython 3.13.7 · 10 cores · extras … · locale utf-8
-  31 of 31 declared room(s) not entered by this run: …
+  33 of 33 declared room(s) not entered by this run: …
 Not run by this gate:
   the test suite — `uv run pytest --cov=beadloom …` (.github/workflows/ci.yml: tests)
   the style linter — `uv run ruff check src/ tests/` (.github/workflows/ci.yml: tests)
   the type checker — `uv run mypy src/` (.github/workflows/ci.yml: tests)
+  the FSD linter — `npm run lint:fsd` (.github/workflows/ci.yml: site-build)
 …
 ```
 
 Смотреть здесь стоит не на `PASS`, а на то, что рядом. Каждый шаг называет, **сколько** он проверил и **чего не смотрел**. Проверка, которой нечего было проверить, не выглядит как успешная — этому посвящён [отдельный раздел](#когда-проверить-не-удалось-beadloom-так-и-пишет), и это главное отличие Beadloom от набора линтеров.
 
-Последние строки говорят то же о самом Gate. Он называет машину, на которой шёл прогон, окружения из CI, в которых прогона не было, и проверки, которые он не запускал вовсе: тесты, линтер и проверку типов. Зелёный вердикт относится к этой машине и к тем проверкам, которые Gate запустил, а не к проекту целиком.
+Последние строки говорят то же о самом Gate. Он называет машину, на которой шёл прогон, окружения из CI, в которых прогона не было, и проверки, которые он не запускал вовсе: тесты, линтер, проверку типов и FSD-линтер портала. Зелёный вердикт относится к этой машине и к тем проверкам, которые Gate запустил, а не к проекту целиком.
 
 Один Gate стоит в трёх местах: в pre-push-хуке, в CI и в руках агента. Неважно, каким провайдером агентов вы пользуетесь: Beadloom универсален и не является частью ни одного из них. Claude Code, Cursor, редактор с MCP, задача в CI, человек за клавиатурой — все упираются в один и тот же `beadloom ci`.
 
