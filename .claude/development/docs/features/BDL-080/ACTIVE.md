@@ -1,13 +1,13 @@
 # ACTIVE: BDL-080 — The portal is a service, and the viewer serves a Feature-Sliced frontend
 
-> **Last updated:** 2026-10-09
+> **Last updated:** 2026-10-10
 > **Phase:** Development
 
 ---
 
 ## Current Bead
 
-**Bead:** S4R `beadloom-xkrn` reviewing on its own worktree of `1d71be89`; S4T landed `10fb8003`, S4g landed `1d71be89`; every dev and test bead of the epic is landed. S2 and S3 complete; the owner ruled ONE PR for S2+S3+S4 after S4W (`beadloom-3dqv`; jkqc and iapw folded). Next: S4R → S4W → the PR → the MAJOR release.
+**Bead:** `beadloom-3dqv` — the ONE PR for S2 + S3 + S4 (coordinator), merge on green CI; then the MAJOR release by BDL-079's recipe. Coordinator state committed `39b01cd9`. S2 and S3 complete; the owner ruled ONE PR for S2+S3+S4 after S4W (`beadloom-3dqv`; jkqc and iapw folded). Next: the S4R re-check of S4h + S4W → the ONE PR (`beadloom-3dqv`) → the MAJOR release.
 **Goal:** the site a service, every layer rule drawn (S1); then S2, S3, S4.
 **Done when:** every PRD goal's *Done when* holds; four PRs merged; a MINOR release.
 
@@ -63,8 +63,9 @@
 | `beadloom-iapw` | S3P | blocked | |
 | `beadloom-af99.15` | S4G | ✓ done (commit `1d71be89`; card and dashboard read «… 69 warnings — 33 on 27 nodes, 36 on none»; no new key; dump byte-identical) | the card's Rule findings wording names both populations (owner, 2026-10-10) |
 | `beadloom-brgd` | S4T | ✓ done (commit `10fb8003`; goal 5 holds (a)–(h): legend at every level on nine portals; populations named; Source link 127/139 200 (12 folders main lacks); brand 8/8 ×9; suites 0 failed on all nine, this portal 364/364; footer-link allowance fixed; full tree green except 57 stale pairs → S4W; mutation 89.4 → 94.6%) |
-| `beadloom-xkrn` | S4R | in progress | review of S4a–S4g + S4T, bead id only, own worktree of `1d71be89` |
-| `beadloom-n644` | S4W | blocked | |
+| `beadloom-xkrn` | S4R | ✓ done — REVIEW PASSED; re-check at `d4395725`: all seven findings fixed, nothing new |
+| `beadloom-af99.16` | S4H | ✓ done (commits `7a9ed23d`, `3e155fdc`; source links judge `pushed` and the stand-in by origin only; `BOX_SIDE` exported from shared/elk; page map «beadloom docs site wrote N pages»; 8744 passed on the tree; the two hash-only pairs + DOC.md:63 → S4W's follow-up) |
+| `beadloom-n644` | S4W | ✓ done (commits `328db625`, `d4395725`; D1 + D2 fixed; `beadloom ci` rc 0 on the tree, 0 stale of 806 pairs; dashboard keys documented as carrying no promise — owner's call; PR-job `pushed` question raised) |
 | `beadloom-3dqv` | S4P | blocked | |
 
 ## Notes
