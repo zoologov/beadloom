@@ -620,7 +620,7 @@ onBeforeUnmount(() => disposeHandle());
     <div class="bl-viewer-legend" aria-label="Legend">
       <LayerLegend :layers="layers" :unlayered="unlayered" />
       <NodeStatusLegend :statuses="statuses" />
-      <EdgeLegend :keys="legendKeys" :colours="legendColours" />
+      <EdgeLegend :keys="legendKeys" :colours="legendColours" :several="canvas.drawnSeveral.value" />
     </div>
   </div>
 </template>

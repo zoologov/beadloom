@@ -27,7 +27,11 @@
 // routed once more with each refusal priced instead (`COST.forced`): it may run
 // along another line, through a halo or through another box's margin, but it
 // still enters no box, runs straight into its own, keeps a lane from every other
-// line and keeps off every arrowhead. A line that finds no route even so, where
+// line and keeps off every arrowhead. A line drawn as itself, which no route
+// moves, is crossed on no box's stem but on a second routing: there it runs into
+// its box under its arrowhead, or the planned line's last run carries one, and a
+// crossing a few pixels from a tip left a head of a planned line on one portal
+// at 3.57 px. A line that finds no route even so, where
 // the lines laid before it closed its ways in, is routed before them: its
 // cheapest route through their room names the lines in its way, they are taken
 // up, it is laid, and they are laid again around it, each kept where it still
@@ -87,6 +91,13 @@ const GREED = 1.5;
 const FIXED = 0x7fffffff;
 /** A fixed line keeps planned lines this share of a pitch away from running along it. */
 const FIXED_REACH = 0.6;
+/**
+ * How many refusals a crossing of a fixed line under an arrowhead is priced as on
+ * a second routing: a head shrunk, or crossed, reads worse than a detour through
+ * halos and margins. At 3 a line on one portal still crossed a fixed line 10 layout
+ * units from its tip; at 8 it went round below (measured).
+ */
+const FIXED_HEAD_REFUSALS = 8;
 
 /** `path` without repeated points and without a point in the middle of a straight run. */
 function simplify(path) {
@@ -192,7 +203,7 @@ function routerOn(grid, pairs, fixed, marks) {
   const sharing = pairs.map(() => false);
   const ends = pairs.map((pair) => [pair.a, pair.b]);
   const headAt = (e, box) => (ends[e][0] === box ? pairs[e].backward > 0 : pairs[e].forward > 0);
-  markFixed(grid, owner, fixed);
+  const underHead = markFixed(grid, owner, fixed, marks.run);
 
   const states = cells * 4;
   const best = new Float64Array(states);
@@ -321,6 +332,13 @@ function routerOn(grid, pairs, fixed, marks) {
         // a stem only where the box has room for one.
         const onItsStem = across !== FIXED && stem[c] >= 0 && (ends[across - 1][0] === stem[c] || ends[across - 1][1] === stem[c]);
         if (onItsStem && !(how === THROUGH && takes(across, c, 1 - axis))) return -1;
+        // Nor, but at a price on a second routing, across a line drawn as itself near its tip or on a
+        // box's stem: there that line runs into its box under its arrowhead, or this line's last run
+        // carries its own.
+        if (across === FIXED && underHead[c]) {
+          if (!relaxed) return -1;
+          forced += FIXED_HEAD_REFUSALS;
+        }
         if (corner[c] || b1 >= 0) {
           if (!relaxed) return -1;
           forced += 1;
@@ -569,24 +587,49 @@ function routedFirst(e, router, routes, order) {
   return false;
 }
 
-/** Mark the cells along every line of `fixed` (pixels) as taken along its axis. */
-function markFixed({ xs, ys, nx, ny, cellAt }, owner, fixed) {
+/** The tracks of `tracks` nearest `at` on each side of it, `[below, above]`, one track where `at` lies on it. */
+function bracketOf(tracks, at) {
+  let above = 0;
+  while (above < tracks.length - 1 && tracks[above] < at - EPS) above += 1;
+  const below = tracks[above] > at + EPS && above > 0 ? above - 1 : above;
+  return [below, above];
+}
+
+/**
+ * Mark the cells along every line of `fixed` (pixels) as taken along its axis:
+ * those on a track within reach of it, and where a planned line crossing it
+ * would run under an arrowhead — on a box's stem, and along its own last run,
+ * `run` back from its tip — the tracks on each side of it too, so a crossing
+ * there is seen however far between two tracks it runs. Returns, per cell,
+ * whether it is such a place (`underHead`).
+ */
+function markFixed({ xs, ys, nx, ny, cellAt, stem }, owner, fixed, run) {
   const reach = FIXED_REACH * (xs.length > 1 ? Math.min(...Array.from(xs).slice(1).map((x, i) => x - xs[i])) : 1);
+  const underHead = new Uint8Array(nx * ny);
   for (const path of fixed) {
+    const tip = path[path.length - 1];
     for (let k = 1; k < path.length; k += 1) {
       const [p, q] = [path[k - 1], path[k]];
       const vertical = Math.abs(p.x - q.x) < Math.abs(p.y - q.y);
       const [i0, j0] = cellAt(Math.min(p.x, q.x), Math.min(p.y, q.y));
       const [i1, j1] = cellAt(Math.max(p.x, q.x), Math.max(p.y, q.y));
+      const beside = vertical ? bracketOf(xs, p.x) : bracketOf(ys, p.y);
+      const last = k === path.length - 1;
       for (let i = Math.max(0, i0 - 1); i <= Math.min(nx - 1, i1 + 1); i += 1) {
         for (let j = Math.max(0, j0 - 1); j <= Math.min(ny - 1, j1 + 1); j += 1) {
-          const near = vertical ? Math.abs(xs[i] - p.x) < reach && j >= j0 && j <= j1 : Math.abs(ys[j] - p.y) < reach && i >= i0 && i <= i1;
+          const c = j * nx + i;
+          const along = vertical ? j >= j0 && j <= j1 : i >= i0 && i <= i1;
+          const nearTip = last && Math.hypot(xs[i] - tip.x, ys[j] - tip.y) <= run;
+          const headed = along && beside.includes(vertical ? i : j) && (stem[c] >= 0 || nearTip);
+          if (headed) underHead[c] = 1;
+          const near = headed || (vertical ? Math.abs(xs[i] - p.x) < reach && j >= j0 && j <= j1 : Math.abs(ys[j] - p.y) < reach && i >= i0 && i <= i1);
           const axis = vertical ? 0 : 1;
-          if (near && !owner[axis][j * nx + i]) owner[axis][j * nx + i] = FIXED;
+          if (near && !owner[axis][c]) owner[axis][c] = FIXED;
         }
       }
     }
   }
+  return underHead;
 }
 
 /**

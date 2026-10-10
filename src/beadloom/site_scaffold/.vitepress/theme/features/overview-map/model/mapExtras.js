@@ -30,10 +30,11 @@ export const FORCED = "test";
  * What the sources over `cy` ask the map to draw beyond the level at rest, in
  * the box tree `tree`; `edges` the file's edges by id (Cytoscape's),
  * `plainEdges` and `edgeById` as plain `{ id, source, target }`, `byKey` an
- * edge's id by its key: `{ expose, setWalk, walkKeys, extrasOf, fullDetailOf,
- * saidOf }`.
+ * edge's id by its key, `reaches(id)` whether a node has edges to draw when
+ * exposed that no "+N" counts (`shared/map-levels/levels.js`, `reachingOf`): `{ expose,
+ * setWalk, walkKeys, extrasOf, fullDetailOf, saidOf, forcedIds }`.
  */
-export function mapExtras(cy, { tree, edges, plainEdges, edgeById, byKey }) {
+export function mapExtras(cy, { tree, edges, plainEdges, edgeById, byKey, reaches = () => false }) {
   const exposures = new Map();
   // The sources whose open boxes draw their own outward edges: a selected box's, not the pointer's.
   const exposingOpen = new Set();
@@ -43,7 +44,7 @@ export function mapExtras(cy, { tree, edges, plainEdges, edgeById, byKey }) {
 
   /** Whether the drawing changes when `before` and `after`, two lists of node ids, swap as exposed. */
   const exposesOther = (before, after) => {
-    const outward = (ids) => ids.some((id) => cy.getElementById(id).data(OUTWARD) > 0);
+    const outward = (ids) => ids.some((id) => cy.getElementById(id).data(OUTWARD) > 0 || reaches(id));
     return JSON.stringify(before) !== JSON.stringify(after) && (outward(before) || outward(after));
   };
 
@@ -99,7 +100,8 @@ export function mapExtras(cy, { tree, edges, plainEdges, edgeById, byKey }) {
 
   /**
    * What the exposed nodes and the walk draw besides the level at rest, with
-   * the boxes `openNow` open, the outward edges of the level `outward` and the
+   * the boxes `openNow` open, the edges each node exposed draws `outward` (its
+   * outward edges and its edges into an open box) and the
    * nodes drawn larger than their layout `grownNow`: `{ originals, own, stubs }`,
    * the edges drawn as themselves, the own lines, each weighed by the edges
    * `kept` shows, and the end each line that is a stub draws no head at
@@ -165,5 +167,8 @@ export function mapExtras(cy, { tree, edges, plainEdges, edgeById, byKey }) {
     return said.forward + said.backward ? said : null;
   }
 
-  return { expose, setWalk, walkKeys: () => walkKeys, extrasOf, fullDetailOf, saidOf };
+  /** The nodes the test handle reveals with every edge of theirs (`FORCED`). */
+  const forcedIds = () => [...(exposures.get(FORCED) || [])];
+
+  return { expose, setWalk, walkKeys: () => walkKeys, extrasOf, fullDetailOf, saidOf, forcedIds };
 }

@@ -18,14 +18,19 @@
 // need, and a node added in another box can make that room a track too narrow
 // for a plate one line wide (one node added to a wide box widened the frame of
 // one portal, its fit stepped one scale coarser, and three lines between other
-// boxes ran under a third box's plate). Where lines still run under a broken plate,
-// the plan is made once more with every plate one line wide, and kept when fewer
-// lines run under them. An overview held at the smallest zoom keeps its plates
-// one line wide, as it was.
+// boxes ran under a third box's plate). A plate's title is always broken where its
+// name breaks, and the plan is made once (the owner's ruling, 2026-10-10). An
+// overview held at the smallest zoom keeps its plates one line wide, as it was.
+// A node an edge drawn as itself ends at is drawn larger only by a box that keeps
+// that edge's line outside it, its end on the border, as a box widened in its
+// row does for the lines from the rows above and below; otherwise its title
+// broken onto two lines is drawn in its laid-out box where it fits there, and
+// stands on a plate only where it does not.
 // A plate stands above its box unless there it would come within a lane of another
 // top-level box, where it would close that box's ways in, or cover a plate
-// placed before it; then below; and when neither side is clear, on the side
-// where it covers no box, or else the least of one; the side is decided here, once per
+// placed before it, or stand over a line drawn as itself, which the plan's routes
+// cannot move; then below, then beside it; and when no side is clear, on a side
+// clear of boxes and plates alone, or else where it covers the least; the side is decided here, once per
 // plan, so the drawn title and the routes around it agree. The plan is made
 // from the overview whatever level is drawn, so a zoom or a box opened
 // moves no line between two top-level nodes: such a line keeps the plan's route
@@ -41,8 +46,8 @@
 // than their layout (`shared/geometry/routes.js`, `compoundSizeOf`).
 //
 // The lines keep inside the frame of the box that holds everything as it is
-// laid out: the box is drawn no smaller at any height, so they keep inside it
-// as drawn too.
+// laid out, below the band its title is drawn in inside it: the box is drawn no
+// smaller at any height, so they keep inside it as drawn too.
 //
 // A line between two top-level nodes that the plan left out — the budget hid it,
 // and the pointer or the selection draws it now — is routed around the plan's
@@ -53,7 +58,7 @@
 // Any line with an end inside an open box is drawn along its medoid as before.
 
 import { centreOf, compoundSizeOf, crossesAny, drawnBoxOf, grownBoxesOf } from "../../../shared/geometry/index.js";
-import { FIT_MAX_ZOOM, FIT_PADDING, MAP_MARKS, PLATE_SIDES, budgetOf, levelOf, plateOf } from "../../../shared/map-levels/index.js";
+import { FIT_MAX_ZOOM, FIT_PADDING, GEOMETRY, MAP_MARKS, PLATE_SIDES, budgetOf, levelOf, plateOf } from "../../../shared/map-levels/index.js";
 import { lengthenLineEnds } from "../../../shared/bundling/index.js";
 import { OVERVIEW_MARKS, planOverview } from "../../../shared/grid-routing/index.js";
 
@@ -85,6 +90,26 @@ function heldBoxOf(box, reach) {
   return { x1: x - width / 2, y1: y - height / 2, x2: x + width / 2, y2: y + height / 2 };
 }
 
+/** How far inside a box's border a line counts as entering it, in layout units: a line ending on the border does not. */
+const BORDER_HAIR = 0.01;
+
+/** Whether every polyline of `paths` keeps outside `box`, an end on its border included. */
+export function keepsOutside(box, paths) {
+  const inner = { x1: box.x1 + BORDER_HAIR, y1: box.y1 + BORDER_HAIR, x2: box.x2 - BORDER_HAIR, y2: box.y2 - BORDER_HAIR };
+  return !crossesAny(inner, paths);
+}
+
+/** The room ELK keeps between a box's title room and its children, in layout units (`shared/elk`, `boxTop`). */
+const BELOW_TITLE = 12;
+
+/**
+ * The frame the plan's lines keep inside, in layout units: the box that holds
+ * everything without the band its title is drawn in once the view is zoomed in
+ * far enough for the title to read inside it, at the top. A line routed through
+ * that band ran under the title at every zoom past that one.
+ */
+const routedFrameOf = (frame) => ({ ...frame, y1: frame.y1 + GEOMETRY.boxTitleRoom - BELOW_TITLE });
+
 /** A pair's lines each way, in a form two plans can be compared by. */
 const signatureOf = (pairs) => pairs.map((pair) => `${pair.name}:${pair.forward.length}:${pair.backward.length}`).join("\n");
 
@@ -92,23 +117,13 @@ const signatureOf = (pairs) => pairs.map((pair) => `${pair.name}:${pair.forward.
 const inputPairOf = (pair) => ({ name: pair.name, a: pair.ends[0], b: pair.ends[1], forward: pair.forward.length, backward: pair.backward.length });
 
 /**
- * How many of the polylines `paths` run under the title on one of `plates` at
- * `unit`: inside its padding and border, where a line would cross its text.
- */
-function linesUnder(plates, paths, unit) {
-  const frame = (MAP_MARKS.platePadding + MAP_MARKS.plateBorder) * unit;
-  const texts = plates.map((plate) => ({ x1: plate.x1 + frame, y1: plate.y1 + frame, x2: plate.x2 - frame, y2: plate.y2 - frame }));
-  return paths.filter((path) => texts.some((text) => crossesAny(text, [path]))).length;
-}
-
-/**
  * The planner of the overview over `cy`: `{ current, routeOf, isTop }`.
  *
  * `tree`, `geometry` and `plainEdges` are the map's (`widgets/graph-viewer/model/canvasMap.js`);
  * `routePointsOf(id)` gives the route an edge of the file is drawn along, or
- * null; `titleOf(id, scale, hidden)` the title a node is drawn with in its
- * laid-out box at a scale when `hidden` of its lines are left out
- * (`shared/map-levels/mapMarks.js`, `mapTitleOf`), `linesOf(id, hidden, broken)` its lines,
+ * null; `titleOf(id, scale, hidden, broken)` the title a node is drawn with in its
+ * laid-out box at a scale when `hidden` of its lines are left out, on one line or,
+ * `broken`, on two where one fits at no size (`shared/map-levels/mapMarks.js`, `mapTitleOf`), `linesOf(id, hidden, broken)` its lines,
  * its name `broken` onto two where it breaks, and `leastBoxOf(id, px, scale, hidden)` the
  * least box, in layout units, that holds that title inside at `px`
  * (`titleBoxOf`); `medoidOf(pair)` the medoid of a pair's edges' routes as the
@@ -156,25 +171,39 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
    * The top-level nodes drawn in a box of their own at `unit`, chosen among
    * `ids`, whose titles fit their laid-out box at no size: each in the least box
    * that holds its title on one line, or, `broken`, broken onto two lines
-   * (`shared/geometry/grownBoxes.js`). None at a fit held at the smallest zoom, and none that
-   * an edge drawn as itself ends at, whose end its drawn box would cover.
+   * (`shared/geometry/grownBoxes.js`). None at a fit held at the smallest zoom. A
+   * node an edge drawn as itself ends at is drawn larger only by a box that keeps
+   * those lines outside it, their ends on its border (`keepsOutside`): a node laid
+   * out in a row is widened, and lines from the rows above and below still end
+   * on its top and bottom; it takes the largest size at which it is so, and is
+   * decided after the nodes no such line ends at.
    */
   function grownAt(unit, ids, hiddenAt, clamped, broken = false) {
     if (clamped) return new Map();
-    const lines = overview.originals.map(routePointsOf).filter(Boolean);
-    const ownEnds = new Set(overview.originals.flatMap((id) => [edgeById.get(id).source, edgeById.get(id).target]));
+    const routed = overview.originals.map((id) => ({ edge: edgeById.get(id), path: routePointsOf(id) })).filter((line) => line.path);
+    const lines = routed.map((line) => line.path);
+    const ownOf = (id) => routed.filter(({ edge }) => edge.source === id || edge.target === id).map((line) => line.path);
     const boxes = Object.fromEntries([...top].map((id) => [id, geometry.boxes[id]]));
-    return grownBoxesOf(
-      ids.filter((id) => !ownEnds.has(id)),
-      boxes,
-      {
-        leastBoxOf: (id, px) => leastBoxOf(id, px, unit, hiddenAt.get(id) || 0, broken),
-        sizes: MAP_MARKS.titleSizes,
-        gaps: GROWN_GAPS.map((gap) => gap * unit),
-        lines,
-        within: tree.wrapper ? geometry.boxes[tree.wrapper] : null,
-      }
-    );
+    const options = {
+      leastBoxOf: (id, px) => leastBoxOf(id, px, unit, hiddenAt.get(id) || 0, broken),
+      sizes: MAP_MARKS.titleSizes,
+      gaps: GROWN_GAPS.map((gap) => gap * unit),
+      lines,
+      within: tree.wrapper ? geometry.boxes[tree.wrapper] : null,
+    };
+    const grown = grownBoxesOf(ids.filter((id) => !ownOf(id).length), boxes, options);
+    const placed = { ...boxes, ...Object.fromEntries([...grown].map(([id, entry]) => [id, entry.box])) };
+    for (const id of ids.filter((node) => ownOf(node).length)) {
+      const own = ownOf(id);
+      const others = lines.filter((path) => !own.includes(path));
+      const entry = MAP_MARKS.titleSizes
+        .map((px) => grownBoxesOf([id], placed, { ...options, sizes: [px], lines: others }).get(id))
+        .find((found) => found && keepsOutside(found.box, own));
+      if (!entry) continue;
+      grown.set(id, entry);
+      placed[id] = entry.box;
+    }
+    return grown;
   }
 
   /**
@@ -183,24 +212,32 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
    * `boxOf(id)` gives each top-level node's drawn box, the titles of `broken`
    * broken onto two lines: `{ plates, sides }`, in
    * the order of `ids`, each plate on the first side of its box where it keeps a
-   * lane from every other box and covers no plate placed before it; else the
-   * first where it covers neither; else the one where it covers the least.
+   * lane from every other box, covers no plate placed before it and no line drawn
+   * as itself runs under it, which no route can move; else the first where it
+   * covers neither and no such line runs under it; else, those lines left aside,
+   * the first where it keeps a lane, then the first where it covers neither; else
+   * the one where it covers the least.
    */
   function platesAt(unit, hiddenAt, ids, boxOf, broken) {
     const plates = [];
     const sides = new Map();
     const others = [...top].map((id) => ({ id, ...boxOf(id) }));
     const lane = OVERVIEW_MARKS.pitch * unit;
+    const fixed = overview.originals.map(routePointsOf).filter(Boolean);
     const obstacles = (id) => [...others.filter((box) => box.id !== id), ...plates];
     const clearBy = (gap) => (rect, id) => others.every((box) => box.id === id || !overlaps(rect, box, gap)) && plates.every((plate) => !overlaps(rect, plate, unit));
+    const clearOfLines = (gap) => (rect, id) => clearBy(gap)(rect, id) && !crossesAny(rect, fixed);
     const covers = (rect, id) => obstacles(id).reduce((sum, other) => sum + areaOfOverlap(rect, other), 0);
     for (const id of ids) {
       const title = titleOf(id, unit, hiddenAt.get(id) || 0);
       const lines = linesOf(id, hiddenAt.get(id) || 0, broken.has(id));
       const placeAt = (side) => plateOf(geometry.boxes[id], side, lines, title.px, unit, measure);
+      const firstClear = (test) => PLATE_SIDES.find((candidate) => test(placeAt(candidate), id));
       const side =
-        PLATE_SIDES.find((candidate) => clearBy(lane)(placeAt(candidate), id)) ||
-        PLATE_SIDES.find((candidate) => clearBy(unit)(placeAt(candidate), id)) ||
+        firstClear(clearOfLines(lane)) ||
+        firstClear(clearOfLines(unit)) ||
+        firstClear(clearBy(lane)) ||
+        firstClear(clearBy(unit)) ||
         [...PLATE_SIDES].sort((p, q) => covers(placeAt(p), id) - covers(placeAt(q), id))[0];
       sides.set(id, side);
       plates.push(placeAt(side));
@@ -250,8 +287,7 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
    * top-level node whose title fits its laid-out box at no size is drawn larger
    * to hold it on one line; where no such box fits, its title is broken onto two
    * lines, in its box or a larger one that holds it so; where neither fits, it
-   * stands on a plate (`plated`), broken onto two lines where its name breaks
-   * unless one line wide runs fewer lines under the plates.
+   * stands on a plate (`plated`), broken onto two lines where its name breaks.
    */
   function layOut(unit, drawn, hiddenAt, clamped) {
     const unfit = [...top].sort().filter((id) => {
@@ -262,7 +298,10 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
     const brokenAt = clamped ? new Map() : grownAt(unit, unfit.filter((id) => !whole.has(id) && breakable(id)), hiddenAt, clamped, true);
     const grows = ([id, entry]) => !sameBox(entry.box, geometry.boxes[id]);
     const grown = new Map([...whole, ...[...brokenAt].filter(grows)]);
-    const broken = new Set(brokenAt.keys());
+    // A node an edge drawn as itself ends at is drawn no larger (`grownAt`), and its title broken onto two lines
+    // may still fit its laid-out box: it is titled there, not on a plate.
+    const inBox = clamped ? [] : unfit.filter((id) => !whole.has(id) && !brokenAt.has(id) && breakable(id) && titleOf(id, unit, hiddenAt.get(id) || 0, true)?.inside);
+    const broken = new Set([...brokenAt.keys(), ...inBox]);
     const boxOf = (id) => grown.get(id)?.box || geometry.boxes[id];
     const plated = unfit.filter((id) => !whole.has(id) && !broken.has(id));
     const project = projectPlateAt(unit, grown);
@@ -275,19 +314,13 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
         plates: project ? [...made.plates, project] : made.plates,
         pairs: drawn.map(inputPairOf),
         fixed: overview.originals.map(routePointsOf).filter(Boolean),
-        frame: tree.wrapper ? geometry.boxes[tree.wrapper] : null,
+        frame: tree.wrapper ? routedFrameOf(geometry.boxes[tree.wrapper]) : null,
       };
       const { paths, failed } = planOverview(input);
       const fallbacks = failed.length ? fallbacksOf(drawn.filter((pair) => failed.includes(pair.name)), drawn, paths, input) : new Map();
-      const under = linesUnder(made.plates, [...paths.values(), ...fallbacks.values()], unit);
-      return { paths, fallbacks, failed, input, sides: made.sides, under, brokenPlates };
+      return { paths, fallbacks, failed, input, sides: made.sides, brokenPlates };
     };
-    const breaking = clamped ? [] : plated.filter((id) => breakable(id));
-    let made = routed(new Set(breaking));
-    if (made.under > 0 && breaking.length) {
-      const again = routed(new Set());
-      if (again.under < made.under) made = again;
-    }
+    const made = routed(new Set(clamped ? [] : plated.filter((id) => breakable(id))));
     const { paths, fallbacks, failed, input, sides } = made;
     return { paths, fallbacks, failed, input, sides, grown, broken: new Set([...broken, ...made.brokenPlates]), plated, project };
   }

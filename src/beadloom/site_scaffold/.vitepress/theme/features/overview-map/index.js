@@ -4,4 +4,4 @@
 export { SAID, aggregateElements, isOwnLine, talliesOf, weigh } from "./model/aggregateElements.js";
 export { FORCED, mapExtras } from "./model/mapExtras.js";
 export { scaleAt, titleDresser, titleLooks } from "./model/mapTitles.js";
-export { overviewPlanner } from "./model/overviewPlan.js";
+export { keepsOutside, overviewPlanner } from "./model/overviewPlan.js";

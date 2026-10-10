@@ -116,7 +116,10 @@ async function leafPositions(page) {
  * Only leaves are compared. A box is drawn around its children, so it moves
  * whenever a child does; and it can shift on its own while no leaf moves: an
  * outermost box moved 3.5 units during a drag that moved no leaf, measured in 2
- * of 6 runs on one adopter's node page.
+ * of 6 runs on one adopter's node page. A box drawn closed counts as a leaf only
+ * while it stays closed: a gesture's pan opens the readable boxes it brings into
+ * view, and a box opened is drawn around its children, which read once as a
+ * Feature-Sliced frontend's `app` box moving under a long press.
  */
 export async function gesturesOnALeaf(page) {
   const outcomes = {};
@@ -128,7 +131,8 @@ export async function gesturesOnALeaf(page) {
     await gesture(page, leaf, 60, 40);
     const after = await leafPositions(page);
     outcomes[name] = {
-      moved: Object.keys(positions).filter((id) => JSON.stringify(after[id]) !== JSON.stringify(positions[id])),
+      // A box the gesture's pan opened, or closed, is no leaf on one side of it: its place is not compared.
+      moved: Object.keys(positions).filter((id) => id in after && JSON.stringify(after[id]) !== JSON.stringify(positions[id])),
       panned: JSON.stringify(await viewer(page, "pan")) !== JSON.stringify(pan),
     };
   }

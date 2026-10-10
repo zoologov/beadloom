@@ -642,7 +642,12 @@ test("zoomed in from the fit, a node drawn larger than its layout keeps its cent
     const titles = Object.fromEntries((await viewer(page, "titles")).map((t) => [t.id, t]));
     const ownLines = (await viewer(page, "edgeRoutes")).filter((r) => !r.aggregated);
     const nodes = Object.fromEntries(
-      grown.filter((id) => boxes[id]).map((id) => [id, { size: sizeOnScreen(boxes[id], zoom), text: titles[id]?.text ?? null, own: ownLines.some((r) => r.source === id || r.target === id) }])
+      grown
+        .filter((id) => boxes[id])
+        .map((id) => {
+          const own = ownLines.filter((r) => r.source === id || r.target === id).map((r) => r.points);
+          return [id, { size: sizeOnScreen(boxes[id], zoom), text: titles[id]?.text ?? null, own: own.length > 0, routes: own }];
+        })
     );
     return { zoom, boxes, titles, open: JSON.stringify(await viewer(page, "openBoxes")), nodes };
   };
@@ -660,9 +665,15 @@ test("zoomed in from the fit, a node drawn larger than its layout keeps its cent
       const box = now.boxes[id];
       const [a, b] = [centreOf(box), centreOf(elk[id])];
       if (!within(elk[id], box) || Math.hypot(a.x - b.x, a.y - b.y) > ON_BORDER) wrong.push(`step ${step}: ${id} does not hold its laid-out box around its centre`);
-      // An edge of the file drawn as itself into it ends on its laid-out border: the node is drawn at that size.
+      // An edge of the file drawn as itself into it keeps its route and ends on the node's border: a node
+      // drawn larger keeps that line outside it, as a node widened in its row does for the lines from
+      // the rows above and below.
       if (now.nodes[id].own) {
-        if (larger(now.boxes).includes(id)) wrong.push(`step ${step}: ${id} is drawn larger than its layout with an edge drawn as itself into it`);
+        const inner = (p) => p.x > box.x1 + ON_BORDER && p.x < box.x2 - ON_BORDER && p.y > box.y1 + ON_BORDER && p.y < box.y2 - ON_BORDER;
+        const along = (points) => points.flatMap((p, k) => (k ? [p, { x: (p.x + points[k - 1].x) / 2, y: (p.y + points[k - 1].y) / 2 }] : [p]));
+        if (larger(now.boxes).includes(id) && now.nodes[id].routes.some((points) => along(points).some(inner))) {
+          wrong.push(`step ${step}: ${id} is drawn larger than its layout over an edge drawn as itself into it`);
+        }
         continue;
       }
       const title = now.titles[id];

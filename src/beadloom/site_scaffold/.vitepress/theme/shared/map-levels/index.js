@@ -30,6 +30,7 @@ export {
   outwardOf,
   outwardOfOpen,
   ownLinesOf,
+  reachingOf,
   selectionReveals,
   smallestChildOf,
   zoomDrawingOf,

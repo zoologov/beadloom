@@ -19,7 +19,8 @@
 // A top-level node the overview's plan draws larger than its layout, to hold its
 // title (`overviewPlan.js`, `shared/geometry/grownBoxes.js`), carries its drawn box in its
 // data (`mapBox`) while it is drawn closed, or as a leaf with its map title, and
-// no edge of the file is drawn as itself into it, whose end the box would cover.
+// the box keeps outside it every edge of the file drawn as itself into it, whose
+// end it would otherwise cover.
 // The box is worked out again at each step of the scale: it keeps about its size
 // on screen, as its title does, down to its laid-out box.
 //
@@ -33,7 +34,7 @@
 // map dresses its nodes with what the plan decided, so the titles come in two
 // parts: `titleLooks`, which the plan is made with, and `titleDresser`, made
 // with the plan. The map's drawing now, which both read, is handed to each call:
-// `{ scale, hiddenAt, grownNow, ownEnds }`.
+// `{ scale, hiddenAt, grownNow, coversOwnLine }`.
 
 import {
   COLLAPSED,
@@ -162,14 +163,16 @@ export function titleDresser(looks, planner, tree, geometry) {
   /**
    * The box each node the plan draws larger than its layout is drawn as now,
    * among the nodes `drawn` with the boxes `openNow` open: while it is closed or
-   * a leaf with its map title, and no edge of the file is drawn into it at rest.
+   * a leaf with its map title, and keeps outside it every line of the file drawn
+   * into it now (`coversOwnLine`).
    */
-  function grownBoxesNow(drawn, openNow, { scale, hiddenAt, ownEnds }) {
+  function grownBoxesNow(drawn, openNow, { scale, hiddenAt, coversOwnLine }) {
     const now = new Map();
     for (const id of drawn) {
-      if (!planner.isGrown(id) || ownEnds.has(id) || (tree.boxes.has(id) && openNow.has(id))) continue;
+      if (!planner.isGrown(id) || (tree.boxes.has(id) && openNow.has(id))) continue;
       const at = titleScaleOf(id, scale);
       const box = planner.drawnBoxAt(id, at, hiddenOf(hiddenAt, id));
+      if (coversOwnLine(id, box)) continue;
       if (!tree.boxes.has(id) && !lookOf(id, at, hiddenOf(hiddenAt, id), box)) continue;
       now.set(id, box);
     }

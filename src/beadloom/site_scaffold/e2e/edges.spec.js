@@ -10,7 +10,10 @@
 // (`map.spec.js`). The legend is read at every level a reader reaches, because it
 // names what the canvas draws there, aggregated lines included: a legend derived
 // from the data file once left the overview drawing an indigo solid line the
-// dotted `uses` sample did not describe.
+// dotted `uses` sample did not describe. A line of the map's that carries edges
+// of several kinds is drawn solid in the colour of the kind it carries most, and
+// the legend says so with an entry of its own, at the levels such a line is drawn
+// at and only there (the owner's ruling, 2026-10-10).
 
 import { test, expect } from "@playwright/test";
 import { architectureData, openArchitecture, openEveryBox, serveEveryEdgeKind, viewer } from "./support/viewer.js";
@@ -39,21 +42,36 @@ async function legendEntries(page) {
   return Object.fromEntries(items.map(({ key, colour, dash }) => [key, { colour, dash: dash === "none" ? [] : (dash.match(/[\d.]+/g) || []).map(Number) }]));
 }
 
+/** The ids of the map's lines drawn now that carry edges of more than one style, by `styleOf` (an edge's key to its style). */
+async function linesOfSeveralStyles(page, styleOf) {
+  const lines = [...(await viewer(page, "aggregatedEdges")), ...(await viewer(page, "ownLines"))].filter((line) => line.drawn);
+  return new Set(lines.filter((line) => new Set([...line.forwardKeys, ...line.backwardKeys].map((key) => styleOf.get(key))).size > 1).map((line) => line.id));
+}
+
+/** Whether the legend holds its entry for a line of several kinds, and the sample's dash: `{ shown, dash }`. */
+async function severalEntry(page) {
+  const item = page.locator("[data-legend-several]");
+  if ((await item.count()) === 0) return { shown: false, dash: null };
+  return { shown: true, dash: await item.locator("[data-legend-line]").evaluate((line) => getComputedStyle(line).strokeDasharray) };
+}
+
 /**
  * What disagrees, at the level drawn now, between the lines on the canvas and the
  * edge legend: a line whose style has no entry, or is drawn in another colour or
  * dash than its entry's sample, and an entry no line is drawn in. A line of the
  * map's that carries edges of more than one style is drawn solid in the style it
- * carries most (RFC D8): its colour is its entry's, its dash solid.
+ * carries most (RFC D8): its colour is its entry's, its dash solid, and the
+ * legend's entry for a line of several kinds is there exactly while one is drawn.
  * `{ wrong, lines, keys }`, `keys` the styles drawn.
  */
 async function legendAgainstCanvas(page, styleOf) {
   const looks = (await viewer(page, "lineLooks")).filter((look) => look.styleKey);
-  const mapLines = [...(await viewer(page, "aggregatedEdges")), ...(await viewer(page, "ownLines"))].filter((line) => line.drawn);
-  const several = new Set(mapLines.filter((line) => new Set([...line.forwardKeys, ...line.backwardKeys].map((key) => styleOf.get(key))).size > 1).map((line) => line.id));
+  const several = await linesOfSeveralStyles(page, styleOf);
   const legend = await legendEntries(page);
   const keys = [...new Set(looks.map((look) => look.styleKey))].sort();
   const wrong = new Set(Object.keys(legend).filter((key) => !keys.includes(key)).map((key) => `the legend's ${key}: no line is drawn in it`));
+  const { shown } = await severalEntry(page);
+  if (shown !== several.size > 0) wrong.add(several.size ? `${several.size} line(s) of several kinds drawn, and no entry for them` : "the entry for a line of several kinds, and none is drawn");
   for (const look of looks) {
     const entry = legend[look.styleKey];
     if (!entry) {
@@ -144,6 +162,23 @@ for (const served of ["as served", "with every edge kind"]) {
     expect(wrong).toEqual([]);
   });
 }
+
+test("the legend names a line of several kinds, solid, at a level that draws one, and not at a level that draws none", async ({ page, request }) => {
+  const data = await architectureData(request);
+  const styleOf = new Map(data.edges.map((edge) => [`${edge.kind}:${edge.src}->${edge.dst}`, styleKeyOfEdge(edge)]));
+  await openArchitecture(page);
+  const atFit = await linesOfSeveralStyles(page, styleOf);
+  requireShape(atFit.size > 0, "no line at the whole-graph fit carries edges of two kinds");
+  const fit = await severalEntry(page);
+  // Every edge drawn as itself: no line of the map's is drawn, so none carries several kinds.
+  await openEveryBox(page);
+  await settled(page);
+  const full = await linesOfSeveralStyles(page, styleOf);
+  const detail = await severalEntry(page);
+  test.info().annotations.push({ type: "measured", description: `at the fit ${atFit.size} line(s) of several kinds (${[...atFit].join(", ")}); every edge as itself ${full.size}` });
+
+  expect({ fit, detail: detail.shown, full: full.size }).toEqual({ fit: { shown: true, dash: "none" }, detail: false, full: 0 });
+});
 
 test("an aggregated line that carries edges of one kind keeps that kind's dash, as its legend sample is drawn", async ({ page, request }) => {
   // Every edge of the served graph made a `uses` edge: each line the overview aggregates carries one kind.

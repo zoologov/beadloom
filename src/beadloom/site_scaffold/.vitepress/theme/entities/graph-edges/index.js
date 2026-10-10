@@ -6,6 +6,7 @@ export {
   DOT_PATTERN,
   DRAWN_KINDS,
   EDGE_STYLES,
+  SEVERAL_KINDS,
   VIOLATION_KEY,
   contractStyleKey,
   dashOf,

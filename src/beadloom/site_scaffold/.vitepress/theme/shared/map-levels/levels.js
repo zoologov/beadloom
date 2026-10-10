@@ -20,7 +20,10 @@
 // a line between boxes that hold it — are its **outward** edges (`outwardOf`):
 // a node inside an open box carries their count, and the map draws them while
 // the node is under the pointer or selected (`ownLinesOf`); an open box selected
-// draws its own the same way (`outwardOfOpen`).
+// draws its own the same way (`outwardOfOpen`). So does a node whose own line runs
+// into an open box and ends on its border, for the edges it carries to the box
+// and to the nodes drawn inside (`reachingOf`): a node selected is drawn with its
+// own edges.
 //
 // A level is a set of open boxes and nothing more: nothing is laid out again, so
 // no box moves between levels. Which boxes are open is decided here as well:
@@ -296,6 +299,35 @@ export function outwardOfOpen(tree, box, edges, level) {
       return !holdersOf(tree, box).includes(other) && !(carriedBy.get(edge.id) || []).includes(box);
     })
     .map((edge) => edge.id);
+}
+
+/**
+ * The edges of the drawn nodes of `level` (`levelOf`, for `open` and `edges`)
+ * that run into an open box on a line with the node as its end: `Map(node =>
+ * [edge ids])`. Such a line is the pair's of the node and the box, which the
+ * level draws for any edge with a box at an end; it ends on the box's border,
+ * while the edge's other end is the box itself or is drawn inside it: a
+ * top-level node's edge into a node of an open box at the top, say. These are
+ * not outward edges, since the node's own line carries them at rest and no
+ * "+N" counts them; but while the node is under the pointer or selected they are
+ * drawn as its outward edges are (`ownLinesOf`), to the end they reach, so the
+ * node is drawn with its own edges.
+ */
+export function reachingOf(tree, open, edges, level) {
+  const carriedBy = new Map();
+  for (const pair of level.pairs.values()) for (const id of [...pair.forward, ...pair.backward]) carriedBy.set(id, pair.ends);
+  const out = new Map();
+  for (const edge of edges) {
+    const ends = carriedBy.get(edge.id);
+    if (!ends) continue;
+    for (const [end, other] of [[edge.source, edge.target], [edge.target, edge.source]]) {
+      const box = ends.find((id) => id !== end);
+      if (!ends.includes(end) || !open.has(box) || !isWithin(tree, other, box)) continue;
+      if (!out.has(end)) out.set(end, []);
+      out.get(end).push(edge.id);
+    }
+  }
+  return out;
 }
 
 /**

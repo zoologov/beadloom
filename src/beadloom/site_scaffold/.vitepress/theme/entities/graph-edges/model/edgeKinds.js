@@ -15,7 +15,9 @@
 // (`legendKeysOf`), the map's aggregated lines among them by the style they are
 // drawn in, so it names every style the canvas shows there and no other. A line
 // of the map's that carries edges of one style is drawn in that style's dash; one
-// that carries several is drawn solid, in the style it carries most.
+// that carries several is drawn solid, in the style it carries most, and the
+// legend names such a line with an entry of its own (`SEVERAL_KINDS`) while one is
+// drawn (the owner's ruling, 2026-10-10).
 //
 // A contract edge of the landscape is drawn by its look — healthy, drifting,
 // broken or neutral — rather than by its kind, because on that map the health
@@ -137,6 +139,19 @@ export const EDGE_STYLES = {
     strength: KIND_STRENGTH,
   },
 };
+
+/**
+ * The legend's entry for a line of the map's that carries edges of several
+ * styles: drawn solid, in the colour of the style it carries most, which this
+ * entry's neutral sample stands for.
+ */
+export const SEVERAL_KINDS = Object.freeze({
+  legend: "several kinds: solid, in the colour of the kind it carries most",
+  line: "solid",
+  arrow: "triangle",
+  tone: "text2",
+  strength: KIND_STRENGTH,
+});
 
 /** The dash pattern of a look, in pixels on screen: none for a solid line. */
 export function dashOf(look) {

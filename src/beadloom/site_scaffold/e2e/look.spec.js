@@ -137,12 +137,36 @@ async function offWeight(page) {
 async function offHead(page, { full = false } = {}) {
   const zoom = await viewer(page, "zoom");
   const half = Math.sqrt(1.25);
+  const looks = await viewer(page, "lineLooks");
+  // A line drawn as itself keeps ELK's route, which no plan moves: where one crosses a line of the map's
+  // within a head and a half of its tip, between two boxes too near for a way round it, the head that
+  // line's run holds is the smaller one (measured: 6.83 px from the tip in a 20 px gap, a 4.55 px head).
+  const fixed = looks.filter((look) => !look.aggregated);
+  const crossedNearTip = (look) => crossedWithin(look, fixed, (HEAD_PX * 1.5) / zoom);
   const off = (look, px) =>
-    full && look.aggregated ? !withinAStep(px, HEAD_PX) : px < SMALLEST_HEAD_PX / half - 1e-6 || px > HEAD_PX * half + 1e-6;
-  return (await viewer(page, "lineLooks"))
+    full && look.aggregated && !crossedNearTip(look) ? !withinAStep(px, HEAD_PX) : px < SMALLEST_HEAD_PX / half - 1e-6 || px > HEAD_PX * half + 1e-6;
+  return looks
     .filter((look) => look.targetArrow !== "none" || look.sourceArrow !== "none")
     .filter((look) => off(look, headLength(look) * zoom))
     .map((look) => `${look.id}: ${(headLength(look) * zoom).toFixed(2)} px`);
+}
+
+/** Whether a segment of one of `others` crosses the last run of `look`, at either end it draws a head at, within `reach` layout units of the tip. */
+function crossedWithin(look, others, reach) {
+  const ends = [];
+  if (look.targetArrow !== "none") ends.push([...look.points].reverse());
+  if (look.sourceArrow !== "none") ends.push(look.points);
+  const crosses = (a, b, c, d) => {
+    const side = (p, q, r) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+    return side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0;
+  };
+  return ends.some(([tip, before]) => {
+    if (!before) return false;
+    const length = Math.hypot(before.x - tip.x, before.y - tip.y) || 1;
+    const share = Math.min(1, reach / length);
+    const back = { x: tip.x + (before.x - tip.x) * share, y: tip.y + (before.y - tip.y) * share };
+    return others.some((other) => other.points.some((p, k) => k > 0 && crosses(tip, back, other.points[k - 1], p)));
+  });
 }
 
 /** The node that depends on the most others: a selection of it walks edges and leaves others outside. */
