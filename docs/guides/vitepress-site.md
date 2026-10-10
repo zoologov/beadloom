@@ -465,11 +465,13 @@ The panel shows a card for the selected node, one kind per mode.
   that commit. Its links name a branch `origin` holds instead: the upstream of the branch the
   commit is on when that upstream is on `origin`, else `origin`'s branch of the same name, else
   `origin`'s default branch (`origin/HEAD`). With none of them they keep the commit. Only
-  `origin` counts, because the links name `origin`'s address: a commit or an upstream that only
-  a fork holds would be a 404 there too (BDL-080 S4h). A path that exists only in the
-  unpublished commit is still missing on the branch. The card says `built from an unpublished
-  commit; links point at main` under the link, and `docs site` warns on stderr, naming the fix
-  when no branch stands in:
+  `origin` counts, because without `site.repo_url` the links name `origin`'s address: a commit
+  or an upstream that only a fork holds would be a 404 there too (BDL-080 S4h). The stand-in
+  branch and `pushed` are judged by `origin`'s branches even when `site.repo_url` names a
+  repository on another forge, a decision of BDL-080 that may be revisited. A path that exists
+  only in the unpublished commit is still missing on the branch. The card says `built from an
+  unpublished commit; links point at main` under the link, and `docs site` warns on stderr,
+  naming the fix when no branch stands in:
 
   ```text
   Warning: the portal was built from 39f9247dddfd, which is on no branch of origin, so its source

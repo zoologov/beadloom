@@ -62,7 +62,9 @@ makes it.
    `linked` is the revision every source link names, either the same hash as `commit` (a pushed
    commit, or an unpublished one no branch stands in for) or the name of a branch on `origin`
    (the branch's upstream when it is on `origin`, `origin`'s branch of the same name, or
-   `origin`'s default branch).
+   `origin`'s default branch). Both are judged by `origin`'s branches only, even when
+   `site.repo_url` names a repository on another forge (a decision of BDL-080 that may be
+   revisited).
    Keys added since 8.0.0 (MINOR, BDL-080 S4a): the top-level `lint`, lint's reach over the whole
    project, `{errors, warnings, nodes_with_findings, nodeless}`, where each entry of `nodeless`
    is `{rule, severity, message, file, line}` and `severity` takes the vocabulary `error`,
