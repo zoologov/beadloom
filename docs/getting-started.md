@@ -538,12 +538,16 @@ cd site && npm ci && npm run docs:build # site/.vitepress/dist is the static sit
 npm run docs:preview                    # look at it locally
 ```
 
-`docs site` reports what it wrote:
+`docs site` reports what it wrote. Measured on this repository:
 
 ```text
-Generated 144 files under /home/me/tidewater/site
-Scaffold (beadloom <version>): 209 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 moved pages retired, 0 copied from .beadloom/site/
+Generated 515 files under <out>
+Scaffold (beadloom 9.0.0): 209 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 moved pages retired, 0 copied from .beadloom/site/
 ```
+
+That is this repository's own portal written by 9.0.0 into an empty directory, `<out>`.
+`Generated` counts every file the run wrote, the scaffold's included, so the first number is
+never smaller than the second.
 
 **Give the portal your project's identity** in `.beadloom/config.yml`. Without it the title is
 the directory's name, the base is `/` and the portal links to no repository:

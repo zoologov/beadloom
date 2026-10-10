@@ -877,9 +877,13 @@ and writes under `--out` (default `site/`, the directory `beadloom init` ignores
   never overwritten and is reported. `.beadloom/site/` is copied last.
 
 ```text
-Generated 144 files under /home/me/tidewater/site
-Scaffold (beadloom <version>): 209 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 moved pages retired, 0 copied from .beadloom/site/
+Generated 515 files under <out>
+Scaffold (beadloom 9.0.0): 209 written, 0 updated, 0 unchanged, 0 retired, 0 empty folders retired, 0 moved pages retired, 0 copied from .beadloom/site/
 ```
+
+That is this repository's own portal written by 9.0.0 into an empty directory, `<out>`.
+`Generated` counts every file the run wrote, the scaffold's included, so the first number is
+never smaller than the second.
 
 A kept file is named on stderr with the reason and the remedy, and the exit code stays 0. A
 `site:` value the portal cannot use exits 1 before anything is written, each refusal printed as
