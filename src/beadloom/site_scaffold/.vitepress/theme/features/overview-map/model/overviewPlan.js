@@ -61,6 +61,7 @@ import { centreOf, compoundSizeOf, crossesAny, drawnBoxOf, grownBoxesOf } from "
 import { FIT_MAX_ZOOM, FIT_PADDING, GEOMETRY, MAP_MARKS, PLATE_SIDES, budgetOf, levelOf, plateOf } from "../../../shared/map-levels/index.js";
 import { lengthenLineEnds } from "../../../shared/bundling/index.js";
 import { OVERVIEW_MARKS, planOverview } from "../../../shared/grid-routing/index.js";
+import { BOX_SIDE } from "../../../shared/elk/index.js";
 
 /** The room a box drawn larger keeps from every other box, in pixels on screen, tried in turn: a lane, else a plate's gap. */
 const GROWN_GAPS = Object.freeze([OVERVIEW_MARKS.pitch, MAP_MARKS.plateGap]);
@@ -99,16 +100,16 @@ export function keepsOutside(box, paths) {
   return !crossesAny(inner, paths);
 }
 
-/** The room ELK keeps between a box's title room and its children, in layout units (`shared/elk`, `boxTop`). */
-const BELOW_TITLE = 12;
-
 /**
  * The frame the plan's lines keep inside, in layout units: the box that holds
  * everything without the band its title is drawn in once the view is zoomed in
  * far enough for the title to read inside it, at the top. A line routed through
- * that band ran under the title at every zoom past that one.
+ * that band ran under the title at every zoom past that one. The band is the
+ * title room less the room ELK keeps inside a box's border on its other sides
+ * (`BOX_SIDE`), so the lines keep as much room above the children as beside
+ * them; it is read from the layout, so a change to ELK's padding moves it too.
  */
-const routedFrameOf = (frame) => ({ ...frame, y1: frame.y1 + GEOMETRY.boxTitleRoom - BELOW_TITLE });
+export const routedFrameOf = (frame) => ({ ...frame, y1: frame.y1 + GEOMETRY.boxTitleRoom - BOX_SIDE });
 
 /** A pair's lines each way, in a form two plans can be compared by. */
 const signatureOf = (pairs) => pairs.map((pair) => `${pair.name}:${pair.forward.length}:${pair.backward.length}`).join("\n");

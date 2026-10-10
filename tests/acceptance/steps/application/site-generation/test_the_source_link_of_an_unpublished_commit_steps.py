@@ -32,7 +32,7 @@ _VIEW_DATA = "public/architecture.data.json"
 #: A fixed instant for the one wall-clock read `generate_site` makes.
 _NOW = "2026-10-10T00:00:00+00:00"
 #: Every unpublished-commit warning says this, whatever it links instead.
-_UNPUBLISHED = "on no remote branch"
+_UNPUBLISHED = "on no branch of origin"
 _IDENTITY = ("-c", "user.name=Shop Team", "-c", "user.email=team@example.invalid")
 
 
@@ -102,6 +102,30 @@ def _tracks(world: dict[str, Any], branch: str, upstream: str) -> None:
     _remote_branch(world, upstream, "first")
     _git(world["project"], "config", f"branch.{branch}.remote", "origin")
     _git(world["project"], "config", f"branch.{branch}.merge", f"refs/heads/{upstream}")
+
+
+def _on_remote(world: dict[str, Any], remote: str, branch: str, which: str) -> None:
+    project = world["project"]
+    if remote not in _git(project, "remote").split():
+        _git(project, "remote", "add", remote, f"https://github.com/{remote}/shop.git")
+    _git(project, "update-ref", f"refs/remotes/{remote}/{branch}", world[which])
+
+
+@given(
+    parsers.parse(
+        'the branch "{branch}" tracks the branch "{upstream}" of the remote "{remote}", '
+        "which holds the first commit"
+    )
+)
+def _tracks_another_remote(world: dict[str, Any], branch: str, upstream: str, remote: str) -> None:
+    _on_remote(world, remote, upstream, "first")
+    _git(world["project"], "config", f"branch.{branch}.remote", remote)
+    _git(world["project"], "config", f"branch.{branch}.merge", f"refs/heads/{upstream}")
+
+
+@given(parsers.parse('the branch "{branch}" of the remote "{remote}" holds the last commit'))
+def _another_remote_holds_last(world: dict[str, Any], branch: str, remote: str) -> None:
+    _on_remote(world, remote, branch, "commit")
 
 
 @given(parsers.parse('the remote\'s default branch is "{branch}"'))

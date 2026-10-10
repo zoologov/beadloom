@@ -88,7 +88,11 @@ test("Pages names every page the run wrote, by section, and the language of each
   await openDashboard(page, data);
   const panel = page.getByTestId("page-map");
 
-  await expect(panel.locator("[data-pages='count']")).toContainText(`This portal has ${countOf(data.pages.count, "page", "pages")}`);
+  // The count is what the run wrote: a file the project adds under `.beadloom/site/` is
+  // on the portal and not counted, so the line names the run, not the portal (beadloom-af99.16).
+  const said = panel.locator("[data-pages='count']");
+  await expect(said).toContainText(`beadloom docs site wrote ${countOf(data.pages.count, "page", "pages")}`);
+  await expect(said).not.toContainText("This portal");
   for (const { language, page: about } of data.pages.languages) {
     await expect(panel.locator("[data-pages='count']")).toContainText(`${language} (${about})`);
   }
@@ -97,6 +101,15 @@ test("Pages names every page the run wrote, by section, and the language of each
     await expect(shown.locator("summary")).toHaveText(`${section.name}: ${section.count}`);
     await expect(shown.locator("li")).toHaveCount(section.pages.length);
   }
+});
+
+test("Pages says one page in the singular", async ({ page, request }) => {
+  const data = await dashboardData(request);
+  requireShape(data.pages, "the data file carries no page map; it was written before it was carried");
+  data.pages = { ...data.pages, count: 1, languages: [] };
+
+  await openDashboard(page, data);
+  await expect(page.getByTestId("page-map").locator("[data-pages='count']")).toHaveText("beadloom docs site wrote 1 page.");
 });
 
 test("a data file written before the two panels shows neither", async ({ page, request }) => {

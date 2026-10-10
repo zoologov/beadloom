@@ -72,10 +72,40 @@ def test_an_upstream_this_clone_no_longer_holds_does_not_stand_in(repository: Pa
     assert source_ref_of(repository, commit).linked == "main"
 
 
-def test_a_commit_any_remote_branch_holds_is_pushed(repository: Path) -> None:
-    _git(repository, "update-ref", "refs/remotes/fork/topic", "HEAD")
+def test_a_commit_a_branch_of_origin_holds_is_pushed(repository: Path) -> None:
+    _git(repository, "update-ref", "refs/remotes/origin/topic", "HEAD")
     commit = _head(repository)
     assert source_ref_of(repository, commit) == SourceRef(commit, commit, pushed=True)
+
+
+def test_a_commit_only_another_remote_holds_is_not_pushed(repository: Path) -> None:
+    # The links name origin's address, where a commit only a fork holds is a 404.
+    _git(repository, "update-ref", "refs/remotes/fork/topic", "HEAD")
+    commit = _head(repository)
+    assert source_ref_of(repository, commit) == SourceRef(commit, "main", pushed=False)
+
+
+def test_an_upstream_on_another_remote_does_not_stand_in(repository: Path) -> None:
+    # The reviewer's probe (beadloom-xkrn M1): `git push -u fork topic`, then one more
+    # commit. origin has no branch "topic", so a link naming it is the 404 again.
+    _git(repository, "remote", "add", "fork", "https://github.com/someone/shop.git")
+    _git(repository, "update-ref", "refs/remotes/fork/topic", "HEAD~1")
+    _git(repository, "config", "branch.work.remote", "fork")
+    _git(repository, "config", "branch.work.merge", "refs/heads/topic")
+    commit = _head(repository)
+    assert source_ref_of(repository, commit) == SourceRef(commit, "main", pushed=False)
+
+
+def test_an_upstream_on_another_remote_gives_way_to_origins_branch_of_the_same_name(
+    repository: Path,
+) -> None:
+    _git(repository, "remote", "add", "fork", "https://github.com/someone/shop.git")
+    _git(repository, "update-ref", "refs/remotes/fork/topic", "HEAD~1")
+    _git(repository, "update-ref", "refs/remotes/origin/work", "HEAD~1")
+    _git(repository, "config", "branch.work.remote", "fork")
+    _git(repository, "config", "branch.work.merge", "refs/heads/topic")
+    commit = _head(repository)
+    assert source_ref_of(repository, commit).linked == "work"
 
 
 @pytest.mark.parametrize(
@@ -145,7 +175,7 @@ def test_the_warning_on_a_branch_says_where_the_links_point_and_how_to_link_the_
     warning = unpublished_warning(SourceRef("0123456789abcdef" * 2, "main", pushed=False))
 
     assert warning == (
-        "Warning: the portal was built from 0123456789ab, which is on no remote branch, "
+        "Warning: the portal was built from 0123456789ab, which is on no branch of origin, "
         "so its source links point at main instead; a path that exists only in that commit "
         "is not there. Push the commit and run `beadloom docs site` again for links to it."
     )
@@ -156,8 +186,8 @@ def test_the_warning_without_a_stand_in_says_the_links_stay_dead_and_how_to_name
     warning = unpublished_warning(SourceRef(commit, commit, pushed=False))
 
     assert warning == (
-        "Warning: the portal was built from 0123456789ab, which is on no remote branch, "
-        "and no branch of the remote stands in for it, so its source links point at "
-        "0123456789ab and stay dead until it is pushed. Push it, or record the remote's default "
+        "Warning: the portal was built from 0123456789ab, which is on no branch of origin, "
+        "and no branch of origin stands in for it, so its source links point at "
+        "0123456789ab and stay dead until it is pushed. Push it, or record origin's default "
         "branch with `git remote set-head origin --auto`, and run `beadloom docs site` again."
     )

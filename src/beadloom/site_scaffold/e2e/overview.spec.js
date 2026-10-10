@@ -798,6 +798,29 @@ function plan(page, input) {
 const box = (id, x1, y1, x2, y2) => ({ id, x1, y1, x2, y2 });
 const lengthOf = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 
+test("the overview's lines keep below a box's title room by the room ELK keeps inside a box's border, read from the layout itself", async ({
+  page,
+}) => {
+  await openThemeModules(page);
+  // The S4 review's M2 (beadloom-af99.16): the overview restated ELK's 12 as a number of
+  // its own, so a change to the layout's padding would have moved the lines' frame silently.
+  const found = await page.evaluate(async () => {
+    const { BOX_SIDE, elkGraphOf } = await import("/shared/elk/index.js");
+    const { GEOMETRY } = await import("/shared/map-levels/index.js");
+    const { routedFrameOf } = await import("/features/overview-map/model/overviewPlan.js");
+    const graph = elkGraphOf({ nodes: [{ id: "box", parent: null }, { id: "leaf", parent: "box", width: 10, height: 10 }], edges: [] });
+    return {
+      side: BOX_SIDE,
+      padding: graph.children[0].layoutOptions["elk.padding"],
+      top: routedFrameOf({ x1: 0, y1: 100, x2: 300, y2: 400 }).y1 - 100,
+      titleRoom: GEOMETRY.boxTitleRoom,
+    };
+  });
+  expect(typeof found.side).toBe("number");
+  expect(found.padding).toBe(`[top=${found.side},left=${found.side},bottom=${found.side},right=${found.side}]`);
+  expect(found.top).toBe(found.titleRoom - found.side);
+});
+
 test("a planned line leaves one box and reaches the other on their borders, with a straight run into each long enough for an arrowhead and a corner", async ({
   page,
 }) => {

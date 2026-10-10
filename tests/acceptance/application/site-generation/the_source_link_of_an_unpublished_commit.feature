@@ -2,10 +2,12 @@
 # to the commit the portal was built from. A portal built locally from a commit that no
 # remote branch holds linked every node to a 404: the forge has never seen the commit.
 #
-# When no remote-tracking branch holds the built commit, the links name a branch the
-# remote does hold instead: the branch's upstream, else the remote's branch of the same
-# name, else the remote's default branch (`origin/HEAD`). With none of them the links keep
-# the commit, because nothing better is known. The data file says which, under
+# When no branch of origin holds the built commit, the links name a branch origin does
+# hold instead: the branch's upstream when it is a branch of origin, else origin's branch
+# of the same name, else origin's default branch (`origin/HEAD`). With none of them the
+# links keep the commit, because nothing better is known. The links name origin's
+# address, so a branch only another remote holds, a fork's, is not one of them
+# (`beadloom-af99.16`, the S4 review's M1). The data file says which, under
 # `source_ref`, the card says so beside the link, and `docs site` warns on stderr.
 #
 # A forge serves a branch under the route it serves a commit under, except Gitea, which
@@ -32,6 +34,26 @@ Feature: the Source link of a portal built from an unpublished commit names a br
     When the site is generated for the project
     Then the node "storage-pool" links its source to "https://github.com/team/shop/tree/release%2F2.0/src/storage/pool.py"
     And the data file's source ref is the last commit, linked at "release/2.0", not pushed
+
+  @bead:beadloom-af99.16
+  Scenario: an unpublished commit whose branch tracks another remote links origin's default branch
+    Given a project committed twice on the branch "work" whose origin is "git@github.com:team/shop.git"
+    And the branch "work" tracks the branch "topic" of the remote "fork", which holds the first commit
+    And the remote's branch "main" holds the first commit
+    And the remote's default branch is "main"
+    When the site is generated for the project
+    Then the node "storage-pool" links its source to "https://github.com/team/shop/tree/main/src/storage/pool.py"
+    And the data file's source ref is the last commit, linked at "main", not pushed
+
+  @bead:beadloom-af99.16
+  Scenario: a commit only another remote holds is not published where the links point
+    Given a project committed twice on the branch "work" whose origin is "git@github.com:team/shop.git"
+    And the branch "work" of the remote "fork" holds the last commit
+    And the remote's branch "main" holds the first commit
+    And the remote's default branch is "main"
+    When the site is generated for the project
+    Then the node "storage-pool" links its source to "https://github.com/team/shop/tree/main/src/storage/pool.py"
+    And the data file's source ref is the last commit, linked at "main", not pushed
 
   Scenario: an unpublished commit links the remote's branch of the same name when it tracks none
     Given a project committed twice on the branch "work" whose origin is "git@github.com:team/shop.git"

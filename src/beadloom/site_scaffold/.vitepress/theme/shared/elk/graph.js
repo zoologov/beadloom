@@ -42,8 +42,12 @@ export const LAYERED_OPTIONS = Object.freeze({
   "elk.padding": "[top=36,left=24,bottom=24,right=24]",
 });
 
-/** The room ELK keeps between a box's border and its children, in layout units, on every side but the top. */
-const BOX_SIDE = 12;
+/**
+ * The room ELK keeps between a box's border and its children, in layout units:
+ * on every side but the top, and at the top too when no `boxTop` is given. The
+ * overview keeps its lines below a box's title band by it (`features/overview-map`).
+ */
+export const BOX_SIDE = 12;
 
 /** Every coordinate of the answer in the root's frame. */
 const ROOT_COORDINATES = Object.freeze({
