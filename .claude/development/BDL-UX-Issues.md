@@ -37,7 +37,7 @@
 
 ## Open Issues
 
-> Last checked against the tracker on 2026-10-10. Fixed on `features/BDL-080` and closing when its PR merges: 305 and 306 (S4a), 307 (S4c), 313 (S3e); 313 refiles `beadloom-0e3m`. Two entries are about to close: 290 is fixed
+> Last checked against the tracker on 2026-10-10. 305, 306, 307 and 313 closed by BDL-080 (PR #98 merged 2026-10-10). Two entries are about to close: 290 is fixed
 > on `features/BDL-078` (`beadloom-nh7h`) and closes when it merges; the cause of 293 was removed
 > by BDL-074, and the entry holds itself open until about 2026-10-29.
 
@@ -46,15 +46,11 @@
 | No | Date | Severity | What |
 |---|---|---|---|
 | 314 | 2026-10-10 | medium | `write_text_atomic` and `write_yaml_atomic` leave every file they write at mode 0600, so a 0644 file edited by `init` becomes owner-only and `rules.yml` is born unreadable to the group |
-| 313 | 2026-10-10 | medium | `init --project .` names the root service `''` (`Path('.').name`), so on a JVM or Swift project `init` exits 1 with `domain-needs-parent` |
 | 312 | 2026-10-10 | medium | a rule-level `scope:` is read only by `layers` rules and accepted without a word on every other rule type — a setting that looks configured and does nothing |
 | 311 | 2026-10-10 | medium | `clean-room` installs with `uv pip install -e`, ignoring `uv.lock`, so a room resolves dependencies CI never sees (gherkin 42 vs 29) |
 | 310 | 2026-10-10 | low | a verdict-room scenario assumes the run lacks the `search` extra, so `--all-extras` turns 8 tests red with one cause |
 | 309 | 2026-10-10 | low | the reference-parser self-check hands gherkin's `TokenScanner` a path where it takes text, so it breaks on gherkin >= 30 |
 | 308 | 2026-10-08 | medium | active-sync reconciles the bead table and leaves ACTIVE.md's header, 'Current bead' and checklist stale when the work item ships |
-| 307 | 2026-10-07 | medium | the portal's Source link is a permalink to the built commit, so a local build from an unpushed commit links to a 404 on every node |
-| 306 | 2026-10-07 | medium | a box's card says `Debt 0` from the box's own score while its activity rolls up from its parts — two populations on one card, unnamed |
-| 305 | 2026-10-07 | medium | `Rule findings: none` on a node card is indistinguishable from "lint never ran", and the 36 findings bound to no node are shown nowhere on the portal |
 | 302 | 2026-09-14 | medium | `review-brief` and `waves` take their subject from the checkout |
 | 301 | 2026-09-14 | medium | a release's own "verified on the published wheel" sentences fail the Gate on the next version bump, and the suppression that excuses them is file-wide |
 | 300 | 2026-09-13 | high | `scope-check` never runs in CI: Actions checks a pull request out on a detached HEAD, so no branch names a work item and the step skips on every pu... |
@@ -145,13 +141,6 @@
     **Issue:** the atomic writers never copy the target's mode (or apply the umask) onto the temp file before the rename, so the write silently changes permissions.
     **Expected:** an existing target keeps its mode; a new file gets `0666 & ~umask`. S3f restored `package.json`'s mode in `steiger_script` only; the fix belongs in `atomic_io.py` with a case per writer. Found by S3f (`beadloom-af99.14`); for Debt to zero (`beadloom-ba9w`).
 
-313. [2026-10-10] [MEDIUM] `init --project .` names the root service `''`, so on a JVM or Swift project `init` exits 1 with `domain-needs-parent`
-
-    **Severity:** medium (a common invocation; the failure names a rule, not the cause)
-    **Command:** `beadloom init --yes --project .`
-    **Context:** BDL-080 S3T ran `init` on scratch copies of the adopter fixtures; with `--project .` the java, kotlin and swift fixtures failed, with an absolute path they passed.
-    **Issue:** `project_scan._detect_project_name` takes `Path('.').name`, which is the empty string, so the root service gets no id and every domain's `part_of` points nowhere.
-    **Expected:** the project path is resolved before its name is taken; `init` says which name it chose. Found by S3T (`beadloom-hvnv`); fixed in S3e (`beadloom-af99.12`).
 
 312. [2026-10-10] [MEDIUM] a rule-level `scope:` is read only by `layers` rules and accepted without a word on every other rule type
 
@@ -193,29 +182,8 @@
     **Issue:** the mechanism reconciles the bead-status table only (BDL-053); the header, the Current Bead line and the checklist are prose it never reads, so a closed work item keeps a development-time header.
     **Expected:** when every bead incl. the parent is closed, active-sync sets the phase and date, rewrites the Bead line to 'none — shipped', and reports unticked Progress items; docs quality names an ACTIVE whose epic is closed but whose header is not. Tracked on `beadloom-cnty`.
 
-307. [2026-10-07] [MEDIUM] the portal's Source link is a permalink to the built commit, so a local build from an unpushed commit links to a 404 on every node
 
-    **Severity:** medium (no wrong data; every link of a locally built portal is dead until the commit is pushed)
-    **Command:** `beadloom docs site`, then the viewer's card
-    **Context:** the owner looked at a portal built from `5bcb6881` on `features/BDL-078`, not pushed, and clicked Source on `vitepress-site`.
-    **Issue:** GitHub answers `404 - Cannot find a valid ref in 5bcb6881…/src/beadloom/site_scaffold/…` for every node: the link names the built commit, which exists on no remote branch.
-    **Expected:** when the built commit is on no remote branch (`git branch -r --contains`), the link names the branch or the remote's default branch, and the card says the portal was built from an unpublished commit. Tracked on `beadloom-be6e`.
 
-306. [2026-10-07] [MEDIUM] a box's card says `Debt 0` from the box's own score while its activity rolls up from its parts — two populations on one card, unnamed
-
-    **Severity:** medium (the number is right for the node and wrong for the question a box's card answers)
-    **Command:** the viewer's card on a box (`beadloom` at the overview)
-    **Context:** the owner selected the project box and read `Debt 0` beside `activity: hot, 59 commits`.
-    **Issue:** debt is the node's OWN reasons (stale_doc, oversized, high_fan_out, dormant), so a box with a fresh document and little own code reads 0 while `application` (3), `graph` (3), `tui` (2) sit inside it; activity on the same card is rolled up from the parts (BDL-078 ruling 6). Nothing names the two populations.
-    **Expected:** a box's card shows debt in two lines — own, and inside: N nodes with debt, the sum, by reason — and the box's `Inside` section carries the same numbers. Tracked on `beadloom-pre3`.
-
-305. [2026-10-07] [MEDIUM] `Rule findings: none` on a node card is indistinguishable from "lint never ran", and the 36 findings bound to no node are shown nowhere on the portal
-
-    **Severity:** medium (the class this project keeps meeting: a check silent about its own reach)
-    **Command:** the viewer's card; `beadloom lint`
-    **Context:** the owner saw `Rule findings: none` on most nodes and asked whether that was right. Measured: `lint` gives 0 errors and 70 warnings; 28 of 130 nodes carry 34 of them; 36 are bound to no node (`scenario-coverage` pointing at PRD lines, the population warnings of `site-fsd-layers`, `test-files-bind-to-a-node`, `scenarios-live-in-their-node-folder`).
-    **Issue:** `none` is correct for 102 nodes and says nothing about whether lint ran or over what; the 36 project-level findings are invisible on the portal.
-    **Expected:** the card names the population (`none — this project: 0 errors, 70 warnings on 28 nodes`) and project-level findings have a home on the project box's card and the dashboard. Tracked on `beadloom-pre3`.
 
 302. [2026-09-14] [MEDIUM] `review-brief` and `waves` take their subject from the checkout — the change from HEAD, the work item from the branch name — and neither accepts it as an option
 
@@ -1644,6 +1612,10 @@
 > (262 and higher), and numbers the shared media of `beadloom waves` cite as evidence. The
 > text of each is in `archive/BDL-UX-Issues-closed.md`.
 
+313. ~~[2026-10-10] [MEDIUM] `init --project .` names the root service `''` (`Path('.').name`), so on a JVM or Swift project `init` exits 1 with `domain-needs-parent`~~ **CLOSED** (BDL-080, PR #98)
+307. ~~[2026-10-07] [MEDIUM] the portal's Source link is a permalink to the built commit, so a local build from an unpushed commit links to a 404 on every node~~ **CLOSED** (BDL-080, PR #98)
+306. ~~[2026-10-07] [MEDIUM] a box's card says `Debt 0` from the box's own score while its activity rolls up from its parts — two populations on one card, unnamed~~ **CLOSED** (BDL-080, PR #98)
+305. ~~[2026-10-07] [MEDIUM] `Rule findings: none` on a node card is indistinguishable from "lint never ran", and the 36 findings bound to no node are shown nowhere on the portal~~ **CLOSED** (BDL-080, PR #98)
 304. ~~[2026-09-29] [HIGH] a replacement for a heuristic was proven "no worse than main" one ecosystem at a time, so the review found the same regression three times~~ **CLOSED**
 303. ~~[2026-09-19] [HIGH] the nightly mutation job is killed by its runner at 93-100 minutes, so the declared scope has had no aggregate score since 2026-09-09 even now that the run works~~ **CLOSED**
 298. ~~[2026-09-13] [MEDIUM] a vacuity guard added in BDL-070 reads the live index while other tests in the same run rebuild it, and saw 57 edges of 365~~ **CLOSED**

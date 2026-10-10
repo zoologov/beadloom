@@ -2,7 +2,7 @@
 
 > **Current version: 8.0.0** (PyPI, published 2026-10-08, verified on the wheel downloaded from PyPI: 11 of 11 checks).
 >
-> Rewritten 2026-10-05 against the tracker, brought up to date 2026-10-10. This file answers one question: what to do next,
+> Rewritten 2026-10-05 against the tracker, brought up to date 2026-10-10 (BDL-080 shipped). This file answers one question: what to do next,
 > and why that and not something else. It holds open work only. What shipped is in the GitHub
 > releases and in `CHANGELOG.md`; the previous revision of this file, with its records of why,
 > is `archive/ROADMAP-until-2026-10-05.md`. Open defects are in `BDL-UX-Issues.md`.
@@ -42,19 +42,12 @@ item below is ranked by what it does for those three. Project names stay out of 
 
 ## In progress
 
-### BDL-080 — the portal is a service, and the viewer serves a Feature-Sliced frontend
+### BDL-081 — the MAJOR release after BDL-080
 
-Work item `.claude/development/docs/features/BDL-080/`, branch `features/BDL-080`. Folds
-`beadloom-be6e` and `beadloom-pre3`. Four slices: S1 the site as a service and every layer rule
-drawn — **merged** (PR #96, 2026-10-09); S2 the viewer cut by cohesion and the cohesion rule in
-the roles — **done on the branch**; S3 the resolver's gaps for Vue and React Native (tsconfig
-paths, aliases, platform suffixes, `.mjs`, the Expo module bridge, Expo Router), the `init` FSD
-preset with Steiger's rules, two fixtures shaped like the owner's projects — **done on the
-branch**; S4 every population named (lint reach, debt inside, legend from the canvas, the Source
-link) plus the portal's brand (the square icon, `site.logo`, the footer) — **review and docs
-left** (2026-10-10). The owner ruled **one PR for S2 + S3 + S4** after S4's docs, then a
-**MAJOR** release (a `kind: site` node is now judged by the service rules). Filed along the way,
-all under Debt to zero: BDL-UX #309–#314.
+Its own work item by BDL-079's recipe (`/task-init`, Explore measuring `v8.0.0..main` per
+surface). MAJOR because a `kind: site` node is now judged by the service rules, so `lint`'s exit
+code can move on an unedited project. BDL-080 shipped 2026-10-10: S1 as PR #96, S2 + S3 + S4 as
+PR #98 (`290507b2`); its findings are BDL-UX #309–#314, all under Debt to zero.
 
 ---
 

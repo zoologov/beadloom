@@ -3044,3 +3044,38 @@ are recorded in the dated subsections of Closed Issues.
     - Add noise to `beadloom graph` Mermaid diagram
     - Create spurious `depends_on` edges (tests naturally import everything)
     **Expected:** Option to exclude test directories from the architecture graph: `beadloom init --bootstrap --exclude-tests` or a `config.yml` setting like `exclude_paths: [app/tests/]`. Alternatively, classify test directories as a separate `kind: test-suite` that can be filtered in `prime`/`graph` output.
+
+## Closed by BDL-080 (PR #98, 2026-10-10)
+
+313. [2026-10-10] [MEDIUM] `init --project .` names the root service `''`, so on a JVM or Swift project `init` exits 1 with `domain-needs-parent`
+
+    **Severity:** medium (a common invocation; the failure names a rule, not the cause)
+    **Command:** `beadloom init --yes --project .`
+    **Context:** BDL-080 S3T ran `init` on scratch copies of the adopter fixtures; with `--project .` the java, kotlin and swift fixtures failed, with an absolute path they passed.
+    **Issue:** `project_scan._detect_project_name` takes `Path('.').name`, which is the empty string, so the root service gets no id and every domain's `part_of` points nowhere.
+    **Expected:** the project path is resolved before its name is taken; `init` says which name it chose. Found by S3T (`beadloom-hvnv`); fixed in S3e (`beadloom-af99.12`).
+
+307. [2026-10-07] [MEDIUM] the portal's Source link is a permalink to the built commit, so a local build from an unpushed commit links to a 404 on every node
+
+    **Severity:** medium (no wrong data; every link of a locally built portal is dead until the commit is pushed)
+    **Command:** `beadloom docs site`, then the viewer's card
+    **Context:** the owner looked at a portal built from `5bcb6881` on `features/BDL-078`, not pushed, and clicked Source on `vitepress-site`.
+    **Issue:** GitHub answers `404 - Cannot find a valid ref in 5bcb6881…/src/beadloom/site_scaffold/…` for every node: the link names the built commit, which exists on no remote branch.
+    **Expected:** when the built commit is on no remote branch (`git branch -r --contains`), the link names the branch or the remote's default branch, and the card says the portal was built from an unpublished commit. Tracked on `beadloom-be6e`.
+
+306. [2026-10-07] [MEDIUM] a box's card says `Debt 0` from the box's own score while its activity rolls up from its parts — two populations on one card, unnamed
+
+    **Severity:** medium (the number is right for the node and wrong for the question a box's card answers)
+    **Command:** the viewer's card on a box (`beadloom` at the overview)
+    **Context:** the owner selected the project box and read `Debt 0` beside `activity: hot, 59 commits`.
+    **Issue:** debt is the node's OWN reasons (stale_doc, oversized, high_fan_out, dormant), so a box with a fresh document and little own code reads 0 while `application` (3), `graph` (3), `tui` (2) sit inside it; activity on the same card is rolled up from the parts (BDL-078 ruling 6). Nothing names the two populations.
+    **Expected:** a box's card shows debt in two lines — own, and inside: N nodes with debt, the sum, by reason — and the box's `Inside` section carries the same numbers. Tracked on `beadloom-pre3`.
+
+305. [2026-10-07] [MEDIUM] `Rule findings: none` on a node card is indistinguishable from "lint never ran", and the 36 findings bound to no node are shown nowhere on the portal
+
+    **Severity:** medium (the class this project keeps meeting: a check silent about its own reach)
+    **Command:** the viewer's card; `beadloom lint`
+    **Context:** the owner saw `Rule findings: none` on most nodes and asked whether that was right. Measured: `lint` gives 0 errors and 70 warnings; 28 of 130 nodes carry 34 of them; 36 are bound to no node (`scenario-coverage` pointing at PRD lines, the population warnings of `site-fsd-layers`, `test-files-bind-to-a-node`, `scenarios-live-in-their-node-folder`).
+    **Issue:** `none` is correct for 102 nodes and says nothing about whether lint ran or over what; the 36 project-level findings are invisible on the portal.
+    **Expected:** the card names the population (`none — this project: 0 errors, 70 warnings on 28 nodes`) and project-level findings have a home on the project box's card and the dashboard. Tracked on `beadloom-pre3`.
+
