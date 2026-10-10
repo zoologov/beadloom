@@ -26,3 +26,12 @@ Feature: a node page that moved to another section is retired from the old one
     When docs site rewrites the portal
     Then the portal node's page is "services/atlas-portal.md" and the project's own page stays under "other/"
     And the scaffold line counts 0 moved pages retired
+
+  # The release review (`beadloom-g0a0`, major 1): a node id may hold a slash and
+  # its page is then nested. The run read the id from the file name, so the page
+  # of `x/b` looked like a page `b` had left, and `services/b.md` was removed.
+  Scenario: a fresh portal keeps the page of every node, a node id holding a slash included
+    Given a project with the service nodes "b" and "x/b"
+    When docs site rewrites the portal
+    Then the portal has the pages "services/b.md" and "services/x/b.md"
+    And the scaffold line counts 0 moved pages retired

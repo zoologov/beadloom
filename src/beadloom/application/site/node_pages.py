@@ -64,10 +64,15 @@ class NodeRow:
 
 @dataclass(frozen=True)
 class NodePage:
-    """A rendered node page: its relative output path + Markdown body."""
+    """A rendered node page: its relative output path + Markdown body, and whose it is.
+
+    ``ref_id`` is the node's id as declared, which may hold a ``/`` and then nests
+    the page: the path cannot be read back into the id, so the page carries it.
+    """
 
     rel_path: str  # e.g. "domains/application.md"
     body: str
+    ref_id: str
 
 
 def load_nodes(conn: sqlite3.Connection) -> list[NodeRow]:
@@ -352,7 +357,7 @@ def render_node_page(
     lines.extend(_graph_section(node.ref_id))
 
     rel_path = f"{node_page_path(node.kind, node.ref_id)}.md"
-    return NodePage(rel_path=rel_path, body="\n".join(lines) + "\n")
+    return NodePage(rel_path=rel_path, body="\n".join(lines) + "\n", ref_id=node.ref_id)
 
 
 def is_page_of(text: str, ref_id: str) -> bool:

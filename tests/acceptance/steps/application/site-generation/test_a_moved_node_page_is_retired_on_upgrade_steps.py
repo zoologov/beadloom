@@ -105,6 +105,18 @@ def _override(world: dict[str, Any], rel: str) -> None:
     own.write_text(_OWN_PAGE, encoding="utf-8")
 
 
+@given(parsers.parse('a project with the service nodes "{first}" and "{second}"'))
+def _two_services(world: dict[str, Any], first: str, second: str) -> None:
+    graph_dir = world["root"] / ".beadloom" / "_graph"
+    graph_dir.mkdir(parents=True)
+    nodes = "".join(
+        f"  - ref_id: {ref}\n    kind: service\n    summary: The {ref} service.\n"
+        for ref in (first, second)
+    )
+    (graph_dir / "services.yml").write_text(f"nodes:\n{nodes}", encoding="utf-8")
+    reindex(world["root"])
+
+
 @when("docs site rewrites the portal")
 def _rewrite(world: dict[str, Any]) -> None:
     args = ["docs", "site", "--project", str(world["root"]), "--out", str(world["site"])]
@@ -129,6 +141,13 @@ def _kept(world: dict[str, Any], page: str, other: str) -> None:
     site: Path = world["site"]
     assert (site / page).is_file()
     assert (site / other / f"{PORTAL}.md").read_text(encoding="utf-8") == _OWN_PAGE
+
+
+@then(parsers.parse('the portal has the pages "{first}" and "{second}"'))
+def _both(world: dict[str, Any], first: str, second: str) -> None:
+    site: Path = world["site"]
+    assert (site / first).is_file()
+    assert (site / second).is_file()
 
 
 @then(parsers.parse("the scaffold line counts {count:d} moved pages retired"))

@@ -714,7 +714,7 @@ def generate_site(
         written.append(out_dir / rel)
     # A node page an earlier version wrote under a section its node has left.
     moved_pages = retire_moved_pages(
-        out_dir, (page.rel_path for page in node_pages), keep=set(scaffold.overridden)
+        out_dir, node_pages, keep=set(scaffold.overridden)
     )
 
     return SiteResult(

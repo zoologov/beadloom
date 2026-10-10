@@ -20,10 +20,9 @@ removed with it, as the scaffold's retired files do.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
-from beadloom.application.site.node_pages import NODE_PAGE_SECTIONS, is_page_of
+from beadloom.application.site.node_pages import NODE_PAGE_SECTIONS, NodePage, is_page_of
 from beadloom.application.site.scaffold import retire_emptied_folders
 
 if TYPE_CHECKING:
@@ -49,26 +48,29 @@ def _is_beadloom_page(path: Path, ref_id: str) -> bool:
 
 
 def retire_moved_pages(
-    out_dir: Path, pages: Iterable[str], *, keep: Collection[str] = ()
+    out_dir: Path, pages: Iterable[NodePage], *, keep: Collection[str] = ()
 ) -> RetiredPages:
     """Remove the page of each node in *pages* that beadloom wrote under another section.
 
+    The old path is built from the node's own id, never read back out of the new
+    path: an id may hold a ``/``, so ``services/x/b.md`` is the page of ``x/b`` and
+    says nothing about ``b``. No path this run wrote is ever a candidate.
+
     Args:
         out_dir: The portal's root.
-        pages: Every node page this run wrote, relative to *out_dir* (``<section>/<ref>.md``).
+        pages: Every node page this run wrote.
         keep: Paths relative to *out_dir* never removed: the project's overrides.
     """
+    pages = list(pages)
+    protected = {page.rel_path for page in pages} | set(keep)
     retired: list[str] = []
-    for rel in pages:
-        page = PurePosixPath(rel)
-        ref_id = page.stem
+    for page in pages:
         for section in NODE_PAGE_SECTIONS:
-            old = f"{section}/{page.name}"
-            if section == page.parent.as_posix() or old in keep:
+            old = f"{section}/{page.ref_id}.md"
+            if old in protected or not _is_beadloom_page(out_dir / old, page.ref_id):
                 continue
-            if _is_beadloom_page(out_dir / old, ref_id):
-                (out_dir / old).unlink()
-                retired.append(old)
+            (out_dir / old).unlink()
+            retired.append(old)
     retired.sort()
     folders = retire_emptied_folders(out_dir, retired)
     return RetiredPages(pages=tuple(retired), folders=tuple(folders))

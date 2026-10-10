@@ -236,11 +236,13 @@ One feature node covers the cooperating modules below (all annotated
   shared with the Pages workflow. `ScaffoldReport` counts `written`, `updated`, `unchanged`,
   `retired`, `retired_folders`, `kept` and `overridden`.
 - **moved_pages.py** — a node's page retired from a section the node's page has left (BDL-081
-  R2). `retire_moved_pages(out_dir, pages, *, keep=())` takes every node page the run wrote
-  (`<section>/<ref>.md`) and, for each other section of `NODE_PAGE_SECTIONS`, removes the file
-  of the same name when `node_pages.is_page_of` reads it as that ref's page. A symlink, a file
-  that cannot be read as text, a page that opens otherwise and a path in `keep` (the project's
-  `.beadloom/site/` overrides) stay. A section the removals leave empty goes through
+  R2). `retire_moved_pages(out_dir, pages, *, keep=())` takes every `NodePage` the run wrote
+  and, for each section of `NODE_PAGE_SECTIONS`, removes `<section>/<ref_id>.md` when
+  `node_pages.is_page_of` reads it as that ref's page. The path is built from the page's own
+  `ref_id`, never read back out of its path: an id may hold a `/` and nests its page, so
+  `services/x/b.md` says nothing about `b` (the release review, `beadloom-g0a0`). A path this
+  run wrote, a symlink, a file that cannot be read as text, a page that opens otherwise and a
+  path in `keep` (the project's `.beadloom/site/` overrides) stay. A section the removals leave empty goes through
   `scaffold.retire_emptied_folders`. It returns `RetiredPages(pages, folders)`, both sorted,
   which `generate_site` carries as `SiteResult.moved_pages` and the CLI counts on the scaffold
   line, the folders with the empty folders.
@@ -1035,7 +1037,8 @@ Module `src/beadloom/application/site/landscape_view.py`:
   the `landscape-diagram` Mermaid fallback (pure function of `data`)
 
 Module `src/beadloom/application/site/node_pages.py`:
-- `NodeRow` / `NodePage` — frozen dataclasses for a graph node and its rendered page
+- `NodeRow` / `NodePage` — frozen dataclasses for a graph node and its rendered page; a
+  `NodePage` carries the `ref_id` it was rendered for (BDL-081 R2)
 - `load_nodes(conn)` -> `list[NodeRow]`; `render_all_pages(conn, portal=None)` -> sorted
   `list[NodePage]`, one per node; `render_node_page(conn, node, kinds, portal=None)` ->
   `NodePage`, whose summary is project text and whose last section mounts `ArchitectureMap`

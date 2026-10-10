@@ -74,11 +74,11 @@ BDL-081 in the pull request this release is cut from. Each line names its bead.
   Measured on the two Feature-Sliced adopter fixtures: on `vue-fsd`, 8.0.0 chooses `monolith`
   and exits 0, and 9.0.0 chooses `fsd` and exits 1 with `fsd-layers: features-apply-coupon;
   fsd-public-api: src/widgets/product-grid/ui/ProductGrid.vue:3`; on `rn-fsd` both exit 0. On
-  each, 9.0.0 writes 21 document skeletons fewer than 8.0.0 (`docs/domains/*/README.md` and
-  `docs/services/shared*.md`), because a layer or a slice is no longer written as a domain or a
-  service. The old reading was wrong: it judged a Feature-Sliced tree by no Feature-Sliced
-  rule. A tree whose folders share the layer names but hold no frontend is still read as 8.0.0
-  read it (under *Fixed*). *Upgrade:* step 4.
+  each, 9.0.0 writes 21 document skeletons fewer than 8.0.0 (`docs/domains/*/README.md`,
+  `docs/services/shared*.md` and `docs/domains/shared/features/shared-api/SPEC.md`), because a
+  layer or a slice is no longer written as a domain or a service. The old reading was wrong: it
+  judged a Feature-Sliced tree by no Feature-Sliced rule. A tree whose folders share the layer
+  names but hold no frontend is still read as 8.0.0 read it (under *Fixed*). *Upgrade:* step 4.
 - **Configuration 8.0.0 accepted by ignoring it is now read or refused (`beadloom-cwzc`,
   `beadloom-kgh6`, `beadloom-af99.2`, `beadloom-5wh2`).** Four places, each measured on the same
   files under both versions:
@@ -126,9 +126,10 @@ BDL-081 in the pull request this release is cut from. Each line names its bead.
 6. **If you publish a portal, run `docs site` with 9.0.0 over it.** The run retires the scaffold
    files 8.0.0 wrote and 9.0.0 no longer ships, the folders they leave empty, and the page of a
    `kind: site` node under `other/`, and its summary line counts each. Measured on this
-   repository's portal written by 8.0.0: `67 written, 51 updated, 91 unchanged, 42 retired, 9
-   empty folders retired, 1 moved pages retired`. A link of your own to `other/<ref>.md` now
-   needs `services/<ref>.md`.
+   repository's portal written by 8.0.0: `67 written, 142 updated, 0 unchanged, 42 retired, 9
+   empty folders retired, 1 moved pages retired`; every scaffold file 8.0.0 wrote is updated,
+   because its marker names the version that wrote it. A link of your own to `other/<ref>.md`
+   now needs `services/<ref>.md`.
 7. **If you read a node's kind**, match `service` where you matched `site`: in `ctx --json`,
    `export`, the MCP `get_context` tool and the portal data file. In `status --json`, read the
    node under `by_kind.service`, since `by_kind.site` is gone.
@@ -427,8 +428,9 @@ BDL-081 in the pull request this release is cut from. Each line names its bead.
   the front matter and heading `docs site` writes on a node page is removed, never a path
   `.beadloom/site/` provides, and the scaffold line counts it: `..., N empty folders retired, M
   moved pages retired, K copied from .beadloom/site/`. Measured on this repository's portal
-  written by the released 8.0.0: `67 written, 51 updated, 91 unchanged, 42 retired, 9 empty
-  folders retired, 1 moved pages retired`, and `other/vitepress-site.md` is gone.
+  written by the released 8.0.0 and rewritten by 9.0.0: `67 written, 142 updated, 0 unchanged,
+  42 retired, 9 empty folders retired, 1 moved pages retired`, and `other/vitepress-site.md` is
+  the only page removed.
 - **A JS/TS specifier names a file by its exact case, on every filesystem (`beadloom-af99.12`).**
   On a filesystem that folds case (macOS) `./app` beside `src/App.vue` and `src/app/index.ts`
   resolved to `App.vue`: `src/app.vue` answered for `App.vue`, and the `.vue` candidate precedes
