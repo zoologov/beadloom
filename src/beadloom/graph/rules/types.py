@@ -729,7 +729,10 @@ class SliceShapeRule:
 
     A *group* — a folder between a sliced layer's folder and its slices that no node
     claims (RFC D2) — shares no code, so a code file at its top is a finding as well.
-    Hidden entries and files that are not code (``README.md``) are not judged.
+    Hidden entries and files that are not code (``README.md``) are not judged, and neither
+    is an unsliced layer's node or its segments (a node ``part_of`` a node sharing its tag):
+    a layer is no slice, so ``app/store`` and ``app/main.ts`` are no finding, where Steiger's
+    ``segments-by-purpose`` reports ``app/store``.
 
     YAML::
 

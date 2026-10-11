@@ -42,6 +42,8 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.exact_case import first_existing_file
 from beadloom.graph.js_specifiers import (
+    MODULE_EXTENSIONS,
+    PLATFORM_SUFFIXES,
     is_relative_specifier,
     module_file_candidates,
     relative_import_candidates,
@@ -93,13 +95,29 @@ def located(specifier: str, importer: str, folder: str, project_root: Path) -> s
     return None
 
 
+def _module_name(file_name: str) -> str:
+    """*file_name* without its code extension and a platform suffix, if it has them.
+
+    ``artist.ios.tsx`` names ``artist``; ``artist.test.ts`` names ``artist.test``, which is no
+    API opened to the slice ``artist``.
+    """
+    name, extension = posixpath.splitext(file_name)
+    if extension not in MODULE_EXTENSIONS:
+        return file_name
+    base, platform = posixpath.splitext(name)
+    return base if platform in PLATFORM_SUFFIXES else name
+
+
 def cross_import_name(path: str, folder: str) -> str | None:
-    """The slice name ``B`` when *path* is ``<folder>/@x/B.*`` or ``<folder>/@x/B/index.*``."""
+    """The slice name ``B`` when *path* is ``<folder>/@x/B.*`` or ``<folder>/@x/B/index.*``.
+
+    ``B.*`` is a code extension, with a platform suffix before it or not.
+    """
     if not inside(path, folder):
         return None
     match path[len(folder) + 1 :].split("/"):
         case [head, file_name] if head == CROSS_IMPORT_FOLDER:
-            return stem(file_name)
+            return _module_name(file_name)
         case [head, slice_name, file_name] if head == CROSS_IMPORT_FOLDER and (
             stem(file_name) == INDEX
         ):

@@ -333,15 +333,18 @@ def evaluate_slice_shape_rules(
 ) -> list[Violation]:
     """Every discouraged folder and stray code file at a slice's top, and code in a group.
 
-    A segment of ``shared`` or ``app`` is not judged: its top is its content.
+    Only slices are judged. A segment of ``shared`` or ``app`` is not, because its top is its
+    content; nor is the layer that holds the segments, its container, because a layer is no
+    slice: neither the names of its segments nor a code file at its top are a finding
+    (``/docs/reference/layers`` lists ``store``, ``routes``, ``styles`` and ``entrypoint`` as
+    segments of App). This differs from Steiger, whose ``segments-by-purpose`` also judges an
+    unsliced layer's segment names and reports ``app/store``.
     """
     root = project_root if project_root is not None else Path.cwd()
     violations: list[Violation] = []
     for rule in rules:
         units = read_units(conn, rule.tags, root)
-        for slice_ref in sorted(units.folders):
-            if units.is_segment(slice_ref):
-                continue
+        for slice_ref in units.slices():
             for message in _shape_messages(rule, slice_ref, root / units.folders[slice_ref]):
                 violations.append(_shape_violation(rule, message, slice_ref=slice_ref))
         violations.extend(_group_findings(rule, units, root))

@@ -212,10 +212,16 @@ def test_a_segment_of_the_app_layer_is_not_judged_for_shape_and_a_slice_is(
     """``/docs/reference/layers``: App and Shared "are made up of segments" — a segment's top
     is its content, so a ``hooks/`` folder inside ``app/routes`` is no finding even under a
     shape rule that carries the app layer's tag, while a slice's ``store/`` folder is one.
+
+    The layer itself is no slice either (S1 review, minor 2): ``app/store`` is a segment the
+    same page lists for App, and ``app/main.ts`` is code at the layer's top, and neither is a
+    shape finding. Steiger reports ``app/store`` (``segments-by-purpose``); Beadloom does not.
     """
     files = {
         **_SONG_AND_ARTIST,
         "src/app/routes/hooks/use-route.ts": "export const useRoute = 1\n",
+        "src/app/store/index.ts": "export const store = {}\n",
+        "src/app/main.ts": "export const main = 1\n",
         "src/entities/song/store/song-store.ts": "export const songStore = 1\n",
     }
     root = _project(tmp_path, files)

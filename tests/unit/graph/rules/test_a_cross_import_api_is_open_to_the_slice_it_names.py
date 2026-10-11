@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from beadloom.graph.rules.cross_imports import cross_import_name
 from beadloom.graph.rules.slices import evaluate_slice_public_api_rules
 from beadloom.graph.rules.types import SlicePublicApiRule
 from tests.support.in_memory_graph import open_graph
@@ -172,3 +173,22 @@ def test_a_cross_import_api_off_the_entities_layer_is_left_to_the_layer_rule(
     _import(conn, "src/features/b/model/b.ts", "@/features/a/@x/b", "features-a")
 
     assert _findings(conn, tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    ("file_name", "opened_to"),
+    [
+        ("artist.ts", "artist"),
+        ("artist.ios.tsx", "artist"),
+        ("artist.test.ts", "artist.test"),
+        ("artist.stories.web.tsx", "artist.stories"),
+    ],
+)
+def test_the_slice_an_api_is_opened_to_is_the_file_name_without_its_extension(
+    file_name: str, opened_to: str
+) -> None:
+    # Only the code extension and a platform suffix come off: `@x/artist.test.ts` is no API
+    # opened to `artist` (S1 review, nit).
+    path = f"src/entities/song/@x/{file_name}"
+
+    assert cross_import_name(path, "src/entities/song") == opened_to
