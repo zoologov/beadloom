@@ -26,6 +26,11 @@ from beadloom.graph.js_specifiers import (
 )
 from beadloom.graph.jvm_packages import JVM_EXTENSIONS, JvmPackages, read_jvm_packages
 from beadloom.graph.project_walk import ProjectFiles
+from beadloom.graph.rules.cross_imports import (
+    edge_cross_import,
+    edge_extra,
+    names_cross_import,
+)
 from beadloom.graph.rules.layers import part_of_ancestors
 from beadloom.graph.swift_packages import SwiftPackages
 from beadloom.graph.tsconfig_paths import TsConfigs
@@ -34,10 +39,12 @@ from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Collection, Iterator, Sequence
+    from collections.abc import Collection, Iterator, Mapping, Sequence
     from pathlib import Path
 
     from tree_sitter import Node as TSNode
+
+    from beadloom.graph.rules.cross_imports import CrossImportFact
 
 
 # Rust built-in crates to skip.
@@ -1211,7 +1218,6 @@ def _part_of_ancestors(conn: sqlite3.Connection) -> dict[str, set[str]]:
 # delete the derived set without touching a declared edge. ``INSERT OR IGNORE``
 # means a pair declared in YAML keeps the YAML row (and stays unmarked).
 _DERIVED_BY_IMPORTS = "imports"
-_DERIVED_EDGE_EXTRA = json.dumps({"derived": _DERIVED_BY_IMPORTS}, ensure_ascii=False)
 
 
 def delete_derived_import_edges(conn: sqlite3.Connection) -> int:
@@ -1228,19 +1234,66 @@ def delete_derived_import_edges(conn: sqlite3.Connection) -> int:
     return int(cursor.rowcount or 0)
 
 
-def refresh_import_edges(conn: sqlite3.Connection) -> int:
+def refresh_import_edges(conn: sqlite3.Connection, *, project_root: Path | None = None) -> int:
     """Rebuild the derived ``depends_on`` edge set from ``code_imports``.
 
-    The derived edges are a pure function of the ``code_imports`` table, so a
-    refresh is delete-then-recreate. Doing only the recreate half is how a
-    removed import kept a dependency edge alive for the cycle and layer rules
-    to trip over (the mirror image of BDL-UX #142).
+    The derived edges are a pure function of the ``code_imports`` table and, for
+    their ``@x`` fact, of the files under *project_root*, so a refresh is
+    delete-then-recreate. Doing only the recreate half is how a removed import
+    kept a dependency edge alive for the cycle and layer rules to trip over (the
+    mirror image of BDL-UX #142).
     """
     delete_derived_import_edges(conn)
-    return create_import_edges(conn)
+    return create_import_edges(conn, project_root=project_root)
 
 
-def create_import_edges(conn: sqlite3.Connection) -> int:
+def _imports_by_edge_end(
+    conn: sqlite3.Connection,
+) -> dict[tuple[str, str], list[tuple[str, int, str]]]:
+    """``(file, line, specifier)`` of every resolved import, by ``(file, resolved node)``."""
+    found: dict[tuple[str, str], list[tuple[str, int, str]]] = {}
+    for file_path, line, specifier, resolved in conn.execute(
+        "SELECT file_path, line_number, import_path, resolved_ref_id FROM code_imports "
+        "WHERE resolved_ref_id IS NOT NULL"
+    ).fetchall():
+        found.setdefault((str(file_path), str(resolved)), []).append(
+            (str(file_path), int(line), str(specifier))
+        )
+    return found
+
+
+def _cross_import_facts(
+    conn: sqlite3.Connection,
+    edges: Mapping[tuple[str, str], list[str]],
+    project_root: Path,
+) -> dict[tuple[str, str], CrossImportFact]:
+    """The ``@x`` fact of each edge whose imports name ``@x`` (BDL-082 RFC D1).
+
+    *edges* maps each derived edge to the importing files behind it. Only an edge one
+    of whose imports names an ``@x`` segment is located, so a project without the
+    notation pays one string test per import.
+    """
+    imports = _imports_by_edge_end(conn)
+    sources = dict(
+        conn.execute("SELECT ref_id, source FROM nodes WHERE source IS NOT NULL").fetchall()
+    )
+    facts: dict[tuple[str, str], CrossImportFact] = {}
+    for (source, target), files in edges.items():
+        rows = [row for file in files for row in imports.get((file, target), ())]
+        if not any(names_cross_import(specifier) for _, _, specifier in rows):
+            continue
+        fact = edge_cross_import(
+            rows,
+            str(sources.get(source) or "").rstrip("/"),
+            str(sources.get(target) or "").rstrip("/"),
+            project_root,
+        )
+        if fact is not None:
+            facts[(source, target)] = fact
+    return facts
+
+
+def create_import_edges(conn: sqlite3.Connection, *, project_root: Path | None = None) -> int:
     """Create ``depends_on`` edges from resolved code imports.
 
     For each resolved import, finds the importing file's owning node
@@ -1257,6 +1310,11 @@ def create_import_edges(conn: sqlite3.Connection) -> int:
     made such a node report "depends on nothing", which is false — and a
     confidently wrong answer is worse than a coarse one.
 
+    With *project_root*, an edge records whether its imports go through the
+    target's ``@x`` cross-import API (:mod:`beadloom.graph.rules.cross_imports`,
+    BDL-082 RFC D1): ``via: "@x"`` when every one does, ``partly_via`` and
+    ``not_via`` when some do. Without it no edge records the fact.
+
     Returns the number of edges created.
     """
     rows = conn.execute(
@@ -1265,8 +1323,8 @@ def create_import_edges(conn: sqlite3.Connection) -> int:
     ).fetchall()
 
     ancestors = _part_of_ancestors(conn)
-    edges_created = 0
-    seen: set[tuple[str, str]] = set()
+    # Each edge, in the order it is first met, with the importing files behind it.
+    edges: dict[tuple[str, str], list[str]] = {}
 
     for row in rows:
         rel_path: str = row[0]
@@ -1278,21 +1336,18 @@ def create_import_edges(conn: sqlite3.Connection) -> int:
         # Drop only parent -> child (the container depending on its own part).
         if source_ref_id in ancestors.get(target_ref_id, ()):
             continue
+        edges.setdefault((source_ref_id, target_ref_id), []).append(rel_path)
 
-        edge_key = (source_ref_id, target_ref_id)
-        if edge_key in seen:
-            continue
-        seen.add(edge_key)
-
+    facts = _cross_import_facts(conn, edges, project_root) if project_root is not None else {}
+    for edge_key in edges:
         conn.execute(
             "INSERT OR IGNORE INTO edges (src_ref_id, dst_ref_id, kind, extra) "
             "VALUES (?, ?, 'depends_on', ?)",
-            (source_ref_id, target_ref_id, _DERIVED_EDGE_EXTRA),
+            (*edge_key, edge_extra(_DERIVED_BY_IMPORTS, facts.get(edge_key))),
         )
-        edges_created += 1
 
     conn.commit()
-    return edges_created
+    return len(edges)
 
 
 _TS_EXTENSIONS = frozenset({*_SCRIPT_EXTENSIONS, _VUE_EXTENSION})
@@ -1484,7 +1539,7 @@ def index_imports(
     _record_manifests(conn, tree)
 
     # Create depends_on edges from resolved imports, and the bridges no import carries.
-    refresh_import_edges(conn)
+    refresh_import_edges(conn, project_root=project_root)
     refresh_bridge_edges(conn, tree.expo_modules)
 
     return total
@@ -1534,7 +1589,7 @@ def reindex_file_imports(
 
     conn.commit()
     _record_manifests(conn, tree)
-    refresh_import_edges(conn)
+    refresh_import_edges(conn, project_root=project_root)
     refresh_bridge_edges(conn, tree.expo_modules)
     return total
 

@@ -45,6 +45,7 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 316 | 2026-10-11 | medium | a `## Axes` section written as `###` subsections reads as zero rows, and the commit gate then calls every owned path outside the approval |
 | 315 | 2026-10-10 | medium | `sync-update <ref> --yes --pair <doc> --code <file>` reports 2 pairs attested and clears the doc's pairs with five other code files nobody read |
 | 314 | 2026-10-10 | medium | `write_text_atomic` and `write_yaml_atomic` leave every file they write at mode 0600, so a 0644 file edited by `init` becomes owner-only and `rules.yml` is born unreadable to the group |
 | 312 | 2026-10-10 | medium | a rule-level `scope:` is read only by `layers` rules and accepted without a word on every other rule type — a setting that looks configured and does nothing |
@@ -133,6 +134,14 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+316. [2026-10-11] [MEDIUM] a `## Axes` section written as `###` subsections reads as zero rows, and the commit gate then calls every owned path outside the approval
+
+    **Severity:** medium (an advisory that fires on every owned path is an advisory that gets ignored; the class of #178)
+    **Command:** the pre-commit scope check (`beadloom.application.declared_scope.scope_check`), `beadloom docs quality`
+    **Context:** BDL-082's S1a and S1b commits were warned `outside-the-declared-axes` for every `rule-engine` path, although the RFC's axes rule `rule-engine` in. Measured on `features/BDL-082` at `2ab2a56b`: the check reads `RFC.md` (the first file of the work item, in sorted order, that carries the heading), not `axes.md`. Its `## Axes` heading is followed by five tables, each under its own `### (a)` to `### (e)` subheading, one per derivation target. The section reader ends a section at the next heading of any level, so the `## Axes` body is one blank line: 0 rows, 0 kept nodes, 0 bounded contexts. Against `30605b71` all 14 owned paths of the branch are reported outside. `axes.md` reads the same way (0 rows).
+    **Issue:** two silences. The reader cuts the section at a subheading and says nothing about the tables below it, and `docs quality` reports those tables only as `NOT CLASSIFIED ... judged by nothing`, with no `empty-section` finding on a heading that read as zero rows. The check's verdict line states the paths it judged and never that it judged them against an empty scope.
+    **Expected:** a `## Axes` section reads the tables of its `###` subsections (the shape a work item with several derivation targets naturally takes), or a section that reads as zero rows is an `empty-section` finding and the scope check states "0 axes read" beside its verdict instead of reporting every path. `beadloom impact --section` writes one flat section, so the shape that trips this is hand-assembled. Found by S1T (`beadloom-wvzg`); for Debt to zero (`beadloom-ba9w`).
 
 315. [2026-10-10] [MEDIUM] `sync-update <ref> --yes --pair <doc> --code <file>` clears pairs it was not asked to attest
 

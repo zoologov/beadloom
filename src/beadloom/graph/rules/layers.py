@@ -293,11 +293,20 @@ def shares_tagged_ancestor(
     )
 
 
+#: The layer, by the name a ``layers:`` list gives it, whose slices may import each other
+#: through feature-sliced.design's ``@x`` notation (BDL-082 RFC D1). It is a NAME, not a
+#: tag: the specification fixes the name of its layers, and a project tags them as it
+#: likes, so the declaration is still what says which tag is in it.
+CROSS_IMPORT_LAYER = "entities"
+
+
 def same_layer_crossings(
     edges: Iterable[tuple[str, str]],
     layers: Sequence[LayerDef],
     parents: Mapping[str, Collection[str]],
     tags: Mapping[str, Collection[str]],
+    *,
+    via_x: Collection[tuple[str, str]] = (),
 ) -> list[tuple[str, str]]:
     """The edges of *edges* that run inside one layer between ends sharing no container.
 
@@ -305,6 +314,11 @@ def same_layer_crossings(
     rest of the layer rule's business, and an edge with an unlayered end is not
     judged at all. Order is the caller's, so a report over the result reads in
     the order the edge set was handed over rather than in a set's.
+
+    *via_x* are the edges every import of which goes through the target's ``@x``
+    cross-import API, the fact the reindex records on the edge (BDL-082 RFC D1). Such an
+    edge is no crossing when its layer is the one the declaration names ``entities``,
+    the only layer the specification gives the notation to; on any other layer it is.
     """
     crossings: list[tuple[str, str]] = []
     for src_ref_id, dst_ref_id in edges:
@@ -312,8 +326,11 @@ def same_layer_crossings(
         dst_layer = layer_of(dst_ref_id, layers, parents, tags)
         if src_layer is None or dst_layer is None or src_layer != dst_layer:
             continue
-        if not shares_tagged_ancestor(src_ref_id, dst_ref_id, layers, parents, tags):
-            crossings.append((src_ref_id, dst_ref_id))
+        if shares_tagged_ancestor(src_ref_id, dst_ref_id, layers, parents, tags):
+            continue
+        if layers[src_layer].name == CROSS_IMPORT_LAYER and (src_ref_id, dst_ref_id) in via_x:
+            continue
+        crossings.append((src_ref_id, dst_ref_id))
     return crossings
 
 

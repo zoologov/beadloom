@@ -65,6 +65,7 @@ from beadloom.graph.rule_engine import (
     own_layer_of,
     part_of_parents,
 )
+from beadloom.graph.rules import VIA_CROSS_IMPORT, VIA_KEY, read_cross_import_facts
 from beadloom.infrastructure.repository import count_symbols_owned_by_node
 
 if TYPE_CHECKING:
@@ -367,7 +368,10 @@ def _arch_edges(
       both ends — an edge no rule judged must not be drawn as healthy. The
       first rule's ranks are asked as well, which keeps the flag on every edge
       that carried one before every rule was read; they are its ranks inside its
-      ``scope:``, so an edge outside the scope is not called judged by it.
+      ``scope:``, so an edge outside the scope is not called judged by it. A
+      ``depends_on`` edge every import of which goes through the target's ``@x``
+      cross-import API carries ``via: "@x"`` too (BDL-082 RFC D1), the fact the
+      reindex recorded on it; an edge without that fact has no ``via`` key.
     - the four ``why`` lists, sorted + de-duplicated: what a node imports
       (``depends_on``) and who imports it, kept SEPARATE from what it ``uses``
       at runtime and who uses it. Merging them would assert an import binding
@@ -382,6 +386,11 @@ def _arch_edges(
         "ORDER BY kind, src_ref_id, dst_ref_id, contract_key"
     ).fetchall()
     flagged = strata.every.flagged(conn)
+    via_x = {
+        edge
+        for edge, fact in read_cross_import_facts(conn, _FLAGGED_EDGE_KIND).items()
+        if fact.every
+    }
     first = strata.first
     edges: list[dict[str, object]] = []
     depends_on: dict[str, set[str]] = {}
@@ -399,6 +408,8 @@ def _arch_edges(
             judged_by_first = first.rank(src) is not None and first.rank(dst) is not None
             if judged_by_first or strata.every.judges(src, dst):
                 edge["violation"] = (src, dst) in flagged
+            if (src, dst) in via_x:
+                edge[VIA_KEY] = VIA_CROSS_IMPORT
         elif kind == "uses":
             uses.setdefault(src, set()).add(dst)
             used_by.setdefault(dst, set()).add(src)

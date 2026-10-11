@@ -70,6 +70,11 @@ because every key is added and none changes meaning for a project without `scope
 - per `depends_on` edge, `violation` is `true` when ANY rule finds against the edge. The key is
   absent on an edge no rule judged, never `false`.
 
+Since BDL-082 S1a a `depends_on` edge every import of which goes through the target's `@x`
+cross-import API also carries `via: "@x"`, the fact the reindex recorded on it. An edge without
+that fact has no `via` key, and the file stays schema 2. The viewer's `architecture-data` slice
+does not read the key.
+
 `layers`, `layer_order` and each node's `layer` and `layer_rank` still describe the first
 `layers` rule by name, and since BDL-080 S1f they follow that rule's `scope:`: a node outside the
 scope has `layer` `""` and `layer_rank` `null` even when it carries the rule's tag, and an edge

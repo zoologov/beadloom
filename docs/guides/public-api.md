@@ -59,6 +59,9 @@ makes it.
    vocabulary as much as on the key that carries it. The portal's other JSON files,
    `dashboard.data.json` and `landscape.data.json`, are not outputs on this list: their keys
    carry no promise (item 5).
+   Key added after 9.0.0 (BDL-082 S1a, unreleased): an edge of `export` carries `via` with the
+   vocabulary `@x` when every import behind the edge goes through the target slice's `@x`
+   cross-import API, and no `via` key otherwise. The export stays `schema_version` 2.
 4. **The MCP tools** the server lists, with their arguments and the keys of what they return. The
    reference is [`docs/services/mcp.md`](../services/mcp.md).
 5. **The portal data file's schema**: the `schema_version` the generator writes and the keys under
@@ -86,6 +89,9 @@ makes it.
    [`dashboard-data.md`](../services/vitepress-site/dashboard-data.md), the second is described
    in [`landscape-data.md`](../services/vitepress-site/landscape-data.md), and neither carries a
    promise.
+   Key added after 9.0.0 (BDL-082 S1a, unreleased): a `depends_on` edge carries `via` with the
+   vocabulary `@x`, on the same edges and with the same meaning as in `export` (item 3), beside
+   `violation`. The file stays schema 2.
 6. **The files generated for an adopter**: what `init`, `docs site`, `docs generate`,
    `setup-agentic-flow`, `setup-rules`, `setup-mcp` and `install-hooks` write into a project,
    their paths and what they mean to the project that receives them. That covers every file
@@ -104,6 +110,16 @@ makes it.
    `lint:fsd` script in `package.json`; and, for any project whose `babel.config.*`,
    `.babelrc` or `vite.config.*` declares aliases, the `imports.aliases` block of
    `.beadloom/config.yml`.
+   Key added after 9.0.0 (BDL-082 S1b, unreleased): `discouraged:` of a `slice_shape` rule, a
+   list of folder names a slice's top is discouraged from holding. Omitted, it is the 69 names
+   of the `segments-by-purpose` rule of `@feature-sliced/steiger-plugin`, in the release the
+   portal scaffold pins. `segments:` keeps its
+   meaning as the known-good set. The FSD rules follow the specification's text where it and
+   Steiger differ: `@x` is accepted on the entities layer only, an `@x` API is open to the one
+   slice it names, an `@x` pair declared in the graph YAML is a crossing, and `app/store` is
+   no finding. The
+   [rule-engine SPEC](../domains/graph/features/rule-engine/SPEC.md#where-beadloom-and-steiger-differ)
+   lists the differences as measured.
 
 **The promise.** Within one major version, nothing on this list is removed, renamed or changed
 in a way that breaks a reader that used it as documented. A release that does any of those is a

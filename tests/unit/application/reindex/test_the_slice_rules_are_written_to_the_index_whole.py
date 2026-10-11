@@ -1,13 +1,18 @@
 """The two FSD slice rules reach the ``rules`` table whole (BDL-080 S3c).
 
 A reader of the index must not see a narrower rule than the one that runs, so a
-``slice_shape`` rule's segments are stored even when the rule took the default ones.
+``slice_shape`` rule's segments, and since BDL-082 S1b its discouraged names, are stored
+even when the rule took the default ones.
 """
 
 from __future__ import annotations
 
 from beadloom.application.reindex.rules_loader import _serialize_rule
-from beadloom.graph.rules.types import SlicePublicApiRule, SliceShapeRule
+from beadloom.graph.rules.types import (
+    DEFAULT_DISCOURAGED_SEGMENTS,
+    SlicePublicApiRule,
+    SliceShapeRule,
+)
 
 
 def test_the_public_api_rule_is_stored_with_its_tags() -> None:
@@ -21,5 +26,17 @@ def test_the_shape_rule_is_stored_with_its_default_segments() -> None:
 
     assert _serialize_rule(rule) == (
         "slice_shape",
-        {"tags": ["fsd-pages"], "segments": ["ui", "model", "lib", "api", "config"]},
+        {
+            "tags": ["fsd-pages"],
+            "segments": ["ui", "model", "lib", "api", "config"],
+            "discouraged": list(DEFAULT_DISCOURAGED_SEGMENTS),
+        },
     )
+
+
+def test_the_shape_rule_is_stored_with_its_own_discouraged_names() -> None:
+    rule = SliceShapeRule(
+        name="fsd-slice-shape", description="", tags=("fsd-pages",), discouraged=("misc",)
+    )
+
+    assert _serialize_rule(rule)[1]["discouraged"] == ["misc"]

@@ -18,6 +18,7 @@ from beadloom.graph.rules.layer_reach import part_of_parents
 from beadloom.graph.rules.layers import within_scope
 from beadloom.graph.rules.node_tags import node_tags
 from beadloom.graph.rules.types import (
+    DEFAULT_DISCOURAGED_SEGMENTS,
     DEFAULT_DOC_AREA_MIN_SUPPORT,
     DEFAULT_DOC_AREA_THRESHOLD,
     DEFAULT_SLICE_SEGMENTS,
@@ -494,9 +495,7 @@ def _parse_layer_rule(
     if not isinstance(exempt_raw, list):
         msg = f"Rule '{name}': layers.exempt must be a list"
         raise ValueError(msg)
-    exempt = tuple(
-        _parse_layer_exemption(name, i, entry) for i, entry in enumerate(exempt_raw)
-    )
+    exempt = tuple(_parse_layer_exemption(name, i, entry) for i, entry in enumerate(exempt_raw))
 
     return LayerRule(
         name=name,
@@ -791,8 +790,7 @@ def _parse_scenario_coverage_rule(
         msg = f"Rule '{name}': scenario_coverage.non_behavioural must be a list"
         raise ValueError(msg)
     declarations = tuple(
-        _parse_non_behavioural(name, index, entry)
-        for index, entry in enumerate(declarations_raw)
+        _parse_non_behavioural(name, index, entry) for index, entry in enumerate(declarations_raw)
     )
 
     return ScenarioCoverageRule(
@@ -829,9 +827,7 @@ def _parse_doc_area_coherence_rule(
     which depends on the project's size rather than on Beadloom.
     """
     threshold = _parse_threshold(name, data.get("threshold", DEFAULT_DOC_AREA_THRESHOLD))
-    min_support = _parse_min_support(
-        name, data.get("min_support", DEFAULT_DOC_AREA_MIN_SUPPORT)
-    )
+    min_support = _parse_min_support(name, data.get("min_support", DEFAULT_DOC_AREA_MIN_SUPPORT))
     return DocAreaCoherenceRule(
         name=name,
         description=description,
@@ -915,9 +911,7 @@ def _parse_summary_facts_rule(
     return SummaryFactsRule(name=name, description=description, severity=severity)
 
 
-def _parse_non_behavioural(
-    rule_name: str, index: int, entry: object
-) -> NonBehaviouralNode:
+def _parse_non_behavioural(rule_name: str, index: int, entry: object) -> NonBehaviouralNode:
     """Parse one ``non_behavioural`` declaration, both fields mandatory."""
     where = f"Rule '{rule_name}': scenario_coverage.non_behavioural[{index}]"
     if not isinstance(entry, dict):
@@ -1154,6 +1148,7 @@ def _parse_slice_shape_rule(
           slice_shape:
             tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
             segments: [ui, model, lib, api, config]
+            discouraged: [components, hooks, types]   # Steiger's 69 names when omitted
     """
     tags = _parse_name_list(
         name, "slice_shape.tags", data.get("tags"), "tags, the tags a slice carries"
@@ -1164,9 +1159,64 @@ def _parse_slice_shape_rule(
         if segments_raw is None
         else _parse_name_list(name, "slice_shape.segments", segments_raw, "folder names")
     )
-    return SliceShapeRule(
-        name=name, description=description, tags=tags, segments=segments, severity=severity
+    discouraged_raw = data.get(_DISCOURAGED_KEY)
+    discouraged = (
+        DEFAULT_DISCOURAGED_SEGMENTS
+        if discouraged_raw is None
+        else _parse_discouraged(name, discouraged_raw)
     )
+    return SliceShapeRule(
+        name=name,
+        description=description,
+        tags=tags,
+        segments=segments,
+        discouraged=discouraged,
+        severity=severity,
+    )
+
+
+#: The ``slice_shape`` key naming the segment names a slice is discouraged from holding.
+_DISCOURAGED_KEY = "discouraged"
+
+
+def _parse_discouraged(name: str, raw: object) -> tuple[str, ...]:
+    """``slice_shape.discouraged``: a list of folder names, empty to discourage none.
+
+    Unlike ``segments`` the list may be empty: an empty deny-list is a project saying it
+    discourages no name, and the rule still judges the code files at a slice's top.
+    """
+    if not isinstance(raw, list) or not all(
+        isinstance(item, str) and item.strip() for item in raw
+    ):
+        msg = (
+            f"Rule '{name}': 'slice_shape.{_DISCOURAGED_KEY}' must be a list of folder "
+            f"names, each a non-empty string"
+        )
+        raise ValueError(msg)
+    return tuple(item.strip() for item in raw)
+
+
+def _refuse_a_key_of_another_type(name: str, key: str, rule_data: dict[str, object]) -> None:
+    """Refuse ``discouraged:`` declared for a rule type that does not read it (BDL-082).
+
+    A key a type does not read is ignored by its parser, so ``discouraged:`` written under
+    ``slice_public_api`` — or beside the rule's type key — would look configured and do
+    nothing. It is the one key of ``slice_shape`` another type could plausibly be handed.
+    """
+    block = rule_data.get(key)
+    if _DISCOURAGED_KEY in rule_data and key != _KEY_READ_FROM_THE_RULE:
+        where = "the rule"
+    elif key != "slice_shape" and (
+        _DISCOURAGED_KEY in rule_data or (isinstance(block, dict) and _DISCOURAGED_KEY in block)
+    ):
+        where = f"'{key}'"
+    else:
+        return
+    msg = (
+        f"Rule '{name}': '{_DISCOURAGED_KEY}' is not a key of {where}; it is a key of "
+        f"'slice_shape'"
+    )
+    raise ValueError(msg)
 
 
 class _MappingParser(Protocol):
@@ -1327,6 +1377,7 @@ def load_rules(rules_path: Path) -> list[Rule]:
             msg = f"rules.yml: rule '{name}' must have exactly one of {listed}"
             raise ValueError(msg)
         (key,) = declared
+        _refuse_a_key_of_another_type(name, key, rule_data)
 
         if key == _KEY_READ_FROM_THE_RULE:
             rules.append(_parse_layer_rule(name, description, rule_data, severity=severity))

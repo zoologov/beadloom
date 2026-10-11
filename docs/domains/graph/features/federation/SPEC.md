@@ -105,7 +105,8 @@ Reads the indexed graph from SQLite (read-only) and emits a deterministic, self-
   ],
   "edges": [
     { "src": "...", "dst": "...", "kind": "...", "lifecycle": "...",
-      "contract": { "protocol": "amqp", "source_file": "...", "direction": "...", "message_type": "..." } }
+      "contract": { "protocol": "amqp", "source_file": "...", "direction": "...", "message_type": "..." } },
+    { "src": "...", "dst": "...", "kind": "depends_on", "lifecycle": "...", "via": "@x" }
   ]
 }
 ```
@@ -113,6 +114,7 @@ Reads the indexed graph from SQLite (read-only) and emits a deterministic, self-
 - Nodes are sorted by `ref_id`; edges by `(src, dst, kind)`; JSON keys are sorted (`sort_keys=True`, 2-space indent) — so identical graphs serialize **byte-identically** (reviewable diffs).
 - The `edges` array unions the local `edges` table **and** the `foreign_edges` table, so declared cross-repo `@repo:` links reach the artifact.
 - An edge's optional `contract` metadata (carried under the `contract` key of the edge's `extra` JSON) is surfaced as a top-level `contract` field; edges without it omit the key entirely. Two protocols are carried: AMQP (`protocol: amqp` + `exchange` / `routing_key` / `message_type` / `direction` — plus an additive optional `body` JSON-Schema, see §6) and GraphQL (`protocol: graphql` + `schema` + the producer's `exposed` SDL surface / a consumer's `references` — and, when the optional `graphql-core` extra is installed, an additive **typed `fields` block**, see §5). The protocol-prefixed `contract_key` is derived at the hub.
+- An edge's optional `via` (BDL-082 S1a) is surfaced the same way: `"via": "@x"` on a derived `depends_on` edge whose every import goes through the target's `@x` cross-import API, the fact the reindex recorded in the edge's `extra` (see the [import-resolver SPEC](../import-resolver/SPEC.md#edge-generation)); edges without it omit the key. A mixed edge's `partly_via` / `not_via` stay in the index and are not exported. The key is additive, so `schema_version` stays 2. `export.py` names the key as its own constant `_VIA_KEY` rather than importing `cross_imports.VIA_KEY`, because the rule engine already reaches this module and importing back would close a dependency cycle. The hub's `aggregate_exports` does not carry it into the federated edge, which keeps `src`, `dst`, `kind`, `lifecycle`, `repo`, `landscape` and `contract`.
 
 #### Provenance fields (`commit_sha`, `exported_at`)
 
@@ -368,7 +370,7 @@ def extract_payload_body(document: str, channel: str | None = None) -> dict | No
 
 ## Testing
 
-Test files: `tests/unit/graph/federation/test_graph_federation.py` (`FederatedRef` + `parse_ref`
+Test files: `tests/integration/graph/federation/test_an_edge_exports_its_cross_import_fact.py` (BDL-082 S1a: an edge every import of which is via `@x` exports `via`, an edge that is not exports none), `tests/unit/graph/federation/test_graph_federation.py` (`FederatedRef` + `parse_ref`
 local/foreign/malformed), `tests/unit/graph/contracts/test_graph_contracts.py` (first-class
 `Contract`, protocol-prefixed `contract_key`, `classify` truth table incl. GraphQL `BREAKING`,
 lifecycle folding, landscape-scoped `reconcile_contracts`), `tests/unit/graph/sdl/test_graph_sdl.py`

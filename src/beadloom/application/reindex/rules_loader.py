@@ -237,9 +237,17 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
         return ("slice_public_api", {"tags": list(rule.tags)})
 
     if isinstance(rule, SliceShapeRule):
-        # The segments are stored even when defaulted, so a reader of the `rules`
-        # table sees the shape that runs rather than having to know the default.
-        return ("slice_shape", {"tags": list(rule.tags), "segments": list(rule.segments)})
+        # The segments and the discouraged names (BDL-082 S1b) are stored even when
+        # defaulted, so a reader of the `rules` table sees the shape that runs rather
+        # than having to know the default.
+        return (
+            "slice_shape",
+            {
+                "tags": list(rule.tags),
+                "segments": list(rule.segments),
+                "discouraged": list(rule.discouraged),
+            },
+        )
 
     # Should never happen with known Rule types, but guard against future additions.
     msg = f"Unknown rule type: {type(rule).__name__}"

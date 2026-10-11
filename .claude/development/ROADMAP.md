@@ -44,16 +44,38 @@ item below is ranked by what it does for those three. Project names stay out of 
 
 ## In progress
 
-Nothing. BDL-081 released 9.0.0 on 2026-10-10 (PR #99, Release `v9.0.0`, the harness green on the
-downloaded wheel). Next by this list: item 1, adoption on the Vue frontend.
+### BDL-082 — FSD by the specification 2.1
+
+Step 1 of the owner's order of 2026-10-11 (below). Measured against feature-sliced.design on
+2026-10-11: the six layers, the strictly-below import rule, app/shared as segment containers,
+the index public API, the standard segments and Steiger match; missing are the `@x`
+cross-import convention of the entities layer (our rules would flag a spec-following import),
+slice groups (`init` reads a group folder as one slice), and the pages-first calibration of the
+cohesion check. Work item `.claude/development/docs/features/BDL-082/`.
 
 ---
 
 ## What to do next, in order
 
-Items 5 to 14 keep the owner's order of 2026-09-29. Items 1 to 4 were placed first by the owner
-on 2026-10-05, 2026-10-07 and 2026-10-08: the three projects, debt to zero (right after
-BDL-080), the rules, the RN project's requirements.
+**The owner's order of 2026-10-11** (a program of sequential work items, each with its own
+`/task-init`, slices and PRs — never one bag):
+
+1. **FSD by the specification 2.1** (BDL-082): `@x` cross-imports on the entities layer, slice
+   groups, the pages-first calibration of the cohesion check, the Steiger plugin's version, the
+   best practices in the overlay. Short; it blocks the first adoption.
+2. **The setup wizard v1** as a main-loop skill (`beadloom-nbpb`) — a thin protocol over `init`,
+   `config-check`, `doctor` and `setup-*`, its second pass written from the adoption's findings
+   before the React Native adoption — and **the graph reviewer v1** as a role (`beadloom-e6s2`)
+   over today's `doctor` and `lint`; `uxqc`'s mechanics stay in Debt to zero.
+3. **Adoption on the Vue frontend** (item 1 below; the owner's step).
+4. **The findings into the BDL-UX log.**
+5. **ROADMAP and the log re-ranked** by what the adoption found.
+6. **Debt to zero brought up to date and done** (`beadloom-ba9w`, slices A–H, plus a slice
+   that re-measures every `high` entry on 9.0.0 — stale ones close, live ones rank by the
+   adoption).
+
+Items 5 to 14 below keep the owner's order of 2026-09-29; items 1 to 4 were placed first on
+2026-10-05, 2026-10-07 and 2026-10-08.
 
 ### 1. Adoption on the Vue frontend, then on the React Native app (after BDL-080; owner's step)
 

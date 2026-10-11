@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.attribution import FileAttribution
+from beadloom.graph.rules.cross_imports import read_cross_import_facts
 from beadloom.graph.rules.exemptions import exemption_index_for, stale_exemption_findings
 from beadloom.graph.rules.layer_crossings import same_layer_statements
 from beadloom.graph.rules.layer_declaration import declaration_statement
@@ -653,7 +654,10 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
     An edge INSIDE one layer is legal when both ends share a container the
     declaration gives a layer and a finding when they do not (RFC Q1) —
     :func:`~beadloom.graph.rules.layer_crossings.same_layer_statements`, which
-    also reports an ``exempt:`` entry that has stopped earning its place.
+    also reports an ``exempt:`` entry that has stopped earning its place. It is handed
+    the ``@x`` fact the reindex records on an edge
+    (:func:`~beadloom.graph.rules.cross_imports.read_cross_import_facts`, BDL-082 RFC D1),
+    read off the edge rows and not off ``code_imports``.
 
     A layer the DECLARATION names and no node is in is reported too
     (:func:`~beadloom.graph.rules.layer_declaration.declaration_statement`), at
@@ -691,7 +695,15 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
                 can_fire=can_fire_on(all_edges, rule.layers, parents, rule_tags),
             )
         )
-        violations.extend(same_layer_statements(rule, all_edges, parents, rule_tags))
+        violations.extend(
+            same_layer_statements(
+                rule,
+                all_edges,
+                parents,
+                rule_tags,
+                facts=read_cross_import_facts(conn, rule.edge_kind),
+            )
+        )
 
         for src_ref_id, dst_ref_id in all_edges:
             src = layer_membership(src_ref_id, rule.layers, parents, rule_tags)

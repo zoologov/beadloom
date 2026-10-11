@@ -446,7 +446,7 @@ bridges on the next incremental reindex.
 ### Edge Generation
 
 ```python
-def create_import_edges(conn: sqlite3.Connection) -> int
+def create_import_edges(conn: sqlite3.Connection, *, project_root: Path | None = None) -> int
 ```
 
 1. Query all distinct `(file_path, resolved_ref_id)` from `code_imports` where `resolved_ref_id IS NOT NULL`.
@@ -460,23 +460,46 @@ def create_import_edges(conn: sqlite3.Connection) -> int
    shared code that lives in its container but belongs to no other node is a
    real dependency, and dropping it made such a node report "depends on
    nothing" — false, and worse than a coarse answer.
-5. Deduplicate `(source, target)` pairs via a `seen` set.
-6. Insert `depends_on` edge with `INSERT OR IGNORE`, stamping
-   `extra = {"derived": "imports"}`. The marker is the provenance that lets an
-   incremental refresh delete the derived set without touching a graph-declared
-   edge; `INSERT OR IGNORE` means a pair also declared in YAML keeps the YAML
-   row and stays unmarked.
-7. Commit and return the count of edges created.
+5. Collect each `(source, target)` pair once, in the order it is first met, with
+   the importing files behind it (an ordered mapping, which replaced the `seen` set in
+   BDL-082 S1a; the pairs it holds are the same).
+6. With `project_root`, compute each pair's `@x` fact (BDL-082 S1a, RFC D1): only a
+   pair one of whose imports has an `@x` path segment is located, through
+   `graph/rules/cross_imports.edge_cross_import`, so a project without the notation
+   pays one string test per import. Without `project_root` no pair gets a fact.
+7. Insert a `depends_on` edge per pair with `INSERT OR IGNORE`, its `extra` written by
+   `cross_imports.edge_extra`:
+   - `{"derived": "imports"}` — no import behind the edge goes through `@x`;
+   - `{"derived": "imports", "via": "@x"}` — every import lands on
+     `<target's source>/@x/<B>.*` or `<target's source>/@x/<B>/index.*`, where `B` is
+     the basename of the importing node's source folder;
+   - `{"derived": "imports", "partly_via": "@x", "not_via": "<file>:<line>"}` — some do,
+     and `not_via` names the first that does not, by file, then line.
+
+   The `derived` marker is the provenance that lets an incremental refresh delete the
+   derived set without touching a graph-declared edge; `INSERT OR IGNORE` means a pair
+   also declared in YAML keeps the YAML row, stays unmarked and records no `@x` fact, so
+   a hand-declared `@x` pair is a crossing to the layer rule (coordinator's ruling,
+   `beadloom-r4ck`). The fact is written whatever layer the ends are in: the reindex
+   reads no rule, and what the fact means is the layer rule's decision (see the
+   [rule-engine SPEC](../rule-engine/SPEC.md), **The `@x` edge fact**). An alias that
+   maps a name with no `@x` segment onto an `@x` folder is read as an ordinary import.
+8. Commit and return the number of pairs, a YAML-declared pair included.
 
 ### Derived-Edge Refresh
 
 ```python
 def delete_derived_import_edges(conn: sqlite3.Connection) -> int
-def refresh_import_edges(conn: sqlite3.Connection) -> int
+def refresh_import_edges(conn: sqlite3.Connection, *, project_root: Path | None = None) -> int
 ```
 
-The derived edge set is a pure function of `code_imports`, so a refresh is
-delete-then-recreate. Doing only the recreate half kept a dependency edge alive
+The derived edge set is a pure function of `code_imports` and, for its `@x` fact,
+of the files under `project_root`, so a refresh is delete-then-recreate, and it hands
+`project_root` on to `create_import_edges`. `index_imports` and
+`reindex_file_imports` pass their own `project_root`, so a full and an incremental
+reindex both record the fact (measured by S1a: editing the `@x` file keeps `via`,
+moving `@x/artist.ts` to `@x/artist/index.ts` keeps it, and adding an import through
+the index turns the edge to `partly_via`). Doing only the recreate half kept a dependency edge alive
 after its import was removed, for the cycle and layer rules to trip over.
 
 ### Incremental Indexing
@@ -614,9 +637,9 @@ def resolve_swift_import(
     import_path: str, importer: str, project_root: Path, conn: sqlite3.Connection,
     packages: SwiftPackages,
 ) -> str | None: ...
-def create_import_edges(conn: sqlite3.Connection) -> int: ...
+def create_import_edges(conn: sqlite3.Connection, *, project_root: Path | None = None) -> int: ...
 def delete_derived_import_edges(conn: sqlite3.Connection) -> int: ...
-def refresh_import_edges(conn: sqlite3.Connection) -> int: ...
+def refresh_import_edges(conn: sqlite3.Connection, *, project_root: Path | None = None) -> int: ...
 def index_imports(
     project_root: Path, conn: sqlite3.Connection, *, aliases: Sequence[tuple[str, str]] = ()
 ) -> int: ...
@@ -701,7 +724,8 @@ class ImportInfo:
 ## Invariants
 
 - Self-references (source node == target node) never generate `depends_on` edges.
-- Each `(source_ref_id, target_ref_id)` pair generates at most one `depends_on` edge (deduplicated via `seen` set in `create_import_edges` and `INSERT OR IGNORE`).
+- Each `(source_ref_id, target_ref_id)` pair generates at most one `depends_on` edge (collected once per pair in `create_import_edges`, and `INSERT OR IGNORE`).
+- A derived edge carries `via: "@x"` only when EVERY import behind it lands on the target's `@x/<importer's folder>` API; a mixed edge carries `partly_via` and `not_via` instead, never `via`.
 - Imports are upserted with `ON CONFLICT(file_path, line_number, import_path) DO UPDATE`, ensuring idempotent reindexing.
 - `extract_imports` returns an empty list (never raises) for unsupported languages, unreadable files, or empty files.
 - Resolution strategies are tried in strict order: file ownership, then annotation lookup, then source-prefix matching.
@@ -786,6 +810,10 @@ class ImportInfo:
 - `a_name_resolves_by_its_exact_case.feature` (3 scenarios, BDL-080 S3e): `./app` beside
   `App.vue` and `app/index.ts` names the folder index, by a relative and an aliased path, and
   a specifier written in the file's own case still names the file.
+- `a_derived_edge_records_its_cross_imports.feature` (3 scenarios, BDL-082 S1a): an edge every
+  import of which goes through the target's `@x` API is recorded `via: "@x"`, an incremental
+  index turns it `partly_via` when one import stops going through the API, and keeps `via` when
+  the API moves from a file to a folder with an index.
 
 The JavaScript side has unit tests of its own: `tests/unit/graph/test_js_specifiers.py`,
 `tests/unit/graph/test_tsconfig_paths.py`, `tests/unit/graph/test_project_walk.py`,
@@ -807,6 +835,12 @@ covers a package in two folders on a full and an incremental reindex.
 - **Edges created.** Insert two nodes and a resolved code_import. Call `create_import_edges`. Assert one `depends_on` edge is created.
 - **Self-reference skipped.** Import where source and target resolve to the same node. Assert zero edges.
 - **Deduplication.** Multiple imports from the same source to the same target. Assert exactly one edge.
+- **The `@x` fact** (`tests/unit/graph/test_an_import_edge_records_its_cross_imports.py`,
+  BDL-082 S1a). Every import through the API opened to the importer is `via`, as a file and as
+  a folder with an index; one import past the API makes a `partly_via` edge naming it in
+  `not_via`; an API opened to another slice, and an `@x` folder below the slice's top, are not
+  `via`; without `project_root` no fact is recorded; a declared edge on the same pair keeps the
+  declared row.
 
 ### Pipeline Tests
 
