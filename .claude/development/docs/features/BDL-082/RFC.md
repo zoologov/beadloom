@@ -188,8 +188,10 @@ reported no `domain-size-limit` finding on any of these nodes (71 lines, measure
 Ruled in by the goals rather than by a derived row: `onboarding` (the five fsd overlays under
 `onboarding/templates/roles/architecture/fsd/*`, in no row because templates are not Python)
 and `vitepress-site` (`steiger.config.js` and the scaffold's `package.json`, read only; the
-portal's own Steiger exception stays). `doc-generator`, `site-generation` and `cli-commands`
-surface as readers and are not edited.
+portal's own Steiger exception stays). `doc-generator` and `cli-commands` surface as readers and are not edited. Widened by S1a
+(2026-10-11): `federation` (`export.py`) and `site-generation` (`architecture_view.py`) carry
+the edge fact `via: "@x"` where edge attributes already travel — both ruled in for that one
+attribute.
 
 ## Decisions
 
@@ -226,9 +228,10 @@ pages-first app). An adopter's existing `rules.yml` is not edited by an upgrade.
 
 ### D4 — custom segments by purpose (S1 the rule, S2 the written rule; ruling 6)
 
-`slice_shape` gains `discouraged:` (default: Steiger's `BAD_NAMES` — `components`, `hooks`,
-`types`, `utils`, `helpers`, `modules`, `common`, `misc` — verified against plugin 0.8.0 in
-S1) and keeps `segments:` as the known-good set; a folder in neither list is fine; a folder in
+`slice_shape` gains `discouraged:` (default: the installed Steiger plugin's `BAD_NAMES` — 69
+names in plugin 0.8.0, among them `components`, `hooks`, `types`, `utils`, `helpers`, `store`,
+`services`, `constants`, `composables`, `actions`, `reducers`; the code quotes the whole list,
+verified by program in S1) and keeps `segments:` as the known-good set; a folder in neither list is fine; a folder in
 `discouraged:` is a finding with the specification's reason ("name by purpose, not essence").
 `init` writes both lists with a comment.
 
