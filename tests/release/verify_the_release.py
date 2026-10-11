@@ -152,6 +152,10 @@ FSD_RULES = (
     "fsd-cohesion-shared",
 )
 
+#: The rule ``init`` no longer writes: a release that writes it is wrong however many
+#: of :data:`FSD_RULES` it holds (BDL-082 S2a, pages-first).
+NOT_FSD_RULES = ("fsd-cohesion-pages",)
+
 #: The cross-import planted inside the features layer, through the Vite alias ``@features``.
 PLANTED_CROSSING = ("features-cart", "features-auth")
 
@@ -1113,6 +1117,7 @@ def check_fsd_scaffold(room: Room, project: Path, report: Report) -> None:
     listed = rules.get("rules") if isinstance(rules, dict) else None
     names = [str(rule.get("name")) for rule in listed or [] if isinstance(rule, dict)]
     missing = [name for name in FSD_RULES if name not in names]
+    missing += [f"no {name}" for name in NOT_FSD_RULES if name in names]
     report.record(
         f"fsd rules: init writes the {len(FSD_RULES)} FSD rules into rules.yml",
         "behaviour",

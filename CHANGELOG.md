@@ -68,6 +68,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   groups and the public API of `shared` and `app`. On the two FSD fixtures
   (`tests/fixtures/site/vue-fsd`, `rn-fsd`) `init --yes` writes the same nodes (19 and 18) and
   `lint --strict` reports the same findings before and after.
+- **The roles `setup-agentic-flow` composes for a Feature-Sliced project say the specification
+  (`beadloom-keki`, BDL-082 RFC D6).** The five `fsd` overlays (dev, explore, review, test,
+  tech-writer) state `@x` on the entities layer only (`entities/A/@x/B`, imported by entity B
+  alone), slice groups and their `<layer>-<group>-<slice>` nodes, pages-first (start in
+  `pages`, extract on a second page's reuse, no size signal for a page), custom segments named
+  by purpose with the `discouraged:` names, the three barrel pitfalls (`export *`, an index on a
+  segment of a sliced layer, one index per component in `shared/ui` and `shared/lib`) and the
+  public API of `shared` and `app`. `insignificant-slice` stays on for an adopter; Beadloom's own
+  portal switches it off with its reason written beside the switch, and the overlay names that
+  as a reasoned exception, not a default. Removed, because the specification contradicts them:
+  "no cross-imports between slices of the same layer" with no exception, a size signal that
+  asked to split a page, and a slice's top holding "its segments and its `index` and nothing
+  else". A project that composes `ddd`, this repository included, gets no changed file.
 - **Exit codes move only on inputs 9.0.0 read against the specification.** Measured by
   `beadloom-wvzg` on 2026-10-11 on Darwin arm64, CPython 3.13, on scratch projects written from
   feature-sliced.design's reference pages: each probe copied twice, `init --yes` then

@@ -239,8 +239,16 @@ docs_audit:
   # absent marker is not a denial, and the audit now reports such a subject as
   # UNRESOLVED and declines to judge the version beside it. A second, hand-written
   # vocabulary entry would be exactly the drift the derivation exists to prevent.
+  #
+  # `steiger` and `@feature-sliced/steiger-plugin` (BDL-082 S2b, `beadloom-keki`):
+  # the FSD overlays, the rules `init` writes and the guides name the plugin's rule
+  # set by its release, and the scaffold pins both. They are npm packages of the
+  # portal's scaffold (`src/beadloom/site_scaffold/package.json`), not of this
+  # project's root, so no manifest the derivation reads declares them.
   subjects:
     - bd
+    - steiger
+    - "@feature-sliced/steiger-plugin"
 
 # BDL-068 S6 (`beadloom-0mdo.66`, BDL-UX #187/#211/#253 and the two of
 # 2026-09-09). The UX log's numbers are ALLOCATED, not read off the end of the

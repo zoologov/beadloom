@@ -760,6 +760,26 @@ class TestTheFeatureSlicedProject:
             ("FAIL", True)
         ]
 
+    def test_a_rule_set_that_still_writes_the_pages_check_fails_and_names_it(
+        self, tmp_path: Path
+    ) -> None:
+        """BDL-082 S2a stopped ``init`` writing ``fsd-cohesion-pages`` (pages-first); a
+        release that writes it again holds every expected rule and is still wrong."""
+        project = _fsd_project(
+            tmp_path,
+            preset="fsd",
+            rules=(*harness.FSD_RULES, "fsd-cohesion-pages"),
+            scripts={"lint:fsd": "steiger ./src"},
+        )
+        report = _report()
+
+        check_fsd_scaffold(_DevPython(tmp_path, None), project, report)
+
+        rules = [check for check in report.checks if check.name.startswith("fsd rules")]
+        assert [(check.status, "fsd-cohesion-pages" in check.detail) for check in rules] == [
+            ("FAIL", True)
+        ]
+
     @pytest.mark.parametrize(
         ("returncode", "output", "status"),
         [
