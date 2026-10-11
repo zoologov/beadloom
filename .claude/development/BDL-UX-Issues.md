@@ -45,6 +45,12 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 322 | 2026-10-11 | low | the README pair says 15 authoring keys (the loader has 17), `ctx` is said to return the rules in force, `why` what breaks, and `architecture.md` claims `<20ms` three times unmeasured |
+| 321 | 2026-10-11 | medium | the CI workflow holds a write token on every job, the self-hosted tech-writer job runs the PR branch's code with no same-repository condition, and fork runs need approval only from first-time contributors |
+| 320 | 2026-10-11 | low | `bfs_subgraph` records an edge before the `max_nodes` check, so a bundle's edges can name a node its `nodes` does not hold |
+| 319 | 2026-10-11 | medium | `ctx` has no token budget; chunks are capped by count, ordered by section type rather than by the focus node, and cut among ties in no promised order |
+| 318 | 2026-10-11 | medium | the Gate has no per-step exception boundary and no 'checker error' status, so 'never short-circuit' holds for FAIL results and not for exceptions |
+| 317 | 2026-10-11 | high | `ctx` surfaces 2 of the 17 rule types and the Markdown output none; its matcher reads `ref_id` and `kind` while the linter's reads `exclude`, `tag` and `tag_prefix` |
 | 316 | 2026-10-11 | medium | a `## Axes` section written as `###` subsections reads as zero rows, and the commit gate then calls every owned path outside the approval |
 | 315 | 2026-10-10 | medium | `sync-update <ref> --yes --pair <doc> --code <file>` reports 2 pairs attested and clears the doc's pairs with five other code files nobody read |
 | 314 | 2026-10-10 | medium | `write_text_atomic` and `write_yaml_atomic` leave every file they write at mode 0600, so a 0644 file edited by `init` becomes owner-only and `rules.yml` is born unreadable to the group |
@@ -134,6 +140,54 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+317. [2026-10-11] [HIGH] `ctx` surfaces 2 of the 17 rule types and the Markdown output none; its matcher reads `ref_id` and `kind` while the linter's reads `exclude`, `tag` and `tag_prefix`
+
+    **Severity:** high (the product's main promise — the context names what the Gate will judge — is false for 15 of 17 rule types, silently; the class ROADMAP names)
+    **Command:** `beadloom ctx <ref>`, `ctx --json`, MCP `get_context`, `beadloom prime`
+    **Context:** an outside static audit (2026-10-11) read `context_oracle/builder.py` and named it; verified by file and line on `c126ecff`. `_collect_constraints` (`builder.py:340-350`) marks a rule relevant only when `rule_type` is `deny` (reads `from`/`to`) or `require` (reads `for`); the `rules` table holds 17 types (`application/reindex/rules_loader.py:76-250`; `AUTHORING_KEYS` in `graph/rules/loader.py:1229-1255`, "exactly one of" enforced at `:1375-1378`). `_matcher_applies` (`builder.py:294-315`) reads `ref_id` and `kind`; the linter's `NodeMatcher.matches` (`graph/rules/types.py:115-137`) reads `exclude`, `ref_id`, `kind`, `tag`, `tag_prefix`, and the evaluators pass the node's tags. All five fields are stored in `rule_json` (`rules_loader.py:23-39`), so the data is there and `ctx` does not read it. The default Markdown output, `_format_markdown` (`services/commands/query.py:54-202`), never renders `bundle["constraints"]`: even the two types reach a reader only through `--json` and MCP.
+    **Issue:** three silences on one field. Fifteen rule types (`layers`, `slice_public_api`, `slice_shape`, `forbid`, `check`, every coverage and binding rule) never appear as a node's constraints, and nothing says the list is partial. A tag-only or `tag_prefix`-only matcher counts as applying to every node, an `exclude`d node still matches, `require.has_edge_to` and `deny.unless_edge` are not read — so the two types that are shown can be shown on the wrong nodes. The text output shows nothing at all. An agent reads a node's context, sees no rule, and meets the rule on the Gate. `README.ru.md:175` promises "действующие правила по узлу" (#322). The AGENTS.md generator fell behind the same key list the same way (#179: "seven of the twelve keys" mapped), and that was held by a test binding the generator to `AUTHORING_KEYS`; `ctx` has no such test.
+    **Expected:** one derivation of "which rules apply to this node", used by the linter and the context builder — `NodeMatcher` plus a per-rule-type localisation; a rule type that cannot be localised to a node is listed under its own heading with the reason, so the list is complete or says where it is not; the Markdown output renders the constraints; a test holds both readers to `AUTHORING_KEYS`. For Debt to zero (`beadloom-ba9w.12`, P1); ranked after the Vue adoption with the rest, by the owner's order of 2026-10-11.
+
+318. [2026-10-11] [MEDIUM] the Gate has no per-step exception boundary and no 'checker error' status, so 'never short-circuit' holds for FAIL results and not for exceptions
+
+    **Severity:** medium (the class behind #226 and #287, stated once; a crashed step leaves the later steps unrun and the verdict does not say so)
+    **Command:** `beadloom ci`, MCP `run_ci_gate`
+    **Context:** named by the outside audit of 2026-10-11; verified on `c126ecff`. `application/gate.py:214-231` `run_ci_gate` calls about eleven step functions in a row with no `try`/`except`; the only handlers are `except LintError` (`:296-305`) and `except (OSError, json.JSONDecodeError)` in the federate step (`:1153-1162`); neither caller (`services/commands/federation.py:449`, `services/mcp_server.py:922`) catches. `GateStep.status` is PASS/WARN/FAIL/SKIP (`application/gate_step.py:68-75`); `GateResult.ok` is `all(s.passed)` (`gate.py:165-167`). The docstring at `gate.py:189` promises "never short-circuit".
+    **Issue:** the promise is true of a step's ordinary FAIL and false of an exception: an unexpected raise in step four ends the run before steps five to eleven, and the output is a traceback rather than a verdict naming the step that broke and the steps that did not run. #226 (a full pipe) and #287 (an unreadable config) are two instances; each was fixed at its site.
+    **Expected:** every step runs inside a boundary; an exception becomes a step with a status `ERROR` — not PASS, not SKIP — carrying the exception's class and the step's name; the remaining steps still run; the verdict names the errored step under its own heading; a fault-injection test raises inside each step in turn and asserts the others reported. For Debt to zero (`beadloom-ba9w.13`).
+
+319. [2026-10-11] [MEDIUM] `ctx` has no token budget; chunks are capped by count, ordered by section type rather than by the focus node, and cut among ties in no promised order
+
+    **Severity:** medium (the bundle is not sized by what a caller can carry, and two runs can differ)
+    **Command:** `beadloom ctx <ref>`, `beadloom prime`
+    **Context:** named by the outside audit of 2026-10-11; verified on `c126ecff`. `collect_chunks` (`context_oracle/builder.py:219-249`) caps rows with SQL `LIMIT ?` (`max_chunks`, default 10 at `:45`); chunk length is unbounded. `estimate_tokens` (`:23-29`, `len(text) // 4`) is never called in the builder; its callers are `application/status.py:57-66` and the TUI, which report a size. `ctx` takes `--depth`, `--max-nodes`, `--max-chunks` and no budget (`services/commands/query.py:261-263`). Ordering (`:237-246`) is `CASE c.section` (spec, invariants, constraints, api, tests, else) then `c.chunk_index`; the `WHERE` is `d.ref_id IN (...)` over the whole subgraph; nothing ranks by graph distance or by focus-node ownership; chunks of different documents tie on (section rank, `chunk_index`) and `LIMIT` cuts among them in an order SQLite does not promise.
+    **Issue:** ten chunks can be ten lines or ten pages; a neighbour's documents can spend the limit before the focus node's own; the cut is not reproducible; "under 2K tokens" for `prime` is unmeasured on the path that produces it.
+    **Expected:** an explicit budget in tokens, with the estimator named as an estimate; the focus node before its neighbours; constraints and freshness kept whole under any cut; a deterministic tie-breaker (ref_id, document path); and the bundle names what it left out so a caller can ask for it. For Debt to zero (`beadloom-ba9w.14`).
+
+320. [2026-10-11] [LOW] `bfs_subgraph` records an edge before the `max_nodes` check, so a bundle's edges can name a node its `nodes` does not hold
+
+    **Severity:** low (a consumer that reads the bundle as a closed subgraph gets an edge into nowhere; no reader is known to break today)
+    **Command:** `beadloom ctx --json`, MCP `get_context`
+    **Context:** named by the outside audit of 2026-10-11; verified on `c126ecff`. `context_oracle/builder.py:190-199` appends the edge at `:192-194` ("Record edge regardless of visit status") before `len(visited) >= max_nodes` at `:198`; a neighbour whose `nodes` row is missing (`nrow is None`, `:206`) keeps its edge too.
+    **Issue:** the subgraph's contract is undefined — neither an induced subgraph nor one with marked boundary edges — and the cap is where the two readings part.
+    **Expected:** choose and state the contract: drop the edge (induced), or carry it with a marker (`outside: true`) so the boundary is visible; a test holds it at the cap. For Debt to zero (`beadloom-ba9w.15`).
+
+321. [2026-10-11] [MEDIUM] the CI workflow holds a write token on every job, the self-hosted tech-writer job runs the PR branch's code with no same-repository condition, and fork runs need approval only from first-time contributors
+
+    **Severity:** medium (a trust boundary that is not stated; no exploit is claimed, and the mitigation GitHub applies to `pull_request` is in force)
+    **Command:** `.github/workflows/ci.yml`; the repository's Actions settings
+    **Context:** named by the outside audit of 2026-10-11; verified on `c126ecff` and the live settings. `ci.yml:42-44` grants `contents: write` and `pull-requests: write` at the workflow level and no job sets its own, so every job — including those running PR code on GitHub-hosted runners — holds the write token. Trigger `pull_request` (`:24-26`) plus `workflow_dispatch`; no `pull_request_target`. `ai-techwriter` is `runs-on: [self-hosted, ai-techwriter]` (`:448`), checks out `github.event.pull_request.head.ref` (`:455`) with `AI_TW_PAT || github.token` persisted (`:465`), then runs `uv sync`, `beadloom reindex` and `python -m beadloom.ai_agents.ai_techwriter` from that checkout with `QWEN_API_KEY`, `QWEN_BASE_URL` and `GH_TOKEN` in the environment (`:526-544`); no fork condition anywhere. Repository: public; `default_workflow_permissions: write`; fork-PR approval policy `first_time_contributors`. Mitigation in force: on `pull_request` GitHub withholds secrets from a fork's run and makes its token read-only — but the self-hosted runner still executes the PR's code on a persistent machine that holds the API key. Also: `ci.yml:124-127` says the two `tests-locale` check-runs are "NOT yet part of main's live branch protection (7 required contexts, not the 9)"; the live protection measured 2026-10-11 holds all nine, both locale legs included. The comment is stale, and the outside reader reported it as the state of the repository.
+    **Issue:** the workflow's trust boundary exists only as GitHub's defaults, and one comment in it contradicts the measured protection. A returning outside contributor's fork PR runs unattended on the self-hosted machine.
+    **Expected:** `permissions: contents: read` at the workflow level, write on the jobs that need it, named; `ai-techwriter` guarded by `github.event.pull_request.head.repo.full_name == github.repository`; the repository set to require approval for all outside collaborators; the publish token's scope reviewed; the stale comment replaced by the measured state with its date; one paragraph in the CI documentation stating what the workflow trusts and what it does not. An ephemeral runner is later. Standalone item `beadloom-dlb6` (P1), right after BDL-082 by the owner's decision of 2026-10-11.
+
+322. [2026-10-11] [LOW] the README pair says 15 authoring keys (the loader has 17), `ctx` is said to return the rules in force, `why` what breaks, and `architecture.md` claims `<20ms` three times unmeasured
+
+    **Severity:** low (four published claims the code does not hold; the first is a 9.0.0 regression the docs audit cannot see)
+    **Command:** `README.ru.md`, `README.md`, `docs/architecture.md`; `beadloom docs audit`
+    **Context:** named by the outside audit of 2026-10-11; verified. `README.ru.md:304` / `README.md:304`: "ровно один из 15 ключей" / "exactly one of 15 authoring keys", listing 15; `AUTHORING_KEYS` has 17 — `slice_public_api` and `slice_shape`, both shipped in 9.0.0, are missing. `docs audit` did not catch it: the count is not a declared fact, and the Russian page's numbers are unchecked (the class of #205). `README.ru.md:175` "`ctx` отдаёт код, документацию и действующие правила по узлу" and `README.md:175` "rules in force": false until #317 ships (2 of 17 types, JSON only). `README.ru.md:167` and `:358` "что сломается, если его тронуть", `README.md` "what breaks if you touch it": impact analysis sold as a defect prediction. `docs/architecture.md:7`, `:67`, `:235`: "<20ms" three times; nothing measures it, and #95 records that the L2 cache is not on the build path.
+    **Issue:** four claims a reader of the first page takes as measured; one of them went stale at the last release because its number lives outside every checked surface.
+    **Expected:** 17 and the two keys, with the count declared as a fact in `.beadloom/config.yml` so the next release's audit holds it; `ctx`'s sentence says what it returns today; `why` says "what an edit can reach"; the `<20ms` figures measured or removed. Russian is the source; English follows. For S2W of BDL-082 (`beadloom-rm5a`), which already touches the README's FSD rules.
 
 316. [2026-10-11] [MEDIUM] a `## Axes` section written as `###` subsections reads as zero rows, and the commit gate then calls every owned path outside the approval
 
@@ -1460,6 +1514,8 @@
 ### Entries
 
 156. [2026-08-19] [MEDIUM] Context rot explains WHY a long instruction file stops being followed — plus selective escalation as a second graph-derived feature
+
+    **Reference added 2026-10-11:** *Evaluating AGENTS.md* (arXiv 2602.11988) measures that auto-generated repository-level context files can lower task success and raise cost — the agent follows the extra instructions without finding the code faster. A warning against "more instructions → better agent", the premise slice H (`beadloom-ba9w.8`) is written against; not a result about Beadloom's own mechanism.
 
     **Severity:** medium (sharpens the root cause in #153 and adds one concrete feature; the rest is confirmation)
     **Command:** design-level — `prime`, the emitted `CLAUDE.md`/role files, wave escalation
