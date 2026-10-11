@@ -20,6 +20,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   third entity importing the same file stays 1 error, with the new wording; a
   `features/b → features/a/@x/b` import goes from 1 `fsd-public-api` error to 0, and its
   `fsd-layers` error is unchanged.
+- **A `layers` rule accepts a cross-import between two entities, and only between entities
+  (`beadloom-r15q`, BDL-082 RFC D1).** The reindex records on a derived `depends_on` edge
+  whether every import behind it lands on the target's `@x/<importer's folder>` (a file, or
+  that folder's `index`): `via: "@x"` in the edge's `extra` when every one does,
+  `partly_via: "@x"` and `not_via: "<file>:<line>"` when some do. The fact is rebuilt with the
+  import edges on a full and an incremental reindex; an edge the graph YAML declares keeps its
+  own row and records no fact. `beadloom export` and the portal's data file carry `via: "@x"`
+  on such an edge (additive; an edge without it has no `via` key). The layer rule reads the
+  fact off the edge: an edge via `@x` between two nodes of the layer its `layers:` list names
+  `entities` is no same-layer crossing; on any other layer it is reported with the
+  specification's note ("`@x` is for the Entities layer only", quoting "only use this notation
+  on the Entities layer, where eliminating cross-imports is often unreasonable"); a mixed edge
+  is reported at the import that does not go through `@x`. Measured on 2026-10-11 on scratch
+  projects after `init --yes`, `lint --strict`, this tree before the change (`2d446b23`)
+  against after: the specification's own example goes from 1 `fsd-layers` error (exit 1) to 0
+  (exit 0); `features/b → features/a/@x/b` stays 1 error, now in the specification's words;
+  an artist entity with one import through the song's index beside its `@x` imports stays 1
+  error, now at `src/entities/artist/model/rel.ts:2`; a third entity importing the API opened
+  to the artist, and the example with the edge declared by hand, stay 1 plain crossing each.
+  Steiger 0.7.0 with plugin 0.8.0 (the recommended set, `insignificant-slice` off) agrees on
+  three of the five, the mixed edge at the same line; it accepts the features pair, because it
+  applies `@x` on every sliced layer, and it does not read the graph YAML, so the declared edge
+  is clean to it. On this repository
+  `lint --strict` reports 0 errors and 69 warnings before and after, and `site-fsd-layers`
+  judges 78 of 470 live `depends_on` edges before and after.
 - **`slice_public_api` covers the segments of `shared` and `app` when its `tags:` name them
   (`beadloom-8sml`, RFC D5).** A segment, a node `part_of` a node carrying its tag, is entered
   through its `index`, and in `shared/ui` and `shared/lib` through a per-component index

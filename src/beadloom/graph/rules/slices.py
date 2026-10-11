@@ -10,8 +10,10 @@ the ``layers`` rule's, not theirs.
 - :func:`evaluate_slice_public_api_rules` — ``slice_public_api``
   (:class:`~beadloom.graph.rules.types.SlicePublicApiRule`). For each row of
   ``code_imports`` that the reindex resolved to a node inside a unit, from a file outside
-  that unit: the imported file is located inside the unit's folder, and a file that is no
-  public API entry is a finding. The entries are the unit's ``index``; ``@x/<B>`` (or
+  that unit: the imported file is located inside the unit's folder
+  (:func:`~beadloom.graph.rules.cross_imports.located`, the reading the reindex's ``@x``
+  edge fact is taken through as well), and a file that is no public API entry is a
+  finding. The entries are the unit's ``index``; ``@x/<B>`` (or
   ``@x/<B>/index``), the cross-import API a slice opens to the slice ``B`` of its own layer
   alone; and, in a segment ``ui`` or ``lib`` of ``shared``, a per-component index
   (``shared/ui/button/index``). Two segments of one container import each other freely, and
@@ -44,13 +46,8 @@ import posixpath
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from beadloom.graph.exact_case import first_existing_file
-from beadloom.graph.js_specifiers import (
-    MODULE_EXTENSIONS,
-    is_relative_specifier,
-    module_file_candidates,
-    relative_import_candidates,
-)
+from beadloom.graph.js_specifiers import MODULE_EXTENSIONS
+from beadloom.graph.rules.cross_imports import cross_import_name, located
 from beadloom.graph.rules.slice_units import (
     INDEX,
     SliceUnits,
@@ -79,36 +76,9 @@ _PER_COMPONENT_SEGMENTS = frozenset({"ui", "lib"})
 _SHARED_LAYER_FOLDER = "shared"
 
 
-def _located(specifier: str, importer: str, folder: str, project_root: Path) -> str | None:
-    """The file inside *folder* that *specifier*, imported by *importer*, names; or ``None``."""
-    if is_relative_specifier(specifier):
-        found = first_existing_file(relative_import_candidates(specifier, importer), project_root)
-        return found if found is not None and inside(found, folder) else None
-    segments = [segment for segment in specifier.split("/") if segment]
-    for start in range(len(segments) + 1):
-        target = posixpath.normpath(posixpath.join(folder, *segments[start:]))
-        if not inside(target, folder):
-            continue
-        found = first_existing_file(module_file_candidates(target), project_root)
-        if found is not None:
-            return found if inside(found, folder) else None
-    return None
-
-
 def _is_the_index_of(path: str, folder: str) -> bool:
     """Whether the file *path* is the ``index`` at the top of *folder*."""
     return posixpath.dirname(path) == folder and stem(posixpath.basename(path)) == INDEX
-
-
-def _cross_import_target(path: str, folder: str) -> str | None:
-    """The slice name ``B`` when *path* is ``<folder>/@x/B.*`` or ``<folder>/@x/B/index.*``."""
-    match path[len(folder) + 1 :].split("/"):
-        case ["@x", file_name]:
-            return stem(file_name)
-        case ["@x", slice_name, file_name] if stem(file_name) == INDEX:
-            return slice_name
-        case _:
-            return None
 
 
 def _has_per_component_indexes(folder: str) -> bool:
@@ -196,9 +166,9 @@ def _judge_import(
     folder = units.folders[unit]
     noun = units.noun(unit)
     per_component = _has_per_component_indexes(folder)
-    found = _located(specifier, importer, folder, project_root)
+    found = located(specifier, importer, folder, project_root)
     if found is not None:
-        opened_to = _cross_import_target(found, folder)
+        opened_to = cross_import_name(found, folder)
         if opened_to is not None:
             return _judge_cross_import(rule, row, owner, units, (unit, opened_to, found))
         if per_component and _is_a_per_component_index(found, folder):

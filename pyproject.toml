@@ -514,6 +514,8 @@ pytest_add_cli_args_test_selection = [
     "tests/unit/graph/rules/test_a_segment_of_shared_or_app_is_entered_through_its_public_api.py",
     "tests/unit/graph/rules/test_a_segment_is_named_by_purpose.py",
     "tests/unit/graph/rules/test_a_slice_group_shares_no_code.py",
+    "tests/unit/graph/rules/test_a_cross_import_crosses_the_entities_layer_only.py",
+    "tests/unit/graph/test_an_import_edge_records_its_cross_imports.py",
     "tests/unit/application/reindex/test_the_slice_rules_are_written_to_the_index_whole.py",
     "tests/unit/onboarding/scanner/test_init_writes_the_fsd_rules.py",
     "tests/unit/graph/rules/test_a_matcher_selects_by_a_tag_prefix.py",

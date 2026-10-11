@@ -28,16 +28,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from beadloom.graph.rules.cross_imports import ENTITIES_ONLY_NOTE
 from beadloom.graph.rules.layer_exemptions import (
     excused_crossings,
     stale_layer_exemption_findings,
 )
-from beadloom.graph.rules.layers import layer_membership, same_layer_crossings
+from beadloom.graph.rules.layers import (
+    CROSS_IMPORT_LAYER,
+    layer_membership,
+    same_layer_crossings,
+)
 from beadloom.graph.rules.types import LAYER_EDGE_RULE_TYPE, Violation
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping, Sequence
 
+    from beadloom.graph.rules.cross_imports import CrossImportFact
     from beadloom.graph.rules.types import LayerRule
 
 #: What to do about a crossing the rules file has not decided about. It offers
@@ -51,6 +57,21 @@ SAME_LAYER_REMEDIATION = (
     "it stands and what would retire it. A dependency between peers inside one "
     "layer is the coupling a layered architecture is drawn to prevent, so it is "
     "a decision to record rather than a detail to pass over."
+)
+
+#: What to do about a dependency that goes through ``@x`` on a layer other than entities.
+CROSS_IMPORT_ELSEWHERE_REMEDIATION = (
+    "Move what both slices need down to `entities` or `shared`, merge the two slices, or "
+    "add an `exempt:` entry to this rule naming the pair, why it stands and what would "
+    "retire it. The `@x` notation is the specification's cross-import between entities, "
+    "not between the slices of any other layer."
+)
+
+#: What to do about an edge some of whose imports go through ``@x`` and one does not.
+MIXED_CROSS_IMPORT_REMEDIATION = (
+    "Import the target at the named line through the cross-import API it opens to this "
+    "slice, `@x/<this slice's folder>`, as the other imports of the edge do, or remove "
+    "that import. An edge is a cross-import only when every import behind it is one."
 )
 
 
@@ -72,33 +93,79 @@ def _where(
     return f"'{ref_id}' (inside '{membership.declared_by}')"
 
 
+def _crossing_text(
+    rule: LayerRule, layer_name: str, ends: str, fact: CrossImportFact | None
+) -> tuple[str, str]:
+    """``(message, remediation)`` of one crossing, by what its edge records about ``@x``.
+
+    *ends* is the sentence's subject, "'a' depends on 'b'". An edge every import of which
+    goes through ``@x`` is a crossing here only off the entities layer, so it is told the
+    specification's note; a mixed edge names the import that does not go through it.
+    """
+    if fact is not None and fact.every:
+        return (
+            f"Same-layer crossing through a cross-import API: {ends}, and every import "
+            f"behind it goes through the `@x` API the target opens to it, in layer "
+            f"'{layer_name}'. `@x` is for the Entities layer only (\"{ENTITIES_ONLY_NOTE}\"), "
+            f"so on this layer it is a dependency between peers like any other "
+            f"(rule '{rule.name}').",
+            CROSS_IMPORT_ELSEWHERE_REMEDIATION,
+        )
+    if fact is not None:
+        elsewhere = (
+            ""
+            if layer_name == CROSS_IMPORT_LAYER
+            else f', and `@x` is for the Entities layer only ("{ENTITIES_ONLY_NOTE}")'
+        )
+        return (
+            f"Same-layer crossing: {ends}, and not every import behind it goes through the "
+            f"`@x` API the target opens to it: {fact.not_via} does not. Both are in layer "
+            f"'{layer_name}' and no container that declares a layer holds both, so the edge "
+            f"is a dependency between peers rather than a cross-import{elsewhere} "
+            f"(rule '{rule.name}').",
+            MIXED_CROSS_IMPORT_REMEDIATION,
+        )
+    return (
+        f"Same-layer crossing: {ends}. Both are in layer "
+        f"'{layer_name}' and no container that declares a layer holds both, so this "
+        f"is a dependency between peers rather than inside one of them "
+        f"(rule '{rule.name}').",
+        SAME_LAYER_REMEDIATION,
+    )
+
+
 def _crossing_finding(
     rule: LayerRule,
-    src_ref_id: str,
-    dst_ref_id: str,
+    edge: tuple[str, str],
     parents: Mapping[str, Collection[str]],
     tags: Mapping[str, Collection[str]],
+    fact: CrossImportFact | None = None,
 ) -> Violation:
-    """One un-excused crossing, at the severity the rule declares."""
+    """One un-excused crossing, at the severity the rule declares.
+
+    *fact* is what the edge records about ``@x`` (BDL-082 RFC D1); a mixed edge's finding
+    sits at the import that does not go through it.
+    """
+    src_ref_id, dst_ref_id = edge
     membership = layer_membership(src_ref_id, rule.layers, parents, tags)
     layer_name = "?" if membership is None else rule.layers[membership.index].name
+    ends = (
+        f"{_where(src_ref_id, rule, parents, tags)} depends on "
+        f"{_where(dst_ref_id, rule, parents, tags)}"
+    )
+    message, remediation = _crossing_text(rule, layer_name, ends, fact)
+    location = None if fact is None else fact.not_via_location()
     return Violation(
         rule_name=rule.name,
         rule_description=rule.description,
         rule_type=LAYER_EDGE_RULE_TYPE,
         severity=rule.severity,
-        file_path=None,
-        line_number=None,
+        file_path=None if location is None else location[0],
+        line_number=None if location is None else location[1],
         from_ref_id=src_ref_id,
         to_ref_id=dst_ref_id,
-        message=(
-            f"Same-layer crossing: {_where(src_ref_id, rule, parents, tags)} depends on "
-            f"{_where(dst_ref_id, rule, parents, tags)}. Both are in layer "
-            f"'{layer_name}' and no container that declares a layer holds both, so this "
-            f"is a dependency between peers rather than inside one of them "
-            f"(rule '{rule.name}')."
-        ),
-        remediation=SAME_LAYER_REMEDIATION,
+        message=message,
+        remediation=remediation,
     )
 
 
@@ -107,6 +174,8 @@ def same_layer_statements(
     edges: Sequence[tuple[str, str]],
     parents: Mapping[str, Collection[str]],
     tags: Mapping[str, Collection[str]],
+    *,
+    facts: Mapping[tuple[str, str], CrossImportFact] | None = None,
 ) -> list[Violation]:
     """Every crossing no entry excuses, and every entry that stopped earning its place.
 
@@ -118,11 +187,10 @@ def same_layer_statements(
     run's output does not move with a ``set``'s iteration order, and the
     exemption findings follow in declaration order.
     """
-    crossings = same_layer_crossings(edges, rule.layers, parents, tags)
+    known = facts or {}
+    every_via_x = frozenset(edge for edge, fact in known.items() if fact.every)
+    crossings = same_layer_crossings(edges, rule.layers, parents, tags, via_x=every_via_x)
     reported, excused = excused_crossings(rule, crossings)
-    findings = [
-        _crossing_finding(rule, src_ref_id, dst_ref_id, parents, tags)
-        for src_ref_id, dst_ref_id in reported
-    ]
+    findings = [_crossing_finding(rule, edge, parents, tags, known.get(edge)) for edge in reported]
     findings.extend(stale_layer_exemption_findings(rule, excused))
     return findings

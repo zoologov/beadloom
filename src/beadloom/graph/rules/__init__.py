@@ -13,6 +13,8 @@ responsibility (BDL-059 S3, cohesion-driven):
 - :mod:`.slices` — the two Feature-Sliced Design slice rules (``slice_public_api``,
   ``slice_shape``); :mod:`.slice_units` reads the units they judge — slices, the segments
   of ``shared`` and ``app`` and their containers, slice groups.
+- :mod:`.cross_imports` — FSD's ``@x`` notation: where an import lands in a slice, and the
+  ``via: "@x"`` fact the reindex records on an edge and the layer rule reads.
 - :mod:`.cycles` — colored (WHITE/GREY/BLACK) cycle detection + edge-liveness SQL helpers.
 
 This ``__init__`` owns the :func:`evaluate_all` orchestration (dispatch by rule
@@ -29,6 +31,12 @@ from beadloom.graph.rules.advisories import ADVISORY_RULE_TYPES, is_advisory
 from beadloom.graph.rules.attribution import (
     FileAttribution,
     count_unattributed_import_files,
+)
+from beadloom.graph.rules.cross_imports import (
+    VIA_CROSS_IMPORT,
+    VIA_KEY,
+    CrossImportFact,
+    read_cross_import_facts,
 )
 from beadloom.graph.rules.cycles import evaluate_cycle_rules
 from beadloom.graph.rules.doc_area import (
@@ -376,7 +384,10 @@ __all__ = [
     "VALID_EDGE_KINDS",
     "VALID_NODE_KINDS",
     "VALID_RULE_SEVERITIES",
+    "VIA_CROSS_IMPORT",
+    "VIA_KEY",
     "CardinalityRule",
+    "CrossImportFact",
     "CycleRule",
     "DenyRule",
     "DocAreaCoherenceRule",
@@ -441,6 +452,7 @@ __all__ = [
     "part_of_generations",
     "part_of_parents",
     "population_phrase",
+    "read_cross_import_facts",
     "stated_populations",
     "suppressed_crossings",
     "validate_rules",

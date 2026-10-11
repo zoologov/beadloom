@@ -48,7 +48,10 @@ def _export_edge(row: sqlite3.Row) -> dict[str, object]:
 
     AMQP/contract metadata (when present under the ``contract`` key of the
     edge's ``extra`` JSON) is surfaced as a top-level ``contract`` field;
-    edges without it omit the key entirely (smaller, stable diffs).
+    edges without it omit the key entirely (smaller, stable diffs). The same
+    holds for ``via``: ``"@x"`` on a derived edge every import of which goes
+    through the target's ``@x`` cross-import API (BDL-082 RFC D1), absent
+    otherwise.
     """
     edge: dict[str, object] = {
         "src": row["src_ref_id"],
@@ -56,24 +59,32 @@ def _export_edge(row: sqlite3.Row) -> dict[str, object]:
         "kind": row["kind"],
         "lifecycle": row["lifecycle"],
     }
-    contract = _edge_contract(row["extra"])
-    if contract is not None:
+    extra = _edge_extra(row["extra"])
+    contract = extra.get("contract")
+    if isinstance(contract, dict):
         edge["contract"] = contract
+    via = extra.get(_VIA_KEY)
+    if isinstance(via, str) and via:
+        edge[_VIA_KEY] = via
     return edge
 
 
-def _edge_contract(raw_extra: str | None) -> dict[str, object] | None:
-    """Extract the optional ``contract`` payload from an edge's ``extra`` JSON."""
+#: The key of the ``@x`` cross-import fact the reindex writes into a derived edge's
+#: ``extra`` (``beadloom.graph.rules.cross_imports.VIA_KEY``, BDL-082 RFC D1). Named here
+#: rather than imported: the rule engine already reaches this module, and importing back
+#: would close a dependency cycle between the two.
+_VIA_KEY = "via"
+
+
+def _edge_extra(raw_extra: str | None) -> dict[str, object]:
+    """An edge's ``extra`` JSON as a mapping; empty when it is absent or no object."""
     if not raw_extra:
-        return None
+        return {}
     try:
         extra = json.loads(raw_extra)
     except json.JSONDecodeError:
-        return None
-    if not isinstance(extra, dict):
-        return None
-    contract = extra.get("contract")
-    return contract if isinstance(contract, dict) else None
+        return {}
+    return extra if isinstance(extra, dict) else {}
 
 
 def build_export(
