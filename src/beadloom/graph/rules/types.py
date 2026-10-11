@@ -640,6 +640,35 @@ class ScenarioBindingRule:
 #: slice's top may hold besides its ``index`` (BDL-080 S3c).
 DEFAULT_SLICE_SEGMENTS: tuple[str, ...] = ("ui", "model", "lib", "api", "config")
 
+#: The segment names a slice's top is discouraged from holding (BDL-082 S1b, RFC D4).
+#: feature-sliced.design, *Slices and segments*: "Make sure that the name of these segments
+#: describes the purpose of the content, not its essence. For example, components, hooks,
+#: and types are bad segment names". The default is Steiger's list, quoted in its order from
+#: ``@feature-sliced/steiger-plugin`` 0.8.0, ``dist/index.js``, rule ``segments-by-purpose``:
+#: ``BAD_NAMES`` is the union of ``BAD_NAMES_GENERIC``, ``_REACT``, ``_VUE``, ``_REDUX`` and
+#: ``_ANGULAR`` below (46 + 5 + 4 + 12 + 2), 69 names. It holds ``store``, which
+#: ``/docs/reference/layers`` lists as a typical segment of ``app``; a project that keeps
+#: one names it in ``segments:``.
+DEFAULT_DISCOURAGED_SEGMENTS: tuple[str, ...] = (
+    # BAD_NAMES_GENERIC
+    "component", "components", "helper", "helpers", "util", "utils", "constant",
+    "constants", "const", "consts", "type", "types", "store", "stores", "modal", "modals",
+    "service", "services", "function", "functions", "class", "classes", "enum", "enums",
+    "interface", "interfaces", "decorator", "decorators", "schema", "schemas", "handler",
+    "handlers", "fixture", "fixtures", "middleware", "middlewares", "validator",
+    "validators", "validation", "validations", "resolver", "resolvers", "mutation",
+    "mutations", "asset", "assets",
+    # BAD_NAMES_REACT
+    "hook", "hooks", "context", "provider", "providers",
+    # BAD_NAMES_VUE
+    "composable", "composables", "directive", "directives",
+    # BAD_NAMES_REDUX
+    "action", "actions", "reducer", "reducers", "selector", "selectors", "effect",
+    "effects", "saga", "sagas", "thunk", "thunks",
+    # BAD_NAMES_ANGULAR
+    "pipe", "pipes",
+)  # fmt: skip
+
 
 @dataclass(frozen=True)
 class SlicePublicApiRule:
@@ -661,12 +690,21 @@ class SlicePublicApiRule:
     ``index`` is a finding; so is an import into a slice that has no ``index`` at all,
     which has no public API to enter. An import from inside the slice is not judged.
 
+    **The specification's other entries** (BDL-082 S1b, RFC D1 and D5). ``A/@x/B`` (a file,
+    or a folder entered through its ``index``) is a second public API of slice A, open to
+    the slice of A's layer whose folder is named B and a finding for any other importer;
+    which layer may use ``@x`` is the ``layers`` rule's question. When ``tags`` names the
+    unsliced layers' tags (``fsd-shared``, ``fsd-app``), a segment — a node ``part_of`` a
+    node carrying its tag — is entered through its ``index``, and in ``shared/ui`` and
+    ``shared/lib`` through a per-component index (``shared/ui/button/index``) as well; two
+    segments of one layer import each other freely, and the layer's own node is not judged.
+
     YAML::
 
         - name: fsd-public-api
           severity: error
           slice_public_api:
-            tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
+            tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities, fsd-shared, fsd-app]
     """
 
     name: str
@@ -677,14 +715,21 @@ class SlicePublicApiRule:
 
 @dataclass(frozen=True)
 class SliceShapeRule:
-    """A slice's top holds its segments and its ``index`` (BDL-080 S3c).
+    """A slice's top holds its segments and its ``index``; a group's top holds no code.
 
-    FSD gives a slice its shape rather than a size: the standard segments
-    (:data:`DEFAULT_SLICE_SEGMENTS`) and a public API in ``index``. For each slice — a
-    node carrying one of ``tags`` whose ``source`` is a folder on disk — a folder at
-    its top whose name is not in ``segments`` is a finding, and so is a code file
-    there that is not its ``index``. Hidden entries and files that are not code
-    (``README.md``) are not judged.
+    FSD gives a slice its shape rather than a size: segments and a public API in
+    ``index`` (BDL-080 S3c). For each slice — a node carrying one of ``tags`` whose
+    ``source`` is a folder on disk — the rule judges what stands at its top:
+
+    - a folder named in ``discouraged`` and not in ``segments`` is a finding: a segment is
+      named by its purpose, not its essence (BDL-082 S1b, RFC D4). ``segments`` is the
+      known-good set, so a name listed in both is fine; a folder in neither is a custom
+      segment and fine too, and so is ``@x``, the folder of the slice's cross-import APIs;
+    - a code file that is not its ``index`` is a finding.
+
+    A *group* — a folder between a sliced layer's folder and its slices that no node
+    claims (RFC D2) — shares no code, so a code file at its top is a finding as well.
+    Hidden entries and files that are not code (``README.md``) are not judged.
 
     YAML::
 
@@ -693,12 +738,14 @@ class SliceShapeRule:
           slice_shape:
             tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
             segments: [ui, model, lib, api, config]   # optional; these five by default
+            discouraged: [components, hooks, types]   # optional; Steiger's 69 by default
     """
 
     name: str
     description: str
     tags: tuple[str, ...]
     segments: tuple[str, ...] = DEFAULT_SLICE_SEGMENTS
+    discouraged: tuple[str, ...] = DEFAULT_DISCOURAGED_SEGMENTS
     severity: str = "error"
 
 

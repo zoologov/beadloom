@@ -11,7 +11,8 @@ responsibility (BDL-059 S3, cohesion-driven):
 - :mod:`.evaluators` — per-rule-type evaluation
   (deny/require/import/forbid/layer/cardinality/coverage).
 - :mod:`.slices` — the two Feature-Sliced Design slice rules (``slice_public_api``,
-  ``slice_shape``).
+  ``slice_shape``); :mod:`.slice_units` reads the units they judge — slices, the segments
+  of ``shared`` and ``app`` and their containers, slice groups.
 - :mod:`.cycles` — colored (WHITE/GREY/BLACK) cycle detection + edge-liveness SQL helpers.
 
 This ``__init__`` owns the :func:`evaluate_all` orchestration (dispatch by rule

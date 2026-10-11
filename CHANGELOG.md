@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`slice_public_api` reads `A/@x/B` as a second public API of slice A, open to slice B alone
+  (`beadloom-8sml`, BDL-082 RFC D1).** An import landing on `<A>/@x/<B>.*` or
+  `<A>/@x/<B>/index.*` is clean when the importer sits in the slice of A's layer whose folder
+  is named B, and a finding for any other importer, whose text quotes the specification ("entity
+  A can declare a separate public API just for entity B"). Which layer may use `@x` stays the
+  layer rule's question. Measured on 2026-10-11 on scratch projects after `init --yes`, 9.0.0
+  against this tree: the specification's own example (`entities/artist` reading
+  `entities/song/@x/artist` in three import forms) goes from 3 `fsd-public-api` errors to 0; a
+  third entity importing the same file stays 1 error, with the new wording; a
+  `features/b → features/a/@x/b` import goes from 1 `fsd-public-api` error to 0, and its
+  `fsd-layers` error is unchanged.
+- **`slice_public_api` covers the segments of `shared` and `app` when its `tags:` name them
+  (`beadloom-8sml`, RFC D5).** A segment, a node `part_of` a node carrying its tag, is entered
+  through its `index`, and in `shared/ui` and `shared/lib` through a per-component index
+  (`shared/ui/button/index`) as well; two segments of one layer import each other freely, and
+  the layer's own node is not judged. A finding calls the unit a `segment` and names its
+  entries. Measured on the probe of the specification's `shared` examples, with `fsd-shared` and
+  `fsd-app` added to the rule's tags: 9.0.0 reports 4 errors, two of them false (an import of
+  `@/shared/ui/button` read as entering a segment with no index, and `shared/routes` importing
+  `shared/ui`); this tree reports 2, the two sidesteps Steiger reports too. With the tags `init`
+  9.0.0 writes, both report 0.
+- **`slice_shape` is a deny-list by purpose (`beadloom-8sml`, RFC D4).** A folder at a slice's
+  top is a finding when its name is in the new optional key `discouraged:` and not in
+  `segments:`; any other name is fine, `@x` included. `discouraged:` defaults to the 69 names
+  of `@feature-sliced/steiger-plugin` 0.8.0's `segments-by-purpose` rule (`components`,
+  `hooks`, `types`, `utils`, `helpers`, `store` and 63 more), may be an empty list, and is
+  refused on every other rule type. `segments:` keeps its meaning as the known-good set. The
+  `rules` table stores the list beside the segments. Measured on the probe
+  `features/x/{ui,analytics,components,hooks}`: 9.0.0 reports 3 warnings, this tree 2
+  (`components/`, `hooks/`); on the `@x` example, 1 warning on `@x/` against 0. Inside a slice
+  group read as one slice by `init` 9.0.0 (`features/auth/{login,register}`), the 2 warnings
+  on `login/` and `register/` are gone.
+- **`slice_shape` reports a code file at the top of a slice group (`beadloom-8sml`, RFC D2).** A
+  group is a folder between a sliced layer's folder and its slices that no node claims; "there
+  should be no code sharing in that folder". Measured on `features/auth/{login,register}` with
+  a node per inner slice and `features/auth/shared.ts`: 9.0.0 reports nothing, this tree 1
+  warning. On this repository `site-fsd-public-api` and `site-fsd-slice-shape` report 0
+  findings before and after.
+
 ## [9.0.0] - 2026-10-10
 
 **This release makes the portal a service, draws every layer rule, and serves a Feature-Sliced
