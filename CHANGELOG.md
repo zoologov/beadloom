@@ -80,7 +80,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as a reasoned exception, not a default. Removed, because the specification contradicts them:
   "no cross-imports between slices of the same layer" with no exception, a size signal that
   asked to split a page, and a slice's top holding "its segments and its `index` and nothing
-  else". A project that composes `ddd`, this repository included, gets no changed file.
+  else". A project that composes `ddd`, this repository included, gets no changed file. The two
+  FSD fixtures gain what the overlays describe: `vue-fsd` a group `features/payment/{card-form,
+  pay-button}` with one planted import between its slices and an `@x` pair in `entities`
+  (21 nodes where it had 19; `lint --strict` exit 1 with 3 errors where it had 2, the new one
+  `fsd-layers` `features-payment-pay-button → features-payment-card-form`), and `rn-fsd` an
+  `@x` pair (19 nodes where it had 18; exit 0 and its 1 warning unchanged). Neither `@x` pair
+  is a finding, and each is the one `depends_on` edge marked `via: @x`. On the two new graphs
+  the portal's layout fails 8 browser cases on `vue-fsd` and 1 on `rn-fsd`; each fixture's
+  browser-suite run is a strict xfail naming `beadloom-us5r.1` until the layout holds.
 - **Exit codes move only on inputs 9.0.0 read against the specification.** Measured by
   `beadloom-wvzg` on 2026-10-11 on Darwin arm64, CPython 3.13, on scratch projects written from
   feature-sliced.design's reference pages: each probe copied twice, `init --yes` then

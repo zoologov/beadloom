@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 
+import type { Product } from '@/entities/product/@x/cart'
 import { formatMoney } from '@/shared/lib'
 
 export const useCartStore = defineStore('cart', {
@@ -11,6 +12,10 @@ export const useCartStore = defineStore('cart', {
   actions: {
     add(slug: string) {
       this.slugs.push(slug)
+    },
+    addProduct(product: Product) {
+      this.slugs.push(product.slug)
+      this.total += product.price
     },
   },
 })
