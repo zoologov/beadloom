@@ -371,7 +371,11 @@ One feature node covers the cooperating modules below (all annotated
   container when the node declares none), symbol count, doc-status, served
   `.html` doc links (gated by the published-slug set so a link never 404s), and
   the `beadloom why` dependency lists; each `depends_on` edge carries a
-  `violation` flag (true when any of the project's layer rules finds against that edge).
+  `violation` flag (true when any of the project's layer rules finds against that edge),
+  and since BDL-082 S1a a `via: "@x"` key when every import behind the edge goes through the
+  target's `@x` cross-import API — the fact the reindex recorded, read with
+  `read_cross_import_facts`; an edge without that fact has no `via` key, and a mixed edge's
+  `partly_via` is not carried.
   Since BDL-080 S1b it also writes every layer rule the project declares (`layer_rules`) and,
   per node, the rule that places it (`layer_rule`, `layer_rule_rank`), read through
   `layer_rules_view.py`. The original keys `layers`, `layer_order`, `layer` and `layer_rank`
@@ -1260,6 +1264,9 @@ Tests bound to this node (the binding moved with the package in K1):
 `test_the_view_flags_what_the_rule_finds.py`, `test_site_landscape.py`,
 `test_site_metrics_history.py`, `test_site_nav.py`,
 `test_a_node_page_opens_the_viewer_on_its_node.py` (A4),
+`architecture_view/test_the_data_file_carries_the_cross_import_fact.py` (BDL-082 S1a: an
+entities edge via `@x` carries `via` and is no violation, a features edge via `@x` carries it and
+is one, an edge without the fact has no `via` key),
 `test_every_landscape_node_links_to_its_page.py` (A4), and
 `architecture_view/test_the_data_file_carries_the_node_card.py` (A1, K4, the source link and
 the activity allow-list),

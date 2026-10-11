@@ -164,8 +164,22 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 | `test_binding` | Report a test file bound to no node (`files` leg) and a node with no bound test file, its own or a `part_of` descendant's (`for` leg) (BDL-074) | default severity `warn`; this repository declares the file leg at `error` and the node leg at `warn`, as two rules |
 | `test_import_boundary` | `forbid_import` over the imports of test files, narrowed by `of` to tests of a matching node (BDL-074) | default severity `error`; `tests/unit/**` of a `layer-domain` node must not import `beadloom/infrastructure/**` |
 | `scenario_binding` | A scenario's `@node:` tag names the node folder its feature file sits in (BDL-074) | default severity `warn`, raised to `error` here; whether the scenario's steps EXECUTE that node is not judged |
-| `slice_public_api` | An import into a Feature-Sliced slice from outside it lands on the slice's `index`, judged over the imports the reindex resolved (BDL-080) | default severity `error`; this repository's `site-fsd-public-api` over the site's `fsd-pages`, `fsd-widgets`, `fsd-features` and `fsd-entities` slices |
-| `slice_shape` | A slice's top holds only its segments (`ui model lib api config` by default) and its `index` (BDL-080) | default severity `error`, lowered to `warn` here (`site-fsd-slice-shape`) |
+| `slice_public_api` | An import into a Feature-Sliced slice from outside it lands on a public API entry: the slice's `index`, or an `@x/<B>` API the slice opens to slice B alone; with `fsd-shared` / `fsd-app` in its tags, a segment of `shared` or `app` is entered through its `index` or, in `shared/ui` and `shared/lib`, a per-component index. Judged over the imports the reindex resolved (BDL-080, BDL-082) | default severity `error`; this repository's `site-fsd-public-api` over the site's `fsd-pages`, `fsd-widgets`, `fsd-features` and `fsd-entities` slices |
+| `slice_shape` | A slice's top holds no folder named in `discouraged:` (Steiger's 69 names by default) and not in `segments:` (`ui model lib api config` by default), and no code file but its `index`; a slice group's top holds no code (BDL-080, BDL-082) | default severity `error`, lowered to `warn` here (`site-fsd-slice-shape`) |
+
+**The Feature-Sliced rules, by the specification** (BDL-082). The FSD rules read
+feature-sliced.design 2.1. An entity B may import a sibling entity A through `entities/A/@x/B`, the
+cross-import API A opens to B alone: the reindex records `via: "@x"` on the derived edge when every
+import behind it goes through that API, and a `layers` rule accepts the edge only on the layer its
+`layers:` list names `entities`, as the specification says ("only use this notation on the Entities
+layer"). Steiger accepts `@x` on every layer, so `features/a/@x/b` is a finding here and clean
+there. A slice group (`features/auth/{login,register}`) shares no code at its top. `init` 9.0.0 reads a
+group as one slice, and BDL-082 S2 makes it write a node per inner slice. Custom segments are fine when named by purpose
+(`analytics/`), and the names the specification and Steiger discourage (`components/`, `hooks/`,
+`types/`) are findings. `shared` and `app` are made of segments with a public API each, judged once
+the public-API rule carries their tags, and neither layer nor its segments is judged for shape, so
+`app/store` is clean here where Steiger reports it. The full rules, findings and differences are in
+the [rule-engine SPEC](domains/graph/features/rule-engine/SPEC.md).
 
 > Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / `scenario_coverage` / `doc_area_coherence` / `summary_facts` / `test_binding` / `test_import_boundary` / `scenario_binding` / `slice_public_api` / `slice_shape` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
 >

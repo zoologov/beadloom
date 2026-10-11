@@ -11,13 +11,13 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/attribution.py` — which node a source FILE belongs to, and how many files belong to none.
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers. `evaluate_one_import_rule` — one `forbid_import` rule over a list of imports — is public since BDL-074 C3, because `test_import_boundary` runs it over test imports.
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code. Since BDL-070 A5 it reads a node's layer through `layers.own_layer_of` and its tags through `node_tags`, so the answer it decides a `layers` rule's liveness on is the answer the evaluator decides its verdict on.
-- `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's, and which node's tag decided (`layer_membership`). Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1). Since BDL-070 B2 it also answers what containment makes of an edge INSIDE one layer: `shares_tagged_ancestor` and `same_layer_crossings`. Since BDL-080 S1b it holds the one narrowing a scoped rule goes through, `within_scope` over `subtree_of`.
+- `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's, and which node's tag decided (`layer_membership`). Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1). Since BDL-070 B2 it also answers what containment makes of an edge INSIDE one layer: `shares_tagged_ancestor` and `same_layer_crossings`. Since BDL-080 S1b it holds the one narrowing a scoped rule goes through, `within_scope` over `subtree_of`. Since BDL-082 S1a `same_layer_crossings` takes `via_x`, the edges every import of which goes through `@x`, and `CROSS_IMPORT_LAYER` (`"entities"`) names the one layer, by its declared NAME, where such an edge is no crossing.
 - `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted against the layer each end is IN, and the finding that states the fraction (BDL-070 A2, recounted in B3). Since BDL-080 S1f `scoped_reach` counts a population already narrowed to the rule's scope, and `reach_of` is `within_scope` followed by `scoped_reach`.
 - `rules/layer_declaration.py` — which declared layers no node is in. A layer rule names TAGS rather than ref_ids, so it fell outside `validate_rules`' `isinstance` chain and a rule could declare a layer nothing carries without anything saying so. One predicate answers both surfaces — the `validate_rules` warning and the evaluator's `warn` finding — and the finding stands down when fewer than two layers are populated AND the rule is inert, because `liveness` names them for exactly that graph (BDL-070 A6). Both halves are needed since BDL-070 B5-fix: a rule whose one inhabited layer holds two peers that cross is live, so liveness says nothing about it, and standing down on the layer count alone would drop the report entirely (BDL-UX #296).
 - `rules/advisories.py` — the rule types whose findings report a rule's REACH rather than a defect (`layer_population`, `layer_declaration`, and since BDL-074 C3 `suite_population`), and the one thing that follows: `lint --fail-on-warn` does not exit 1 on them (BDL-070 A8).
 - `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2), and of the sixth cache `liveness._GraphFacts` kept beside them (BDL-070 A5).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
-- `rules/layer_crossings.py` — what the rule SAYS about a dependency that stays inside one layer: the un-excused crossings as findings, at the rule's declared severity, and the exemption entries that have stopped earning their place (BDL-070 B3). `layers` decides what crosses and `layer_exemptions` decides what an entry does about it; this turns the pair into findings.
+- `rules/layer_crossings.py` — what the rule SAYS about a dependency that stays inside one layer: the un-excused crossings as findings, at the rule's declared severity, and the exemption entries that have stopped earning their place (BDL-070 B3). `layers` decides what crosses and `layer_exemptions` decides what an entry does about it; this turns the pair into findings. Since BDL-082 S1a it is handed the `@x` facts of the edges and words a crossing by them: through `@x` off the entities layer, or a mixed edge located at the import that does not go through it.
 - `rules/layer_edges.py` — the set of edges a layer rule finds against, as `(src, dst)` pairs,
   for an instrument that DRAWS the graph rather than reporting on it (BDL-070 B4). It projects
   the rule's own findings; it holds no predicate of its own.
@@ -28,7 +28,9 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/test_binding.py` — `test_binding`: a test file bound to no node (the `files` leg) and a node with no bound test file, its own or a `part_of` descendant's (the `for` leg), over the binding the reindex records in `test_files` (BDL-074 C3).
 - `rules/test_import_boundary.py` — `test_import_boundary`: chooses which recorded TEST imports a boundary judges, then hands them to `forbid_import`'s own evaluator (BDL-074 C3).
 - `rules/scenario_binding.py` — `scenario_binding`: a scenario's `@node:` tag against the node folder its feature file sits in. Whether the scenario's steps execute that node is NOT judged (see below) (BDL-074 C3).
-- `rules/slices.py` — the two Feature-Sliced Design slice rules, `slice_public_api` and `slice_shape`, judged per slice over the slice's folder on disk, and `slice_rule_inert_reason`, which `liveness.py` reads (BDL-080 S3c).
+- `rules/slices.py` — the two Feature-Sliced Design slice rules, `slice_public_api` and `slice_shape`, judged per slice over the slice's folder on disk, and `slice_rule_inert_reason`, which `liveness.py` reads (BDL-080 S3c). Since BDL-082 S1b they read feature-sliced.design 2.1: `@x` cross-import APIs, the segments of `shared` and `app` with per-component indexes, and `slice_shape` as a deny-list by purpose (see **The slice rules** below).
+- `rules/slice_units.py` — what the two slice rules judge, read off the graph and the folders (BDL-082 S1b): `read_units` returns a `SliceUnits` whose carriers are split into **slices**, **containers** (a carrier another carrier sharing one of its tags is `part_of`: the `shared` or `app` layer node) and **segments** (a carrier `part_of` a container), plus the slice **groups** no node claims. It also holds the helpers both slice modules share: `INDEX`, `SLICED_LAYER_FOLDERS`, `stem`, `inside`, `has_index`, `node_sources`, `carriers`.
+- `rules/cross_imports.py` — feature-sliced.design's `@x` notation, read once for two rules (BDL-082 S1a): `located` (which file of a slice an import reaches) and `cross_import_name` (whether that file is an `@x` API, and for which slice), which `slice_public_api` reads; and the **edge fact** the reindex records from the same two answers (`edge_cross_import`, `edge_extra`) and the layer rule reads back (`read_cross_import_facts` → `CrossImportFact`). See **`@x` on a same-layer edge** below.
 - `rules/suite_tables.py` — the `test_files` and `test_imports` tables read for the suite rules (`IndexedTestFile` carries each file's `path`, `ref_id`, `placement` and, since BDL-074 F1, its recorded `kind`), and `NodeSelection` (which nodes a matcher selects, and whether a node is one of them or `part_of` one). Every reader returns `None` for an index written before those tables existed, so a rule says "reindex" rather than reporting every node untested (BDL-074 C3).
 - `rules/listed_exemptions.py` — `ExemptionLedger`: what a `ListedExemption` does — which entry excuses a subject, which entries excuse nothing (dead) and which exemptions are past their `until` date while still excusing something (expired). `excused` counts the subjects the entries excused in a run, and `exemptions_used` (BDL-074 F1) how many exemptions excused at least one, which the `files` leg states as `excused by K exemption(s)`. The counterpart of `exemptions.py` for exemptions that list paths or node ids rather than a from/to glob pair (BDL-074 C3).
 - `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports.
@@ -58,8 +60,8 @@ Enforce architectural constraints declaratively. Rules are defined in a YAML fil
 | **test_binding** | `test_binding` | A test file bound to no node, and a node with no bound test file |
 | **test_import_boundary** | `test_import_boundary` | Forbid imports from test files, narrowed to the tests of matched nodes |
 | **scenario_binding** | `scenario_binding` | A scenario's `@node:` tag names the node folder its feature file sits in |
-| **slice_public_api** | `slice_public_api` | An import into a Feature-Sliced slice from outside it lands on the slice's `index` |
-| **slice_shape** | `slice_shape` | A slice's top holds only its segments and its `index` |
+| **slice_public_api** | `slice_public_api` | An import into a Feature-Sliced slice or segment from outside it lands on a public API entry: its `index`, an `@x` API open to the importer, or a per-component index in `shared/ui`, `shared/lib` |
+| **slice_shape** | `slice_shape` | A slice's top holds no discouraged folder name and no code file but its `index`; a group's top holds no code |
 
 ### Constants
 
@@ -761,37 +763,184 @@ holding one glob, so `ExemptionLedger` judges each entry on its own:
 Every liveness finding the three rules make is `warn`, including a total stand-down, because
 none of them passes the declared severity to `liveness_finding`.
 
-### The slice rules — `slice_public_api`, `slice_shape` (BDL-080 S3c)
+### The slice rules — `slice_public_api`, `slice_shape` (BDL-080 S3c, BDL-082 S1b)
 
 Feature-Sliced Design gives a slice a shape and a way in rather than a size. Both rules live in
-`rules/slices.py` and judge each **slice**: a node carrying one of the rule's `tags` whose
-`source` is a folder on disk. The layer order between slices is the `layers` rule's, not theirs.
+`rules/slices.py`; the layer order between slices is the `layers` rule's, not theirs. Since
+BDL-082 S1b they read feature-sliced.design 2.1 (`/docs/reference/public-api`,
+`/docs/reference/slices-segments`, `/docs/reference/layers`).
 
-- **`slice_public_api`** reads `code_imports`, where the reindex already decided which node each
-  import reached. For an import resolved to a node inside a slice, from a file outside that slice,
-  it locates the imported file inside the slice's folder. A relative specifier is completed from
-  the importing file's folder by `js_specifiers.relative_import_candidates`, the completion the
-  resolver uses. Any other specifier went through an alias the rule does not read, so it is
-  matched by its longest trailing path that names a file in the folder: `@/features/auth` names
-  the folder itself, so its `index`. Either way a candidate list is settled by
-  `exact_case.first_existing_file`, the resolver's own function (BDL-080 S3f): a candidate counts
-  only when every part of its path is listed in its exact case, so on a case-folding filesystem
-  the rule and the resolver cannot pick different files for one import. Measured by S3f on
-  macOS: an import of `@/entities/app` beside `App.vue` was 1 finding before and 0 after. A file other than the slice's `index` is a finding, and so
-  is an import into a slice that has no `index`. An import whose file cannot be located is not
-  judged. A glob cannot express "inside this slice but not its index", which is why this is a
-  rule over resolved imports and not a `forbid_import` pattern. Steiger's
-  `fsd/no-public-api-sidestep` is the file-level check of the same thing.
-- **`slice_shape`** reads the folder: a folder at the slice's top that is not one of `segments`
-  (`DEFAULT_SLICE_SEGMENTS`, `ui model lib api config`) is a finding, and so is a code file there
-  that is not the `index`. Hidden entries and files that are not code (`README.md`) are not
-  judged.
+**What is judged** (`rules/slice_units.py`). A rule's *carriers* are the nodes carrying one of
+its `tags` whose `source` is a folder on disk. `read_units` sorts them by the graph's own
+`part_of` edges:
 
-Both default to `error` (`slice_shape` is not in `_KEYS_THAT_DEFAULT_TO_WARN`). Each finding's
-remediation is written by `evaluate_all`: import through the index and export what is needed
-from it, or move the entry into a segment or a slice of its own. Neither rule reads a `scope:`
-key, and the loader accepts one there without a warning (measured by BDL-080 S2d, BDL-UX #312),
-so the `tags` alone confine what is judged.
+- a **container** is a carrier that another carrier sharing one of its tags is `part_of` — the
+  `shared` or `app` layer node `init` writes. A layer is no slice, so a container is judged by
+  neither rule;
+- a **segment** is a carrier `part_of` a container — a segment of `shared` or `app`;
+- every other carrier is a **slice**;
+- a **group** has no node (RFC D2). It is a folder between a sliced layer's folder and the
+  slices in it that no node's source claims, as `features/auth` holds `login` and `register`.
+  The layer folder is recognised by the specification's names (`SLICED_LAYER_FOLDERS`: `pages`,
+  `widgets`, `features`, `entities`), so slices under a folder of any other name are in no
+  group.
+
+Containers and segments exist only when a rule's `tags` name the unsliced layers' tags
+(`fsd-shared`, `fsd-app`). The rules `init` writes as of BDL-082 S1 name the sliced layers'
+tags alone, so on a freshly initialised project neither rule judges `shared` or `app` until a
+rule carries those tags (measured by S1T: 0 findings with `init`'s tags, 4 with the two tags
+added, on one probe).
+
+#### `slice_public_api`
+
+The rule reads `code_imports`, where the reindex already decided which node each import reached.
+For an import resolved to a node inside a slice or a segment, from a file outside that unit, it
+locates the imported file inside the unit's folder through `cross_imports.located`, the reading
+the reindex's `@x` edge fact is taken through as well. A relative specifier is completed from the
+importing file's folder by `js_specifiers.relative_import_candidates`, the completion the resolver
+uses. Any other specifier went through an alias the rule does not read, so it is matched by its
+longest trailing path that names a file in the folder: `@/features/auth` names the folder
+itself, so its `index`. Either way a candidate list is settled by
+`exact_case.first_existing_file`, the resolver's own function (BDL-080 S3f): a candidate counts
+only when every part of its path is listed in its exact case, so on a case-folding filesystem
+the rule and the resolver cannot pick different files for one import. Measured by S3f on macOS:
+an import of `@/entities/app` beside `App.vue` was 1 finding before and 0 after.
+
+A unit's **public API entries** are:
+
+- its `index` at the top of its folder;
+- `@x/<B>.*` or `@x/<B>/index.*` — a cross-import API the slice opens to the slice of its own
+  layer (a carrier sharing one of the rule's tags) whose folder is named `B`, and to no other
+  importer ("entity A can declare a separate public API just for entity B"). `B` is the file
+  name without its code extension and a platform suffix: `@x/artist.ios.tsx` opens to
+  `artist`, and `@x/artist.test.ts` names `artist.test`, which is no API opened to `artist`.
+  Which LAYER may use `@x` is not this rule's question: `features/a/@x/b` imported from
+  `features/b` is clean here and a finding of the `layers` rule;
+- in a segment `ui` or `lib` of `shared`, a per-component index
+  (`shared/ui/button/index.*`). It is an entry, not a node.
+
+Two segments of one container import each other freely, and an import into a container itself
+is not judged. An import whose file cannot be located in a unit that has an `index` is not
+judged. A glob cannot express "inside this slice but not its index", which is why this is a
+rule over resolved imports and not a `forbid_import` pattern. Steiger's
+`fsd/no-public-api-sidestep` is the file-level check of the same thing.
+
+The findings, verbatim. `<noun>` is `slice` or `segment`. An `@x` API reached by any importer
+but the slice it names, where an importer in no unit reads `from outside every slice`:
+
+```text
+<file>:<line> imports '<specifier>', the cross-import API slice '<A>' opens to its sibling
+slice '<B>' alone (<file reached>), from slice '<importer's slice>': a cross-import API is open
+to the one slice it names ("entity A can declare a separate public API just for entity B")
+```
+
+with the remediation:
+
+```text
+import `<A>` through its index, or have `<A>` open a cross-import API of its own to this
+slice, `@x/<this slice's folder>`
+```
+
+An import into a unit with no `index` that lands on no other entry:
+
+```text
+<file>:<line> imports '<specifier>' into <noun> '<ref>', which has no index: a <noun> without
+a public API cannot be entered from outside it
+```
+
+An import past the entries (the bracketed clause only in `shared/ui` and `shared/lib`):
+
+```text
+<file>:<line> imports '<specifier>', which reaches past the public API of <noun> '<ref>'
+(<folder>/index[, or a per-component index <folder>/<component>/index]) into <file reached>
+```
+
+#### `slice_shape`
+
+The rule reads the folder of each SLICE — never a segment, whose top is its content, and never a
+container. For the container this is the specification's `/docs/reference/layers`, which lists
+`store`, `routes`, `styles` and `entrypoint` as segments of App, so `app/store` and a code file
+at `app`'s top are no finding (S1 review `beadloom-r4ck`, minor 2). At a slice's top:
+
+- a folder named in `discouraged` and not in `segments` is a finding. `segments`
+  (`DEFAULT_SLICE_SEGMENTS`, `ui model lib api config`) is the known-good set, so a name in both
+  lists is fine. A folder in neither list is a custom segment and fine too — `analytics/` is
+  clean — and so is `@x/`, which no list names. Until BDL-082 S1b the rule was an allow-list and
+  every folder outside `segments` was a finding;
+- a code file other than the `index` is a finding.
+
+`discouraged` defaults to `DEFAULT_DISCOURAGED_SEGMENTS`: the 69 names of
+`@feature-sliced/steiger-plugin` 0.8.0's `segments-by-purpose` `BAD_NAMES`, in the plugin's
+order — the union of its generic (46), React (5), Vue (4), Redux (12) and Angular (2) lists. It
+holds `components`, `hooks`, `types`, `utils`, `helpers`, `services`, `constants`, `composables`,
+`actions`, `reducers` and `store`; a project that keeps a slice's `store/` lists it under
+`segments:`. An empty `discouraged: []` discourages no name, and the rule still judges code
+files.
+
+A **group** shares no code ("there should be no code sharing in that folder"), so a code file
+at a group's top is a finding.
+
+The findings, verbatim. A discouraged folder (`the name this rule discourages` in place of
+`one of the <N> names this rule discourages` when the list holds one name):
+
+```text
+Slice '<ref>' holds the folder '<name>/' at its top, one of the <N> names this rule
+discourages: name by purpose, not essence ("the name of these segments describes the purpose
+of the content, not its essence"; its known segments: <segments>)
+```
+
+with the remediation:
+
+```text
+rename `<name>/` after what its code is for, or list it under the rule's `segments:` when the
+name is this project's decision
+```
+
+A code file at a slice's top:
+
+```text
+Slice '<ref>' holds the code file '<file>' at its top, beside its segments (<segments>): only
+its public API, the index, belongs there
+```
+
+A code file at a group's top, with `file_path` the file and `from_ref_id` `None`, because a
+group has no node:
+
+```text
+Group folder '<group>/' holds the code file '<file>' at its top: a group shares no code (its
+slices: <refs>; "there should be no code sharing in that folder")
+```
+
+with the remediation:
+
+```text
+move `<file>` into the one slice of the group that uses it, or into a lower layer when several
+slices do
+```
+
+Hidden entries and files that are not code (`README.md`) are not judged.
+
+Both rules default to `error` (`slice_shape` is not in `_KEYS_THAT_DEFAULT_TO_WARN`). The
+`@x`, discouraged-folder and group findings carry the remediation written above. The other
+findings get theirs from `evaluate_all`: import through the index and export what is needed from
+it, or move the entry into a segment or a slice of its own. Neither rule reads a `scope:` key,
+and the loader accepts one there without a warning (measured by BDL-080 S2d, BDL-UX #312), so
+the `tags` alone confine what is judged.
+
+#### Where Beadloom and Steiger differ
+
+Measured by S1T (`beadloom-wvzg`) on scratch probes written from the specification's text,
+against Steiger 0.7.0 with `@feature-sliced/steiger-plugin` 0.8.0, recommended set:
+
+| Case | Beadloom | Steiger | Why |
+|---|---|---|---|
+| `features/b` imports `features/a/@x/b` | `layers` finding | clean | Steiger accepts `@x` on every layer; the specification says "only use this notation on the Entities layer" |
+| a feature imports `entities/song/@x/artist` | `slice_public_api` finding | clean | the specification opens `@x/artist` to "code inside `entities/artist/`" alone |
+| an `@x` pair declared by hand as a YAML edge | `layers` finding | clean | Steiger reads no YAML; a declared edge keeps its row and records no `@x` fact |
+| a loose code file in `shared/ui` outside a component folder | `slice_public_api` finding when imported | clean | each component carries its own index |
+| `app/store` | clean | `segments-by-purpose` finding | `/docs/reference/layers` lists `store` as an App segment, and a container is never shape-judged |
+
+On the rest of the probes the two tools report the same imports.
 
 ### rules.yml Schema
 
@@ -883,14 +1032,16 @@ rules:
     description: "<description>"
     slice_public_api:
       tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]   # the tags a slice carries
+      # add fsd-shared, fsd-app to judge the segments of the unsliced layers too
 
-  # --- slice_shape: a slice's top holds its segments and its index ---
+  # --- slice_shape: no discouraged folder and no stray code at a slice's top ---
   - name: <unique-rule-name>
     description: "<description>"
     severity: warn
     slice_shape:
       tags: [fsd-pages, fsd-widgets, fsd-features, fsd-entities]
-      segments: [ui, model, lib, api, config]  # optional; these five by default
+      segments: [ui, model, lib, api, config]  # optional; the known-good names, these five by default
+      discouraged: [components, hooks, types]  # optional; Steiger's 69 names by default; [] for none
 ```
 
 Each rule must contain exactly one key of `AUTHORING_KEYS` — the `Keyword` column of the table
@@ -919,7 +1070,19 @@ def load_rules(rules_path: Path) -> list[Rule]
       otherwise.
    d. Take `AUTHORING_KEYS.intersection(rule)`. None or several raise `ValueError`:
       `rule '<name>' must have exactly one of <every authoring key, sorted>`.
-   e. `layers` is handed, with the whole rule, to `_parse_layer_rule`. Any other key's value must
+   e. `discouraged` is refused anywhere `slice_shape` cannot read it (BDL-082 S1b), because a
+      parser ignores a key its type does not read and the key would look configured while doing
+      nothing. Beside the rule's type key (on a `layers` rule, whose keys all sit at the top,
+      the message names `'layers'` instead of `the rule`), inside another type's block, and
+      inside `slice_shape` when it is not a list of non-empty strings (an empty list is
+      allowed), the messages are:
+
+      ```text
+      Rule '<name>': 'discouraged' is not a key of the rule; it is a key of 'slice_shape'
+      Rule '<name>': 'discouraged' is not a key of '<key>'; it is a key of 'slice_shape'
+      Rule '<name>': 'slice_shape.discouraged' must be a list of folder names, each a non-empty string
+      ```
+   f. `layers` is handed, with the whole rule, to `_parse_layer_rule`. Any other key's value must
       be a mapping — one message for all sixteen, `Rule '<name>': '<key>' must be a mapping` — and
       is handed to `_MAPPING_PARSERS[key]`.
 6. Remember `(text, tuple(rules))` under the resolved path and return the list. A file that raises
@@ -1066,7 +1229,8 @@ def part_of_ancestors(ref_id, parents) -> frozenset[str]
 def layer_population(edges, layer_at) -> LayerPopulation
 def tagged_containers(ref_id, layers, parents, tags) -> frozenset[str]
 def shares_tagged_ancestor(src, dst, layers, parents, tags) -> bool
-def same_layer_crossings(edges, layers, parents, tags) -> list[tuple[str, str]]
+def same_layer_crossings(edges, layers, parents, tags, *, via_x=()) -> list[tuple[str, str]]
+CROSS_IMPORT_LAYER = "entities"
 def subtree_of(scope, parents) -> frozenset[str]
 def within_scope(scope, edges, parents, tags) -> tuple[list[tuple[str, str]], Mapping]
 ```
@@ -1102,6 +1266,17 @@ every one — so neither could tell an internal edge from a peer crossing.
 `same_layer_crossings` applies it to an edge set and returns only the crossings. An edge whose ends
 are in DIFFERENT layers is not among them: direction is the rest of the layer rule's business. An
 edge with an unlayered end is not judged at all.
+
+**`@x` on a same-layer edge** (BDL-082 S1a, RFC D1). `via_x` holds the edges every import of
+which goes through the target's `@x` cross-import API, the fact the reindex records on the edge
+(see **The `@x` edge fact** below). Such an edge is no crossing when its layer is the one the
+rule's `layers:` list NAMES `entities` (`CROSS_IMPORT_LAYER`): the specification says "only use
+this notation on the Entities layer, where eliminating cross-imports is often unreasonable". It
+is a name and not a tag because the specification fixes its layers' names and a project tags
+them as it likes. On any other layer the edge is a crossing, and so is an edge only some of whose
+imports go through `@x`. A `scope:` narrows the edges first and the fact is read on what
+remains (measured by S1T: a rule scoped to a container of entities judged 1 of 1 edge and
+accepted it).
 
 Two properties hold, and both are settled by the declaration rather than by a dictionary's
 iteration order:
@@ -1142,8 +1317,10 @@ rule asks the second.
 
 ```python
 SAME_LAYER_REMEDIATION: str
+CROSS_IMPORT_ELSEWHERE_REMEDIATION: str   # BDL-082 S1a
+MIXED_CROSS_IMPORT_REMEDIATION: str       # BDL-082 S1a
 
-def same_layer_statements(rule, edges, parents, tags) -> list[Violation]
+def same_layer_statements(rule, edges, parents, tags, *, facts=None) -> list[Violation]
 ```
 
 One pass over the edge set produces both halves of what a layer rule has to say about its own
@@ -1156,6 +1333,100 @@ The finding names each end with the container that gives it its layer, and the r
 all three honest moves: remove the dependency, bring both ends inside one container the
 declaration gives a layer, or write an `exempt:` entry saying why it stands and what would retire
 it. A remediation naming only the exemption would be advice to silence the check.
+
+`facts` maps `(src, dst)` to the edge's `CrossImportFact`; `evaluate_layer_rules` reads it with
+`read_cross_import_facts(conn, rule.edge_kind)`, off the edge rows and never off `code_imports`,
+so the layer rule stays a rule over the graph. The edges whose fact is `every` are passed to
+`same_layer_crossings` as `via_x`, and each reported crossing is worded by its fact
+(BDL-082 S1a):
+
+Every import via `@x`, on a layer not named `entities`, with `file_path` and `line_number`
+`None` and the remediation `CROSS_IMPORT_ELSEWHERE_REMEDIATION` (move what both slices need down
+to `entities` or `shared`, merge the two slices, or add an `exempt:` entry):
+
+```text
+Same-layer crossing through a cross-import API: '<src>' depends on '<dst>', and every import
+behind it goes through the `@x` API the target opens to it, in layer '<layer>'. `@x` is for the
+Entities layer only ("only use this notation on the Entities layer, where eliminating
+cross-imports is often unreasonable"), so on this layer it is a dependency between peers like
+any other (rule '<rule>').
+```
+
+Some imports via `@x` and one not, with `file_path` and `line_number` the `not_via` import's and
+the remediation `MIXED_CROSS_IMPORT_REMEDIATION` (import the target at the named line through
+`@x/<this slice's folder>` as the other imports do, or remove that import). Off the entities
+layer the sentence also says that `@x` is for the Entities layer only, quoting the same note,
+before the rule name:
+
+```text
+Same-layer crossing: '<src>' depends on '<dst>', and not every import behind it goes through
+the `@x` API the target opens to it: <file>:<line> does not. Both are in layer '<layer>' and no
+container that declares a layer holds both, so the edge is a dependency between peers rather
+than a cross-import (rule '<rule>').
+```
+
+With no fact the text is the one above, unchanged since BDL-070 B3.
+
+#### The `@x` edge fact (`rules/cross_imports.py`, BDL-082 S1a)
+
+```python
+CROSS_IMPORT_FOLDER = "@x"
+VIA_KEY = "via"; PARTLY_VIA_KEY = "partly_via"; NOT_VIA_KEY = "not_via"
+VIA_CROSS_IMPORT = "@x"
+ENTITIES_ONLY_NOTE: str
+
+def located(specifier, importer, folder, project_root) -> str | None
+def cross_import_name(path, folder) -> str | None
+def names_cross_import(specifier) -> bool
+def edge_cross_import(imports, importer_folder, target_folder, project_root) -> CrossImportFact | None
+def read_cross_import_facts(conn, edge_kind) -> dict[tuple[str, str], CrossImportFact]
+def edge_extra(derived_by, fact) -> str
+
+@dataclass(frozen=True)
+class CrossImportFact:
+    every: bool             # every import behind the edge goes through @x
+    not_via: str | None     # "<file>:<line>" of the first that does not, when not every
+    def as_extra(self) -> dict[str, str]: ...
+    def not_via_location(self) -> tuple[str, int] | None: ...
+```
+
+Two rules read the notation, and both read it through this module so that they cannot read one
+import two ways: `slice_public_api` asks `located` and `cross_import_name` directly, and the
+layer rule reads the fact the reindex took from the same two answers. An import is *via* `@x`
+when its specifier has an `@x` path segment (`names_cross_import`) and the file it reaches
+inside the target node's source folder is `<target folder>/@x/<B>.*` or
+`<target folder>/@x/<B>/index.*`, where `B` is the basename of the importing node's source
+folder. `import_resolver.create_import_edges` calls `edge_cross_import` once per derived edge
+and writes `edge_extra("imports", fact)` into the edge's `extra`:
+
+| The imports behind the edge | `extra` |
+|---|---|
+| every one via `@x` | `{"derived": "imports", "via": "@x"}` |
+| some via `@x`, at least one not | `{"derived": "imports", "partly_via": "@x", "not_via": "<file>:<line>"}` (the first that is not, by file, then line) |
+| none via `@x` | `{"derived": "imports"}`, as before BDL-082 |
+
+The fact is written on ANY derived import edge, whatever layer its ends are in, because the
+reindex reads no rule; what the fact means is the layer rule's decision. A project without the
+notation pays one string test per import, since only an edge one of whose imports names `@x` is
+located. `read_cross_import_facts` returns the fact of every edge of one kind that carries one,
+by `(src, dst)`. `VIA_KEY`, `VIA_CROSS_IMPORT`, `CrossImportFact` and `read_cross_import_facts`
+are re-exported from `beadloom.graph.rules` and `beadloom.graph.rule_engine`. The fact travels on
+as the edge key `via: "@x"` in `beadloom export` and in the portal's data file; `partly_via` and
+`not_via` stay in the index.
+
+Two limits hold, and both err towards a finding the user can see:
+
+- **An alias that hides `@x`.** An alias mapping a name with no `@x` segment straight onto an
+  `@x` folder (a tsconfig `paths` entry `"@song-x-artist"` → `entities/song/@x/artist`, a prefix
+  `"@song-api/*"` → `entities/song/@x/*`, or an `imports.aliases` entry in `config.yml`) is read
+  as an ordinary import, so the edge is reported as an ordinary crossing. Measured by S1T on all
+  three alias forms; Steiger reports nothing there. Reading it would need the resolver to hand
+  the resolved file over. The case is pinned by
+  `tests/integration/graph/rules/test_the_specifications_fsd_examples_lint_as_it_reads_them.py`.
+- **A YAML-declared `@x` pair.** A `depends_on` edge declared in the graph YAML on the same pair
+  keeps its row (`INSERT OR IGNORE`) and records no fact, so a hand-declared `@x` pair is a
+  crossing. An authored edge is an authored claim and the fact describes derived imports
+  (coordinator's ruling on `beadloom-r4ck`, 2026-10-11).
 
 #### The edges a layer rule finds against (`rules/layer_edges.py`, BDL-070 B4)
 
@@ -1471,6 +1742,7 @@ def evaluate_scenario_binding_rules(conn: sqlite3.Connection, rules: list[Scenar
 def evaluate_slice_public_api_rules(conn: sqlite3.Connection, rules: list[SlicePublicApiRule], *, project_root: Path | None = None) -> list[Violation]: ...
 def evaluate_slice_shape_rules(conn: sqlite3.Connection, rules: list[SliceShapeRule], *, project_root: Path | None = None) -> list[Violation]: ...
 def population_finding(*, rule_name: str, rule_description: str, message: str) -> Violation: ...  # rules/types.py; always warn
+def read_cross_import_facts(conn: sqlite3.Connection, edge_kind: str) -> dict[tuple[str, str], CrossImportFact]: ...  # rules/cross_imports.py (BDL-082 S1a)
 def evaluate_all(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]: ...
 ```
 
@@ -1601,6 +1873,7 @@ class ScenarioBindingRule:
     severity: str = "warn"
 
 DEFAULT_SLICE_SEGMENTS: tuple[str, ...] = ("ui", "model", "lib", "api", "config")
+DEFAULT_DISCOURAGED_SEGMENTS: tuple[str, ...]   # 69 names, Steiger plugin 0.8.0's BAD_NAMES (BDL-082 S1b)
 
 @dataclass(frozen=True)
 class SlicePublicApiRule:
@@ -1615,7 +1888,16 @@ class SliceShapeRule:
     description: str
     tags: tuple[str, ...]
     segments: tuple[str, ...] = DEFAULT_SLICE_SEGMENTS
+    discouraged: tuple[str, ...] = DEFAULT_DISCOURAGED_SEGMENTS   # BDL-082 S1b
     severity: str = "error"
+
+VIA_KEY = "via"                 # rules/cross_imports.py (BDL-082 S1a)
+VIA_CROSS_IMPORT = "@x"
+
+@dataclass(frozen=True)
+class CrossImportFact:          # rules/cross_imports.py (BDL-082 S1a)
+    every: bool
+    not_via: str | None
 
 Rule = (DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule | LayerRule
         | CardinalityRule | UnregisteredFeatureCandidateRule | ModuleCoverageRule
@@ -1671,6 +1953,9 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 - All `kind` values in matchers are validated against `VALID_NODE_KINDS` at parse time.
 - All edge kind values (`unless_edge`, `edge_kind`) are validated against `VALID_EDGE_KINDS` at parse time.
 - Rules support `error` and `warn` severity levels (default varies by rule type).
+- `slice_public_api` and the reindex's `@x` edge fact locate an import through one function, `cross_imports.located`, and name the slice an `@x` API opens to through one function, `cross_imports.cross_import_name`, so the two cannot read one import two ways.
+- The layer rule reads the `@x` fact off the edge rows and never off `code_imports`. An edge via `@x` is no crossing only on the layer the declaration names `entities`.
+- Neither slice rule judges a container (the `shared` or `app` layer node), and `slice_shape` judges no segment.
 
 ---
 
@@ -1828,6 +2113,30 @@ All three surfaces that require an exit condition are covered in ONE file on pur
   `suite_population` findings and the `features-have-bound-tests` node debt are excluded from
   the undeclared findings, and two checks assert that each suite rule states its population and
   that the feature debt still fires.
+
+### Slice Rule and `@x` Tests (BDL-082 S1)
+
+- `tests/unit/graph/rules/test_a_cross_import_api_is_open_to_the_slice_it_names.py` — `@x/<B>`
+  as a file or a folder with an index is clean from slice B and a finding from a third slice; the
+  slice an API is opened to is the file name without its code extension and platform suffix.
+- `tests/unit/graph/rules/test_a_segment_of_shared_or_app_is_entered_through_its_public_api.py` —
+  segment indexes, per-component indexes in `shared/ui` and `shared/lib`, free imports between
+  the segments of one container, the container not judged.
+- `tests/unit/graph/rules/test_a_segment_is_named_by_purpose.py` — the deny-list, `segments:`
+  winning over `discouraged:`, an empty list, and the loader's three refusals.
+- `tests/unit/graph/rules/test_a_slice_group_shares_no_code.py` — a code file at a group's top.
+- `tests/unit/graph/rules/test_the_units_a_slice_rule_judges.py`,
+  `test_the_cross_import_notation_is_read_one_way.py`,
+  `test_a_slice_rule_finding_names_what_it_judged.py` — `read_units`, `located` /
+  `cross_import_name`, and the finding texts.
+- `tests/unit/graph/rules/test_a_cross_import_crosses_the_entities_layer_only.py` — `via_x`
+  accepted on `entities`, the two new finding forms elsewhere and on a mixed edge.
+- `tests/integration/graph/rules/test_the_specifications_fsd_examples_lint_as_it_reads_them.py`
+  — `init --yes` + `lint --strict` through the CLI on the specification's own examples: the
+  `@x` example clean, a scoped layer rule, `@x` reached from a higher layer, an `app` segment
+  and the `app` layer not shape-judged, the alias that hides `@x` pinned as a crossing.
+- Acceptance: `tests/acceptance/graph/rule-engine/slice_rules_by_the_specification.feature`,
+  `a_cross_import_crosses_the_entities_layer_only.feature`.
 
 ### Combined Evaluation Tests
 

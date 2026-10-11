@@ -7,7 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`discouraged:`, an optional key of a `slice_shape` rule in `rules.yml` (`beadloom-8sml`,
+  BDL-082 RFC D4).** A list of folder names a slice's top is discouraged from holding. Omitted,
+  it is the 69 names of `@feature-sliced/steiger-plugin` 0.8.0's `segments-by-purpose` rule. An
+  empty list discourages none. A value that is not a list of non-empty strings is refused, and
+  so is the key on any other rule type or beside a rule's type key, each with a message naming
+  `slice_shape`. The `rules` table stores it beside `segments`.
+- **The edge key `via`, with the value `@x`, in `beadloom export` and in the portal's data file
+  (`beadloom-r15q`, BDL-082 RFC D1).** A `depends_on` edge every import of which goes through
+  the target's `@x` cross-import API carries `"via": "@x"`, and any other edge has no `via`
+  key. The export stays `schema_version` 2 and the data file stays schema 2. In the index the
+  fact is the edge's `extra`: `{"derived": "imports", "via": "@x"}`, or `{"derived": "imports",
+  "partly_via": "@x", "not_via": "<file>:<line>"}` when only some imports go through `@x`. The
+  second form is not exported.
+
 ### Changed
+
+- **Exit codes move only on inputs 9.0.0 read against the specification.** Measured by
+  `beadloom-wvzg` on 2026-10-11 on Darwin arm64, CPython 3.13, on scratch projects written from
+  feature-sliced.design's reference pages: each probe copied twice, `init --yes` then
+  `lint --strict`, by 9.0.0 (installed with `[languages]`) and by this tree. `init --yes` moves
+  with `lint --strict`, since it runs the same check.
+  - The specification's `@x` example (`entities/artist` importing `entities/song/@x/artist`)
+    goes from exit 1 to 0: as a file, as a folder with an index, and under a `layers` rule with
+    a `scope:`.
+  - Every probe holding a real violation stays exit 1, with fewer findings and the new wording.
+  - Custom segments by purpose stay exit 0, with 6 warnings in 9.0.0 and 4 in this tree.
+  - `shared` and `app` with `fsd-shared` and `fsd-app` added to the public-API rule's tags stay
+    exit 1, with 10 errors in 9.0.0 (6 of them false) and 4 in this tree (all real).
+  - No probe moved from 0 to 1. On this repository `lint --strict` reports 0 errors and 69
+    warnings with 9.0.0 and with this tree.
 
 - **`slice_public_api` reads `A/@x/B` as a second public API of slice A, open to slice B alone
   (`beadloom-8sml`, BDL-082 RFC D1).** An import landing on `<A>/@x/<B>.*` or
@@ -26,8 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that folder's `index`): `via: "@x"` in the edge's `extra` when every one does,
   `partly_via: "@x"` and `not_via: "<file>:<line>"` when some do. The fact is rebuilt with the
   import edges on a full and an incremental reindex; an edge the graph YAML declares keeps its
-  own row and records no fact. `beadloom export` and the portal's data file carry `via: "@x"`
-  on such an edge (additive; an edge without it has no `via` key). The layer rule reads the
+  own row and records no fact. `beadloom export` and the portal's data file carry the first
+  form as `via: "@x"` (see *Added*). The layer rule reads the
   fact off the edge: an edge via `@x` between two nodes of the layer its `layers:` list names
   `entities` is no same-layer crossing; on any other layer it is reported with the
   specification's note ("`@x` is for the Entities layer only", quoting "only use this notation
@@ -65,13 +96,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `features/x/{ui,analytics,components,hooks}`: 9.0.0 reports 3 warnings, this tree 2
   (`components/`, `hooks/`); on the `@x` example, 1 warning on `@x/` against 0. Inside a slice
   group read as one slice by `init` 9.0.0 (`features/auth/{login,register}`), the 2 warnings
-  on `login/` and `register/` are gone.
+  on `login/` and `register/` are gone. A layer's own node — `shared` or `app` when the rule's
+  tags name them — is never judged for shape, nor are its segments: `/docs/reference/layers`
+  lists `store`, `routes`, `styles` and `entrypoint` as segments of App, so `app/store/` and a
+  code file at `app`'s top are no finding, where Steiger's `segments-by-purpose` reports
+  `app/store` (S1 review `beadloom-r4ck`).
 - **`slice_shape` reports a code file at the top of a slice group (`beadloom-8sml`, RFC D2).** A
   group is a folder between a sliced layer's folder and its slices that no node claims; "there
   should be no code sharing in that folder". Measured on `features/auth/{login,register}` with
   a node per inner slice and `features/auth/shared.ts`: 9.0.0 reports nothing, this tree 1
   warning. On this repository `site-fsd-public-api` and `site-fsd-slice-shape` report 0
   findings before and after.
+- **Where Beadloom and Steiger differ on the slice rules, by the specification's text**
+  (measured by `beadloom-wvzg` beside Steiger 0.7.0 with plugin 0.8.0, recommended set).
+  `features/b` importing `features/a/@x/b` is a `layers` finding here and clean to Steiger,
+  which accepts `@x` on every layer. A feature importing `entities/song/@x/artist` is a
+  `slice_public_api` finding here and clean to Steiger: the specification opens that file to
+  code inside `entities/artist/` alone. An `@x` pair declared in the graph YAML is a crossing
+  here; Steiger reads no YAML. A loose code file in `shared/ui` outside a component folder is a
+  finding here when imported. `app/store` is a finding to Steiger and not here. The
+  [rule-engine SPEC](docs/domains/graph/features/rule-engine/SPEC.md) keeps the table.
+
+### Known limitations
+
+- **An alias that hides `@x` reads as an ordinary import.** Only an import whose specifier has
+  an `@x` path segment is located for the edge fact, so a tsconfig `paths` entry
+  (`"@song-x-artist"` → `entities/song/@x/artist`, or the prefix `"@song-api/*"` →
+  `entities/song/@x/*`) or an `imports.aliases` entry that maps a name without `@x` onto an
+  `@x` folder leaves the edge a plain same-layer crossing: one `fsd-layers` error that Steiger
+  does not report, measured on all three forms. It errs towards a finding you can see. Write the
+  import with its `@x` segment. Reading it would need the resolver to hand the resolved file
+  over to the fact.
+- **A YAML-declared `@x` pair stays a crossing.** An edge the graph YAML declares keeps its own
+  row and records no `@x` fact, so declaring an `@x` pair by hand turns it into a `fsd-layers`
+  error (coordinator's ruling on `beadloom-r4ck`: an authored edge is an authored claim, the fact
+  describes derived imports). Let the reindex derive the edge from the imports instead.
+- **The rules `init` writes do not yet judge `shared` and `app`.** The public-API rule `init`
+  writes carries the sliced layers' tags only, so on a freshly initialised project the segments
+  of `shared` and `app` are judged only after `fsd-shared` and `fsd-app` are added to its
+  `tags:`. BDL-082 S2 has `init` write them.
 
 ## [9.0.0] - 2026-10-10
 
