@@ -17,6 +17,8 @@ responsibility (BDL-059 S4, cohesion-driven):
 - :mod:`.sync_state` — snapshot and rebuild the ``sync_state`` baselines.
 - :mod:`.change_detection` — file-index hashing/diffing + parser fingerprint
   (the incremental change-detection layer).
+- :mod:`.unread_code` — the indexed code files no installed parser reads, by language
+  (BDL-082 S2a).
 - :mod:`.full` — the :func:`reindex` (full rebuild) orchestration.
 - :mod:`.incremental` — the :func:`incremental_reindex` orchestration.
 
@@ -71,6 +73,7 @@ from beadloom.application.reindex.sync_state import (
     _build_initial_sync_state,
     _snapshot_sync_baselines,
 )
+from beadloom.application.reindex.unread_code import UnreadCode, read_unread_code, unread_code
 
 # Re-exported at the package level so ``_store_git_activity`` and
 # ``_compute_parser_fingerprint`` resolve them via this namespace (honouring
@@ -90,6 +93,7 @@ __all__ = [
     "_EXT_TO_LANG",
     "_TABLES_TO_DROP",
     "ReindexResult",
+    "UnreadCode",
     "_SyncPairSnapshot",
     "_beadloom_version",
     "_build_doc_ref_map",
@@ -119,7 +123,9 @@ __all__ = [
     "_update_node_extra",
     "analyze_git_activity",
     "incremental_reindex",
+    "read_unread_code",
     "reindex",
     "resolve_scan_paths",
     "supported_extensions",
+    "unread_code",
 ]

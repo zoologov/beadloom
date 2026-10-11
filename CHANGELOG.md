@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`init` and `reindex` name the code files they read no symbol from (`beadloom-6e2o`,
+  BDL-082 S2a).** A code file under the scan paths whose language has no parser installed is
+  counted by language and named on its own line, for instance `8 TypeScript files, no parser
+  installed — install beadloom[languages]`: after `init`'s `Index:` line in all three branches
+  (`--yes`, `--bootstrap`, the wizard) and after the counts of `reindex`, whether or not
+  anything changed. Information only, and no exit code moves on it. Measured before this change
+  on the specification's slice-group example with the TypeScript grammar unavailable: `init`
+  printed `Index: 0 symbols, 0 imports` and nothing else, and every FSD rule then had no import
+  to judge. Measured after it on the fixture `tests/fixtures/site/vue-fsd` in an environment
+  installed without the extra: `init --yes` exits 0 where it exits 1 with the grammar (its two
+  planted violations are unread), and now says why, in three lines: 26 TypeScript, 10 Vue and
+  3 JavaScript files.
 - **`discouraged:`, an optional key of a `slice_shape` rule in `rules.yml` (`beadloom-8sml`,
   BDL-082 RFC D4).** A list of folder names a slice's top is discouraged from holding. Omitted,
   it is the 69 names of `@feature-sliced/steiger-plugin` 0.8.0's `segments-by-purpose` rule. An
@@ -25,6 +37,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`init` reads a slice group as the slices in it (`beadloom-6e2o`, BDL-082 RFC D2).** A
+  folder of `pages`, `widgets`, `features` or `entities` is a slice when it holds a standard
+  segment (`ui`, `model`, `api`, `lib`, `config`) or an `index` at its top; a folder holding
+  neither whose folders are slices is a group, which gets no node, and each folder in it with
+  code is one slice, `<layer>-<group>-<slice>`, tagged with the layer. Groups are read one
+  level deep; a group with an `index` of its own is a slice. Measured on 2026-10-11 on the
+  specification's example (`features/auth/{login,register}`, `register` importing `login`, a
+  page importing both) after `init --yes`, `lint --strict`, `30624370` against this tree:
+  5 nodes against 6 (`features-auth` becomes `features-auth-login` and
+  `features-auth-register`), 2 false `fsd-public-api` "no index" errors against 0, and the
+  sharing the specification forbids, invisible before, is 1 `fsd-layers` error
+  (`features-auth-register → features-auth-login`). The exit code stays 1. Steiger reports the
+  same import (`fsd/forbidden-imports`).
+- **`init` writes no cohesion check for `pages` (`beadloom-6e2o`, BDL-082 RFC D3).** FSD 2.1 is
+  pages-first: "There's no limit to how much code you can place in a page slice as long as your
+  team still finds it easy to navigate". The five other `fsd-cohesion-<layer>` checks stay, so
+  `init` writes 8 FSD rules where 9.0.0 wrote 9. An existing `rules.yml` is never rewritten:
+  `init` writes one only where none exists, so an adopter who upgrades keeps
+  `fsd-cohesion-pages` until they remove it. Measured on a pages-first probe (a 90-symbol page,
+  `app`, `shared`): 1 `fsd-cohesion-pages` warning against 0; with a 90-symbol feature beside
+  it, its `fsd-cohesion-features` warning stays. Exit code 0 on both, before and after.
+- **The rules `init` writes for a Feature-Sliced frontend say the specification
+  (`beadloom-6e2o`, BDL-082 RFC D4, D5, D6).** `fsd-public-api` is tagged with every layer,
+  `fsd-shared` and `fsd-app` included, so a sidestep into a segment of `shared` or `app` is a
+  finding on a project `init` set up. `fsd-slice-shape` is written with `segments:` and the 69
+  `discouraged:` names and the specification's reason ("name by purpose, not essence"). The
+  header lists the 17 rules `@feature-sliced/steiger-plugin` 0.8.0 turns on in `recommended`,
+  one line each, where 9.0.0 named 5, and the comments state `@x` on the entities layer, slice
+  groups and the public API of `shared` and `app`. On the two FSD fixtures
+  (`tests/fixtures/site/vue-fsd`, `rn-fsd`) `init --yes` writes the same nodes (19 and 18) and
+  `lint --strict` reports the same findings before and after.
 - **Exit codes move only on inputs 9.0.0 read against the specification.** Measured by
   `beadloom-wvzg` on 2026-10-11 on Darwin arm64, CPython 3.13, on scratch projects written from
   feature-sliced.design's reference pages: each probe copied twice, `init --yes` then

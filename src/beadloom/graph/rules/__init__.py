@@ -115,8 +115,10 @@ from beadloom.graph.rules.test_import_boundary import (
     evaluate_test_import_boundary_rules,
 )
 from beadloom.graph.rules.types import (
+    DEFAULT_DISCOURAGED_SEGMENTS,
     DEFAULT_DOC_AREA_MIN_SUPPORT,
     DEFAULT_DOC_AREA_THRESHOLD,
+    DEFAULT_SLICE_SEGMENTS,
     LIVE_EDGE_LIFECYCLES,
     LIVENESS_RULE_TYPE,
     MATCHING_FORM_HINT,
@@ -363,8 +365,10 @@ def evaluate_all(
 __all__ = [
     "ADVISORY_RULE_TYPES",
     "BEAD_NOT_VERIFIED",
+    "DEFAULT_DISCOURAGED_SEGMENTS",
     "DEFAULT_DOC_AREA_MIN_SUPPORT",
     "DEFAULT_DOC_AREA_THRESHOLD",
+    "DEFAULT_SLICE_SEGMENTS",
     "DOC_AREA_RULE_TYPE",
     "EXPIRED_EXEMPTION_HINT",
     "INERT_RULE_HINT",

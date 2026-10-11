@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import click
 
-from beadloom.services.commands._root import _warn_missing_parsers, main
+from beadloom.services.commands._root import _echo_unread_code, _warn_missing_parsers, main
 
 if TYPE_CHECKING:
     from beadloom.infrastructure.git_activity import GitHistory
@@ -83,6 +83,7 @@ def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
         click.echo(f"Symbols: {result.symbols_indexed}")
         click.echo(f"Imports: {result.imports_indexed}")
         click.echo(f"Rules:   {result.rules_loaded}")
+    _echo_unread_code(project_root)
     _echo_tests_line(project_root)
     _echo_activity_line(result.activity_history)
     if result.errors:

@@ -54,4 +54,9 @@ def test_init_writes_the_limits_this_repository_holds_its_own_site_to() -> None:
         if rule["name"].startswith("site-fsd-cohesion-")
     }
 
-    assert held == FSD_COHESION_LIMITS
+    # `init` writes no check for `pages` (BDL-082 RFC D3, pages-first), and this
+    # repository keeps its own: the portal is not a pages-first app, and an adopter's
+    # file is theirs. The layers init does write are held to one number each.
+    assert "pages" not in FSD_COHESION_LIMITS
+    assert {layer: held[layer] for layer in FSD_COHESION_LIMITS} == FSD_COHESION_LIMITS
+    assert set(held) - set(FSD_COHESION_LIMITS) == {"pages"}

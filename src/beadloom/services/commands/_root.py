@@ -1,4 +1,4 @@
-"""The shared Click ``main`` group + the missing-parser warning helper."""
+"""The shared Click ``main`` group + the missing-parser warning helpers."""
 # beadloom:component=cli-commands
 
 from __future__ import annotations
@@ -122,3 +122,24 @@ def _warn_missing_parsers(project_root: Path) -> None:
         '  Install language support: uv tool install "beadloom[languages]"',
         fg="yellow",
     )
+
+
+#: The extra that installs every grammar beyond Python's.
+_LANGUAGES_EXTRA = "beadloom[languages]"
+
+
+def _echo_unread_code(project_root: Path, *, prefix: str = "") -> None:
+    """Name the indexed code files no installed parser reads, one line per language.
+
+    BDL-082 S2a: read from the index the command just wrote, so ``init`` and
+    ``reindex`` say the same thing about one tree. Information only: no exit code moves
+    on it. Silent when every code file was read.
+    """
+    from beadloom.application.reindex import read_unread_code
+
+    for unread in read_unread_code(project_root):
+        files = "file" if unread.files == 1 else "files"
+        click.echo(
+            f"{prefix}{unread.files} {unread.language} {files}, no parser installed"
+            f" \u2014 install {_LANGUAGES_EXTRA}"
+        )
