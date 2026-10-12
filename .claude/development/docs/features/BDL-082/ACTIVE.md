@@ -33,7 +33,7 @@
 | `beadloom-vv3e` | S1P | ✓ done (PR #101 merged `30624370`; required checks green; java leg a flake on re-run; site-e2e at its limit) |
 | `beadloom-6e2o` | S2a | ✓ done (commit `df4d8cc3`; groups → `features-auth-login`/`-register`, `register → login` an error; no `pages` check (8 rules); both lists; the rule over six layers; 17-rule header; `unread_code.py` names files without a parser; fixtures unchanged 19/18 nodes) |
 | `beadloom-keki` | S2b | ✓ done (commits `c126ecff` + `c7963f7c`; overlays by the spec, Steiger packages as version subjects, harness refuses the pages check; vue-fsd 21 nodes / rc 1 / 3 errors, rn-fsd 19 / rc 0 / 1 warn; slow browser run 143 passed, 2 strict xfails naming S2c; lint 0 errors 69 warnings; 28 known stale pairs) |
-| `beadloom-us5r.1` | S2c | in progress | launched 2026-10-11 after the owner removed the S2b edge; analysis in a clean room until S2b closes |
+| `beadloom-us5r.1` | S2c | in progress (PAUSED 2026-10-12) | WIP landed `8d2f20f6` (28 files: router routes every top-level line, off-centre box growth, plates retired, legend per colour); own portal from a room 357 passed / 1 failed (card.spec:47, no .git in the room); UNVERIFIED: slow eight-adopter run, vue-fsd/rn-fsd on this build, lint, mypy, ci, fast suite |
 | `beadloom-q2el` | S2T | blocked | |
 | `beadloom-r8y2` | S2R | blocked | |
 | `beadloom-rm5a` | S2W | blocked | |
@@ -43,5 +43,6 @@
 
 - 2026-10-11: /task-init done; the measured gaps in `axes.md`; the owner's eight rulings in PRD.md.
 - 2026-10-11: PAUSED (owner) during S2b's second half. S2b's first half landed `c126ecff`; the fixture half (vue-fsd 21 nodes, rn-fsd 19) lands with a strict xfail on the shipped browser suite naming S2c `beadloom-us5r.1` — read `beadloom-keki`'s last comment for whether it landed. S2c carries two owner rulings (titles inside boxes; legend samples per colour). Resume: S2c → S2T → S2R → S2W (+ BDL-UX #322) → S2P.
+- 2026-10-12: PAUSED (owner). S2c's agent ran 10 h without a checkpoint (process note on the bead); its tree state landed as WIP `8d2f20f6`, bead open. RESUME S2c: slow adopter run with Node 22 (expect vue-fsd and rn-fsd green, strict xfails removed), lint, mypy, `beadloom ci`, fast suite, then COMPLETED + close. ALSO: the pre-commit scope check calls every viewer path `outside-the-declared-axes` — the RFC's `## Axes` never named the viewer nodes (S2c was unplanned); re-derive with `beadloom impact --section` over the viewer and widen the RFC before S2R.
 - 2026-10-11: DAG change (owner): S2c no longer depends on S2b; `beadloom waves` 0 serialisations between them; S2c launched while S2b verifies.
 - 2026-10-11: an outside static audit's six findings verified and recorded (#317–#322, commit `34213b40`); `beadloom-dlb6` (CI trust boundary) is next right after this work item.
