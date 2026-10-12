@@ -252,9 +252,11 @@ function readers(source) {
     selection: () => source.selection() || null,
     state: () => ({ ...source.state() }),
     // Every node's position, whether it is drawn or inside a closed box, which
-    // keeps it where it was: no level moves a node.
+    // keeps it where it was: no level moves a node. A top-level node the overview
+    // draws larger, off its laid-out centre, is given where it stands at every
+    // other level; its drawn box, which holds the laid-out one, is in `nodeBoxes`.
     positions: () =>
-      idRecord((source.map()?.allNodes() || cy().nodes()).map((node) => [node.id(), { ...node.position() }])),
+      idRecord((source.map()?.allNodes() || cy().nodes()).map((node) => [node.id(), { ...(source.map()?.homeOf(node.id()) || node.position()) }])),
     pan: () => ({ ...cy().pan() }),
     zoom: () => cy().zoom(),
     // The last move that framed a selection or a search: `{ animated, from, to,
@@ -391,11 +393,13 @@ function readers(source) {
     // `{ id: { count, text, shown, x1, y1, x2, y2 } }`, on the canvas in pixels
     // while `shown`, which a node too small to read is not.
     outwardMarks: () => source.outward(),
-    // The overview's last plan: `{ ms, unit, routed, failed, grown, plates }`, how
-    // long it took, the layout units a pixel was at its scale, the names of the
-    // pairs it routed and of those it found no route for, the top-level nodes it
-    // draws larger than their layout to hold their titles, and those whose title
-    // stands on a plate beside its box because no such box fits.
+    // The overview's last plan: `{ ms, unit, routed, failed, grown, broken,
+    // projectPlate }`, how long it took, the layout units a pixel was at its
+    // scale, the names of the pairs it routed and of those it found no route for,
+    // an edge drawn as itself among them on a pair of its own, the top-level
+    // nodes it draws larger than their layout to hold their titles and those whose
+    // title it breaks onto two lines, and the room it keeps for the title of the
+    // box that holds everything (`features/overview-map/model/overviewPlan.js`).
     overviewPlan: () => source.map()?.plan() || null,
     // The pills drawn last: `{ pills, dropped }`, each pill `{ id, text, x1, y1,
     // x2, y2, fontSize, faded, crowded }` on the canvas in pixels, `id` its line's,

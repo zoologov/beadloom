@@ -40,6 +40,21 @@ were measured to change, are described under "The overview" in [the viewer's pag
   head of a planned line at 3.57 px on one portal; at a price of 3 refusals a line still
   crossed a fixed line 10 layout units from its tip, and at 8 it went round.
 
+  **Since BDL-082 S2c** (`beadloom-us5r.1`) the plan routes every edge drawn as itself between
+  two top-level nodes too, so fixed lines are rare: a loop. Two rules came with it. A box drawn
+  larger keeps a port through the middle of its laid-out box however near a corner of the drawn
+  box that stands (`sideRange`): a laid-out box 9 px wide standing at the side of the box drawn
+  around it had the corner's arc cover every track through it, and no port on that axis, so the
+  five lines of the `tui` box on this repository's graph with two edges more found no route; the
+  drawn box's corner takes the room the line's end leaves it, as any node's does. And the input
+  takes `reserved`, the points where an edge of the file ends on the border of a top-level box
+  itself, as ELK routes it, and no port lies within a pixel of one (`clearOfReserved`,
+  `RESERVED_REACH`): ELK brings such an edge into the middle of the box's side and a track runs
+  through every side's middle, so a planned line ended at the very point where a selected
+  node's edge drawn as itself, 8 layout units after a bend, shared its arrowhead (measured: a
+  bend 4.09 px behind a head of 2.99 px at zoom 0.545). A reach of half a pitch took ports a
+  crowded box needed and left a line unrouted, so it is one pixel.
+
 ## Public API
 
 `shared/grid-routing/index.js`: `OVERVIEW_MARKS`, `planOverview`.

@@ -33,7 +33,13 @@ cut the viewer into slices (RFC D3). How the viewer uses each part is described 
   titles: `grownBoxesOf`, `drawnBoxOf`, `crossesAny`, and `pathOutside`, where a line into a
   grown box stops. `grownBoxesOf` takes `limit` (BDL-080 S4i), a box no drawn box passes,
   even where the box that holds them all (`within`) is given up: the overview's plan names the
-  box past which the whole-graph fit would land a step of the map's scale coarser.
+  box past which the whole-graph fit would land a step of the map's scale coarser. Since BDL-082
+  S2c a drawn box holds its laid-out box rather than being centred on it: centred where that
+  keeps clear, otherwise off its centre at the smallest size a lane from every other box
+  (`placesOf`), and with `always` a node no clear box fits is drawn at the least box for its
+  title where it overlaps the other boxes least and keeps the most room from its nearest
+  neighbours, nearest first (`lessCrowded`), so a title is never drawn outside its box.
+  `drawnBoxOf` shrinks an off-centre box towards the laid-out one along the way it grew.
 - `aggregateRoutes.js` — `aggregateRouteOf(members, fromBox, toBox, closed)`: an aggregated
   line's route, the medoid of its members' ELK routes clipped between the two boxes, its last run
   into a closed box straightened where it was a short dogleg (`straightenedInto`).

@@ -13,7 +13,10 @@
 // dotted `uses` sample did not describe. A line of the map's that carries edges
 // of several kinds is drawn solid in the colour of the kind it carries most, and
 // the legend says so with an entry of its own, at the levels such a line is drawn
-// at and only there (the owner's ruling, 2026-10-10).
+// at and only there (the owner's ruling, 2026-10-10): one entry per colour such
+// lines are drawn in, its sample solid in that colour, so every colour and dash on
+// the canvas has a sample drawn alike, and the case compares the sample's colour
+// and dash with the line's, never the entry's words (the owner's ruling, 2026-10-11).
 
 import { test, expect } from "@playwright/test";
 import { architectureData, openArchitecture, openEveryBox, serveEveryEdgeKind, viewer } from "./support/viewer.js";
@@ -48,40 +51,54 @@ async function linesOfSeveralStyles(page, styleOf) {
   return new Set(lines.filter((line) => new Set([...line.forwardKeys, ...line.backwardKeys].map((key) => styleOf.get(key))).size > 1).map((line) => line.id));
 }
 
-/** Whether the legend holds its entry for a line of several kinds, and the sample's dash: `{ shown, dash }`. */
-async function severalEntry(page) {
-  const item = page.locator("[data-legend-several]");
-  if ((await item.count()) === 0) return { shown: false, dash: null };
-  return { shown: true, dash: await item.locator("[data-legend-line]").evaluate((line) => getComputedStyle(line).strokeDasharray) };
+/**
+ * The legend's entries for lines of several kinds as the browser paints them, by
+ * the style each says such a line carries most: `{ key: { colour, dash } }`.
+ */
+async function severalEntries(page) {
+  const items = await page.locator("[data-legend-several]").evaluateAll((items) =>
+    items.map((item) => {
+      const line = getComputedStyle(item.querySelector("[data-legend-line]"));
+      return { key: item.dataset.legendSeveral, colour: line.stroke, dash: line.strokeDasharray };
+    })
+  );
+  return Object.fromEntries(items.map(({ key, colour, dash }) => [key, { colour, dash: dash === "none" ? [] : (dash.match(/[\d.]+/g) || []).map(Number) }]));
 }
 
 /**
  * What disagrees, at the level drawn now, between the lines on the canvas and the
- * edge legend: a line whose style has no entry, or is drawn in another colour or
- * dash than its entry's sample, and an entry no line is drawn in. A line of the
- * map's that carries edges of more than one style is drawn solid in the style it
- * carries most (RFC D8): its colour is its entry's, its dash solid, and the
- * legend's entry for a line of several kinds is there exactly while one is drawn.
- * `{ wrong, lines, keys }`, `keys` the styles drawn.
+ * edge legend: a line whose colour and dash no sample is drawn in, and an entry no
+ * line is drawn in. A line of the map's that carries edges of more than one style
+ * is drawn solid in the colour of the style it carries most (RFC D8), and its
+ * sample is the entry for a line of several kinds that names that style: the
+ * colour and the dash of the sample are compared with the line's, not the words
+ * of the entry. A line of one style has its style's entry. `{ wrong, lines, keys }`,
+ * `keys` the styles drawn, a line of several kinds' as `several:<style>`.
  */
 async function legendAgainstCanvas(page, styleOf) {
   const looks = (await viewer(page, "lineLooks")).filter((look) => look.styleKey);
   const several = await linesOfSeveralStyles(page, styleOf);
   const legend = await legendEntries(page);
-  const keys = [...new Set(looks.map((look) => look.styleKey))].sort();
-  const wrong = new Set(Object.keys(legend).filter((key) => !keys.includes(key)).map((key) => `the legend's ${key}: no line is drawn in it`));
-  const { shown } = await severalEntry(page);
-  if (shown !== several.size > 0) wrong.add(several.size ? `${several.size} line(s) of several kinds drawn, and no entry for them` : "the entry for a line of several kinds, and none is drawn");
+  const mixed = await severalEntries(page);
+  const single = new Set(looks.filter((look) => !several.has(look.id)).map((look) => look.styleKey));
+  const mostly = new Set(looks.filter((look) => several.has(look.id)).map((look) => look.styleKey));
+  const wrong = new Set([
+    ...Object.keys(legend).filter((key) => !single.has(key)).map((key) => `the legend's ${key}: no line of that one style is drawn`),
+    ...Object.keys(mixed).filter((key) => !mostly.has(key)).map((key) => `the legend's several kinds, mostly ${key}: no such line is drawn`),
+  ]);
   for (const look of looks) {
-    const entry = legend[look.styleKey];
+    const isMixed = several.has(look.id);
+    const entry = isMixed ? mixed[look.styleKey] : legend[look.styleKey];
+    const name = isMixed ? `several kinds, mostly ${look.styleKey}` : look.styleKey;
     if (!entry) {
-      wrong.add(`${look.styleKey}: drawn, and not in the legend`);
+      wrong.add(`${name}: drawn ${look.colour} ${proportionOf(look.dash)}, and no sample in the legend`);
       continue;
     }
-    if (channelDistance(look.colour, entry.colour) > 1) wrong.add(`${look.styleKey}: drawn ${look.colour}, its sample ${entry.colour}`);
-    const wanted = several.has(look.id) ? "solid" : proportionOf(entry.dash);
-    if (proportionOf(look.dash) !== wanted) wrong.add(`${look.styleKey}${look.aggregated ? " (aggregated)" : ""}: drawn ${proportionOf(look.dash)}, ${several.has(look.id) ? "a line of several styles" : "its sample"} ${wanted}`);
+    if (channelDistance(look.colour, entry.colour) > 1) wrong.add(`${name}: drawn ${look.colour}, its sample ${entry.colour}`);
+    if (isMixed && look.dash.length) wrong.add(`${name}: drawn ${proportionOf(look.dash)}, and a line of several kinds is solid`);
+    if (proportionOf(look.dash) !== proportionOf(entry.dash)) wrong.add(`${name}${look.aggregated ? " (aggregated)" : ""}: drawn ${proportionOf(look.dash)}, its sample ${proportionOf(entry.dash)}`);
   }
+  const keys = [...[...single].sort(), ...[...mostly].sort().map((key) => `several:${key}`)];
   return { wrong: [...wrong], lines: looks.length, keys };
 }
 
@@ -163,21 +180,31 @@ for (const served of ["as served", "with every edge kind"]) {
   });
 }
 
-test("the legend names a line of several kinds, solid, at a level that draws one, and not at a level that draws none", async ({ page, request }) => {
+test("the legend names a line of several kinds with a solid sample in each colour such a line is drawn in, at a level that draws one, and not at a level that draws none", async ({ page, request }) => {
   const data = await architectureData(request);
   const styleOf = new Map(data.edges.map((edge) => [`${edge.kind}:${edge.src}->${edge.dst}`, styleKeyOfEdge(edge)]));
   await openArchitecture(page);
   const atFit = await linesOfSeveralStyles(page, styleOf);
   requireShape(atFit.size > 0, "no line at the whole-graph fit carries edges of two kinds");
-  const fit = await severalEntry(page);
+  const looks = (await viewer(page, "lineLooks")).filter((look) => atFit.has(look.id));
+  const lines = [...(await viewer(page, "aggregatedEdges")), ...(await viewer(page, "ownLines"))].filter((line) => atFit.has(line.id));
+  // What each line of several kinds carries, by the kinds of its edges: it is one, not a line of one kind drawn solid by mistake.
+  const kindsBehind = lines.map((line) => `${line.id}: ${[...new Set([...line.forwardKeys, ...line.backwardKeys].map((key) => styleOf.get(key)))].sort().join(" + ")}`);
+  const colours = Object.fromEntries(looks.map((look) => [look.styleKey, look.colour]));
+  const fit = Object.fromEntries(Object.entries(await severalEntries(page)).map(([key, entry]) => [key, { solid: entry.dash.length === 0, sameColour: channelDistance(entry.colour, colours[key] ?? "") <= 1 }]));
   // Every edge drawn as itself: no line of the map's is drawn, so none carries several kinds.
   await openEveryBox(page);
   await settled(page);
   const full = await linesOfSeveralStyles(page, styleOf);
-  const detail = await severalEntry(page);
-  test.info().annotations.push({ type: "measured", description: `at the fit ${atFit.size} line(s) of several kinds (${[...atFit].join(", ")}); every edge as itself ${full.size}` });
+  const detail = Object.keys(await severalEntries(page));
+  test.info().annotations.push({ type: "measured", description: `at the fit ${atFit.size} line(s) of several kinds (${kindsBehind.join("; ")}); every edge as itself ${full.size}` });
 
-  expect({ fit, detail: detail.shown, full: full.size }).toEqual({ fit: { shown: true, dash: "none" }, detail: false, full: 0 });
+  expect(lines.every((line) => new Set([...line.forwardKeys, ...line.backwardKeys].map((key) => styleOf.get(key))).size > 1)).toBe(true);
+  expect({ fit, detail, full: full.size }).toEqual({
+    fit: Object.fromEntries(Object.keys(colours).map((key) => [key, { solid: true, sameColour: true }])),
+    detail: [],
+    full: 0,
+  });
 });
 
 test("an aggregated line that carries edges of one kind keeps that kind's dash, as its legend sample is drawn", async ({ page, request }) => {

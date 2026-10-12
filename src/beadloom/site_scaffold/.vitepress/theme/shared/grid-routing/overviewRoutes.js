@@ -99,6 +99,31 @@ const FIXED_REACH = 0.6;
  */
 const FIXED_HEAD_REFUSALS = 8;
 
+/**
+ * How near a port may come to a point where an edge drawn as itself ends, in
+ * pixels: a pixel, since tracks run through the middles of boxes' sides and ELK
+ * brings an edge into a box at the middle of its side, so the two meet exactly
+ * where they meet at all, and keeping a wider reach took ports a crowded box
+ * needed (measured: half a pitch left a line unrouted on a portal's graph with
+ * two edges more).
+ */
+const RESERVED_REACH = 1;
+
+/**
+ * `ports` without those within `reach` of a point of `reserved`, but for a box
+ * that would keep none: where an edge drawn as itself ends on a box's border, as
+ * ELK routes an edge into the middle of a box's side, a planned line ending there
+ * would share its arrowhead at a level that draws both, behind that edge's bend.
+ */
+function clearOfReserved(ports, reserved, reach) {
+  if (!reserved.length) return ports;
+  const isFree = (port) => reserved.every((p) => Math.abs(p.x - port.at.x) > reach || Math.abs(p.y - port.at.y) > reach);
+  return ports.map((own) => {
+    const free = own.filter(isFree);
+    return free.length ? free : own;
+  });
+}
+
 /** `path` without repeated points and without a point in the middle of a straight run. */
 function simplify(path) {
   const out = [];
@@ -664,8 +689,10 @@ function polylineOf(grid, routed) {
  * box inside it that a box drawn larger to hold its title was laid out as; `a`
  * and `b` are box ids, `forward` and `backward` how many edges the pair carries
  * each way; `fixed` the routes of lines drawn as themselves, which no planned
- * line runs along; and `frame`, or none, the box that holds every box, whose
- * inside every route keeps to. `marks` are the sizes on screen (`OVERVIEW_MARKS`).
+ * line runs along; `frame`, or none, the box that holds every box, whose
+ * inside every route keeps to; and `reserved`, or none, the points where an edge
+ * drawn as itself ends on a box's border, which no planned line ends at
+ * (`clearOfReserved`). `marks` are the sizes on screen (`OVERVIEW_MARKS`).
  *
  * `{ paths, failed }`: each routed pair's polyline by its name, from a border of
  * box `a` to a border of box `b`, of its core where it has one; and the names of
@@ -688,6 +715,7 @@ export function planOverview(input, marks = OVERVIEW_MARKS) {
   const degree = new Map();
   for (const pair of pairs) for (const b of [pair.a, pair.b]) degree.set(b, (degree.get(b) || 0) + 1);
   const grid = { ...gridOf(boxes, plates, marks, (b) => degree.get(b) || 0, cores, frame), boxes };
+  grid.ports = clearOfReserved(grid.ports, (input.reserved || []).map((p) => ({ x: p.x / unit, y: p.y / unit })), RESERVED_REACH);
   const fixed = (input.fixed || []).map((path) => path.map((p) => ({ x: p.x / unit, y: p.y / unit })));
   const router = routerOn(grid, pairs, fixed, marks);
   const byName = (p, q) => (pairs[p].name < pairs[q].name ? -1 : pairs[p].name > pairs[q].name ? 1 : 0);

@@ -51,6 +51,7 @@ import {
   titleBoxOf,
 } from "../../../shared/map-levels/index.js";
 import { giveData } from "../../../shared/canvas-marks/index.js";
+import { centreOf } from "../../../shared/geometry/index.js";
 import { PROJECT_PLATE_SIDE } from "./overviewPlan.js";
 
 /** The zoom step the map's marks are restyled at. */
@@ -86,6 +87,13 @@ export function titleLooks(cy, { nodes, tree, geometry }) {
     return brokenLabels.get(id);
   }
 
+  /**
+   * Whether node `id`'s own label is drawn whole on its card, as the stylesheet
+   * draws it: a longer one is cut short there, so the node keeps the map's title,
+   * which is drawn whole, at every zoom.
+   */
+  const labelFitsCard = (id) => measure(String(nodes.get(id).data("label")), GEOMETRY.nodeTitle) <= GEOMETRY.cardLabelWidth;
+
   /** A node's title as lines: its label, `broken` onto two where it breaks, and the count of its lines left out when there are any. */
   function linesOf(id, hidden, broken = false) {
     const label = (broken && brokenLabelFor(id)) || [String(nodes.get(id).data("label"))];
@@ -112,7 +120,7 @@ export function titleLooks(cy, { nodes, tree, geometry }) {
     const size = { width: box.x2 - box.x1, height: box.y2 - box.y1 };
     const reserved = reservedOf(id, at, size.height);
     const lines = broken ? linesOf(id, hidden, true) : null;
-    return mapTitleOf(linesOf(id, hidden), size, at, measure, { reserved, natural: isBox ? null : GEOMETRY.nodeTitle, broken: lines });
+    return mapTitleOf(linesOf(id, hidden), size, at, measure, { reserved, natural: isBox || !labelFitsCard(id) ? null : GEOMETRY.nodeTitle, broken: lines });
   }
 
   /**
@@ -139,7 +147,7 @@ export function titleLooks(cy, { nodes, tree, geometry }) {
  * The titles and grown boxes the map dresses its nodes with, as `looks`
  * (`titleLooks`) draws them and the overview's `planner` decided them, in the
  * box tree `tree` laid out as `geometry`: `{ grownBoxesNow, dressTitle,
- * dressBox, closedRoomsOf }`.
+ * dressBox, standHome, homeOf, closedRoomsOf, closedBoxOf }`.
  */
 export function titleDresser(looks, planner, tree, geometry) {
   const hiddenOf = (hiddenAt, id) => hiddenAt.get(id) || 0;
@@ -205,10 +213,45 @@ export function titleDresser(looks, planner, tree, geometry) {
     giveData(node, title ? { [MAP_TITLE]: { ...title, side: PROJECT_PLATE_SIDE, scale: at }, [MAP_SCALE]: scale } : { [MAP_TITLE]: undefined });
   }
 
-  /** Give the drawn node `node` the box it is drawn as now, from `grownNow`, when the plan draws it larger than its layout. */
+  // Where each top-level node stood before the plan stood its box off its laid-out centre, by id.
+  const homes = new Map();
+
+  /** Stand `node` at `at`, where it is not already. */
+  const standAt = (node, at) => {
+    const now = node.position();
+    if (Math.abs(now.x - at.x) > 1e-9 || Math.abs(now.y - at.y) > 1e-9) node.position(at);
+  };
+
+  /**
+   * Give the drawn node `node` the box it is drawn as now, from `grownNow`, when
+   * the plan draws it larger than its layout, and stand it where that box is: a
+   * box the plan stood off its laid-out centre moves the node's centre by as much,
+   * so it is drawn holding its laid-out box. Every other node stays where it stood.
+   * An open box is left where its children are.
+   */
   function dressBox(node, grownNow) {
-    const box = grownNow.get(node.id());
+    const id = node.id();
+    const box = grownNow.get(id);
     giveData(node, { [MAP_BOX]: box ? { width: box.x2 - box.x1, height: box.y2 - box.y1 } : undefined });
+    const laid = geometry.boxes[id];
+    if (!planner.isTop(id) || node.isParent() || !laid) return;
+    const [drawn, centre] = [centreOf(box || laid), centreOf(laid)];
+    const [dx, dy] = [drawn.x - centre.x, drawn.y - centre.y];
+    if (!homes.has(id) && (Math.abs(dx) > 1e-9 || Math.abs(dy) > 1e-9)) homes.set(id, { ...node.position() });
+    const home = homes.get(id);
+    if (home) standAt(node, { x: home.x + dx, y: home.y + dy });
+  }
+
+  /**
+   * Stand every node a box drawn off its laid-out centre moved back where it
+   * stood, while it holds no children: before a level puts a box's children back,
+   * which Cytoscape then centres it on.
+   */
+  function standHome(nodeOf) {
+    for (const [id, home] of homes) {
+      const node = nodeOf(id);
+      if (node && !node.isParent()) standAt(node, home);
+    }
   }
 
   /**
@@ -231,5 +274,14 @@ export function titleDresser(looks, planner, tree, geometry) {
     return rooms;
   }
 
-  return { grownBoxesNow, dressTitle, dressBox, closedRoomsOf };
+  /** The box top-level node `id` is drawn as closed at the map's `scale`, open now or not, in layout units: drawn larger where the plan draws it so. */
+  function closedBoxOf(id, scale) {
+    const grown = planner.isGrown(id) ? planner.drawnBoxAt(id, titleScaleOf(id, scale), planner.hiddenOf(id)) : null;
+    return grown || geometry.boxes[id];
+  }
+
+  /** Where node `id` stood before the plan stood its box off its laid-out centre, or null for a node it never moved. */
+  const homeOf = (id) => (homes.has(id) ? { ...homes.get(id) } : null);
+
+  return { grownBoxesNow, dressTitle, dressBox, standHome, homeOf, closedRoomsOf, closedBoxOf };
 }

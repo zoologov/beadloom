@@ -37,6 +37,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The portal draws every title inside its box, routes every line between two top-level nodes
+  itself, and names each colour of a line of several kinds in the legend (`beadloom-us5r.1`,
+  BDL-082 S2c; the owner's two rulings of 2026-10-11).** A top-level box too small for its
+  title is drawn larger and holds its laid-out box: centred where that keeps clear, otherwise
+  off its centre a lane from every other box, and where neither fits at the least box for its
+  title all the same. No node's title stands on a plate beside its box any more, except on a
+  map that does not fit the canvas at the smallest zoom, which keeps its plates by the earlier
+  deferral, and the frame's title above the frame. An edge drawn as itself between two
+  top-level nodes now follows the overview's own route rather than ELK's, whose runs are
+  spaced in layout units. The legend's single grey "several kinds" sample is replaced by one
+  entry per colour such lines are drawn in, "several kinds, mostly uses at runtime" with a
+  solid indigo sample and "several kinds, mostly depends on" with a solid grey one. A top-level
+  leaf whose label is cut short on its card keeps the map's title, drawn whole, at every zoom.
+  The overview's router keeps a port through the middle of a box drawn larger however near
+  the drawn box's corner it stands, and ends no planned line at the point where an edge of the
+  file ends on a top-level box's own border. Measured on the `vue-fsd` fixture (21 nodes) before and after: 8 of the shipped browser
+  cases failed (4 titles on plates with lines under them, lines 4.22 px apart, two arrowheads
+  with 2.80 and 3.36 px before a bend), and none fail after; on this repository's portal
+  `ai_agents` was drawn 8 px wide with its title on a plate beside it, and is now a box 59 px
+  wide with its title inside. The test handle's `overviewPlan().routed` names an edge drawn as
+  itself as `"\nedge\n" + id`, and its `plates` is empty but on the map held at the smallest
+  zoom.
+
 - **`init` reads a slice group as the slices in it (`beadloom-6e2o`, BDL-082 RFC D2).** A
   folder of `pages`, `widgets`, `features` or `entities` is a slice when it holds a standard
   segment (`ui`, `model`, `api`, `lib`, `config`) or an `index` at its top; a folder holding

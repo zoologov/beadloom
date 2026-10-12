@@ -29,7 +29,8 @@
 // children marked as everything else is. A loop's end (`shared/map-levels/loopLines.js`) is no
 // node of the file: it is shown with its box and marked with nothing. After every
 // drawing it notes the styles the lines on the canvas are drawn in (`drawnStyles`),
-// the map's aggregated lines among them, which the legend is made of.
+// the map's aggregated lines of one style among them, and the styles its lines of
+// several kinds are drawn in (`drawnSeveral`): the legend is made of both.
 
 import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { loadCytoscape } from "../../../shared/cytoscape/index.js";
@@ -100,8 +101,9 @@ async function undrawnUntil(instance, promise) {
  * source, ms }` (`shared/elk`, `layOut`), or null; `bundles` is its routes with
  * the fans bundled, `{ paths, trunks, buses, ms }` (`canvasLayout.js`), or null;
  * `hoveredEdges` the ids of the edges along the line under the pointer;
- * `drawnStyles` the style keys the lines shown now are drawn in, sorted, and
- * `drawnSeveral` whether one of them is a line of the map's of several styles;
+ * `drawnStyles` the style keys the lines of one style shown now are drawn in,
+ * sorted, and `drawnSeveral` the style keys the map's lines of several styles
+ * shown now are drawn in, sorted;
  * `layoutError` is the error a failed run gave, or null; `followed()` the lines
  * drawn on top, `labelled()` the ones whose label is drawn and `frames()` what
  * drawing them cost (`features/follow-edge/model/followedOverlay.js`); `droppedHeads()` the line ends that
@@ -116,7 +118,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   const bundles = shallowRef(null);
   const hoveredEdges = shallowRef([]);
   const drawnStyles = shallowRef([]);
-  const drawnSeveral = shallowRef(false);
+  const drawnSeveral = shallowRef([]);
   const layoutError = shallowRef(null);
   let shared = null;
   let followed = null;
@@ -220,7 +222,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
     bundles.value = null;
     hoveredEdges.value = [];
     drawnStyles.value = [];
-    drawnSeveral.value = false;
+    drawnSeveral.value = [];
     containerRef.value?.removeEventListener("mouseleave", clearHover);
     shared = null;
     pointerQueued = false;
@@ -336,16 +338,18 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
 
   /**
    * Note the style keys the lines shown on `instance` are drawn in, when they
-   * differ from the ones noted, and whether a line of several styles is shown: a
-   * line hidden by the filters or left outside a selection is not shown, a
-   * dimmed one is.
+   * differ from the ones noted: those of the lines of one style, and apart from
+   * them those of the map's lines of several styles, each drawn solid in the
+   * colour of the style it carries most. A line hidden by the filters or left
+   * outside a selection is not shown, a dimmed one is.
    */
   function noteDrawnStyles(instance) {
-    const shown = instance.edges().filter((edge) => edge.visible());
-    const keys = [...new Set(shown.map((edge) => edge.data("styleKey")).filter(Boolean))].sort();
+    const shown = instance.edges().filter((edge) => edge.visible() && edge.data("styleKey"));
+    const keysOf = (edges) => [...new Set(edges.map((edge) => edge.data("styleKey")))].sort();
+    const keys = keysOf(shown.filter((edge) => !edge.data(SEVERAL_STYLES)));
     if (keys.join("\n") !== drawnStyles.value.join("\n")) drawnStyles.value = keys;
-    const several = shown.some((edge) => Boolean(edge.data(SEVERAL_STYLES)));
-    if (several !== drawnSeveral.value) drawnSeveral.value = several;
+    const several = keysOf(shown.filter((edge) => edge.data(SEVERAL_STYLES)));
+    if (several.join("\n") !== drawnSeveral.value.join("\n")) drawnSeveral.value = several;
   }
 
   /**

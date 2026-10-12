@@ -18,6 +18,8 @@ export const GEOMETRY = Object.freeze({
   outerHeight: 47,
   /** A node's title size, in layout units. */
   nodeTitle: 12,
+  /** The widest a card's own label is drawn, in layout units: a longer one is cut short (`text-wrap: ellipsis`). */
+  cardLabelWidth: 143,
   cardBorder: 1.5,
   boxBorder: 1,
   selectedBorder: 3,

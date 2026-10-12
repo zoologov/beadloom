@@ -292,8 +292,9 @@ forge's icon, or no link. `dashboard.spec.js` (bound to `site-dashboard`) holds 
 population panels ([Dashboard](vitepress-site/dashboard.md)), and `card.spec.js` the card's
 reach line, node-less list, own and inside debt and unpublished-commit note
 ([Node card](vitepress-site/node-card.md)). `edges.spec.js` holds the legend against the canvas
-at every level, the "several kinds" entry where such a line is drawn and not where none is, and
-an aggregated line of one kind keeping that kind's dash; `metrics.spec.js` that opening any
+at every level, comparing each sample's colour and dash with the lines drawn in it, a
+"several kinds" entry per colour such lines are drawn in where one is drawn and none where
+none is (BDL-082 S2c), and an aggregated line of one kind keeping that kind's dash; `metrics.spec.js` that opening any
 top-level box at the fit moves no line and no pill of the other top-level nodes. Three cases
 accept less than before, each with its measurement; the owner accepted all three on
 2026-10-10:
@@ -303,8 +304,8 @@ accept less than before, each with its measurement; the owner accepted all three
   layout units for a head's run, which at the `rn-fsd` portal's fit zoom of 0.7218 is 5.77 px,
   and the 7 px goal had been set on this repository's graph;
 - the 10 px floor of a title at the fit allows the half-step of the map's scale (10 / √1.25),
-  since an 11 px title drew at 9.93 px on a Feature-Sliced portal, and a title on the plate the
-  plan stood it on counts;
+  since an 11 px title drew at 9.93 px on a Feature-Sliced portal; since BDL-082 S2c every
+  title is held inside its box, and a plate no longer counts;
 - `look.spec.js` accepts a head shrunk where a line drawn as itself crosses a line's last run
   within a head and a half of its tip, between two boxes too near for a way round (measured: a
   4.55 px head, 6.83 px from the tip in a 20 px gap).

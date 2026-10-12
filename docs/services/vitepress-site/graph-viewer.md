@@ -385,7 +385,14 @@ boxes; no box moves.
   Since S4f a plate also keeps off a line drawn as itself, which no route moves. A node that
   such a line ends at is drawn larger only by a box that keeps the line outside it, its end on
   the border (`keepsOutside`); otherwise its title, broken onto two lines, is drawn in its
-  laid-out box where it fits there.
+  laid-out box where it fits there. **Since BDL-082 S2c every title is drawn inside its box**
+  (the owner's ruling of 2026-10-11): a box that cannot grow centred grows off its centre,
+  always holding its laid-out box, and one no clear box fits is drawn at the least box for its
+  title all the same; the plates are retired for nodes, but on an overview held at the smallest
+  zoom (ruling 11), and the project box's title keeps its plate. An edge drawn as itself between
+  two top-level nodes is routed by the overview's plan too, so it keeps the overview's pitch and
+  head runs at any scale, and no such line holds a grown box back (see
+  [the overview map](overview-map.md)).
 - **Calm by default.** Lines at rest are thin and light. Hovering or selecting a box brings its
   lines and pills forward (`is-in-front`) and fades the rest (`is-behind`), and the pointer gone,
   all are back at rest. A closed box large enough on screen says how many edges come in and go out
@@ -463,7 +470,8 @@ that leaves the page removes only its own. Records keyed by a node id have no pr
 - the map: `openBoxes`, `level` (`{ fitZoom, zoom, scale, extent, open, collapsed }`),
   `aggregatedEdges`, `ownLines`, `outwardMarks` (each node's "+N"), `hiddenEdgeCounts`;
 - the overview: `overviewPlan` (`{ ms, unit, routed, failed, grown, broken, plates,
-  projectPlate }`), `pills` (`{ pills, dropped }`, each pill `crowded` or not), `titles`,
+  projectPlate }`, `routed` naming an edge drawn as itself as `"\nedge\n" + id` and `plates`
+  empty but on an overview held at the smallest zoom, since BDL-082 S2c), `pills` (`{ pills, dropped }`, each pill `crowded` or not), `titles`,
   `boxTitles`, `boxTallies`.
 
 Since BDL-080 S1c `visibleIds`, `boxes`, `nodeLooks` and the handle's other node readers count

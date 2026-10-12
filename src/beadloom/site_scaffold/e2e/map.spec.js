@@ -187,7 +187,8 @@ for (const graph of GRAPHS) {
 
       // A box keeps its centre, and its sides but where it is drawn larger than its layout: a
       // top-level node too small for its title at the overview, and the box that holds it, drawn
-      // around it (`overview.spec.js`). Such a box still holds the box it was laid out as.
+      // around it (`overview.spec.js`). Such a box still holds the box it was laid out as, and a
+      // top-level one may stand off its laid-out centre where centred it would crowd another box.
       const top = new Set(Object.keys(tree.parents).filter((id) => tree.parents[id] === tree.wrapper));
       let largest = 0;
       const shrunk = [];
@@ -197,8 +198,9 @@ for (const graph of GRAPHS) {
           const drawn = await viewer(page, "nodeBoxes");
           for (const [id, box] of Object.entries(drawn)) {
             const was = reference[id];
-            largest = Math.max(largest, Math.abs(box.x1 + box.x2 - was.x1 - was.x2) / 2, Math.abs(box.y1 + box.y2 - was.y1 - was.y2) / 2);
             const larger = top.has(id) || id === tree.wrapper;
+            const drawnLarger = top.has(id) && (box.x2 - box.x1 > was.x2 - was.x1 + DISPLACEMENT || box.y2 - box.y1 > was.y2 - was.y1 + DISPLACEMENT);
+            if (!drawnLarger) largest = Math.max(largest, Math.abs(box.x1 + box.x2 - was.x1 - was.x2) / 2, Math.abs(box.y1 + box.y2 - was.y1 - was.y2) / 2);
             for (const side of ["x1", "y1", "x2", "y2"]) {
               const outward = side.endsWith("1") ? was[side] - box[side] : box[side] - was[side];
               if (larger ? outward < -DISPLACEMENT : Math.abs(outward) > DISPLACEMENT) shrunk.push(`${id} ${side} at level ${level}`);

@@ -50,32 +50,6 @@ _STACKS = list(FIXTURES_BY_STACK)
 #: A port per stack, apart from the default 4178 the suite uses on our own portal.
 _PORTS = {stack: str(4191 + index) for index, stack in enumerate(_STACKS)}
 
-#: Where the viewer does not hold today on a stack's portal, the suite's case is a strict
-#: xfail naming the bead that holds the defect, so it fails the day the defect is fixed and
-#: the mark is still there. BDL-082 S2b (``beadloom-keki``) gave the two FSD fixtures a
-#: slice group and ``@x`` pairs; the layout then failed, on two runs alike, 8 cases on
-#: vue-fsd (21 nodes: arrowheads with no room before a bend, lines 4.22 px apart, lines
-#: under titles, boxes too small for their titles) and 1 on rn-fsd (an aggregate
-#: arrowhead of 3.96 px, smaller than the smallest).
-_VIEWER = (
-    "beadloom-us5r.1 (BDL-082 S2c): the viewer's layout does not hold on the FSD fixture "
-    "with a slice group and @x pairs"
-)
-_SUITE_XFAILS = {"vue-fsd": _VIEWER, "rn-fsd": _VIEWER}
-
-
-def _stacks_marked(xfails: dict[str, str]) -> list[object]:
-    """Every claimed stack as a parameter, the named ones as strict xfails."""
-    return [
-        pytest.param(
-            stack,
-            marks=[pytest.mark.xfail(reason=xfails[stack], strict=True)]
-            if stack in xfails
-            else [],
-        )
-        for stack in _STACKS
-    ]
-
 
 def _takes_the_adopter_sized_cases(stack: str) -> bool:
     """Whether *stack* is the first stack, in the PRD's order, that declares as many layers."""
@@ -116,7 +90,7 @@ def browser_runs(
     return run_of
 
 
-@pytest.mark.parametrize("stack", _stacks_marked(_SUITE_XFAILS))
+@pytest.mark.parametrize("stack", _STACKS)
 def test_the_shipped_browser_suite_passes_on_the_fixtures_portal(
     browser_runs: Callable[[str], BrowserRun], stack: str
 ) -> None:

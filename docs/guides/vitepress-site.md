@@ -235,7 +235,8 @@ no bridges, no dots where lines part and no colour gradient along a line any mor
   colour the canvas uses, so it never names something the canvas does not show. A line of the
   map that carries one kind of edge keeps that kind's dash. A line that carries several kinds
   is drawn solid in the colour of the kind it carries most, and while one is drawn the legend
-  adds the entry "several kinds: solid, in the colour of the kind it carries most". Where two
+  adds an entry for each colour such lines are drawn in, with a solid sample in that colour:
+  "several kinds, mostly uses at runtime", "several kinds, mostly depends on". Where two
   or more layer rules are drawn, the layers are grouped per rule under the rule's `title:` (its
   name where it declares none), each group top to bottom.
 - **Layer boxes.** A layer rule scoped to a box inside the project, such as a Feature-Sliced
@@ -278,9 +279,10 @@ between two of them one line that carries every edge between them and their cont
   the line's count shows in the note while the pointer is on the line. A closed box large enough
   on screen says how many edges come in and go out in its lower right corner, `in 12 · out 7`.
 - **Titles.** A box's title is drawn inside it at 14, 12.5, 11 or 10 px, the largest that fits. A
-  top-level box too small for its title is drawn a little larger around its place, never moving;
-  where even that does not fit one line, the name is broken onto two. Only a title neither way
-  fits stands beside its box on a plate with a border, and no line runs under it.
+  top-level box too small for its title is drawn larger, always holding the place it was laid
+  out at: around it where there is room, else to the side that has it; where one line does not
+  fit, the name is broken onto two. Every title is inside its box; only a map too large to fit
+  the canvas at the smallest zoom still stands its titles on plates.
 - **At most 100 lines.** When the map would draw more, the weakest lines are left out, and each
   box counts its lines left out as **+N** under its title. With the pointer on a box, or the box
   selected, all of its lines are drawn.

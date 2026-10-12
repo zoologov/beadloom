@@ -6,12 +6,13 @@
 // colour the canvas gives a line of that style at rest. The viewer passes those
 // colours, resolved from the theme as the canvas's are (`colours`); until it
 // has, a sample takes its tone at its share from the theme's variables. While
-// the canvas draws a line of several kinds (`several`), an entry says how such a
-// line is drawn, with a solid sample in a neutral tone (`SEVERAL_KINDS`).
+// the canvas draws lines of several kinds (`several`), each colour they are drawn
+// in has an entry of its own, "several kinds, mostly …", with a solid sample in
+// that colour (`severalKindsOf`): a colour on the canvas always has its sample.
 
 import { computed } from "vue";
 import { TOKEN_VARIABLES } from "../../../shared/theme-tokens/index.js";
-import { EDGE_STYLES, SEVERAL_KINDS, dashOf } from "../model/edgeKinds.js";
+import { EDGE_STYLES, dashOf, severalKindsOf } from "../model/edgeKinds.js";
 
 /** A sample's line and arrowhead, in pixels: the canvas's weight and head. */
 const SAMPLE = Object.freeze({ width: 30, height: 10, line: 1.35, head: 6 });
@@ -20,8 +21,8 @@ const props = defineProps({
   keys: { type: Array, required: true },
   /** The colour of each style key at rest, as the canvas draws it: `{ [styleKey]: "rgb(...)" }`. */
   colours: { type: Object, default: () => ({}) },
-  /** Whether a line of several kinds is drawn now: the legend then names it. */
-  several: { type: Boolean, default: false },
+  /** The style keys the lines of several kinds drawn now are drawn in: the legend names each. */
+  several: { type: Array, default: () => [] },
 });
 
 /** A style's colour from the theme's variables: its tone at its share over the background. */
@@ -50,7 +51,9 @@ const entryOf = (look, colour) => ({ text: look.legend, colour: colour || themeC
 const entries = computed(() =>
   props.keys.filter((key) => EDGE_STYLES[key]).map((key) => ({ key, ...entryOf(EDGE_STYLES[key], props.colours[key]) }))
 );
-const severalEntry = computed(() => (props.several ? entryOf(SEVERAL_KINDS) : null));
+const severalEntries = computed(() =>
+  props.several.filter((key) => EDGE_STYLES[key]).map((key) => ({ key, ...entryOf(severalKindsOf(key), props.colours[key]) }))
+);
 </script>
 
 <template>
@@ -80,7 +83,12 @@ const severalEntry = computed(() => (props.several ? entryOf(SEVERAL_KINDS) : nu
     </svg>
     {{ entry.text }}
   </span>
-  <span v-if="severalEntry" class="bl-legend-item" data-legend-several>
+  <span
+    v-for="severalEntry in severalEntries"
+    :key="`several:${severalEntry.key}`"
+    class="bl-legend-item"
+    :data-legend-several="severalEntry.key"
+  >
     <svg
       class="bl-legend-line"
       :width="SAMPLE.width"

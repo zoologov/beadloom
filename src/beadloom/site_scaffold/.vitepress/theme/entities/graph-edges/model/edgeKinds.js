@@ -16,8 +16,10 @@
 // drawn in, so it names every style the canvas shows there and no other. A line
 // of the map's that carries edges of one style is drawn in that style's dash; one
 // that carries several is drawn solid, in the style it carries most, and the
-// legend names such a line with an entry of its own (`SEVERAL_KINDS`) while one is
-// drawn (the owner's ruling, 2026-10-10).
+// legend names such a line with an entry of its own while one is drawn (the
+// owner's ruling, 2026-10-10): one entry per colour such lines are drawn in, its
+// sample solid in that colour, "several kinds, mostly …" (`severalKindsOf`), so
+// every colour on the canvas has a sample (the owner's ruling, 2026-10-11).
 //
 // A contract edge of the landscape is drawn by its look — healthy, drifting,
 // broken or neutral — rather than by its kind, because on that map the health
@@ -141,17 +143,16 @@ export const EDGE_STYLES = {
 };
 
 /**
- * The legend's entry for a line of the map's that carries edges of several
- * styles: drawn solid, in the colour of the style it carries most, which this
- * entry's neutral sample stands for.
+ * The look of a line of the map's that carries edges of several styles, the
+ * style `key` most: drawn solid, in that style's colour and arrowhead, and named
+ * in the legend by what it carries most.
  */
-export const SEVERAL_KINDS = Object.freeze({
-  legend: "several kinds: solid, in the colour of the kind it carries most",
-  line: "solid",
-  arrow: "triangle",
-  tone: "text2",
-  strength: KIND_STRENGTH,
-});
+export function severalKindsOf(key) {
+  const look = EDGE_STYLES[key];
+  // A line that carries a violation is drawn in the violation's look whatever else it carries most (`aggregateElements.js`).
+  const says = key === VIOLATION_KEY ? "several kinds, one of them a violation" : `several kinds, mostly ${look.legend.replace(/ \(.*\)$/, "")}`;
+  return Object.freeze({ ...look, legend: says, line: "solid" });
+}
 
 /** The dash pattern of a look, in pixels on screen: none for a solid line. */
 export function dashOf(look) {

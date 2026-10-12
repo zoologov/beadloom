@@ -8,19 +8,22 @@
 // routes its lines itself, between the boxes that never move, on tracks a few
 // pixels apart, with a straight run into each box and one arrowhead where lines
 // share their last run; a count is a pill drawn over every line; a title shrinks
-// to fit its box and otherwise stands above it on a plate no line runs under; and
-// the lines are light until the pointer rests on a box, which brings that box's
-// lines forward and fades the rest.
+// to fit its box, and a box too small for it at every size is drawn larger,
+// holding its laid-out box, so every title stands inside its box (the owner's
+// ruling, 2026-10-11, which retired the title plates for nodes); an edge drawn as
+// itself between two top-level nodes is routed by the overview too, so it keeps
+// the overview's spacing at any scale; and the lines are light until the pointer
+// rests on a box, which brings that box's lines forward and fades the rest.
 //
 // What the cases cannot see. They read the state the viewer drew, through its
 // test handle, and measure it with their own geometry (`support/overview.js`);
 // they compare no pixels, so a pill drawn in the wrong colour passes. On the
 // adopter-sized graph the whole-graph fit is clamped at the smallest zoom and does
 // not fit the canvas, its boxes about 35 by 10 px and every title on a plate
-// larger than its box; the owner deferred an overview for such a project (ruling
-// 11), so titles, and lines kept from under them, are held on this portal's graph
-// only. There a plate can close every way into a box, and the router runs a line
-// under it rather than leave the line unrouted.
+// larger than its box, as before the ruling of 2026-10-11; the owner deferred an
+// overview for such a project (ruling 11), so titles, and lines kept from under
+// them, are held on this portal's graph only. There a plate can close every way
+// into a box, and the router runs a line under it rather than leave it unrouted.
 
 import { test, expect } from "@playwright/test";
 import { ADOPTER_SIZED, adopterSizedGraph } from "./support/adopterGraph.js";
@@ -467,7 +470,7 @@ for (const graph of [...GRAPHS, PERTURBED]) {
   });
 }
 
-test("every closed box and every top-level node at the fit is titled readably: at 14, 12.5, 11 or 10 px inside it, or beside it on a plate with a border that nothing covers and no line runs under", async ({
+test("every closed box and every top-level node at the fit is titled readably: at 14, 12.5, 11 or 10 px inside it, and no title is covered or has a line run under it", async ({
   page,
   request,
 }) => {
@@ -498,10 +501,9 @@ test("every closed box and every top-level node at the fit is titled readably: a
   expect(wrong.map((t) => `${t.id}: ${t.sizePx} px drawn at ${t.fontSize.toFixed(2)}`)).toEqual([]);
   const rects = await nodeRects(page, view);
   const inside = (r, box) => r.x1 >= box.x1 - 0.5 && r.x2 <= box.x2 + 0.5 && r.y1 >= box.y1 - 0.5 && r.y2 <= box.y2 + 0.5;
-  expect(titles.filter((t) => t.inside && !inside(t, rects[t.id])).map((t) => t.id)).toEqual([]);
-  // A title outside its box stands on an opaque plate with a border on one side of the box, clear of it.
-  const besideBox = (t, box) => t.y2 <= box.y1 + 0.5 || t.y1 >= box.y2 - 0.5 || t.x2 <= box.x1 + 0.5 || t.x1 >= box.x2 - 0.5;
-  expect(titles.filter((t) => !t.inside && (t.plate.opacity < 1 || !(t.plate.borderWidth > 0) || !besideBox(t, rects[t.id]))).map((t) => t.id)).toEqual([]);
+  // Every title stands inside its box: none on a plate beside it (the owner's ruling, 2026-10-11).
+  // The box that holds everything is titled by a case of its own: on a plate above it while its title reads too small inside.
+  expect(titles.filter((t) => t.id !== tree.wrapper && (!t.inside || !inside(t, rects[t.id]))).map((t) => t.id)).toEqual([]);
   // Nothing covers a title: no other node, no other title.
   const covered = titles.flatMap((t) => [
     ...Object.entries(rects).filter(([id]) => id !== t.id && id !== tree.wrapper && rectsOverlap(t, rects[id])).map(([id]) => `${t.id} under ${id}`),
@@ -509,7 +511,7 @@ test("every closed box and every top-level node at the fit is titled readably: a
   ]);
   expect(covered).toEqual([]);
   const segments = segmentsOf(await viewer(page, "lineLooks"), view);
-  const underTitles = titles.filter((t) => !t.inside).flatMap((t) => segments.filter((s) => segmentInRect(s.a, s.b, t, 1)).map((s) => `${s.id} under ${t.id}`));
+  const underTitles = titles.flatMap((t) => segments.filter((s) => segmentInRect(s.a, s.b, t, 1)).map((s) => `${s.id} under ${t.id}`));
   expect(underTitles).toEqual([]);
 });
 
@@ -521,7 +523,7 @@ test("zoomed out from the fit, no line runs under a title: a title keeps to the 
 
   const titles = await viewer(page, "titles");
   const segments = segmentsOf(await viewer(page, "lineLooks"), await viewOf(page));
-  const under = titles.filter((t) => !t.inside).flatMap((t) => segments.filter((s) => segmentInRect(s.a, s.b, t, 1)).map((s) => `${s.id} under ${t.id}`));
+  const under = titles.flatMap((t) => segments.filter((s) => segmentInRect(s.a, s.b, t, 1)).map((s) => `${s.id} under ${t.id}`));
   expect(under).toEqual([]);
 });
 
@@ -553,18 +555,10 @@ test("at the fit, and zoomed out from it, the title of the box that holds everyt
   expect(wrong).toEqual([]);
 });
 
-/** The room a title keeps from its box's edges, in pixels on screen; a line of a title is this share of its size tall. */
-const TITLE_INSET_PX = 6;
-const TITLE_LINE_HEIGHT = 1.25;
-/** What a status mark takes at each end of a title's line, at most, in pixels: the mark and its inset from the corner. */
-const MARK_ROOM_PX = 7 + 4;
-/** A plate's padding and border around its title, in pixels at the size the plate was laid out at. */
-const PLATE_FRAME_PX = 3 + 1;
 /** The least room a box drawn larger than its layout keeps from every other box, in pixels. */
 const NEIGHBOUR_GAP_PX = 3;
 
-
-test("at the fit every top-level node is a box with its title inside: one too small for its title is drawn larger, centred on its laid-out box and clear of every other box, and a title stands on a plate only where even the smallest box for it would come within a few pixels of another", async ({
+test("at the fit every top-level node is a box with its title inside: one too small for its title is drawn larger, holding its laid-out box, centred on it where that keeps clear, and clear of every other box", async ({
   page,
   request,
 }) => {
@@ -578,50 +572,32 @@ test("at the fit every top-level node is a box with its title inside: one too sm
   const laid = Object.fromEntries(top.filter((id) => elk[id]).map((id) => [id, boxOnScreen(elk[id], view)]));
   const titles = Object.fromEntries((await viewer(page, "titles")).map((t) => [t.id, t]));
   requireShape(top.some((id) => titles[id]), "no top-level node takes the map's title at the fit");
-  const marked = new Set((await viewer(page, "nodeLooks")).filter((look) => look.status).map((look) => look.id));
 
-  // A box drawn larger than its layout holds its laid-out box and shares its centre: no node moves.
-  const off = Object.keys(laid).filter((id) => {
-    const [a, b] = [centreOf(laid[id]), centreOf(drawn[id])];
-    return !within(laid[id], drawn[id]) || Math.hypot(a.x - b.x, a.y - b.y) > 0.5;
-  });
-  expect(off).toEqual([]);
-  // No two top-level boxes overlap, and none covers another's title.
-  const overlapping = top.flatMap((id, k) => top.slice(k + 1).filter((other) => rectsOverlap(drawn[id], drawn[other], 0.5)).map((other) => `${id} and ${other}`));
-  expect(overlapping).toEqual([]);
+  // A box drawn larger than its layout holds its laid-out box: no node is drawn anywhere its layout did not put it.
+  expect(Object.keys(laid).filter((id) => !within(laid[id], drawn[id]))).toEqual([]);
+  // No two top-level boxes come nearer than a few pixels, and none covers another's title.
+  const reach = (r) => ({ x1: r.x1 - NEIGHBOUR_GAP_PX + 0.5, y1: r.y1 - NEIGHBOUR_GAP_PX + 0.5, x2: r.x2 + NEIGHBOUR_GAP_PX - 0.5, y2: r.y2 + NEIGHBOUR_GAP_PX - 0.5 });
+  const grownIds = (await viewer(page, "overviewPlan")).grown;
+  const crowding = top.flatMap((id, k) =>
+    top.slice(k + 1).filter((other) => rectsOverlap(grownIds.includes(id) || grownIds.includes(other) ? reach(drawn[id]) : drawn[id], drawn[other], 0.5)).map((other) => `${id} and ${other}`)
+  );
+  expect(crowding).toEqual([]);
   const covered = Object.values(titles).flatMap((t) => top.filter((id) => id !== t.id && rectsOverlap(t, drawn[id], 0.5)).map((id) => `the title of ${t.id} under ${id}`));
   expect(covered).toEqual([]);
-
-  // The smallest box that holds a title on a plate inside it at the smallest size, centred where its
-  // node is: its text, its inset from the box's edges, and the room of a status mark at each end.
-  const smallestBoxOf = (id) => {
-    const t = titles[id];
-    const frame = PLATE_FRAME_PX * (t.fontSize / t.sizePx);
-    const text = (t.x2 - t.x1 - 2 * frame) * (Math.min(...TITLE_PX) / t.fontSize);
-    const width = text + 2 * (marked.has(id) ? MARK_ROOM_PX : TITLE_INSET_PX);
-    const height = String(t.text).split("\n").length * TITLE_LINE_HEIGHT * Math.min(...TITLE_PX) + TITLE_INSET_PX;
-    const { x, y } = centreOf(drawn[id]);
-    return { x1: x - width / 2, y1: y - height / 2, x2: x + width / 2, y2: y + height / 2 };
-  };
-  const crowded = (id) => {
-    const r = smallestBoxOf(id);
-    const reach = { x1: r.x1 - NEIGHBOUR_GAP_PX, y1: r.y1 - NEIGHBOUR_GAP_PX, x2: r.x2 + NEIGHBOUR_GAP_PX, y2: r.y2 + NEIGHBOUR_GAP_PX };
-    return top.some((other) => other !== id && rectsOverlap(reach, drawn[other]));
-  };
+  // Every title is inside its box, on no plate (the owner's ruling, 2026-10-11).
   const outside = top.filter((id) => titles[id] && !(titles[id].inside && within(titles[id], drawn[id])));
+  const offCentre = grownIds.filter((id) => laid[id] && Math.hypot(centreOf(laid[id]).x - centreOf(drawn[id]).x, centreOf(laid[id]).y - centreOf(drawn[id]).y) > 0.5);
   test.info().annotations.push({
     type: "measured",
-    description: `${top.filter((id) => titles[id]).length - outside.length} of ${top.filter((id) => titles[id]).length} top-level titles inside their box; on a plate: ${outside.join(", ") || "none"}`,
+    description: `${top.filter((id) => titles[id]).length - outside.length} of ${top.filter((id) => titles[id]).length} top-level titles inside their box; drawn larger: ${grownIds.join(", ") || "none"}; off their laid-out centre: ${offCentre.join(", ") || "none"}`,
   });
-  expect(outside.filter((id) => !crowded(id))).toEqual([]);
-  // The plan names the plates it stood titles on, and they are the ones drawn.
-  expect((await viewer(page, "overviewPlan")).plates).toEqual(outside);
+  expect(outside).toEqual([]);
 });
 
 /** How many toolbar steps a case zooms in, at most, for a box drawn larger than its layout to meet it. */
 const MEETING_STEPS = 16;
 
-test("zoomed in from the fit, a node drawn larger than its layout keeps its centre and, while the level stays, about its size on screen and its title inside, until its laid-out box is as large; its lines keep their routes, a last run into it only longer along itself and ending on its border", async ({
+test("zoomed in from the fit, a node drawn larger than its layout holds its laid-out box, its centre moving only towards the laid-out one, and, while the level stays, about its size on screen and its title inside, until its laid-out box is as large; its lines keep their routes, a last run into it only longer along itself and ending on its border", async ({
   page,
   request,
 }) => {
@@ -663,8 +639,10 @@ test("zoomed in from the fit, a node drawn larger than its layout keeps its cent
     const view = await viewOf(page);
     for (const id of grown.filter((id) => now.nodes[id])) {
       const box = now.boxes[id];
-      const [a, b] = [centreOf(box), centreOf(elk[id])];
-      if (!within(elk[id], box) || Math.hypot(a.x - b.x, a.y - b.y) > ON_BORDER) wrong.push(`step ${step}: ${id} does not hold its laid-out box around its centre`);
+      const offOf = (drawnBox) => Math.hypot(centreOf(drawnBox).x - centreOf(elk[id]).x, centreOf(drawnBox).y - centreOf(elk[id]).y);
+      if (!within(elk[id], box)) wrong.push(`step ${step}: ${id} does not hold its laid-out box`);
+      // A box the plan stood off its laid-out centre shrinks towards the laid-out box along the way it grew.
+      if (last.boxes[id] && offOf(box) > offOf(last.boxes[id]) + ON_BORDER) wrong.push(`step ${step}: ${id} moves away from its laid-out centre`);
       // An edge of the file drawn as itself into it keeps its route and ends on the node's border: a node
       // drawn larger keeps that line outside it, as a node widened in its row does for the lines from
       // the rows above and below.
