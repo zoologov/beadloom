@@ -294,8 +294,13 @@ reach line, node-less list, own and inside debt and unpublished-commit note
 ([Node card](vitepress-site/node-card.md)). `edges.spec.js` holds the legend against the canvas
 at every level, comparing each sample's colour and dash with the lines drawn in it, a
 "several kinds" entry per colour such lines are drawn in where one is drawn and none where
-none is (BDL-082 S2c), and an aggregated line of one kind keeping that kind's dash; `metrics.spec.js` that opening any
-top-level box at the fit moves no line and no pill of the other top-level nodes. Three cases
+none is (BDL-082 S2c), and an aggregated line of one kind keeping that kind's dash;
+`metrics.spec.js` that opening any top-level box at the fit moves no line and no pill of the
+other top-level nodes. Since BDL-082 `beadloom-us5r.4` the test handle reads where a node is
+drawn (`positions`) apart from where it is laid out (`homes`): `look.spec.js` compares the
+homes when it asks whether a node's status moves anything, because a box the overview draws
+larger may stand off its laid-out centre, and `overview.spec.js` opens every box drawn off its
+centre at the fit and finds it drawn back at its home. Three cases
 accept less than before, each with its measurement; the owner accepted all three on
 2026-10-10:
 
@@ -404,7 +409,12 @@ failed: `vue-fsd` 321 and 43, `rn-fsd` 280 and 41, python 263 and 101, go 278 an
 typescript 319 and 45, java 219 and 102, kotlin 214 and 107, swift 214 and 107, every skip
 named by shape (S4T re-measured the same counts). This repository's portal measured 364 of 364
 there (354 in `chromium`, 10 in `performance`, `BEADLOOM_E2E_NO_SKIP=1`), and 366 passed at
-`1d71be89` (S4R). These are local measurements, not a claim about the Linux CI legs, whose
+`1d71be89` (S4R). BDL-082 S2b grew the two FSD fixtures: `vue-fsd` gained the slice group
+`features/payment`, two slices, and an `@x` pair in `entities`, and `rn-fsd` an `@x` pair.
+The portal as 9.0.0 drew it failed 8 shipped cases on the first and 1 on the second. After
+S2c, on 2026-10-13, Darwin arm64, `Node.js 22`, the browser-suite test
+passed on all eight adopter portals (24 cases, with no xfail mark), and this repository's
+portal measured 369 passed (`beadloom-us5r.1`). These are local measurements, not a claim about the Linux CI legs, whose
 fonts differ: a title's width decides growth and breaks, so a plan may differ there. What it
 tests is its `paths:` filter, and a self-check holds that filter to every file the slow tests
 read and every `src/beadloom` file their `init`, `reindex` and `docs site` steps enter, traced

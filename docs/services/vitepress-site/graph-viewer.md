@@ -453,8 +453,8 @@ that leaves the page removes only its own. Records keyed by a node id have no pr
 - the canvas: `ready` (false while the view is animated or a change is still to be read),
   `visibleIds`, `selection`, `state`, `positions` (where each node is drawn now) and `homes`
   (where it stands at every level that draws it as laid out; the two differ only for a node the
-  overview draws off its laid-out centre, BDL-082 `beadloom-us5r.4`), `pan`, `zoom`, `move` (the last move that
-  framed a selection or a search, `site-navigate-graph`'s `lastMove()`: `{ animated, from, to,
+  overview draws off its laid-out centre, BDL-082 `beadloom-us5r.4`), `pan`, `zoom`, `move`
+  (the last move that framed a selection or a search, `site-navigate-graph`'s `lastMove()`: `{ animated, from, to,
   frames, done }`, or `null` before any), `boxes` (page coordinates), `nodeBoxes` (drawn boxes,
   graph coordinates), `colours`, `statusLooks` (with `mark`);
 - the looks: `nodeLooks` (fill, border and its position, title, status mark, shape, size,
@@ -593,8 +593,9 @@ handle by oracles in `e2e/support/`, which import nothing from the theme.
   portal with two edges more (`support/perturbedGraph.js`) and an adopter-sized graph in no layer
   ranks.
 - `e2e/overview.spec.js` (support `overview.js`): the overview's routing, gaps, pills, titles,
-  plates, grown and broken titles, the frame, the plan kept across zoom and opening, calm hover,
-  tallies, and pure cases of the router and the pill search.
+  plates, grown and broken titles, the frame, the plan kept across zoom and opening, a box drawn
+  off its laid-out centre found back at its home once it opens (BDL-082 `beadloom-us5r.4`), calm
+  hover, tallies, and pure cases of the router and the pill search.
 - `e2e/map.spec.js`: the levels, the budget and its counts, a filter composed with the level, the
   root's loops, marks keeping their size, the landscape without levels.
 - `e2e/levels.spec.js` (support `levels.js`): opening by readability, the sibling rule, "+N", own

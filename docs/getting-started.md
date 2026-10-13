@@ -187,8 +187,11 @@ names it:
 - **An alias a bundler computes** — a Babel `module-resolver` `root:` folder, a
   regular-expression alias, a value built with no string literal — is not read; `init` names
   the last two it met. Declare the folder under `imports.aliases:` by hand.
-- **A Feature-Sliced tree inside one package of a monorepo,** and slice groups (a folder of
-  slices inside a layer), are not read as such: the group is read as one slice.
+- **A Feature-Sliced tree inside one package of a monorepo** is not read as such. Slice groups
+  are read since BDL-082 S2: a folder of a sliced layer holding neither a standard segment nor
+  an `index` is a group when it has no code file at its top and a slice below it, at any depth,
+  or when it has code at its top and a folder in it holds a standard segment, and one slice
+  otherwise; each slice in a group is a node `<layer>-<group>-<slice>`, and the group none.
 
 ## Configuration
 

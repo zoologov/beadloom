@@ -303,6 +303,7 @@ the tree slice by slice. Every node it writes is a `component` with one tag:
 | Folder | Node | Tag | `part_of` |
 |--------|------|-----|-----------|
 | a slice of `pages`, `widgets`, `features` or `entities` holding code | `<layer>-<slice>` | `fsd-<layer>` | the root service |
+| a slice inside a slice group (see below) | `<layer>-<group>-<slice>`, one name more per group inside a group | `fsd-<layer>` | the root service |
 | `app/`, `shared/` | a container named `app` / `shared` | `fsd-app` / `fsd-shared` | the root service |
 | a segment of `app/` or `shared/` holding code | `<layer>-<segment>` | `fsd-app` / `fsd-shared` | its container |
 | a folder beside the layers holding code (`components`, `hooks`, `stores`, ...) | the folder's name | `fsd-legacy` | the root service |
@@ -315,6 +316,25 @@ code says by omission that it is not there; they stand outside every FSD rule. W
 claims (`FsdLayout.claimed`: the whole `src/` and the routes folder when the layers are under
 `src/`, else the layer and legacy folders at the root) leaves the directory clustering.
 
+**Slices and slice groups** (BDL-082 S2a, RFC D2, the owner's ruling of 2026-10-13). A folder
+of a sliced layer is a slice when it holds a standard segment (`ui`, `model`, `api`, `lib`,
+`config`: `DEFAULT_SLICE_SEGMENTS`) or an `index` code file at its top. A folder holding neither
+is a group when it has no code file at its top and a slice below it, at any depth, or when it
+has code at its top and a folder in it holds a standard segment; otherwise it is one slice. The
+`index` is read by `graph.rules.is_index_file`, the public-API rule's own reader, over the same
+extensions (`.ts .tsx .js .jsx .mjs .cjs .vue`), so `init` and `fsd-public-api` agree on which
+folders have a public API. A group has no node. Each folder in it is read the same way in turn,
+and each slice is named by the whole path (`features/auth/login` → `features-auth-login`;
+`features/account/settings/profile` → `features-account-settings-profile`), so `register`
+importing `login` is a crossing between two slices of one layer. A linked folder is not looked
+into. Measured on 2026-10-13 by `beadloom-us5r.5`: the specification's group
+`features/auth/{helpers.ts, login/{index, ui/}, register/{index, ui/}}` gives
+`features-auth-login` and `features-auth-register`, with `register → login` one `fsd-layers`
+error and `helpers.ts` one group-top `fsd-slice-shape` warning. A slice not yet split into
+segments, `features/checkout/{Checkout.vue, store.ts, store2.ts, components/Total.vue,
+components/Summary/{index.ts, Summary.vue}}`, stays one node, `features-checkout`, holding its
+6 files. The code at a group's top belongs to no node, and the shape rule reports it.
+
 **No import edge is frozen into the YAML.** On an FSD tree `bootstrap_project()` skips the quick
 import scan, and the first reindex derives every `depends_on` edge from the code through tsconfig
 `paths` and `imports.aliases:`. Measured by S3c on its synthetic tree: with scan edges written,
@@ -322,15 +342,23 @@ a cross-import removed from the code kept `fsd-layers` red, because the YAML edg
 the reindex derived the same 17 of 17 edges.
 
 **The rules it writes** (`rules_gen.generate_fsd_rules(frontend, rules_path)`, as commented text
-through `write_text_atomic`; the count it returns is read back from that text). Nine rules, each
-with the owner's reason in a comment beside it, citing Steiger's `recommended` set:
+through `write_text_atomic`; the count it returns is read back from that text). Eight rules
+since BDL-082 S2a, where 9.0.0 wrote nine, each with the owner's reason in a comment beside it.
+The file's header lists the 17 rules `@feature-sliced/steiger-plugin` 0.8.0 turns on in its
+`recommended` set (`rules_gen.STEIGER_RECOMMENDED`), one line each with what it reports and the
+rule here that judges the same thing, and it states the slice and group rule above:
 
 | Rule | Type | Severity | What it judges |
 |------|------|----------|----------------|
-| `fsd-layers` | `layers`, titled `FSD architecture`, `scope:` the root service, `allow_skip: true`, `edge_kind: depends_on` | error | the six `fsd-<layer>` tags, top-down |
-| `fsd-public-api` | `slice_public_api`, tags `fsd-pages fsd-widgets fsd-features fsd-entities` | error | an import into a slice lands on its `index` |
-| `fsd-slice-shape` | `slice_shape`, the same tags, segments `ui model lib api config` | warn | a slice's top holds its segments and its `index` |
-| `fsd-cohesion-<layer>` (six) | `check`, `for: {kind: component, tag: fsd-<layer>}`, `max_symbols` | warn | widgets 80 symbols, every other layer 60 (`FSD_COHESION_LIMITS`) |
+| `fsd-layers` | `layers`, titled `FSD architecture`, `scope:` the root service, `allow_skip: true`, `edge_kind: depends_on` | error | the six `fsd-<layer>` tags, top-down; an `@x` edge between two entities is no crossing |
+| `fsd-public-api` | `slice_public_api`, tags `fsd-pages fsd-widgets fsd-features fsd-entities fsd-shared fsd-app` | error | an import into a slice or a segment from outside it lands on its `index` |
+| `fsd-slice-shape` | `slice_shape`, the four sliced layers' tags, `segments: [ui, model, lib, api, config]`, `discouraged:` the 69 names of `DEFAULT_DISCOURAGED_SEGMENTS` | warn | a slice's top holds segments named by purpose and its `index`; a group's top holds no code |
+| `fsd-cohesion-<layer>` (five) | `check`, `for: {kind: component, tag: fsd-<layer>}`, `max_symbols` | warn | widgets 80 symbols; `app`, `features`, `entities` and `shared` 60 (`FSD_COHESION_LIMITS`) |
+
+No cohesion check is written for `pages`: FSD 2.1 is pages-first ("There's no limit to how much
+code you can place in a page slice as long as your team still finds it easy to navigate"). An
+existing `rules.yml` is never rewritten, so a project initialised by 9.0.0 keeps its
+`fsd-cohesion-pages` until its owner removes it.
 
 **Steiger's script** (`scanner/steiger_script.py`, `ensure_steiger_script(project_root,
 fsd_root)` -> `SteigerScript`). `init` writes `"lint:fsd": "steiger ./<fsd root>"` (`steiger .`
@@ -367,10 +395,26 @@ finding is a `layers`, `slice_public_api` or `slice_shape` finding, the code fai
 not the scaffold, and `init` prints `Error: your code does not pass the rules this command wrote
 alongside it.`, one line per finding, and that each line is a finding about the project, not a
 defect in the scaffold. The exit code stays 1, what the Gate's lint step says, so a scripted
-`init && ci` stops. Measured on the `vue-fsd` fixture: `init` exits 1 naming the cross-import
-`features-apply-coupon -> features-add-to-cart` and the deep import at
-`src/widgets/product-grid/ui/ProductGrid.vue:3`; on `rn-fsd` it exits 0 with one
-`fsd-slice-shape` warning.
+`init && ci` stops. Measured on 2026-10-13 on a copy of the `vue-fsd` fixture (21 nodes):
+`init --yes` exits 1 with 3 errors, naming the cross-import from `features-apply-coupon`, the
+crossing inside the group `features/payment` from `features-payment-pay-button`, and the deep
+import at `src/widgets/product-grid/ui/ProductGrid.vue:3`. On a copy of `rn-fsd` (19 nodes) it
+exits 0.
+
+**The code it could not read** (BDL-082 S2a, `beadloom-us5r.2`). After its `Index:` line
+`init` prints one line per language whose files the index holds and no installed parser reads,
+most files first:
+
+```text
+8 TypeScript files, no parser installed — install with: uv tool install "beadloom[languages]"
+```
+
+The line is read from the index `init` has just written (`application.reindex.read_unread_code`),
+and `_root._echo_unread_code` returns whether it printed, so `init --bootstrap` skips the older
+`No parser available` warning where the line already named the files. No exit code moves on
+it. `--yes` and `--bootstrap` print it whenever the index holds such files. The wizard prints
+it when its own run re-indexed; answered `cancel` at the graph review, it re-indexes before its
+verdict and prints no line (BDL-UX #324).
 
 ### Expo modules
 
@@ -431,6 +475,8 @@ fixtures.
 
 Unit: `tests/unit/onboarding/test_an_fsd_project_is_detected_before_every_other_preset.py`,
 `tests/unit/onboarding/scanner/test_an_fsd_layout_is_read_slice_by_slice.py`,
+`tests/unit/onboarding/scanner/test_an_fsd_layout_reads_slice_groups.py`,
+`tests/unit/onboarding/scanner/test_init_and_the_public_api_rule_read_one_index.py`,
 `tests/unit/onboarding/scanner/test_init_writes_the_fsd_rules.py`,
 `tests/unit/onboarding/scanner/test_init_gives_a_frontend_its_steiger_script.py`,
 `tests/unit/onboarding/scanner/test_alias_scan.py`,
@@ -438,12 +484,15 @@ Unit: `tests/unit/onboarding/test_an_fsd_project_is_detected_before_every_other_
 `tests/unit/onboarding/scanner/test_expo_router.py`. Integration:
 `tests/integration/onboarding/scanner/test_init_writes_the_aliases_a_bundler_declares.py`,
 `tests/integration/onboarding/scanner/test_lint_judges_an_fsd_projects_layers_straight_after_init.py`,
-`tests/integration/onboarding/scanner/test_init_names_the_root_after_a_relative_project_path.py`.
+`tests/integration/onboarding/scanner/test_init_names_the_root_after_a_relative_project_path.py`,
+`tests/integration/onboarding/scanner/test_init_writes_the_rules_the_specifications_examples_need.py`,
+`tests/integration/services/commands/setup/test_the_init_wizard_names_the_code_it_could_not_read.py`.
 Acceptance, under `tests/acceptance/onboarding/agent-prime/`:
 `init_on_a_feature_sliced_frontend.feature`, `init_on_an_app_with_expo_modules.feature`,
 `init_on_an_fsd_app_with_expo_router.feature`,
 `init_reads_layer_named_folders_as_fsd_only_on_a_frontend.feature`,
-`init_keeps_a_frontends_package_json_as_it_was_written.feature`.
+`init_keeps_a_frontends_package_json_as_it_was_written.feature`,
+`init_reads_slice_groups_and_pages_first.feature`.
 
 ## API
 

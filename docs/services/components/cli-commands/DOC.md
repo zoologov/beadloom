@@ -38,7 +38,7 @@ is what holds that line.
 
 | Module | Commands |
 |---|---|
-| `_root.py` | the shared `main` group and the missing-parser warning helper — no command of its own. The summary `beadloom --help` prints is `help=_HELP`, derived from the package docstring rather than written as the group's own docstring: it was a third hand-written copy of the product description and shipped the 1.x sentence through both 3.0 patch releases (BDL-UX #211) |
+| `_root.py` | the shared `main` group and the two missing-parser helpers — no command of its own. `_warn_missing_parsers` prints `⚠ No parser available for <extensions> files.`; `_echo_unread_code` (BDL-082 S2a) prints the unread-code line described under `reindex` below and returns whether it printed one; both name `_INSTALL_LANGUAGES`, the install command, runnable as printed. The summary `beadloom --help` prints is `help=_HELP`, derived from the package docstring rather than written as the group's own docstring: it was a third hand-written copy of the product description and shipped the 1.x sentence through both 3.0 patch releases (BDL-UX #211) |
 | `query.py` | `ctx`, `graph`, `why`, `search`, `prime` |
 | `index_ops.py` | `reindex`, `doctor`, `diff`, `link` |
 | `status.py` | `status` |
@@ -67,6 +67,19 @@ is what holds that line.
 `link` reads `.beadloom/_graph/` through `onboarding.graph_files.each_graph_file`, which is where the skip policy is stated: BDL-069 measured that it reads the directory for NODES, so a graph file it cannot parse must leave the answer "that node is not in the graph" rather than a traceback at whoever ran the command.
 
 `reindex` ends its output with a `Tests:` line (BDL-074 C1): `_echo_tests_line` opens the index read-only and prints `application.reindex.test_index.describe_placements` over `placement_counts` and, since BDL-074 F1, `kind_counts`, so the bound and unplaced counts come from the `test_files` table — the bound count naming the files bound beside the code in parentheses when there are any (BDL-074 G2) — and each kind of the `other_kind` files is named with its own count (`72 acceptance step, 103 self-check`) instead of "bound by other means". An index without that table prints no line. Tested in `tests/integration/services/commands/index_ops/test_the_tests_line_names_each_kind.py`. Since BDL-078 the bound count also names the flat Python tests bound by the module named or imported (`beadloom-76mk`), and `_echo_activity_line` prints `Activity: <note>` after `Tests:` when a full reindex measured activity on a shallow clone, the note from `infrastructure.git_activity.activity_history_note` over `ReindexResult.activity_history` (`beadloom-btkd.9`); a full history prints nothing. Since BDL-080 S1a `reindex` prints `ReindexResult.infos` as an `[info]` block after the `[warn]` block: one line per graph node read through a kind alias, such as `[info] Node 'X' declares kind 'site', read as 'service' (an accepted alias)`. Nothing in it is to fix, and it does not change the exit code.
+
+Since BDL-082 S2a `reindex` prints, before its `Tests:` line and whether or not anything
+changed, one line per language whose code files the index holds and no installed parser reads,
+most files first (`_echo_unread_code` over `application.reindex.read_unread_code`):
+`<N> <Language> files, no parser installed — install with: uv tool install "beadloom[languages]"`. The
+line is information and moves no exit code. Where it printed, the older `⚠ No parser
+available` warning, which a run that indexed 0 symbols prints, is skipped (`beadloom-us5r.2`),
+so `reindex --full` names a missing parser once. `init` prints the same line after its `Index:`
+line: in `--yes` indented, in `--bootstrap` after a `⚠` mark and in place of the older warning
+on the same condition, and in the wizard when its own run re-indexed (not after `cancel` at the
+graph review, BDL-UX #324). Tested in `tests/test_cli_reindex.py`,
+`tests/integration/services/commands/setup/test_the_init_wizard_names_the_code_it_could_not_read.py`
+and `tests/acceptance/application/reindex/the_index_names_the_code_it_could_not_read.feature`.
 
 `init` prints the same `Tests:` line after its reindex and, below it, every test file bound to no node, by path and placement (`_echo_test_binding`, BDL-078 `beadloom-76mk`), reading the index through `infrastructure.db.readonly_connection` (`beadloom-btkd.18`). The list is indented rather than prefixed, because under `--bootstrap` the prefix is a check mark. A project with no test file, or an index without the test tables, prints neither. `bootstrap_project` writes `tests: {flat_tests: true}` into `.beadloom/config.yml` for a project whose languages include `.py`.
 

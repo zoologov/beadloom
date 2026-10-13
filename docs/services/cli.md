@@ -56,7 +56,9 @@ beadloom init [--project DIR]
 **A Feature-Sliced frontend** (BDL-080 S3) is read slice by slice: a `component` per slice tagged
 `fsd-<layer>`, `app` and `shared` containers of segments, folders beside the layers tagged
 `fsd-legacy`, Expo Router's `app/` beside an FSD `src/` as one `app-routes` node, and each local
-Expo module with its `ios/` and `android/` parts. `init` writes nine FSD rules into `rules.yml`,
+Expo module with its `ios/` and `android/` parts. Since BDL-082 S2 a slice group's slices are
+nodes of their own, `<layer>-<group>-<slice>`, and the group none. `init` writes eight FSD rules
+into `rules.yml` (nine before BDL-082 S2, which dropped the cohesion check for `pages`),
 writes no import edge into the graph YAML (the reindex derives them), and adds a `lint:fsd`
 script running Steiger to `package.json` in the file's own indentation. On every project it also
 reads the aliases `babel.config.*`, `.babelrc` and `vite.config.*` declare, by a text scan, and
@@ -74,7 +76,8 @@ or `slice_shape` error, and nothing else at `error`), `init` says so rather than
 defect in the scaffold: `Error: your code does not pass the rules this command wrote alongside
 it.`, one line per finding, and that each is a finding about the project. It still exits 1, as
 `beadloom ci`'s lint step would, so a scripted `init && ci` stops there. On the `vue-fsd`
-fixture, which plants a cross-import and a deep import, `init` exits 1 naming both.
+fixture, which plants two cross-imports (one between two slices of the group
+`features/payment`) and a deep import, `init` exits 1 naming all three (measured 2026-10-13).
 
 `--project .` names the root service after the current folder (BDL-080 S3e, BDL-UX #313); before,
 it named it `''` whenever no `pyproject.toml`, `package.json`, `go.mod` or `Cargo.toml` named the
@@ -189,7 +192,14 @@ Default mode is incremental (only changed files). Use `--full` to force complete
 
 Order: drop tables -> create schema -> load graph YAML -> index docs -> index code -> resolve imports -> load rules -> build sync state -> populate FTS5 -> take health snapshot.
 
-When no changes are detected, displays current DB totals (nodes, edges, docs, symbols) instead of reindex counts. Warns about missing tree-sitter parsers when symbols == 0.
+When no changes are detected, displays current DB totals (nodes, edges, docs, symbols) instead of reindex counts.
+
+Since BDL-082 S2a both branches print, after the counts, one line per language whose code files
+the index holds and no installed parser reads, most files first: `8 TypeScript files, no parser
+installed — install with: uv tool install "beadloom[languages]"`. No exit code moves on it, and
+`init` prints the same line after its `Index:` line. A run that changed something and indexed
+0 symbols also warns `⚠ No parser available for <extensions> files.`, unless that line already
+named the files.
 
 On both branches the output ends its totals with a `Tests:` line (BDL-074 C1), read from the `test_files` table: how many test files are indexed, how many bind to a node — with `(B beside the code)` after the count when any test inside a node's source is bound (BDL-074 G2), and `K flat, by the module named or imported` when the layout declares `flat_tests` (BDL-078) — and how many are `unplaced`, reached by none of the ways a test binds, plus the `unowned` count when non-zero and, since BDL-074 F1, each recorded kind of the files a kind folder places, by its own count (`acceptance step`, `self-check`), where the line used to fold both into "bound by other means". On this repository, measured by `beadloom reindex` on 2026-09-28 at `909a0098`: `Tests:   620 files (275 bound to a node, 167 unplaced, 75 acceptance step, 103 self-check)`. Which files are tests, and where they are looked for, is the test layout of the `tests:` block in `.beadloom/config.yml`; see [Configuration](../getting-started.md#configuration). A key of that block that cannot be used, and a node's `tests:` prefix that covers no indexed test file, are printed as warnings: ``Node 'billing': `tests:` prefix 'tests/e2e' covers no indexed test file, so it binds nothing (a folder is declared with a trailing '/')``. An index built before the test tables prints no such line. A change to a test file alone is no longer reported as "no changes". See the [Test Mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md).
 

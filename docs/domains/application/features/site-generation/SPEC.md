@@ -1338,7 +1338,9 @@ python, go, typescript, java, kotlin, swift, and since BDL-080 S3d the Feature-S
 `vue-fsd` and `rn-fsd`, whose layers and rules `init` writes with no hand edit)
 and `test_the_browser_tests_pass_on_an_adopter_portal.py`. The two FSD fixtures have a fast test
 of their own, `test_an_fsd_adopter_fixture_is_judged_by_the_rules_init_writes.py` (the import
-forms each fixture carries, its planted findings, the Expo bridges). The `site-adopters` matrix
+forms each fixture carries, its planted findings, the Expo bridges; since BDL-082 S2b the `@x`
+pair each fixture carries, which is no finding, and on `vue-fsd` the slice group
+`features/payment`, whose planted crossing is the third error). The `site-adopters` matrix
 has nine legs, `[python, go, typescript, java, kotlin, swift, vue-fsd, rn-fsd, projects]`,
 reported as the check runs `site-adopters (<part>)`. That workflow starts on a pull request
 only through its `paths:` filter, and `tests/self_check/config/test_every_slow_test_runs_in_a_ci_job.py`

@@ -2,7 +2,7 @@
 
 Full and incremental reindex pipeline for rebuilding the architecture graph database.
 
-Source: `src/beadloom/application/reindex/` (package; decomposed by cohesion in BDL-059 S4 into `models`, `rules_loader`, `indexing`, `enrichment`, `sync_state`, `change_detection`, `full`, `incremental`; BDL-074 C1 added `test_index`; with the package `__init__` re-exporting the stable public + back-compat surface)
+Source: `src/beadloom/application/reindex/` (package; decomposed by cohesion in BDL-059 S4 into `models`, `rules_loader`, `indexing`, `enrichment`, `sync_state`, `change_detection`, `full`, `incremental`; BDL-074 C1 added `test_index` and BDL-082 S2a `unread_code`; with the package `__init__` re-exporting the stable public + back-compat surface)
 
 ## Specification
 
@@ -281,7 +281,19 @@ beadloom reindex [--project DIR] [--docs-dir DIR] [--full]
 | `--docs-dir` | `Path` | from config | Documentation directory |
 | `--full` | flag | `False` | Force full rebuild (drop all tables and re-create) |
 
-By default, performs an incremental reindex (only changed files). Use `--full` to force a complete rebuild. When `nothing_changed` is detected, displays current DB totals instead of reindex counts. Warns about missing language parsers when `symbols_indexed == 0`.
+By default, performs an incremental reindex (only changed files). Use `--full` to force a complete rebuild. When `nothing_changed` is detected, displays current DB totals instead of reindex counts.
+
+Since BDL-082 S2a, after the counts and whether or not anything changed, it prints one line
+per language whose code files the index holds and no installed parser reads, most files first
+(`unread_code`, below):
+
+```
+8 TypeScript files, no parser installed — install with: uv tool install "beadloom[languages]"
+```
+
+The line moves no exit code. A run that indexed 0 symbols and changed something also warns
+about missing language parsers (`⚠ No parser available for <extensions> files.`), unless the
+line above was printed (`beadloom-us5r.2`), so `reindex --full` names a missing parser once.
 
 ## API
 
@@ -304,6 +316,20 @@ def resolve_scan_paths(project_root: Path) -> list[str]
 ```
 
 Resolve source scan directories from `.beadloom/config.yml`. Returns `["src", "lib", "app"]` when config is absent or has no `scan_paths` key.
+
+```python
+def unread_code(conn: sqlite3.Connection) -> tuple[UnreadCode, ...]
+def read_unread_code(project_root: Path) -> tuple[UnreadCode, ...]
+```
+
+Module `unread_code` (BDL-082 S2a). `unread_code` counts the `kind = 'code'` rows of
+`file_index` whose extension no installed tree-sitter grammar reads
+(`context_oracle.code_indexer.check_parser_availability`), grouped by language through
+`LANGUAGE_OF` (`.ts`/`.tsx` → `TypeScript`, `.vue` → `Vue`, an unknown extension under its own
+suffix), most files first and then by name. Sentinel rows are skipped through
+`is_sentinel_path`. `read_unread_code` opens `.beadloom/beadloom.db` read-only and returns `()`
+when the index does not exist or predates `file_index`. `beadloom reindex` and `beadloom init`
+print the result through `services.commands._root._echo_unread_code`.
 
 ### Internal Functions
 
@@ -586,6 +612,15 @@ class ReindexResult:
     activity_history: GitHistory | None = None
 ```
 
+```python
+@dataclass(frozen=True)
+class UnreadCode:
+    language: str
+    files: int
+```
+
+`files` code files in `language` that the reindex read no symbol from (BDL-082 S2a).
+
 `beadloom reindex` prints `infos` as an `[info]` block after the `[ERR]` and `[warn]` blocks,
 one line each. A graph node declared `kind: site` reads:
 
@@ -642,7 +677,10 @@ table). BDL-080 S3a added
 (an edit to a tsconfig or to `imports.aliases:` alone re-resolves on an incremental reindex),
 `tests/integration/application/reindex/test_the_six_fixtures_index_as_before_aliases_were_read.py`
 (the six adopter fixtures of that time keep identical import rows and edges) and
-`tests/unit/application/test_import_aliases.py` (the block's readings and refusals). The CLI
+`tests/unit/application/test_import_aliases.py` (the block's readings and refusals). BDL-082
+S2a added `tests/unit/application/reindex/test_the_index_counts_the_code_it_could_not_read.py`
+and `tests/acceptance/application/reindex/the_index_names_the_code_it_could_not_read.feature`
+(the unread-code count and its line). The CLI
 surface is tested in
 `tests/test_cli_reindex.py`, which binds to no node yet (placement `unplaced`). The `Tests:`
 line's kinds are tested in

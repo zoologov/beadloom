@@ -249,6 +249,19 @@ docs_audit:
     - bd
     - steiger
     - "@feature-sliced/steiger-plugin"
+  # BDL-UX #322 (BDL-082 S2W, `beadloom-rm5a`): how many authoring keys one entry of
+  # `rules.yml` can declare, `len(graph.rules.loader.AUTHORING_KEYS)`. The README pair
+  # said 15 through the release that added `slice_public_api` and `slice_shape`,
+  # because no checked surface held the number. `rule_type_count` is not this
+  # number: it counts the rules this repository declares (28 on 2026-10-13).
+  # LIMIT, measured on 2026-10-13: `docs audit` lists this fact as unreadable ("no
+  # scanner keywords are registered for authoring_key_count"), so until the scanner
+  # binds a sentence to it the number is declared here and checked nowhere, and a
+  # Russian sentence would not be read by any English keyword either.
+  extra_facts:
+    authoring_key_count:
+      value: 17
+      source: "graph.rules.loader.AUTHORING_KEYS"
 
 # BDL-068 S6 (`beadloom-0mdo.66`, BDL-UX #187/#211/#253 and the two of
 # 2026-09-09). The UX log's numbers are ALLOCATED, not read off the end of the

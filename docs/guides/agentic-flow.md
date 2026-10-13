@@ -278,7 +278,14 @@ one implementation instead of three:
    containers whose segments are `component` nodes of the same tag. It states
    the public-API rule (`slice_public_api` in the graph, Steiger's
    `no-public-api-sidestep` file by file), the slice shape and a cohesion
-   section, and puts Steiger in the completion commands. The `ddd` overlay
+   section, and puts Steiger in the completion commands. Since BDL-082 S2b the
+   five `fsd` overlays follow feature-sliced.design 2.1: `@x` cross-imports on
+   the entities layer only, slice groups (the group has no node, and each slice
+   in it is `<layer>-<group>-<slice>`; the `dev` overlay states which folder is
+   a group), pages-first with no size signal for a page, custom segments named
+   by purpose beside the `discouraged:` names, three barrel pitfalls, the
+   public API of `shared` and `app`, and Steiger's `insignificant-slice` left
+   on for an adopter. The `ddd` overlay
    gains the same cohesion section for Python packages, and the duty
    `cohesion` is declared for `dev`, `explore` and `review`.
 4. one+ **STACK** overlays in **sorted** order: stack idioms + lint/type/test
