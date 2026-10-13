@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** S2 fix 4 `beadloom-us5r.5` (owner ruling option (c), 2026-10-13); S2a landed `df4d8cc3`; S1 merged (PR #101); S1T landed `49e0df97`, S1a `2ab2a56b`, S1b `2d446b23`; then S1T, S1R, S1W, S1P; S2 after S1's PR.
+**Bead:** S2P `beadloom-iuky` (S2W closed 2026-10-13); S2a landed `df4d8cc3`; S1 merged (PR #101); S1T landed `49e0df97`, S1a `2ab2a56b`, S1b `2d446b23`; then S1T, S1R, S1W, S1P; S2 after S1's PR.
 **Goal:** a spec-following FSD project gets no false finding and every real one; the overlays say the specification.
 **Done when:** every PRD goal's *Done when* holds; two PRs merged; MINOR by the public-API guide.
 
@@ -18,7 +18,8 @@
 - [x] S1T
 - [x] S1R; S1W
 - [x] S1 PR merged 2026-10-11
-- [ ] S2a, S2b landed; S2T; S2R; S2W; S2 PR
+- [x] S2a, S2b, S2c landed; S2T; S2R (four passes, four fix beads); S2W
+- [ ] S2 PR
 
 ## Results
 
@@ -34,12 +35,12 @@
 | `beadloom-6e2o` | S2a | ✓ done (commit `df4d8cc3`; groups → `features-auth-login`/`-register`, `register → login` an error; no `pages` check (8 rules); both lists; the rule over six layers; 17-rule header; `unread_code.py` names files without a parser; fixtures unchanged 19/18 nodes) |
 | `beadloom-keki` | S2b | ✓ done (commits `c126ecff` + `c7963f7c`; overlays by the spec, Steiger packages as version subjects, harness refuses the pages check; vue-fsd 21 nodes / rc 1 / 3 errors, rn-fsd 19 / rc 0 / 1 warn; slow browser run 143 passed, 2 strict xfails naming S2c; lint 0 errors 69 warnings; 28 known stale pairs) |
 | `beadloom-us5r.1` | S2c | ✓ done (commits `8d2f20f6` + `2dbd308b`; eight adopter portals' browser tests 24 passed with no xfail; own suite 369 passed incl. 10 performance cases; unit+integration 8926 passed; ruff, mypy, lint --strict, docs audit clean; `ci` rc 1 only for S2W's 28 stale pairs; not run: acceptance, self_check, mutation, Linux legs) |
-| `beadloom-us5r.5` | S2 fix 4 | ready | ruling 3 refined, option (c): code at the top ⇒ group only when a child holds a standard segment; both probes as red-first cases |
+| `beadloom-us5r.5` | S2 fix 4 | ✓ done (commit `a721033d`, 9 files; both probes hold: checkout one node of 6 files, auth two slices with `register → login` an error and `helpers.ts` a warning; nested groups unchanged; green in a clean room over 9 files; on the tree fixtures + probes 202 passed, vue-fsd 21/3, rn-fsd 19/1, lint 0 errors; 2 vitepress-site pairs stale from cc0a93a7 → S2W) |
 | `beadloom-q2el` | S2T | ✓ done (commit `f8062735`; whole collected suite on the tree 14415 passed / 145 skipped / 13 xfailed / 0 failed, 95% coverage; slow adopter suite 129/129 incl. eight portals with no xfail; spec probes match PRD goals 1–6; vue-fsd 21 nodes / 3 errors, rn-fsd 19 / 1 warning; mutation per change empty, fsd_layout.py 98.2%; `ci` rc 1 on S2W's 28 stale pairs only; 6 tests added; BDL-UX #323, #324 filed) |
-| `beadloom-r8y2` | S2R | blocked | Major 1 (two prose lines sync-check cannot see) + Minor 4 → S2W; Major 2 (S2c unreviewed) → review widened to S2c, relaunch after the fix bead; Minors 1–3 + nitpick → `beadloom-us5r.2` |
+| `beadloom-r8y2` | S2R | ✓ done | Major 1 (two prose lines sync-check cannot see) + Minor 4 → S2W; Major 2 (S2c unreviewed) → review widened to S2c, relaunch after the fix bead; Minors 1–3 + nitpick → `beadloom-us5r.2` |
 | `beadloom-us5r.2` | S2 fix | ✓ done (commit `db75ab46`, 26 files; green in a clean room over 26 files: ruff, mypy 3.10–3.13, integration 5989, top-level 3570, self_check 1053, unit+acceptance 3770 passed / 1 known room-only failure #311; on the tree fixtures + probes 181 passed, vue-fsd 21/3, rn-fsd 19/1, lint 0 errors; `ci` rc 1 on 13 stale pairs all S2W's; 16 of S2W's pairs re-baselined by editing their documents, text unreviewed — listed on `beadloom-rm5a`) |
-| `beadloom-rm5a` | S2W | blocked | |
-| `beadloom-iuky` | S2P | blocked | |
+| `beadloom-rm5a` | S2W | ✓ done (commit `92e445f8`, 21 files; 15 stale + 16 re-baselined pairs read, stale 15 → 0; on the tree `beadloom ci` rc 0, reindex, sync-check, docs audit, docs quality, lint --strict rc 0, self_check 1099 passed; the Gate did not run pytest, ruff, mypy, lint:fsd; open: the 17-key fact unreadable by docs audit (Debt bead), the MINOR/MAJOR case to measure at the release, #323 to the owner) |
+| `beadloom-iuky` | S2P | in progress | 2026-10-13: fresh branch, PR, merge on green |
 
 ## Notes
 
