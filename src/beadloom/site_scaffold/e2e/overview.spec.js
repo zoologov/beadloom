@@ -594,6 +594,33 @@ test("at the fit every top-level node is a box with its title inside: one too sm
   expect(outside).toEqual([]);
 });
 
+/** How far a box's centre may lie from where it stood, in layout units: Cytoscape sums a box's centre from its children. */
+const HOME_ROUNDING = 0.01;
+
+test("a box the overview draws off its laid-out centre is drawn back where it stood once it opens: the handle reads the drawn place and the home apart", async ({
+  page,
+  request,
+}) => {
+  const tree = treeOf(await architectureData(request));
+  await openArchitecture(page);
+  const [drawn, homes] = [await viewer(page, "positions"), await viewer(page, "homes")];
+  const apart = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const moved = Object.keys(homes).filter((id) => tree.boxes.has(id) && apart(drawn[id], homes[id]) > HOME_ROUNDING);
+  requireShape(moved.length > 0, "no box drawn off its laid-out centre at the fit");
+  const notBack = [];
+  for (const id of moved) {
+    await page.evaluate((box) => window.__beadloomViewer.revealNodes([box], { edges: false }), id);
+    await expect.poll(() => viewer(page, "openBoxes")).toContain(id);
+    await twoFrames(page);
+    const [now, home] = [(await viewer(page, "positions"))[id], (await viewer(page, "homes"))[id]];
+    if (apart(now, home) > HOME_ROUNDING) notBack.push(`${id}: drawn at ${now.x.toFixed(2)},${now.y.toFixed(2)}, home ${home.x.toFixed(2)},${home.y.toFixed(2)}`);
+    await page.evaluate(() => window.__beadloomViewer.revealNodes([]));
+    await expect.poll(() => viewer(page, "openBoxes")).not.toContain(id);
+  }
+  test.info().annotations.push({ type: "measured", description: `${moved.length} box(es) drawn off their laid-out centre at the fit: ${moved.join(", ")}` });
+  expect(notBack).toEqual([]);
+});
+
 /** How many toolbar steps a case zooms in, at most, for a box drawn larger than its layout to meet it. */
 const MEETING_STEPS = 16;
 

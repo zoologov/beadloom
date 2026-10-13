@@ -251,11 +251,15 @@ function readers(source) {
     visibleIds: () => fileNodes().filter((node) => node.visible()).map((node) => node.id()).sort(),
     selection: () => source.selection() || null,
     state: () => ({ ...source.state() }),
-    // Every node's position, whether it is drawn or inside a closed box, which
-    // keeps it where it was: no level moves a node. A top-level node the overview
-    // draws larger, off its laid-out centre, is given where it stands at every
-    // other level; its drawn box, which holds the laid-out one, is in `nodeBoxes`.
-    positions: () =>
+    // Every node's position as it is drawn now, whether it is drawn or inside a
+    // closed box, which keeps it where it was: no level moves a node, but a
+    // top-level node the overview draws larger off its laid-out centre, which
+    // stands at its drawn box's centre while it is so drawn.
+    positions: () => idRecord((source.map()?.allNodes() || cy().nodes()).map((node) => [node.id(), { ...node.position() }])),
+    // Every node's home: where it stands at every level that draws it as laid
+    // out — for a node the overview drew off its laid-out centre, where it stood
+    // before (`features/overview-map/model/mapTitles.js`, `homeOf`); for any other, where it is.
+    homes: () =>
       idRecord((source.map()?.allNodes() || cy().nodes()).map((node) => [node.id(), { ...(source.map()?.homeOf(node.id()) || node.position()) }])),
     pan: () => ({ ...cy().pan() }),
     zoom: () => cy().zoom(),

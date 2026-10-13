@@ -280,7 +280,7 @@ export function overviewPlanner(cy, { tree, geometry, plainEdges, routePointsOf,
       gaps: GROWN_GAPS.map((gap) => gap * unit),
       lines,
       within: tree.wrapper ? geometry.boxes[tree.wrapper] : null,
-      limit: clamped ? null : scaleKeepingBoxOf(unit),
+      limit: scaleKeepingBoxOf(unit),
       always,
     };
     const grown = grownBoxesOf(ids.filter((id) => !ownOf(id).length), boxes, options);

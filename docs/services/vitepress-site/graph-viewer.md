@@ -451,7 +451,9 @@ that leaves the page removes only its own. Records keyed by a node id have no pr
 `outwardMarks` answer such a record before the map has drawn a count and after. It reads:
 
 - the canvas: `ready` (false while the view is animated or a change is still to be read),
-  `visibleIds`, `selection`, `state`, `positions`, `pan`, `zoom`, `move` (the last move that
+  `visibleIds`, `selection`, `state`, `positions` (where each node is drawn now) and `homes`
+  (where it stands at every level that draws it as laid out; the two differ only for a node the
+  overview draws off its laid-out centre, BDL-082 `beadloom-us5r.4`), `pan`, `zoom`, `move` (the last move that
   framed a selection or a search, `site-navigate-graph`'s `lastMove()`: `{ animated, from, to,
   frames, done }`, or `null` before any), `boxes` (page coordinates), `nodeBoxes` (drawn boxes,
   graph coordinates), `colours`, `statusLooks` (with `mark`);
