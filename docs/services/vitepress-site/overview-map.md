@@ -79,7 +79,7 @@ draws are described under "The map" and "The overview" in [the viewer's page](gr
   - **an edge drawn as itself between two top-level nodes is routed by the plan**, on a pair of
     its own named `"\nedge\n" + id` (`edgeRouteOf(id)`, `routesEdge(id)`); only a line the plan
     does not route, a loop, keeps its own route and holds a grown box back. ELK spaces its runs
-    in layout units, so on the `vue-fsd` fixture of 21 nodes (unit 1.95 at the fit) two such
+    in layout units, so on the `vue-fsd` fixture as S2b grew it (unit 1.95 at the fit) two such
     routes ran 4.22 px apart and a last run of 12 units held no arrowhead; every slice of a
     Feature-Sliced frontend is a top-level node, so every one of its lines was such an edge.
 - `model/mapTitles.js` — `titleLooks(cy, { nodes, tree, geometry })`, how each title would be
