@@ -143,10 +143,11 @@ _FSD_HEADER = """\
 # what it reports and, where one does, the rule below that judges the same thing:
 #
 {steiger_lines}#
-# A slice is a folder of a sliced layer holding a standard segment or an index. A folder
-# holding neither with a slice below it is a group, at any depth: it has no node, each
-# slice in it is one, named <layer>-<group>-<slice> (a group inside a group adds its
-# name), and its top holds no code ("there should be no code sharing in that folder").
+# A slice is a folder of a sliced layer holding a standard segment, an index or any other
+# code file at its top. A folder holding none of them with a slice below it is a group,
+# at any depth: it has no node, each slice in it is one, named <layer>-<group>-<slice>
+# (a group inside a group adds its name), and its top holds no code ("there should be no
+# code sharing in that folder").
 # Folders beside the layers are nodes tagged `fsd-legacy` and stand outside every rule
 # below, so the graph shows them without judging them.
 version: 3

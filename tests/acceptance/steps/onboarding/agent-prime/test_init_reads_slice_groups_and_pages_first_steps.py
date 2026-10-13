@@ -17,7 +17,13 @@ from click.testing import CliRunner
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.services.cli import main
-from tests.support.fsd_spec_examples import GROUP, NESTED_GROUP, pages_first, write_example
+from tests.support.fsd_spec_examples import (
+    GROUP,
+    NESTED_GROUP,
+    PRE_MIGRATION_SLICE,
+    pages_first,
+    write_example,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -71,6 +77,18 @@ def _nested_group(
     folders = {path.rsplit("/", 2)[0] for path in NESTED_GROUP if path.startswith(f"src/{group}/")}
     assert {f"src/{group}/{inner}/{first}", f"src/{group}/{inner}/{second}"} <= folders
     state["root"] = write_example(tmp_path / "probe", NESTED_GROUP)
+
+
+@given(
+    parsers.parse(
+        'a slice "{folder}" with code at its top and a component "{component}" holding an index'
+    )
+)
+def _pre_migration(tmp_path: Path, state: dict[str, Any], folder: str, component: str) -> None:
+    top = [p for p in PRE_MIGRATION_SLICE if p.rsplit("/", 1)[0] == f"src/{folder}"]
+    assert top, PRE_MIGRATION_SLICE
+    assert f"src/{folder}/{component}/index.ts" in PRE_MIGRATION_SLICE
+    state["root"] = write_example(tmp_path / "probe", PRE_MIGRATION_SLICE)
 
 
 @given("a pages-first frontend whose page and feature each own 90 symbols")
@@ -138,6 +156,12 @@ def _reported(state: dict[str, Any], rule: str, ref_id: str) -> None:
 @then(parsers.parse('lint reports no "{rule}" finding'))
 def _not_reported(state: dict[str, Any], rule: str) -> None:
     found = [v for v in _violations(state, rule) if v["rule_type"] != "rule_liveness"]
+    assert found == [], found
+
+
+@then("lint reports no finding of code at a group's top")
+def _no_group_top(state: dict[str, Any]) -> None:
+    found = [v for v in _violations(state, "fsd-slice-shape") if "Group folder" in v["message"]]
     assert found == [], found
 
 

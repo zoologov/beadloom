@@ -72,7 +72,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `account` holds only `settings`, gives 7 nodes against 6, 0 `fsd-public-api` errors against
   1, and `billing → profile` as 1 `fsd-layers` error, invisible when `features-account` was
   one node (measured 2026-10-13). A group with an `index` of its own is a slice, and `init`
-  reads that `index` with the rule's own reader. Measured on 2026-10-11 on the
+  reads that `index` with the rule's own reader. A folder holding a code file at its top is a
+  slice and never a group (`beadloom-us5r.3`): `features/checkout/{Checkout.vue, store.ts,
+  store2.ts, components/Total.vue, components/Summary/{index.ts, Summary.vue}}`, a slice not
+  yet split into segments, is one node holding its 6 files, where reading groups at any depth
+  without that rule wrote one node for `Summary` and left 4 files in no node, each reported as
+  code at a group's top (measured 2026-10-13). Measured on 2026-10-11 on the
   specification's example (`features/auth/{login,register}`, `register` importing `login`, a
   page importing both) after `init --yes`, `lint --strict`, `30624370` against this tree:
   5 nodes against 6 (`features-auth` becomes `features-auth-login` and

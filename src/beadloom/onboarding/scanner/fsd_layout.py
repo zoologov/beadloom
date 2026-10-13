@@ -12,12 +12,14 @@ So the units a graph is written from are:
   other would pass.
 - **a slice of a group** (BDL-082 S2a, RFC D2): a folder of a sliced layer is a slice
   when it holds a standard segment or an ``index`` at its top; a folder that holds
-  neither and whose children are slices is a *group*, which the specification gives
-  "no code sharing". The group has no unit; each folder in it is one slice, named
-  ``<layer>-<group>-<slice>``, so ``register`` importing ``login`` is an edge between two
-  slices of one layer. Groups are read at any depth: a group inside a group is read as
-  its slices too, named ``<layer>-<group>-<group>-<slice>``. A code file at a group's top
-  belongs to no unit, and the shape rule reports it.
+  neither, holds no code file at its top, and has a slice below it is a *group*, which
+  the specification gives "no code sharing". The group has no unit; each folder in it
+  is one slice, named ``<layer>-<group>-<slice>``, so ``register`` importing ``login`` is
+  an edge between two slices of one layer. Groups are read at any depth: a group inside
+  a group is read as its slices too, named ``<layer>-<group>-<group>-<slice>``. A folder
+  holding code at its top is a slice, never a group, so a slice not yet split into
+  segments stays one unit with all its files, and the shape rule reports what stands at
+  its top.
 - **a container** for ``app`` and for ``shared``, and **a segment** for each folder in
   them, the segment a part of its container. Two segments of one layer import each other
   freely in FSD, which the tagged container says to the layer rule.
@@ -203,29 +205,37 @@ def _is_slice(folder: Path) -> bool:
     )
 
 
-def _holds_a_slice(folder: Path) -> bool:
-    """Whether a slice stands below *folder*, reached through folders that are no slice.
+def _holds_code_at_top(folder: Path) -> bool:
+    """Whether *folder* holds a code file directly, not only in its folders."""
+    return any(child.is_file() and child.suffix in _CODE_EXTENSIONS for child in folder.iterdir())
 
-    A linked folder is not looked into: a link back up the tree would never end.
+
+def _is_group(folder: Path) -> bool:
+    """Whether *folder*, no slice itself, is a group: no code at its top, a slice below it.
+
+    A group shares no code, so a folder holding a code file at its top is a slice and
+    never a group (BDL-082 S2 fix 2). A linked folder is not looked into: a link back up
+    the tree would never end.
     """
-    return any(
-        _is_slice(child) or (not child.is_symlink() and _holds_a_slice(child))
-        for child in _subfolders(folder)
+    return (
+        not folder.is_symlink()
+        and not _holds_code_at_top(folder)
+        and any(_is_slice(child) or _is_group(child) for child in _subfolders(folder))
     )
 
 
 def _slices_of(project_root: Path, path: list[Path], layer: str) -> list[FsdUnit]:
     """The slices the folder at the end of *path*, in a sliced layer, is read as.
 
-    A folder that is no slice but holds one is a group (RFC D2), and every folder in it
-    is read the same way: a slice, a group in its turn, or, with no slice below it, one
-    slice of the group whether slice-shaped or not, since a group shares no code and a
-    folder read as a slice makes an import of it from a sibling a same-layer crossing.
-    Groups are read at any depth (BDL-082 S2 fix), and each slice is named by the whole
-    *path*, ``<layer>-<group>-...-<slice>``.
+    A folder with no code at its top, no slice itself and a slice below it is a group
+    (RFC D2), and every folder in it is read the same way: a slice, a group in its turn,
+    or one slice of the group whether slice-shaped or not, since a group shares no code and
+    a folder read as a slice makes an import of it from a sibling a same-layer crossing.
+    Groups are read at any depth, through folders with no code at their top, and each
+    slice is named by the whole *path*, ``<layer>-<group>-...-<slice>``.
     """
     folder = path[-1]
-    if _is_slice(folder) or folder.is_symlink() or not _holds_a_slice(folder):
+    if _is_slice(folder) or not _is_group(folder):
         return _slice_unit(project_root, path, layer)
     return [
         unit

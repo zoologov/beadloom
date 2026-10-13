@@ -174,8 +174,11 @@ def test_a_folder_beside_the_slices_of_a_group_is_read_as_a_slice_of_it(
     )
 
 
-def test_a_code_file_at_a_groups_top_belongs_to_no_unit(tmp_path: Path) -> None:
-    # Left to `fsd-slice-shape`, which reports code at a group's top (BDL-082 S1b).
+def test_a_folder_holding_code_at_its_top_is_a_slice_and_never_a_group(tmp_path: Path) -> None:
+    # BDL-082 S2 fix 2 (re-review of S2R, Major A): a group shares no code, so a folder with
+    # a code file at its top is a slice, whatever stands below it. `shared.ts` is then code
+    # at that slice's top, which `fsd-slice-shape` reports; until the fix `auth` was a group
+    # and `shared.ts` belonged to no unit.
     _layers(tmp_path)
     _write(
         tmp_path,
@@ -184,11 +187,64 @@ def test_a_code_file_at_a_groups_top_belongs_to_no_unit(tmp_path: Path) -> None:
         "src/features/auth/register/index.ts",
     )
 
-    layout = read_fsd_layout(tmp_path)
-    files = {path for unit in layout.units for path in unit.files}
+    units = {unit.directory: unit for unit in read_fsd_layout(tmp_path).units}
 
-    assert "src/features/auth/shared.ts" not in files
-    assert "src/features/auth" not in _by_directory(layout)
+    assert units["src/features/auth"].name == "features-auth"
+    assert "src/features/auth/shared.ts" in units["src/features/auth"].files
+    assert not any(directory.startswith("src/features/auth/") for directory in units)
+
+
+def test_a_slice_not_yet_split_into_segments_is_one_slice_with_all_its_files(
+    tmp_path: Path,
+) -> None:
+    # The re-review's probe: code at the slice's top and a `components` folder, one
+    # component of which has its own index. `db75ab46` wrote one node, for `Summary`, and
+    # left the four other files in no unit.
+    _layers(tmp_path)
+    _write(
+        tmp_path,
+        "src/features/checkout/Checkout.vue",
+        "src/features/checkout/store.ts",
+        "src/features/checkout/store2.ts",
+        "src/features/checkout/components/Total.vue",
+        "src/features/checkout/components/Summary/index.ts",
+        "src/features/checkout/components/Summary/Summary.vue",
+    )
+
+    slices = [unit for unit in read_fsd_layout(tmp_path).units if unit.layer == "features"]
+
+    assert [(unit.name, unit.directory) for unit in slices] == [
+        ("features-checkout", "src/features/checkout")
+    ]
+    assert slices[0].files == (
+        "src/features/checkout/Checkout.vue",
+        "src/features/checkout/components/Summary/Summary.vue",
+        "src/features/checkout/components/Summary/index.ts",
+        "src/features/checkout/components/Total.vue",
+        "src/features/checkout/store.ts",
+        "src/features/checkout/store2.ts",
+    )
+
+
+def test_a_group_is_descended_only_through_folders_with_no_code_at_their_top(
+    tmp_path: Path,
+) -> None:
+    # `a` holds no code at its top, so it is a group; `b` holds `b.ts`, so it is one slice
+    # of `a` with `c` inside it, however slice-shaped `c` is.
+    _layers(tmp_path)
+    _write(
+        tmp_path,
+        "src/features/a/d/index.ts",
+        "src/features/a/b/b.ts",
+        "src/features/a/b/c/index.ts",
+    )
+
+    units = _by_directory(read_fsd_layout(tmp_path))
+
+    assert units["src/features/a/b"][0] == "features-a-b"
+    assert units["src/features/a/d"][0] == "features-a-d"
+    assert "src/features/a" not in units
+    assert "src/features/a/b/c" not in units
 
 
 def test_a_group_inside_a_group_beside_a_slice_is_read_as_its_slices(tmp_path: Path) -> None:

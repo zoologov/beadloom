@@ -68,6 +68,24 @@ NESTED_GROUP: Mapping[str, str] = {
     ),
 }
 
+#: A slice not yet split into segments (BDL-082 S2 fix 2, re-review of S2R, Major A): code
+#: files at the slice's top and a ``components`` folder, one component of which has its own
+#: ``index``. ``db75ab46`` read ``checkout`` as a group and wrote one node, for ``Summary``,
+#: leaving the other four files in no unit; a folder holding code at its top is a slice.
+PRE_MIGRATION_SLICE: Mapping[str, str] = {
+    "src/app/index.ts": "export const app = 1\n",
+    "src/shared/lib/index.ts": "export const x = 1\n",
+    "src/features/checkout/Checkout.vue": (
+        "<script setup lang=\"ts\">\nimport { total } from './store'\n</script>\n"
+    ),
+    "src/features/checkout/store.ts": "export function total() { return 1 }\n",
+    "src/features/checkout/store2.ts": "export function count() { return 2 }\n",
+    "src/features/checkout/components/Total.vue": "<template><b>1</b></template>\n",
+    "src/features/checkout/components/Summary/index.ts": "export const summary = 1\n",
+    "src/features/checkout/components/Summary/Summary.vue": "<template><i>1</i></template>\n",
+    "src/pages/home/index.ts": "export const home = 1\n",
+}
+
 
 def _functions(prefix: str, count: int) -> str:
     return "".join(f"export function {prefix}{i}() {{ return {i} }}\n" for i in range(count))

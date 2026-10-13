@@ -31,6 +31,17 @@ Feature: init reads a slice group as its slices and writes no size limit for pag
     And lint reports "fsd-layers" for the edge "features-account-settings-billing" -> "features-account-settings-profile"
     And lint reports no "fsd-public-api" finding
 
+  # BDL-082 S2 fix 2 (`beadloom-us5r.3`), the re-review of S2R, Major A: reading groups at
+  # any depth split this slice into one node for `Summary` and left four files in no node.
+  @bead:beadloom-us5r.3
+  Scenario: a slice not yet split into segments is one node holding all its files
+    Given a slice "features/checkout" with code at its top and a component "components/Summary" holding an index
+    When beadloom init is run with --yes
+    And beadloom lint --strict is run
+    Then the graph holds the node "features-checkout" tagged "fsd-features"
+    And the graph holds no node for the folder "src/features/checkout/components/Summary"
+    And lint reports no finding of code at a group's top
+
   Scenario: a page of 90 symbols is no finding, and a feature of 90 symbols still is
     Given a pages-first frontend whose page and feature each own 90 symbols
     When beadloom init is run with --yes
