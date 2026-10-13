@@ -45,6 +45,8 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 324 | 2026-10-13 | low | the `init` wizard cancelled at the graph review re-indexes and takes the verdict, and does not print the line naming the code no installed parser read |
+| 323 | 2026-10-13 | medium | an `@x` API inside a slice group has no form both linters accept: Beadloom reads `invoice/@x/receipt`, Steiger reads `invoice/@x/payment/receipt/index` |
 | 322 | 2026-10-11 | low | the README pair says 15 authoring keys (the loader has 17), `ctx` is said to return the rules in force, `why` what breaks, and `architecture.md` claims `<20ms` three times unmeasured |
 | 321 | 2026-10-11 | medium | the CI workflow holds a write token on every job, the self-hosted tech-writer job runs the PR branch's code with no same-repository condition, and fork runs need approval only from first-time contributors |
 | 320 | 2026-10-11 | low | `bfs_subgraph` records an edge before the `max_nodes` check, so a bundle's edges can name a node its `nodes` does not hold |
@@ -140,6 +142,22 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+323. [2026-10-13] [MEDIUM] an `@x` API inside a slice group has no form both linters accept: Beadloom reads `invoice/@x/receipt`, Steiger reads `invoice/@x/payment/receipt/index`
+
+    **Severity:** medium (a spec-following project that groups its entities and runs both linters, as `init` sets it up to, is red on one of them whatever it names the file; the specification's text does not settle it)
+    **Command:** `beadloom lint --strict` after `beadloom init --yes`; `npm run lint:fsd` (Steiger 0.7.0, `@feature-sliced/steiger-plugin` 0.8.0, recommended set)
+    **Context:** S2T (`beadloom-q2el`) on `features/BDL-082` at `2dbd308b`, Darwin arm64, CPython 3.13.7, Node 22.9.0. The probe is the entities example of `/docs/reference/slice-groups` (`entities/payment/{invoice,receipt,transaction}`, `entities/user`, `entities/product`, each slice with `model/`, `ui/` and an index) with receipt importing invoice through an `@x` API. Three namings, measured: `invoice/@x/receipt.ts` — Beadloom rc 0, the edge marked `via: @x`; Steiger `fsd/forbidden-imports` error. `invoice/@x/payment-receipt.ts` — Beadloom 2 errors (`fsd-layers`, `fsd-public-api`); Steiger the same error. `invoice/@x/payment/receipt/index.ts` — Beadloom 2 errors; Steiger clean. Beadloom names the importer by its folder name (`graph/rules/cross_imports.py:19`, "`<target's folder>/@x/<importer's folder name>`"); Steiger's `isCrossImportPublicApi` (`@feature-sliced/filesystem`) compares against the slice name relative to the layer, `payment/receipt`, which only the index form under a nested folder can match. An `@x` from a grouped slice to an ungrouped one (`invoice/@x/user.ts` imported by `entities/user`) is clean under both. `/docs/reference/public-api` writes `entities/A/@x/B` with flat slices only, and `/docs/reference/slice-groups` does not mention `@x`. S1's `@x` (`beadloom-r15q`) and S2a's groups (`beadloom-6e2o`) each hold alone; this is where they meet.
+    **Issue:** the rule-engine SPEC's table "Where Beadloom and Steiger differ" lists five measured differences and not this one, and no overlay says how a grouped slice names its `@x` API. An adopter who follows Steiger's form gets two Beadloom errors; one who follows Beadloom's gets a Steiger error.
+    **Expected:** a form both accept. Beadloom reading `@x/<group>/<slice>` (a folder with its index, Steiger's form) as the grouped importer's API beside `@x/<slice>` makes one exist; failing that, the difference is a row of that table and a sentence of the dev and review overlays, with the measurement. Owner's call which.
+
+324. [2026-10-13] [LOW] the `init` wizard cancelled at the graph review re-indexes and takes the verdict, and does not print the line naming the code no installed parser read
+
+    **Severity:** low (one sub-branch of the wizard; the next command the cancel message names, `beadloom reindex`, prints the line)
+    **Command:** `beadloom init` (the wizard), answering `cancel` at "Proceed with this graph?"
+    **Context:** S2T (`beadloom-q2el`) on `2dbd308b`, with the TypeScript grammar made absent at `code_indexer.get_lang_config` and the specification's group example (8 TypeScript files, one real crossing `register → login`). Answer `yes`: "Indexed 0 symbols, 0 imports" and "8 TypeScript files, no parser installed — install beadloom[languages]", rc 0. Answer `cancel`: the cancel message, the reindex `services/commands/setup.py` runs because a graph file was written, a verdict over that index, rc 0, and no line. The echo sits under `if "reindex" in result:` (`setup.py:1929-1930`), and the reindex the cancel branch triggers is the one `setup.py` runs itself, so `result` never records it. S2a (`beadloom-6e2o`) states that every branch of `init` prints the line.
+    **Issue:** the cancel branch prints a green verdict over an index that read no code, with nothing saying why, which is the vacuous pass the line was added to explain.
+    **Expected:** the line follows any reindex `init` ran, the one in `setup.py` included; a case in `tests/integration/services/commands/setup/test_the_init_wizard_names_the_code_it_could_not_read.py` for the `cancel` answer.
 
 317. [2026-10-11] [HIGH] `ctx` surfaces 2 of the 17 rule types and the Markdown output none; its matcher reads `ref_id` and `kind` while the linter's reads `exclude`, `tag` and `tag_prefix`
 

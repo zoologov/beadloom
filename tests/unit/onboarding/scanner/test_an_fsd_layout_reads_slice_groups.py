@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from beadloom.onboarding.scanner.fsd_layout import FsdLayout, read_fsd_layout
 
 if TYPE_CHECKING:
@@ -98,6 +100,26 @@ def test_a_folder_with_an_index_and_no_segment_is_a_slice(tmp_path: Path) -> Non
     units = _by_directory(read_fsd_layout(tmp_path))
 
     assert units["src/widgets/header"] == ("widgets-header", "widgets", "slice", None)
+
+
+@pytest.mark.parametrize("index", ["index.server.ts", "index.client.ts"])
+def test_a_slice_entered_by_an_environment_specific_index_is_a_slice_of_its_group(
+    tmp_path: Path, index: str
+) -> None:
+    # `/docs/reference/public-api`, *Environment-specific Public APIs*: a slice's public API
+    # can be split into files that match the runtime environment. Such a file is the
+    # slice's index, so the folder holding it is a slice and the folder above is a group.
+    # `login` is the group's only folder, so nothing but its index can make it a slice.
+    _layers(tmp_path)
+    _write(
+        tmp_path,
+        f"src/features/auth/login/{index}",
+        "src/features/auth/login/session/token.ts",
+    )
+
+    units = _by_directory(read_fsd_layout(tmp_path))
+
+    assert units["src/features/auth/login"] == ("features-auth-login", "features", "slice", None)
 
 
 def test_a_folder_holding_neither_and_no_slice_is_still_one_slice(tmp_path: Path) -> None:
