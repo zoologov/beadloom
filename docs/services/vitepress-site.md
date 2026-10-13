@@ -291,7 +291,9 @@ in either theme; the footer on two lines unless switched off; the header's link 
 forge's icon, or no link. `dashboard.spec.js` (bound to `site-dashboard`) holds the two
 population panels ([Dashboard](vitepress-site/dashboard.md)), and `card.spec.js` the card's
 reach line, node-less list, own and inside debt and unpublished-commit note
-([Node card](vitepress-site/node-card.md)). `edges.spec.js` holds the legend against the canvas
+([Node card](vitepress-site/node-card.md)). `navigation.spec.js` holds the whole-graph fit to one
+zoom whether it is pressed at the fit, after zooming in or after zooming out, in the portal's
+font and in a wide one (BDL-082 `beadloom-us5r.6`). `edges.spec.js` holds the legend against the canvas
 at every level, comparing each sample's colour and dash with the lines drawn in it, a
 "several kinds" entry per colour such lines are drawn in where one is drawn and none where
 none is (BDL-082 S2c), and an aggregated line of one kind keeping that kind's dash;

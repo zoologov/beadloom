@@ -10,6 +10,10 @@ import { architectureData, openArchitecture, openEveryBox, parentMap, viewer, wa
 import { drag, gesturesOnALeaf, pressEveryToolbarButton } from "./support/pointer.js";
 import { landscapeData } from "./support/landscape.js";
 import { LACKING, requireShape } from "./support/shape.js";
+import { WIDE_FONT, drawInFont } from "./support/fonts.js";
+
+/** Wait for two frames: what the map draws after a change of the view is drawn by then. */
+const twoFrames = (page) => page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
 
 /** A point on the canvas, inside a compound parent's box, that lies on no other node. */
 function pointInsideParentOnly(boxes, canvas) {
@@ -132,6 +136,34 @@ for (const { name, path, requireANode } of GRAPH_PAGES) {
       drag: { moved: [], panned: true },
       "long press": { moved: [], panned: true },
     });
+  });
+}
+
+for (const font of [null, WIDE_FONT]) {
+  test(`the whole-graph fit is one zoom whatever zoom it starts from${font ? ", in a wide font" : ""}`, async ({ page }) => {
+    // A box the overview draws larger to hold its title can reach past the laid-out graph, and a wider font
+    // makes it reach further: the fit is held to one zoom from the fit itself, from a zoom in and from a zoom
+    // out, so a fit pressed anywhere lands where the page opened. (A selection opens the panel, whose width a
+    // fit leaves out, so a fit with it open is another zoom by design.)
+    if (font) await drawInFont(page, font);
+    await openArchitecture(page);
+    const fitted = await viewer(page, "zoom");
+    const fit = async () => {
+      await page.getByRole("button", { name: "Fit" }).click();
+      await twoFrames(page);
+      return viewer(page, "zoom");
+    };
+    const after = {};
+    after.fit = await fit();
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    after["zoom in"] = await fit();
+    await page.getByRole("button", { name: "Zoom out" }).click();
+    await page.getByRole("button", { name: "Zoom out" }).click();
+    after["zoom out"] = await fit();
+    test.info().annotations.push({ type: "measured", description: `first fit ${fitted}; ${Object.entries(after).map(([from, zoom]) => `${from} ${zoom}`).join("; ")}` });
+    const off = Object.entries(after).filter(([, zoom]) => Math.abs(zoom - fitted) >= 0.5e-5).map(([from, zoom]) => `${from}: ${zoom} where the first fit was ${fitted}`);
+    expect(off).toEqual([]);
   });
 }
 

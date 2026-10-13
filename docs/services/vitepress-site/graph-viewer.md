@@ -511,7 +511,14 @@ What stays in `widgets/graph-viewer/`:
   `map()`.
 - `model/canvasLayout.js` — `layoutInputOf`, `applyGeometry`, `fitCompounds`, `isLoop`; a node's
   `stack` is read from `STACK_LANES`.
-- `model/canvasMap.js` — `canvasMap`, the level drawn on Cytoscape. Its parts were split out by
+- `model/canvasMap.js` — `canvasMap`, the level drawn on Cytoscape. Since BDL-082
+  `beadloom-us5r.6`, `reachOf` holds the frame around the boxes drawn larger at a level with
+  their border (`REACH_RIM`, a card's border, 1.5 layout units), so the frame is one size at
+  every zoom of a level and the whole-graph fit is one zoom wherever it is pressed from. Before,
+  a box drawn against the frame widened it by its border at the fit and not once a zoom had
+  shrunk it: on `vue-fsd` a Fit pressed after two steps in landed at 0.51408 where the page
+  opened at 0.51318 (macOS, measured), the class the Linux runner's wider fonts turned into a red
+  case. Its parts were split out by
   job in `beadloom-btkd.17` and now live in `site-overview-map`; it re-exports none of their
   names (`beadloom-btkd.20`). Since BDL-080 S4b it also returns `isTopBox(id)` and
   `closedRoomsOf(id)`, which the pills are placed around, and `ofTopLevel` no longer counts a top

@@ -41,6 +41,7 @@
 import {
   AGGREGATE,
   COLLAPSED,
+  GEOMETRY,
   HIDDEN_EDGES,
   LAYER_BOX,
   LEVEL_OPTIONS,
@@ -81,6 +82,13 @@ import { giveData, setClass } from "../../../shared/canvas-marks/index.js";
 import { nodeCorners } from "./nodeCorners.js";
 
 const sameSet = (a, b) => a.size === b.size && [...a].every((id) => b.has(id));
+
+/**
+ * How far past its drawn box a node drawn larger than its layout reaches with
+ * its border, at most, in layout units: a card's border, the wider of the two,
+ * whatever the zoom, so a frame held around those boxes is one size at every zoom.
+ */
+const REACH_RIM = Math.max(GEOMETRY.cardBorder, GEOMETRY.boxBorder);
 
 /**
  * The map over `cy`, drawn as `geometry` lays it out: `{ apply, evaluate,
@@ -549,13 +557,23 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
     /**
      * The room box `id` holds besides its children as drawn, or null: for the box
      * that holds everything, the most the nodes drawn larger than their layout at
-     * this level ever take, so it is one size at every zoom of a level
-     * (`canvasLayout.js`, `fitCompounds`).
+     * this level ever take, each with the border drawn around it, so it is one
+     * size at every zoom of a level (`canvasLayout.js`, `fitCompounds`). Without the
+     * border, a box drawn at its full size against the frame widened it by its
+     * border at the fit and not once a zoom had shrunk it, and a fit pressed there
+     * landed 0.18 % further in than the one the page opened at (measured on a
+     * Feature-Sliced frontend in a wide font).
      */
     reachOf(id) {
       const boxes = id === tree.wrapper ? [...grownNow.keys()].map((grown) => planner.plannedBoxOf(grown)) : [];
       if (!boxes.length) return null;
-      return boxes.reduce((a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) }));
+      const rim = REACH_RIM;
+      return boxes.reduce((a, b) => ({ x1: Math.min(a.x1, b.x1 - rim), y1: Math.min(a.y1, b.y1 - rim), x2: Math.max(a.x2, b.x2 + rim), y2: Math.max(a.y2, b.y2 + rim) }), {
+        x1: Infinity,
+        y1: Infinity,
+        x2: -Infinity,
+        y2: -Infinity,
+      });
     },
     fitZoom,
     /** The least zoom at which node `id` is drawn as itself and readable (`shared/map-levels/levels.js`, `zoomDrawingOf`). */
