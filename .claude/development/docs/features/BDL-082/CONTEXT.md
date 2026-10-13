@@ -55,3 +55,5 @@ Python >= 3.10, ruff, mypy --strict, pytest; documents in English; commits
 - **Phase:** Development
 - **Current bead:** see ACTIVE.md
 - **Blockers:** none
+
+- 2026-10-13 (owner, after S2R's third pass): **ruling 3 refined, option (c).** A folder that holds code files at its top is a group only when at least one child holds a standard segment (`ui`, `model`, `api`, `lib`, `config` — Steiger's own slice test), and a slice when its children carry only an index; a folder with no code at its top is a group when its children are slices, at any depth. Measured probes: a pre-migration slice `features/checkout/{..., components/Summary/index.ts}` stays one node; the specification's group `features/auth/{helpers.ts, login/{index, ui/}, register/{index, ui/}}` stays two nodes with `register → login` an error. Fix bead `beadloom-us5r.3` had landed option (a) (code at the top ⇒ always a slice), which hid that crossing; superseded.

@@ -232,6 +232,8 @@ top is a finding of `slice_shape` ("a group shares no code"). `rules_gen.py` unc
 shape. Cases: `features/auth/` holding `login` and `register` → two nodes; `register → login`
 a `fsd-layers` error; no false "no index".
 
+*Refined by the owner on 2026-10-13 (option (c), after S2R):* a folder holding code at its top is a group only when a child holds a standard segment, and a slice when its children carry only an index; a code-free folder is a group when its children are slices, at any depth. Both measured probes (a pre-migration slice with an index-bearing component folder; the specification's group with a shared file) hold.
+
 ### D3 — pages-first (S2; ruling 4)
 
 `rules_gen.py` writes no `fsd-cohesion-pages`; the other five cohesion checks stay; the
