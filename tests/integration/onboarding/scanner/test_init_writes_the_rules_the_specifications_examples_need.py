@@ -106,7 +106,10 @@ def test_the_bootstrap_branch_names_the_code_it_could_not_read(tmp_path: Path) -
 
     code, output = _init(root, "--bootstrap")
 
-    assert "⚠ 8 TypeScript files, no parser installed — install beadloom[languages]" in (output)
+    assert (
+        "⚠ 8 TypeScript files, no parser installed — "
+        'install with: uv tool install "beadloom[languages]"'
+    ) in output
     # Information, not a verdict: with no import read, the rules find nothing to report.
     assert code == 0, output
 

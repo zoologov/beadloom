@@ -15,9 +15,9 @@ So the units a graph is written from are:
   neither and whose children are slices is a *group*, which the specification gives
   "no code sharing". The group has no unit; each folder in it is one slice, named
   ``<layer>-<group>-<slice>``, so ``register`` importing ``login`` is an edge between two
-  slices of one layer. Groups are read one level deep: a group inside a group is one
-  slice of the outer group. A code file at a group's top belongs to no unit, and the
-  shape rule reports it.
+  slices of one layer. Groups are read at any depth: a group inside a group is read as
+  its slices too, named ``<layer>-<group>-<group>-<slice>``. A code file at a group's top
+  belongs to no unit, and the shape rule reports it.
 - **a container** for ``app`` and for ``shared``, and **a segment** for each folder in
   them, the segment a part of its container. Two segments of one layer import each other
   freely in FSD, which the tagged container says to the layer rule.
@@ -51,7 +51,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from beadloom.graph.rules import DEFAULT_SLICE_SEGMENTS
+from beadloom.graph.rules import DEFAULT_SLICE_SEGMENTS, is_index_file
 from beadloom.onboarding.presets import FSD_LAYERS, fsd_root
 from beadloom.onboarding.scanner.constants import (
     _CLUSTER_SKIP,
@@ -75,9 +75,6 @@ SEGMENTED_LAYERS: frozenset[str] = frozenset({"app", "shared"})
 #: The layer Expo Router's routes belong to, and the name their one unit asks for.
 ROUTES_LAYER = "app"
 ROUTES_UNIT = "app-routes"
-
-#: The stem of a slice's public API file: ``index.ts``, ``index.vue``.
-_INDEX = "index"
 
 #: The tag a folder beside the layers is written with: outside every layer of the rule.
 FSD_LEGACY_TAG = "fsd-legacy"
@@ -170,7 +167,7 @@ def _layer_units(project_root: Path, layer_folder: Path) -> list[FsdUnit]:
         return [
             unit
             for folder in _subfolders(layer_folder)
-            for unit in _slices_of(project_root, folder, layer)
+            for unit in _slices_of(project_root, [folder], layer)
         ]
     segments = [
         FsdUnit(
@@ -195,31 +192,45 @@ def _layer_units(project_root: Path, layer_folder: Path) -> list[FsdUnit]:
 
 
 def _is_slice(folder: Path) -> bool:
-    """Whether *folder* holds a standard segment or an ``index`` code file at its top."""
+    """Whether *folder* holds a standard segment or an ``index`` code file at its top.
+
+    The ``index`` is read by the public-API rule's own reader, so ``init`` and
+    ``fsd-public-api`` agree on which folders have a public API.
+    """
     return any(
-        (child.is_dir() and child.name in DEFAULT_SLICE_SEGMENTS)
-        or (
-            child.is_file()
-            and child.name.split(".", 1)[0] == _INDEX
-            and child.suffix in _CODE_EXTENSIONS
-        )
+        (child.is_dir() and child.name in DEFAULT_SLICE_SEGMENTS) or is_index_file(child)
         for child in folder.iterdir()
     )
 
 
-def _slices_of(project_root: Path, folder: Path, layer: str) -> list[FsdUnit]:
-    """The slices *folder*, a folder of a sliced layer, is read as: itself, or its folders.
+def _holds_a_slice(folder: Path) -> bool:
+    """Whether a slice stands below *folder*, reached through folders that are no slice.
+
+    A linked folder is not looked into: a link back up the tree would never end.
+    """
+    return any(
+        _is_slice(child) or (not child.is_symlink() and _holds_a_slice(child))
+        for child in _subfolders(folder)
+    )
+
+
+def _slices_of(project_root: Path, path: list[Path], layer: str) -> list[FsdUnit]:
+    """The slices the folder at the end of *path*, in a sliced layer, is read as.
 
     A folder that is no slice but holds one is a group (RFC D2), and every folder in it
-    with code is a slice of that group, slice-shaped or not: a group shares no code, and
-    a folder read as a slice makes an import of it from a sibling a same-layer crossing.
-    One level only, so a group inside a group is one slice of the outer group.
+    is read the same way: a slice, a group in its turn, or, with no slice below it, one
+    slice of the group whether slice-shaped or not, since a group shares no code and a
+    folder read as a slice makes an import of it from a sibling a same-layer crossing.
+    Groups are read at any depth (BDL-082 S2 fix), and each slice is named by the whole
+    *path*, ``<layer>-<group>-...-<slice>``.
     """
-    children = _subfolders(folder)
-    if _is_slice(folder) or not any(_is_slice(child) for child in children):
-        return _slice_unit(project_root, [folder], layer)
+    folder = path[-1]
+    if _is_slice(folder) or folder.is_symlink() or not _holds_a_slice(folder):
+        return _slice_unit(project_root, path, layer)
     return [
-        unit for child in children for unit in _slice_unit(project_root, [folder, child], layer)
+        unit
+        for child in _subfolders(folder)
+        for unit in _slices_of(project_root, [*path, child], layer)
     ]
 
 

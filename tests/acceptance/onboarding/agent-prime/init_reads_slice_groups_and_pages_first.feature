@@ -17,6 +17,20 @@ Feature: init reads a slice group as its slices and writes no size limit for pag
     And lint reports "fsd-layers" for the edge "features-auth-register" -> "features-auth-login"
     And lint reports no "fsd-public-api" finding
 
+  # BDL-082 S2 fix (`beadloom-us5r.2`), review S2R minor 3: a group holding only another
+  # group was read as ONE slice, `features-account`, measured with `init --yes`.
+  @bead:beadloom-us5r.2
+  Scenario: a group inside a group is read as its slices too
+    Given a slice group "features/account" holding only the group "settings" of "profile" and "billing"
+    When beadloom init is run with --yes
+    And beadloom lint --strict is run
+    Then the graph holds the node "features-account-settings-profile" tagged "fsd-features"
+    And the graph holds the node "features-account-settings-billing" tagged "fsd-features"
+    And the graph holds no node for the folder "src/features/account"
+    And the graph holds no node for the folder "src/features/account/settings"
+    And lint reports "fsd-layers" for the edge "features-account-settings-billing" -> "features-account-settings-profile"
+    And lint reports no "fsd-public-api" finding
+
   Scenario: a page of 90 symbols is no finding, and a feature of 90 symbols still is
     Given a pages-first frontend whose page and feature each own 90 symbols
     When beadloom init is run with --yes

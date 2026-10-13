@@ -23,6 +23,19 @@ from beadloom.infrastructure.scan_paths import resolve_scan_paths
 if TYPE_CHECKING:
     from pathlib import Path
 
+#: The prefix of a sentinel row of ``file_index``: a row the reindex keeps about itself,
+#: such as the parser fingerprint, and not a file of the project. Every reader of the
+#: table's files skips it through :func:`is_sentinel_path`.
+SENTINEL_PREFIX = "__"
+
+#: The sentinel row that holds the parser fingerprint.
+_PARSER_FINGERPRINT_PATH = f"{SENTINEL_PREFIX}parser_fingerprint__"
+
+
+def is_sentinel_path(path: str) -> bool:
+    """Whether *path*, read from ``file_index``, is a sentinel row rather than a file."""
+    return path.startswith(SENTINEL_PREFIX)
+
 
 def _compute_parser_fingerprint() -> str:
     """Compute a fingerprint of currently available tree-sitter parsers.
@@ -44,12 +57,12 @@ def _compute_parser_fingerprint() -> str:
 def _get_stored_parser_fingerprint(conn: sqlite3.Connection) -> str | None:
     """Read the stored parser fingerprint from file_index.
 
-    Uses a sentinel row with ``path='__parser_fingerprint__'``.
+    Uses the sentinel row :data:`_PARSER_FINGERPRINT_PATH`.
     Returns ``None`` if not stored.
     """
     try:
         row = conn.execute(
-            "SELECT hash FROM file_index WHERE path = '__parser_fingerprint__'"
+            "SELECT hash FROM file_index WHERE path = ?", (_PARSER_FINGERPRINT_PATH,)
         ).fetchone()
     except sqlite3.OperationalError as exc:  # file_index may not exist on first run
         if _is_missing_table_error(exc):
@@ -63,10 +76,10 @@ def _store_parser_fingerprint(conn: sqlite3.Connection, fingerprint: str) -> Non
     now = datetime.now(tz=timezone.utc).isoformat()
     conn.execute(
         "INSERT INTO file_index (path, hash, kind, indexed_at) "
-        "VALUES ('__parser_fingerprint__', ?, 'code', ?) "
+        "VALUES (?, ?, 'code', ?) "
         "ON CONFLICT(path) DO UPDATE SET hash=excluded.hash, "
         "indexed_at=excluded.indexed_at",
-        (fingerprint, now),
+        (_PARSER_FINGERPRINT_PATH, fingerprint, now),
     )
     conn.commit()
 
@@ -128,7 +141,9 @@ def _get_stored_file_index(
             return {}
         raise
     return {
-        row["path"]: (row["hash"], row["kind"]) for row in rows if not row["path"].startswith("__")
+        row["path"]: (row["hash"], row["kind"])
+        for row in rows
+        if not is_sentinel_path(row["path"])
     }
 
 

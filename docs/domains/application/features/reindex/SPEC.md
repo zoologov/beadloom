@@ -515,7 +515,7 @@ Scan all project files and return `{relative_path: (sha256_hex, kind)}`.
 def _get_stored_file_index(conn: sqlite3.Connection) -> dict[str, tuple[str, str]]
 ```
 
-Read file_index from DB. Returns `{path: (hash, kind)}`. Filters out sentinel rows (paths starting with `__`).
+Read file_index from DB. Returns `{path: (hash, kind)}`. Filters out sentinel rows through `is_sentinel_path`: a path starting with `SENTINEL_PREFIX` (`__`), such as the parser fingerprint's row. `unread_code` skips them through the same predicate.
 
 ```python
 def _diff_files(

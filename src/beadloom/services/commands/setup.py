@@ -1854,11 +1854,12 @@ def init(
             f"{ri.imports_indexed} imports"
             + (f", {dep_count} dependency edges" if dep_count else "")
         )
-        _echo_unread_code(project_root, prefix="\u26a0 ")
+        unread_named = _echo_unread_code(project_root, prefix="\u26a0 ")
         _echo_test_binding(project_root, prefix="\u2713 ")
 
-        # Warn about missing language parsers when symbols == 0.
-        if ri.symbols_indexed == 0:
+        # Warn about missing language parsers when symbols == 0, unless the line above
+        # already named the files no parser read.
+        if ri.symbols_indexed == 0 and not unread_named:
             _warn_missing_parsers(project_root)
 
         _verdict_on_the_generated_graph(project_root, graph_before=graph_before)

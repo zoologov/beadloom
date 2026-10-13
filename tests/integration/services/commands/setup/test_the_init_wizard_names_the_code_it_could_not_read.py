@@ -1,9 +1,9 @@
 """The ``init`` wizard names the code files no installed parser read, as ``--yes`` does.
 
-BDL-082 S2a wired the line ``<N> <Language> files, no parser installed — install
-beadloom[languages]`` into every branch of ``init`` and both branches of ``reindex``; the
-``--yes`` and ``--bootstrap`` branches and the reindex have cases, and the wizard, the
-branch a human adopter meets first, had none. Without the line, a project of TypeScript
+BDL-082 S2a wired the line ``<N> <Language> files, no parser installed — install with:
+uv tool install "beadloom[languages]"`` into every branch of ``init`` and both branches of
+``reindex``; the ``--yes`` and ``--bootstrap`` branches and the reindex have cases, and the
+wizard, the branch a human adopter meets first, had none. Without the line, a project of TypeScript
 files read with no grammar prints 0 symbols and every FSD rule passes with no input.
 
 The wizard's answers are patched at ``rich.prompt``, its one input boundary: "bootstrap"
@@ -26,7 +26,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 #: The specification's slice group holds 8 TypeScript files; the wizard indents its lines.
-UNREAD_LINE = "  8 TypeScript files, no parser installed — install beadloom[languages]"
+UNREAD_LINE = (
+    "  8 TypeScript files, no parser installed — "
+    'install with: uv tool install "beadloom[languages]"'
+)
 
 
 def _wizard(root: Path, review: str) -> tuple[int, str]:

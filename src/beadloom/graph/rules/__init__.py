@@ -96,6 +96,7 @@ from beadloom.graph.rules.scenario_coverage import (
     SCENARIO_COVERAGE_RULE_TYPE,
     evaluate_scenario_coverage_rules,
 )
+from beadloom.graph.rules.slice_units import is_index_file
 from beadloom.graph.rules.slices import (
     SLICE_PUBLIC_API_RULE_TYPE,
     SLICE_SHAPE_RULE_TYPE,
@@ -445,6 +446,7 @@ __all__ = [
     "flagged_layer_edges",
     "inert_rule_names",
     "is_advisory",
+    "is_index_file",
     "layer_membership",
     "layer_of",
     "layer_rule_reach",

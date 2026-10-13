@@ -17,6 +17,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from beadloom.application.reindex.change_detection import is_sentinel_path
 from beadloom.application.reindex.models import _is_missing_table_error
 from beadloom.context_oracle.code_indexer import check_parser_availability
 
@@ -64,7 +65,7 @@ def _suffix(path: str) -> str:
 def unread_code(conn: sqlite3.Connection) -> tuple[UnreadCode, ...]:
     """The indexed code files whose language has no parser installed, most first."""
     rows = conn.execute("SELECT path FROM file_index WHERE kind = 'code'").fetchall()
-    suffixes = Counter(_suffix(str(row[0])) for row in rows if not str(row[0]).startswith("__"))
+    suffixes = Counter(_suffix(str(row[0])) for row in rows if not is_sentinel_path(str(row[0])))
     readable = check_parser_availability(suffixes)
     by_language: Counter[str] = Counter()
     for suffix, count in suffixes.items():

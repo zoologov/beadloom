@@ -12,9 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`init` and `reindex` name the code files they read no symbol from (`beadloom-6e2o`,
   BDL-082 S2a).** A code file under the scan paths whose language has no parser installed is
   counted by language and named on its own line, for instance `8 TypeScript files, no parser
-  installed — install beadloom[languages]`: after `init`'s `Index:` line in all three branches
-  (`--yes`, `--bootstrap`, the wizard) and after the counts of `reindex`, whether or not
-  anything changed. Information only, and no exit code moves on it. Measured before this change
+  installed — install with: uv tool install "beadloom[languages]"`: after `init`'s `Index:`
+  line in all three branches (`--yes`, `--bootstrap`, the wizard) and after the counts of
+  `reindex`, whether or not anything changed. Where it is printed, the older `No parser
+  available` warning is not, so `init --bootstrap` and `reindex --full` announce a missing
+  parser once (`beadloom-us5r.2`). Information only, and no exit code moves on it.
+  Measured before this change
   on the specification's slice-group example with the TypeScript grammar unavailable: `init`
   printed `Index: 0 symbols, 0 imports` and nothing else, and every FSD rule then had no import
   to judge. Measured after it on the fixture `tests/fixtures/site/vue-fsd` in an environment
@@ -64,8 +67,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   folder of `pages`, `widgets`, `features` or `entities` is a slice when it holds a standard
   segment (`ui`, `model`, `api`, `lib`, `config`) or an `index` at its top; a folder holding
   neither whose folders are slices is a group, which gets no node, and each folder in it with
-  code is one slice, `<layer>-<group>-<slice>`, tagged with the layer. Groups are read one
-  level deep; a group with an `index` of its own is a slice. Measured on 2026-10-11 on the
+  code is one slice, `<layer>-<group>-<slice>`, tagged with the layer. Groups are read at
+  any depth (`beadloom-us5r.2`): `features/account/settings/{profile,billing}`, where
+  `account` holds only `settings`, gives 7 nodes against 6, 0 `fsd-public-api` errors against
+  1, and `billing → profile` as 1 `fsd-layers` error, invisible when `features-account` was
+  one node (measured 2026-10-13). A group with an `index` of its own is a slice, and `init`
+  reads that `index` with the rule's own reader. Measured on 2026-10-11 on the
   specification's example (`features/auth/{login,register}`, `register` importing `login`, a
   page importing both) after `init --yes`, `lint --strict`, `30624370` against this tree:
   5 nodes against 6 (`features-auth` becomes `features-auth-login` and

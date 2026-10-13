@@ -14,11 +14,29 @@ Feature: the index names the code files it could not read
 
   Scenario: init names the files it read no symbol from
     When beadloom init is run with --yes
-    Then the output says "8 TypeScript files, no parser installed — install beadloom[languages]"
+    Then the output says "8 TypeScript files, no parser installed — install with: uv tool install "beadloom[languages]""
     And init exits 0
 
   Scenario: a reindex names them as well
     When beadloom init is run with --yes
     And beadloom reindex is run
-    Then the output says "8 TypeScript files, no parser installed — install beadloom[languages]"
+    Then the output says "8 TypeScript files, no parser installed — install with: uv tool install "beadloom[languages]""
+    And the reindex exits 0
+
+  # BDL-082 S2 fix (`beadloom-us5r.2`), review S2R minor 1: where the reindex read no symbol
+  # at all, the older warning fired beside this line, so `init --bootstrap` and a full
+  # reindex announced one missing parser twice, with two hints of which one could be run.
+  @bead:beadloom-us5r.2
+  Scenario: init --bootstrap names a missing parser once, with the command that installs it
+    When beadloom init is run with --bootstrap
+    Then the output says "8 TypeScript files, no parser installed — install with: uv tool install "beadloom[languages]""
+    And exactly one line of the output speaks of a parser
+    And init exits 0
+
+  @bead:beadloom-us5r.2
+  Scenario: a full reindex names a missing parser once
+    When beadloom init is run with --yes
+    And beadloom reindex --full is run
+    Then the output says "8 TypeScript files, no parser installed — install with: uv tool install "beadloom[languages]""
+    And exactly one line of the output speaks of a parser
     And the reindex exits 0

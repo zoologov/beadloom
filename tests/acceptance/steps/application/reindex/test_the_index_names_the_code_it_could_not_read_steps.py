@@ -58,9 +58,9 @@ def _no_grammar(without_typescript: None) -> None:
     del without_typescript
 
 
-@when("beadloom init is run with --yes")
-def _init(state: dict[str, Any]) -> None:
-    result = CliRunner().invoke(main, ["init", "--yes", "--project", str(state["root"])])
+@when(parsers.parse("beadloom init is run with {flag}"))
+def _init(state: dict[str, Any], flag: str) -> None:
+    result = CliRunner().invoke(main, ["init", flag, "--project", str(state["root"])])
     assert result.exception is None or isinstance(result.exception, SystemExit), result.output
     state["init_exit"] = result.exit_code
     state["output"] = result.output
@@ -68,7 +68,16 @@ def _init(state: dict[str, Any]) -> None:
 
 @when("beadloom reindex is run")
 def _reindex(state: dict[str, Any]) -> None:
-    result = CliRunner().invoke(main, ["reindex", "--project", str(state["root"])])
+    _run_reindex(state)
+
+
+@when("beadloom reindex --full is run")
+def _full_reindex(state: dict[str, Any]) -> None:
+    _run_reindex(state, "--full")
+
+
+def _run_reindex(state: dict[str, Any], *flags: str) -> None:
+    result = CliRunner().invoke(main, ["reindex", *flags, "--project", str(state["root"])])
     state["reindex_exit"] = result.exit_code
     state["output"] = result.output
 
@@ -76,6 +85,12 @@ def _reindex(state: dict[str, Any]) -> None:
 @then(parsers.parse('the output says "{text}"'))
 def _says(state: dict[str, Any], text: str) -> None:
     assert text in state["output"], state["output"]
+
+
+@then("exactly one line of the output speaks of a parser")
+def _one_parser_line(state: dict[str, Any]) -> None:
+    lines = [line for line in state["output"].splitlines() if "parser" in line.lower()]
+    assert len(lines) == 1, lines
 
 
 @then(parsers.parse("init exits {code:d}"))

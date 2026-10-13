@@ -47,6 +47,27 @@ GROUP: Mapping[str, str] = {
     ),
 }
 
+#: A group inside a group (BDL-082 S2 fix, review S2R minor 3): ``features/account`` holds
+#: only the group ``settings``, whose slices ``profile`` and ``billing`` share code the way
+#: :data:`GROUP`'s do. Until the fix ``init`` read the whole of ``features/account`` as one
+#: slice, so ``billing`` importing ``profile`` was inside one node.
+NESTED_GROUP: Mapping[str, str] = {
+    "src/app/index.ts": "export const app = 1\n",
+    "src/shared/lib/index.ts": "export const x = 1\n",
+    "src/features/account/settings/profile/index.ts": "export { card } from './ui/card'\n",
+    "src/features/account/settings/profile/ui/card.ts": "export function card() { return 1 }\n",
+    "src/features/account/settings/billing/index.ts": "export { plan } from './ui/plan'\n",
+    "src/features/account/settings/billing/ui/plan.ts": (
+        "import { card } from '@/features/account/settings/profile'\n"
+        "export function plan() { return card() }\n"
+    ),
+    "src/pages/home/index.ts": "export { home } from './ui/home'\n",
+    "src/pages/home/ui/home.ts": (
+        "import { plan } from '@/features/account/settings/billing'\n"
+        "export function home() { return plan() }\n"
+    ),
+}
+
 
 def _functions(prefix: str, count: int) -> str:
     return "".join(f"export function {prefix}{i}() {{ return {i} }}\n" for i in range(count))

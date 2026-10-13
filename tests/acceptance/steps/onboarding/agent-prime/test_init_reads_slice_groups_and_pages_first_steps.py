@@ -17,7 +17,7 @@ from click.testing import CliRunner
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.services.cli import main
-from tests.support.fsd_spec_examples import GROUP, pages_first, write_example
+from tests.support.fsd_spec_examples import GROUP, NESTED_GROUP, pages_first, write_example
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -58,6 +58,19 @@ def state() -> dict[str, Any]:
 def _group(tmp_path: Path, state: dict[str, Any], group: str, first: str, second: str) -> None:
     assert {f"src/{group}/{first}/index.ts", f"src/{group}/{second}/index.ts"} <= set(GROUP)
     state["root"] = write_example(tmp_path / "probe", GROUP)
+
+
+@given(
+    parsers.parse(
+        'a slice group "{group}" holding only the group "{inner}" of "{first}" and "{second}"'
+    )
+)
+def _nested_group(
+    tmp_path: Path, state: dict[str, Any], group: str, inner: str, first: str, second: str
+) -> None:
+    folders = {path.rsplit("/", 2)[0] for path in NESTED_GROUP if path.startswith(f"src/{group}/")}
+    assert {f"src/{group}/{inner}/{first}", f"src/{group}/{inner}/{second}"} <= folders
+    state["root"] = write_example(tmp_path / "probe", NESTED_GROUP)
 
 
 @given("a pages-first frontend whose page and feature each own 90 symbols")
