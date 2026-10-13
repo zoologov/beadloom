@@ -42,6 +42,19 @@ Feature: init reads a slice group as its slices and writes no size limit for pag
     And the graph holds no node for the folder "src/features/checkout/components/Summary"
     And lint reports no finding of code at a group's top
 
+  # BDL-082 S2 fix 4 (`beadloom-us5r.5`), the owner's ruling of 2026-10-13 on Major B of the
+  # third review pass: a folder holding code at its top is still a group when a child holds
+  # a standard segment. 7be98929 read this group as one slice and the crossing vanished.
+  @bead:beadloom-us5r.5
+  Scenario: a group with a shared file at its top is still two slices, and both findings are reported
+    Given the specification's slice group "features/auth" with a shared file "helpers.ts" at its top
+    When beadloom init is run with --yes
+    And beadloom lint --strict is run
+    Then the graph holds the node "features-auth-login" tagged "fsd-features"
+    And the graph holds the node "features-auth-register" tagged "fsd-features"
+    And lint reports "fsd-layers" for the edge "features-auth-register" -> "features-auth-login"
+    And lint reports code at a group's top in "src/features/auth/helpers.ts"
+
   Scenario: a page of 90 symbols is no finding, and a feature of 90 symbols still is
     Given a pages-first frontend whose page and feature each own 90 symbols
     When beadloom init is run with --yes

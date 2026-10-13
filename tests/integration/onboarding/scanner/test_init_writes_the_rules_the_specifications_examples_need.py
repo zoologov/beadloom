@@ -75,13 +75,10 @@ def test_an_import_past_a_shared_segments_index_is_a_finding_after_init(tmp_path
     ]
 
 
-def test_code_beside_the_slices_of_a_folder_makes_it_one_slice_the_rules_still_judge(
-    tmp_path: Path,
-) -> None:
-    # BDL-082 S2 fix 2: a group shares no code, so `auth` holding `shared.ts` is a slice,
-    # not a group. The sharing does not go unreported: the shape rule names the code at
-    # the slice's top, and the page's imports of `auth/login` and `auth/register` pass the
-    # slice's public API.
+def test_code_at_a_groups_top_is_left_to_the_shape_rule(tmp_path: Path) -> None:
+    # The owner's ruling of 2026-10-13 (BDL-082 S2 fix 4): `login` and `register` hold
+    # `ui/`, so `auth` stays a group with `shared.ts` at its top, the crossing between its
+    # slices stays an error, and the shared file is the shape rule's group-top finding.
     pytest.importorskip("tree_sitter_typescript")
     root = write_example(
         tmp_path / "probe", {**GROUP, "src/features/auth/shared.ts": "export const s = 1\n"}
@@ -89,22 +86,9 @@ def test_code_beside_the_slices_of_a_folder_makes_it_one_slice_the_rules_still_j
     _init(root)
 
     found = _findings(root)
-    shape = _shape_messages(root)
 
-    assert any("features-auth" in m and "'shared.ts'" in m for m in shape), shape
-    assert ("fsd-public-api", "src/pages/home/ui/home.ts", 1, "features-auth") in found
-    assert ("fsd-public-api", "src/pages/home/ui/home.ts", 2, "features-auth") in found
-
-
-def _shape_messages(root: Path) -> list[str]:
-    result = CliRunner().invoke(
-        main, ["lint", "--strict", "--format", "json", "--project", str(root)]
-    )
-    return [
-        str(v["message"])
-        for v in json.loads(result.stdout)["violations"]
-        if v["rule_name"] == "fsd-slice-shape"
-    ]
+    assert ("fsd-slice-shape", "src/features/auth/shared.ts", None, None) in found
+    assert not [f for f in found if f[0] == "fsd-public-api"], found
 
 
 @pytest.fixture

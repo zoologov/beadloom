@@ -19,6 +19,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from beadloom.services.cli import main
 from tests.support.fsd_spec_examples import (
     GROUP,
+    GROUP_WITH_A_SHARED_FILE,
     NESTED_GROUP,
     PRE_MIGRATION_SLICE,
     pages_first,
@@ -89,6 +90,18 @@ def _pre_migration(tmp_path: Path, state: dict[str, Any], folder: str, component
     assert top, PRE_MIGRATION_SLICE
     assert f"src/{folder}/{component}/index.ts" in PRE_MIGRATION_SLICE
     state["root"] = write_example(tmp_path / "probe", PRE_MIGRATION_SLICE)
+
+
+@given(
+    parsers.parse(
+        'the specification\'s slice group "{group}" with a shared file "{name}" at its top'
+    )
+)
+def _group_with_a_shared_file(
+    tmp_path: Path, state: dict[str, Any], group: str, name: str
+) -> None:
+    assert f"src/{group}/{name}" in GROUP_WITH_A_SHARED_FILE
+    state["root"] = write_example(tmp_path / "probe", GROUP_WITH_A_SHARED_FILE)
 
 
 @given("a pages-first frontend whose page and feature each own 90 symbols")
@@ -163,6 +176,16 @@ def _not_reported(state: dict[str, Any], rule: str) -> None:
 def _no_group_top(state: dict[str, Any]) -> None:
     found = [v for v in _violations(state, "fsd-slice-shape") if "Group folder" in v["message"]]
     assert found == [], found
+
+
+@then(parsers.parse('lint reports code at a group\'s top in "{path}"'))
+def _group_top(state: dict[str, Any], path: str) -> None:
+    found = [
+        v
+        for v in _violations(state, "fsd-slice-shape")
+        if v.get("file_path") == path and "Group folder" in v["message"]
+    ]
+    assert found, _violations(state, "fsd-slice-shape")
 
 
 @then("the rules file is byte for byte the one the adopter had")

@@ -12,14 +12,15 @@ So the units a graph is written from are:
   other would pass.
 - **a slice of a group** (BDL-082 S2a, RFC D2): a folder of a sliced layer is a slice
   when it holds a standard segment or an ``index`` at its top; a folder that holds
-  neither, holds no code file at its top, and has a slice below it is a *group*, which
-  the specification gives "no code sharing". The group has no unit; each folder in it
+  neither and has a slice below it is a *group*, which the specification gives "no code
+  sharing". The group has no unit; each folder in it
   is one slice, named ``<layer>-<group>-<slice>``, so ``register`` importing ``login`` is
   an edge between two slices of one layer. Groups are read at any depth: a group inside
   a group is read as its slices too, named ``<layer>-<group>-<group>-<slice>``. A folder
-  holding code at its top is a slice, never a group, so a slice not yet split into
-  segments stays one unit with all its files, and the shape rule reports what stands at
-  its top.
+  holding code at its top is a group only when a folder in it holds a standard segment,
+  and otherwise one slice (the owner's ruling of 2026-10-13): a slice not yet split into
+  segments stays one unit with all its files, while the code at a group's top belongs to
+  no unit, and the shape rule reports both.
 - **a container** for ``app`` and for ``shared``, and **a segment** for each folder in
   them, the segment a part of its container. Two segments of one layer import each other
   freely in FSD, which the tagged container says to the layer rule.
@@ -193,16 +194,20 @@ def _layer_units(project_root: Path, layer_folder: Path) -> list[FsdUnit]:
     return [FsdUnit(layer, rel, layer, CONTAINER, None, own), *segments]
 
 
+def _holds_a_segment(folder: Path) -> bool:
+    """Whether *folder* holds a standard segment at its top: Steiger's own slice test."""
+    return any(
+        child.is_dir() and child.name in DEFAULT_SLICE_SEGMENTS for child in folder.iterdir()
+    )
+
+
 def _is_slice(folder: Path) -> bool:
     """Whether *folder* holds a standard segment or an ``index`` code file at its top.
 
     The ``index`` is read by the public-API rule's own reader, so ``init`` and
     ``fsd-public-api`` agree on which folders have a public API.
     """
-    return any(
-        (child.is_dir() and child.name in DEFAULT_SLICE_SEGMENTS) or is_index_file(child)
-        for child in folder.iterdir()
-    )
+    return _holds_a_segment(folder) or any(is_index_file(child) for child in folder.iterdir())
 
 
 def _holds_code_at_top(folder: Path) -> bool:
@@ -211,28 +216,31 @@ def _holds_code_at_top(folder: Path) -> bool:
 
 
 def _is_group(folder: Path) -> bool:
-    """Whether *folder*, no slice itself, is a group: no code at its top, a slice below it.
+    """Whether *folder*, no slice itself, is a group of the slices below it.
 
-    A group shares no code, so a folder holding a code file at its top is a slice and
-    never a group (BDL-082 S2 fix 2). A linked folder is not looked into: a link back up
-    the tree would never end.
+    The owner's ruling 3 as refined on 2026-10-13: a folder with no code at its top is a
+    group when a folder in it is a slice or a group, at any depth; a folder with code at its
+    top is a group only when a folder in it holds a standard segment, and otherwise a slice,
+    so a slice not yet split into segments stays whole while a group with a shared file in it
+    keeps its slices. A linked folder is not looked into: a link back up the tree would
+    never end.
     """
-    return (
-        not folder.is_symlink()
-        and not _holds_code_at_top(folder)
-        and any(_is_slice(child) or _is_group(child) for child in _subfolders(folder))
-    )
+    if folder.is_symlink():
+        return False
+    children = _subfolders(folder)
+    if _holds_code_at_top(folder):
+        return any(_holds_a_segment(child) for child in children)
+    return any(_is_slice(child) or _is_group(child) for child in children)
 
 
 def _slices_of(project_root: Path, path: list[Path], layer: str) -> list[FsdUnit]:
     """The slices the folder at the end of *path*, in a sliced layer, is read as.
 
-    A folder with no code at its top, no slice itself and a slice below it is a group
-    (RFC D2), and every folder in it is read the same way: a slice, a group in its turn,
-    or one slice of the group whether slice-shaped or not, since a group shares no code and
-    a folder read as a slice makes an import of it from a sibling a same-layer crossing.
-    Groups are read at any depth, through folders with no code at their top, and each
-    slice is named by the whole *path*, ``<layer>-<group>-...-<slice>``.
+    A folder that is no slice but a group (:func:`_is_group`, RFC D2) has no unit, and
+    every folder in it is read the same way: a slice, a group in its turn, or one slice of
+    the group whether slice-shaped or not, since a group shares no code and a folder read as
+    a slice makes an import of it from a sibling a same-layer crossing. Each slice is named
+    by the whole *path*, ``<layer>-<group>-...-<slice>``.
     """
     folder = path[-1]
     if _is_slice(folder) or not _is_group(folder):

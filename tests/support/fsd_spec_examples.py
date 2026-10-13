@@ -86,6 +86,14 @@ PRE_MIGRATION_SLICE: Mapping[str, str] = {
     "src/pages/home/index.ts": "export const home = 1\n",
 }
 
+#: The specification's group with one shared file at its top (BDL-082 S2 fix 4, the third
+#: review pass's Major B). ``login`` and ``register`` hold ``ui/``, so by the owner's ruling
+#: of 2026-10-13 ``auth`` stays a group and ``helpers.ts`` is code at a group's top.
+GROUP_WITH_A_SHARED_FILE: Mapping[str, str] = {
+    **GROUP,
+    "src/features/auth/helpers.ts": "export const helper = 1\n",
+}
+
 
 def _functions(prefix: str, count: int) -> str:
     return "".join(f"export function {prefix}{i}() {{ return {i} }}\n" for i in range(count))

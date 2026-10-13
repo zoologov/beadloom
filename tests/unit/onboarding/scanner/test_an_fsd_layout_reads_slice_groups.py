@@ -174,11 +174,13 @@ def test_a_folder_beside_the_slices_of_a_group_is_read_as_a_slice_of_it(
     )
 
 
-def test_a_folder_holding_code_at_its_top_is_a_slice_and_never_a_group(tmp_path: Path) -> None:
-    # BDL-082 S2 fix 2 (re-review of S2R, Major A): a group shares no code, so a folder with
-    # a code file at its top is a slice, whatever stands below it. `shared.ts` is then code
-    # at that slice's top, which `fsd-slice-shape` reports; until the fix `auth` was a group
-    # and `shared.ts` belonged to no unit.
+def test_a_folder_with_code_at_its_top_and_index_only_children_is_a_slice(
+    tmp_path: Path,
+) -> None:
+    # Owner's ruling 3 as refined on 2026-10-13 (option c): a folder holding code at its
+    # top is a group only when a child holds a standard segment. `login` and `register`
+    # carry only an index, so `auth` is one slice and `shared.ts` stands at its top, where
+    # `fsd-slice-shape` reports it.
     _layers(tmp_path)
     _write(
         tmp_path,
@@ -192,6 +194,32 @@ def test_a_folder_holding_code_at_its_top_is_a_slice_and_never_a_group(tmp_path:
     assert units["src/features/auth"].name == "features-auth"
     assert "src/features/auth/shared.ts" in units["src/features/auth"].files
     assert not any(directory.startswith("src/features/auth/") for directory in units)
+
+
+def test_a_folder_with_code_at_its_top_and_a_child_holding_a_segment_is_a_group(
+    tmp_path: Path,
+) -> None:
+    # The third review pass's probe (Major B): the specification's group with one shared
+    # file in it. `login` and `register` hold `ui/`, Steiger's own slice test, so `auth`
+    # stays a group: two slices, and `helpers.ts` belongs to no unit, left to the shape rule
+    # as code at a group's top. 7be98929 read the whole folder as one slice.
+    _layers(tmp_path)
+    _write(
+        tmp_path,
+        "src/features/auth/helpers.ts",
+        "src/features/auth/login/index.ts",
+        "src/features/auth/login/ui/form.ts",
+        "src/features/auth/register/index.ts",
+        "src/features/auth/register/ui/form.ts",
+    )
+
+    layout = read_fsd_layout(tmp_path)
+    units = _by_directory(layout)
+
+    assert units["src/features/auth/login"][0] == "features-auth-login"
+    assert units["src/features/auth/register"][0] == "features-auth-register"
+    assert "src/features/auth" not in units
+    assert "src/features/auth/helpers.ts" not in {f for unit in layout.units for f in unit.files}
 
 
 def test_a_slice_not_yet_split_into_segments_is_one_slice_with_all_its_files(
@@ -226,11 +254,11 @@ def test_a_slice_not_yet_split_into_segments_is_one_slice_with_all_its_files(
     )
 
 
-def test_a_group_is_descended_only_through_folders_with_no_code_at_their_top(
+def test_a_folder_with_code_inside_a_group_is_one_slice_when_no_child_holds_a_segment(
     tmp_path: Path,
 ) -> None:
-    # `a` holds no code at its top, so it is a group; `b` holds `b.ts`, so it is one slice
-    # of `a` with `c` inside it, however slice-shaped `c` is.
+    # `a` holds no code at its top, so it is a group; `b` holds `b.ts` and its only child
+    # `c` carries an index and no segment, so `b` is one slice of `a` with `c` inside it.
     _layers(tmp_path)
     _write(
         tmp_path,

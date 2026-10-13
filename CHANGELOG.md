@@ -73,11 +73,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   1, and `billing → profile` as 1 `fsd-layers` error, invisible when `features-account` was
   one node (measured 2026-10-13). A group with an `index` of its own is a slice, and `init`
   reads that `index` with the rule's own reader. A folder holding a code file at its top is a
-  slice and never a group (`beadloom-us5r.3`): `features/checkout/{Checkout.vue, store.ts,
-  store2.ts, components/Total.vue, components/Summary/{index.ts, Summary.vue}}`, a slice not
-  yet split into segments, is one node holding its 6 files, where reading groups at any depth
-  without that rule wrote one node for `Summary` and left 4 files in no node, each reported as
-  code at a group's top (measured 2026-10-13). Measured on 2026-10-11 on the
+  group only when a folder in it holds a standard segment, and one slice otherwise
+  (`beadloom-us5r.3`, `beadloom-us5r.5`, the owner's ruling of 2026-10-13):
+  `features/checkout/{Checkout.vue, store.ts, store2.ts, components/Total.vue,
+  components/Summary/{index.ts, Summary.vue}}`, a slice not yet split into segments, is one
+  node holding its 6 files, where reading groups at any depth without that rule wrote one node
+  for `Summary` and left 4 files in no node; the specification's group with `helpers.ts` at
+  its top stays `features-auth-login` and `features-auth-register`, `register → login` 1
+  `fsd-layers` error and `helpers.ts` 1 group-top warning (measured 2026-10-13).
+  Measured on 2026-10-11 on the
   specification's example (`features/auth/{login,register}`, `register` importing `login`, a
   page importing both) after `init --yes`, `lint --strict`, `30624370` against this tree:
   5 nodes against 6 (`features-auth` becomes `features-auth-login` and
