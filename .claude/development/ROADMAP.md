@@ -4,7 +4,7 @@
 > from PyPI). The release before it, 8.0.0, is the latest on PyPI, published 2026-10-08 and
 > verified on the wheel downloaded from PyPI: 11 of 11 checks.
 >
-> Rewritten 2026-10-05 against the tracker, brought up to date 2026-10-14 (BDL-082 shipped). This file answers one question: what to do next,
+> Rewritten 2026-10-05 against the tracker, re-ranked 2026-10-14 (BDL-082 shipped; federation and the team's operating model first). This file answers one question: what to do next,
 > and why that and not something else. It holds open work only. What shipped is in the GitHub
 > releases and in `CHANGELOG.md`; the previous revision of this file, with its records of why,
 > is `archive/ROADMAP-until-2026-10-05.md`. Open defects are in `BDL-UX-Issues.md`.
@@ -21,7 +21,9 @@ rank everything:
 - **Solo multi-agent flow** — Claude Code + Beadloom + Beads + GitHub. Building large projects
   alone with an AI fleet.
 - **A team of solos** — each member runs that flow on their own service. Its cross-repository
-  half, federation, is deferred until a need for it appears (owner, 2026-09-29).
+  half, federation, was deferred until a need for it appeared (owner, 2026-09-29). The need
+  appeared on 2026-10-12: the owner's team adopts Beadloom entity by entity as every monorepo is
+  split into its own repository, and the hub is what joins them (owner, 2026-10-14).
 
 Every P0 and P1 item must serve one of them. Items serving only adoption or market are demoted
 to *Off-north-star*.
@@ -39,54 +41,114 @@ Native app** (Expo Router, Expo Modules with Swift and Kotlin, gluestack with `.
 aliases; FSD planned in its refactoring). Measured 2026-10-08: on both, 44–49 % of imports go
 through path aliases the resolver does not read, so a graph built today lies by omission. Every
 item below is ranked by what it does for those three. Project names stay out of this repository.
+Since 2026-10-12 the three sit inside a split: every monorepo the owner holds is being cut into
+one repository per entity — the colleague's PDF-viewer library out of the frontend's `shared/lib`
+first, the backend into microservices, the frontend into its own repository, configuration into an
+infrastructure repository. **The order of adoption is the order of the split**: the cheapest moment
+to put an entity under Beadloom is the birth of its repository, with the graph written as intent
+and the rules in force from the first commit.
 
 ---
 
 ## In progress
 
 Nothing. BDL-082 shipped on 2026-10-14 (PR #101 on 2026-10-11, PR #102 on 2026-10-14). The order
-below is the owner's of 2026-10-11; the team-topology discussion of 2026-10-11/12 (every monorepo
-split into its own repository, federation hub and satellites, the catalog as a separate product)
-is parked in the owner's note and re-ranks this list when the owner says so.
+below is the owner's of 2026-10-14, set after the team-topology discussion of 2026-10-11/12; the
+owner's note of that discussion holds the measurements behind it.
 
 ---
 
 ## What to do next, in order
 
-**The owner's order of 2026-10-11** (a program of sequential work items, each with its own
-`/task-init`, slices and PRs — never one bag):
+**The owner's order of 2026-10-14** (a program of sequential work items, each with its own
+`/task-init`, slices and PRs — never one bag). It replaces the order of 2026-10-11: the team's
+adoption across split repositories is the need federation was waiting for, and the team's way of
+working is designed before the hub, because the hub's PRD takes its input from it.
 
-1. **FSD by the specification 2.1** (BDL-082) — **shipped 2026-10-14** (PRs #101, #102): `@x`
-   on entities, slice groups by the owner's option (c) of 2026-10-13, pages-first, custom segments
-   by purpose, the public API of every layer, the overlays by the specification, the viewer on
-   the 21-node fixtures. Open: BDL-UX #323 (owner's call), the `slice_shape`-at-error release
-   measurement, `beadloom-ba9w.16`.
-1b. **The CI trust boundary** (`beadloom-dlb6`, BDL-UX #321): a short standalone item — read-only
+1. **The team's operating model** — a design item, no code. How several people, each with their
+   own agent, work under Beadloom in one repository and across repositories. Seven decisions:
+   who owns the graph and the rules (path ownership in the repository, not an agreement); the unit
+   of work (one work item is one branch, one document folder and one coordinator — waves and the
+   shared tree stay inside one person, people separate through git); the tracker between people
+   (a local database per clone, the exchange through the tracked file — closes already get lost on
+   branch merges, and two people closing beads in parallel is unmeasured); the files that change by
+   themselves (the metrics history and the interactions journal change in every session and
+   conflict on every merge — out of git, or a merge strategy); review (the human in the PR, the
+   agent's brief per bead, the tech-writer on CI — which blocks and which advises); a newcomer's
+   entry (three commands and nothing by hand; the roles compose from `flow.yml` and are committed,
+   so every agent is the same — verified, not assumed); who feeds the hub (a satellite exports on
+   its merge to `main`, the hub aggregates on CI in the infrastructure repository). Form: a short
+   model with its assumptions written down; the tracker and the self-changing files measured on
+   two clones; the rest checked on the pilot satellite of item 3. Output: a guide under `docs/`
+   and a bead per gap found. **Needs `/task-init`** (type task, BRIEF).
+2. **The CI trust boundary** (`beadloom-dlb6`, BDL-UX #321): a short standalone item — read-only
    token by default with elevation on one job, the tech-writer job limited to same-repository
    PRs, fork runs approved for every outside contributor, the stale protection comment corrected.
-   Independent of everything else; from an outside audit of 2026-10-11, verified by line.
-2. **The setup wizard v1** as a main-loop skill (`beadloom-nbpb`) — a thin protocol over `init`,
-   `config-check`, `doctor` and `setup-*`, its second pass written from the adoption's findings
-   before the React Native adoption — and **the graph reviewer v1** as a role (`beadloom-e6s2`)
-   over today's `doctor` and `lint`; `uxqc`'s mechanics stay in Debt to zero.
-3. **Adoption on the Vue frontend** (item 1 below; the owner's step).
-4. **The findings into the BDL-UX log.**
-5. **ROADMAP and the log re-ranked** by what the adoption found.
-6. **Debt to zero brought up to date and done** (`beadloom-ba9w`, slices A–H, plus a slice
+   From an outside audit of 2026-10-11, verified by line. Runs beside item 1 while the owner
+   reads the model's draft: it needs no owner decision.
+3. **Federation: the hub as a product** — the deferral of 2026-09-29 lifted (*Federation* below).
+   In order: the hub over three to five satellites (a portal page for the federated graph, a CI
+   recipe for the hub, hub-level rules — a contract removed while a consumer in another repository
+   holds it, a satellite whose export is older than its term); the mount point by name (a
+   satellite declares the packages and contracts it publishes, the hub joins exports by those
+   names — the frontend depends on the library as a package, a service on a service as a
+   contract; mounting by path inside a monorepo is withdrawn together with nested roots); the
+   platform satellite from manifests (Helm, Kubernetes YAML, compose, Terraform — nodes of kind
+   cluster, queue, storage and database, edges from services derived from configuration or
+   declared and marked *not verified*; the graph says of every edge whether it was measured or
+   declared). `beadloom-147x` (a token in the export's repository name) closes inside it. The
+   pilot satellite is the colleague's PDF-viewer library in its own repository — the cheapest
+   split (158 files, one index, one external dependency), its first findings known in advance.
+   **Needs `/task-init`**, with item 1's guide as the PRD's input.
+4. **The catalog**, after the Backstage trial — a separate product over the hub, not the core
+   (the two *Won't do* lines below are reworded accordingly). The vocabulary is borrowed from
+   Backstage either way — Domain, System, Component, API, Resource, Group, User; owns, provides,
+   consumes, depends on, part of — so an export to `catalog-info.yaml` stays trivial. The trial
+   measures: whether three satellites' exports carry over without loss; whether *verified by code*
+   can be shown where a person looks; the cost of owning a Node application with a database, auth
+   and plugins against a static portal from CI; TechDocs against the portal; the audience
+   (architects through PRs, or the whole company with permissions and search). A bought
+   on-premise system and the planned integrations between projects enter as declared nodes of
+   kind *external system*, confirmed from our side when a satellite's export brings the measured
+   edge. **The owner decides after the trial; no `/task-init` before it.**
+5. **The setup wizard v1** as a main-loop skill (`beadloom-nbpb`) — a thin protocol over `init`,
+   `config-check`, `doctor` and `setup-*`, its second pass written from the adoption's findings —
+   and **the graph reviewer v1** as a role (`beadloom-e6s2`) over today's `doctor` and `lint`;
+   `uxqc`'s mechanics stay in Debt to zero. One addition since 2026-10-11: the wizard knows
+   satellites and the hub from its first day, and its adoption levels are what keeps a teammate
+   with one agent on a young service from paying for ceremony that does not pay back.
+6. **Adoption in the split's order** (item 1 below): the library first, as item 3's pilot; the
+   backend microservices as each is split out; the frontend when it gets its own repository; the
+   infrastructure repository as the platform satellite and the hub's home. A nested project root
+   gets an honest refusal, not support (`beadloom-7pd6`, BDL-UX #325); the FSD-root-inside-the-
+   repository key stays a stopgap, taken only if the frontend's split runs past about six months.
+7. **The findings into the BDL-UX log; ROADMAP and the log re-ranked** by what the adoptions found.
+8. **Debt to zero brought up to date and done** (`beadloom-ba9w`, slices A–I, plus a slice
    that re-measures every `high` entry on 9.0.0 — stale ones close, live ones rank by the
-   adoption).
+   adoption; slice E reworded for the team, see below).
 
 Items 5 to 14 below keep the owner's order of 2026-09-29; items 1 to 4 were placed first on
 2026-10-05, 2026-10-07 and 2026-10-08.
 
-### 1. Adoption on the Vue frontend, then on the React Native app (after BDL-080; owner's step)
+### 1. Adoption in the split's order: the library, the microservices, the Vue frontend, the React Native app (owner, 2026-10-12)
 
-The first outside adoptions, in this order: the Vue frontend first — it is already FSD, runs
-Steiger, and its GitLab remote exercises the Source link's second forge; the React Native app
-second — it needs S3's resolver work and the Expo module bridge, and its own process RFC asks
-Beadloom for more (item 4). Each adoption is a work item of its own: `init`, the graph read by
-the owner, `lint --strict` over the FSD rules, the portal published, the findings filed as
-BDL-UX issues. What those two find is what ranks the rest of this list.
+The order of adoption is the order of the split (*Vision* above). First the colleague's PDF-viewer
+library in its own repository — the pilot satellite of order item 3; measured 2026-10-12 by imports
+(nothing run): 158 files, one top-level index, one external dependency, a microkernel-shaped
+inside (facade, coordinator, managers, an event bus with 131 event names in strings, 48 files on
+the bus) that is, from the frontend's side, one `shared/lib` slice with a public API. Beadloom holds
+it as a node with child nodes and two rule sets of different reach: FSD outside, its own rules
+inside (the core imports no module, modules import no module, subsystems cross only through
+`shared`) — four core files and two `page → list` imports become its first findings. Then the
+backend microservices as each is split out, each at the birth of its repository. Then the two
+frontends, in this order: the Vue frontend first, when it has its own repository — it is already
+FSD, runs Steiger, and its GitLab remote exercises the Source link's second forge; the React Native
+app second — it needs S3's resolver work and the Expo module bridge, and its own process RFC asks
+Beadloom for more (item 4). Each adoption is a work item of its own: `init`, the graph read by the
+owner, `lint --strict` over the rules, the portal published, the export into the hub, the findings
+filed as BDL-UX issues. What those adoptions find is what ranks the rest of this list. During the
+transition nothing reads inside a monorepo: an entity not yet split out is *not yet under
+Beadloom*, and the hub shows it as a declared, unverified node.
 
 ### 1c. `beadloom-nbpb` — the setup wizard, a main-loop skill (P1, not started; between the two adoptions — owner, 2026-10-10)
 
@@ -97,7 +159,7 @@ and the forge, hooks, CI, branch protection, the roles in `flow.yml` — as a th
 naming what it set up and what it did not. It offers adoption **levels**, each useful alone —
 context only; plus architecture checks; plus documentation control; plus the agentic flow — so
 a person who stops at the first gets a working tool and a report of what was not set up (owner,
-2026-10-11; expected to be the first feedback from a teammate with one agent). It knows nothing by prose: the keys live in
+2026-10-11; expected to be the first feedback from a teammate with one agent). It knows satellites and the hub from its first day (owner, 2026-10-14). It knows nothing by prose: the keys live in
 `config-check`, the sequence lives in its checklist, which closes #218 (`init`'s three
 hand-written step sequences). Place: after the first adoption writes the real checklist, before
 the second checks it. Ships via `setup-agentic-flow` with a Cursor adapter. **Needs `/task-init`.**
@@ -124,7 +186,9 @@ D smells); BDL-080 S2 takes `site-graph-viewer`'s oversized smell.
 Owner, 2026-10-09, three more slices, agreed with two conditions: **E the Beads upgrade** —
 every claim the composed CLAUDE.md measured on bd 1.0.4 (the merge-slot forms, `--suggest-next`'s
 16-of-23 shapes, the `bd list` caps) is re-measured on the new version and confirmed or
-rewritten, in a claim / was / is table; **F the agents' capability check** — Claude Code and
+rewritten, in a claim / was / is table, and — for the team (owner, 2026-10-14) — whether that
+version runs against a remote Dolt database, with import and export around every commit and
+tracker-to-file coherence judged by the Gate; **F the agents' capability check** — Claude Code and
 Cursor against their current docs (agent frontmatter, hooks, skills, MCP), the deltas applied to
 the role templates and `setup-agentic-flow`; **G dependencies** — Python, the portal scaffold
 (VitePress, Cytoscape, elkjs, Playwright) and GitHub Actions, each major verified by the full tree
@@ -179,8 +243,8 @@ overlays; a `ui-tokens-only` rule (no hex colours or `StyleSheet` in `features`,
 the landscape; more than one stack in one `flow.yml`; a hook that mirrors beads and documents
 into the team's tracker and wiki (Huly) and comments back; a multi-session guard (two
 coordinators on one station, never one bead or one branch twice); a `graphql-federation`
-overlay and a contracts hub over `export`/`federate` for its backend services — which is the
-need the federation deferral below was waiting for. Rank inside the item: the ones the first
+overlay and a contracts hub over `export`/`federate` for its backend services — served by order
+item 3 (the deferral lifted on 2026-10-14). Rank inside the item: the ones the first
 adoption blocks on first.
 
 ### 5. `beadloom-jwfc` — the pre-push Gate crashes on a full pipe and reports it as stale docs (P0, BDL-UX #226)
@@ -282,7 +346,7 @@ it clearly better. BDL-065 has no bead. **Needs `/task-init`.**
 ### Open P1 bugs this order does not rank
 
 - `beadloom-147x`: `export` publishes a git remote's query string (a token) in the federation
-  artifact's repository name.
+  artifact's repository name. Closes inside order item 3.
 - `beadloom-uz8x` (#215): the Gate reports an index problem as a rules configuration error.
 - `beadloom-0mb5` (#221): attribution keys on the whole node.
 - `beadloom-tgo8` (#222): the cross-check computes an attribution rule the implementation dropped.
@@ -292,13 +356,16 @@ it clearly better. BDL-065 has no bead. **Needs `/task-init`.**
 - `beadloom-mj2o` (#227): open in the tracker while the log records #227 as closed on 2026-09-10.
   One of the two is wrong; reconcile.
 
-### Deferred until a need appears — federation (BDL-060 S5/S6)
+### Federation (BDL-060 S5/S6) — the deferral lifted on 2026-10-14
 
-Owner decision 2026-09-29. Epic `beadloom-8qqp` and its eight beads are `deferred`. S5 is live
-cross-repo `ctx`; S6 is the `unverified` lifecycle, the undeclared sweep and review-gated
-bootstrap. **The need has a date now:** the RN project's RFC plans a contracts hub over
-`export`/`federate` for its backend services (item 4). The deferral stands until the owner
-lifts it.
+Owner decision 2026-09-29 deferred epic `beadloom-8qqp` and its eight S5/S6 beads until a need
+appeared. The need appeared on 2026-10-12 — the team's adoption across split repositories — and
+the owner lifted the deferral on 2026-10-14 (order item 3). The eight beads stay `deferred` in the
+tracker until item 3's `/task-init` decides which of S5 (live cross-repo `ctx`) and S6 (the
+`unverified` lifecycle, the undeclared sweep, review-gated bootstrap) it absorbs and which it
+re-plans; `export` and `federate` (S1–S4, shipped) are its base, and what is missing — the hub's
+portal page, its CI recipe, hub-level rules, the mount point by name, the platform satellite — is
+listed in item 3.
 
 ---
 
@@ -357,6 +424,15 @@ withholding review · recording the offer, not only the decision.
 - Architecture decay report over snapshots and metrics history.
 - Auto-bootstrap of the graph from code, tied to `unverified`.
 - A versioned schema-migration framework.
+- A roles overlay for architectures outside DDD and FSD — layered by contract, or user-declared —
+  and an event-bus edge reader (`emit`/`on` names as edges, marked by their channel), from the
+  colleague's library measurement of 2026-10-12: a microkernel inside a `shared/lib` slice whose
+  131 event names the graph cannot see.
+- Work items crossing by axes: `waves` one level up — which open work items collide on graph
+  nodes, read from their `## Axes` sections, with a portal page of who holds which nodes.
+- A fragment folder for the shared files no bead owns (this file, the issue log, the Unreleased
+  section of `CHANGELOG.md`): one fragment per change, the file composed — the issue log's number
+  claims are the first step of it.
 
 ## Off-north-star — raise only on a concrete need
 
@@ -373,8 +449,10 @@ withholding review · recording the offer, not only the decision.
 - A built-in LLM or bundled weights.
 - **Model tiering** — the same job on a cheaper model. A role runtime is a different thing: a
   different requirement and a different executor, declared in `flow.yml` and verified.
-- A live web app or SaaS hub. The portal is static and CI-generated.
+- A live web application or a SaaS hub **in the core**. The portal is static and CI-generated;
+  the catalog, if built, is a separate product over the hub (order item 4; owner, 2026-10-12).
 - A plugin marketplace.
 - DSL or OPA-Rego rules, autofix patches, chat integrations.
-- A Backstage replacement. Feed Backstage instead.
+- A Backstage replacement **in the core**. Feed Backstage, or build the catalog as a separate
+  product over the hub — the owner decides after the Backstage trial (order item 4).
 - Full bootstrap accuracy upfront, C#, pattern detection, dependency-weight analysis.
