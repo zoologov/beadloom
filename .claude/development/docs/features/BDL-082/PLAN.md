@@ -1,6 +1,6 @@
 # PLAN: BDL-082 — FSD by the specification 2.1
 
-> **Status:** Approved
+> **Status:** Done
 > **Approval:** delegated by the owner on 2026-10-11.
 > **Created:** 2026-10-11
 

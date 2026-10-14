@@ -4,7 +4,7 @@
 > from PyPI). The release before it, 8.0.0, is the latest on PyPI, published 2026-10-08 and
 > verified on the wheel downloaded from PyPI: 11 of 11 checks.
 >
-> Rewritten 2026-10-05 against the tracker, brought up to date 2026-10-10 (BDL-080 shipped). This file answers one question: what to do next,
+> Rewritten 2026-10-05 against the tracker, brought up to date 2026-10-14 (BDL-082 shipped). This file answers one question: what to do next,
 > and why that and not something else. It holds open work only. What shipped is in the GitHub
 > releases and in `CHANGELOG.md`; the previous revision of this file, with its records of why,
 > is `archive/ROADMAP-until-2026-10-05.md`. Open defects are in `BDL-UX-Issues.md`.
@@ -44,14 +44,10 @@ item below is ranked by what it does for those three. Project names stay out of 
 
 ## In progress
 
-### BDL-082 — FSD by the specification 2.1
-
-Step 1 of the owner's order of 2026-10-11 (below). Measured against feature-sliced.design on
-2026-10-11: the six layers, the strictly-below import rule, app/shared as segment containers,
-the index public API, the standard segments and Steiger match; missing are the `@x`
-cross-import convention of the entities layer (our rules would flag a spec-following import),
-slice groups (`init` reads a group folder as one slice), and the pages-first calibration of the
-cohesion check. Work item `.claude/development/docs/features/BDL-082/`.
+Nothing. BDL-082 shipped on 2026-10-14 (PR #101 on 2026-10-11, PR #102 on 2026-10-14). The order
+below is the owner's of 2026-10-11; the team-topology discussion of 2026-10-11/12 (every monorepo
+split into its own repository, federation hub and satellites, the catalog as a separate product)
+is parked in the owner's note and re-ranks this list when the owner says so.
 
 ---
 
@@ -60,9 +56,11 @@ cohesion check. Work item `.claude/development/docs/features/BDL-082/`.
 **The owner's order of 2026-10-11** (a program of sequential work items, each with its own
 `/task-init`, slices and PRs — never one bag):
 
-1. **FSD by the specification 2.1** (BDL-082): `@x` cross-imports on the entities layer, slice
-   groups, the pages-first calibration of the cohesion check, the Steiger plugin's version, the
-   best practices in the overlay. Short; it blocks the first adoption.
+1. **FSD by the specification 2.1** (BDL-082) — **shipped 2026-10-14** (PRs #101, #102): `@x`
+   on entities, slice groups by the owner's option (c) of 2026-10-13, pages-first, custom segments
+   by purpose, the public API of every layer, the overlays by the specification, the viewer on
+   the 21-node fixtures. Open: BDL-UX #323 (owner's call), the `slice_shape`-at-error release
+   measurement, `beadloom-ba9w.16`.
 1b. **The CI trust boundary** (`beadloom-dlb6`, BDL-UX #321): a short standalone item — read-only
    token by default with elevation on one job, the tech-writer job limited to same-repository
    PRs, fork runs approved for every outside contributor, the stale protection comment corrected.
