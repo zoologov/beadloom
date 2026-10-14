@@ -425,12 +425,10 @@ export function canvasMap(cy, geometry, { fitZoom, onLevel, onRescale = () => {}
    * Work out the boxes wanted again, and have the level drawn again when they
    * differ or a drawn box changed size; otherwise, when only the scale stepped,
    * tell the canvas (`onRescale`), whose marks of shared lines depend on it. A
-   * drawn box that changed size alone draws the same boxes again without sizing
-   * them anew (`{ boxes: false }`): the frame of the box that holds everything
-   * keeps the size its level was drawn at, which holds every box the plan draws
-   * larger inside it (`reachOf`); sized again at another scale it came out a
-   * layout unit narrower on each side, which moved the fit by 0.2 % (measured on
-   * a Feature-Sliced frontend).
+   * drawn box that changed size alone draws the same level again
+   * (`{ boxes: false }`), the boxes open now kept open; the canvas sizes every box
+   * again, and the frame of the box that holds everything comes out one size at
+   * every scale, held around the boxes drawn larger with their border (`reachOf`).
    */
   function evaluate() {
     if (destroyed) return;

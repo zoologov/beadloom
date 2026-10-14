@@ -518,7 +518,11 @@ What stays in `widgets/graph-viewer/`:
   a box drawn against the frame widened it by its border at the fit and not once a zoom had
   shrunk it: on `vue-fsd` a Fit pressed after two steps in landed at 0.51408 where the page
   opened at 0.51318 (macOS, measured), the class the Linux runner's wider fonts turned into a red
-  case. Its parts were split out by
+  case. Since `beadloom-us5r.7`, `useGraphCanvas.redraw` sizes every box on every redraw, a
+  level drawn again only because a box drawn larger changed size included: one zoom step in
+  shrank such boxes, the compounds were not sized again, and Cytoscape centred the frame on its
+  children's new bounding box, 18.9 layout units off its place, so a Fit pressed there measured
+  routes past the frame (0.51811 against 0.51820 on `vue-fsd` in a heavy font, measured). Its parts were split out by
   job in `beadloom-btkd.17` and now live in `site-overview-map`; it re-exports none of their
   names (`beadloom-btkd.20`). Since BDL-080 S4b it also returns `isTopBox(id)` and
   `closedRoomsOf(id)`, which the pills are placed around, and `ofTopLevel` no longer counts a top

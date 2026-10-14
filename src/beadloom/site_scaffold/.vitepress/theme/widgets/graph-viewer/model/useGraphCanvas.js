@@ -353,9 +353,15 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
   }
 
   /**
-   * Draw the level wanted now, and mark the filters and the selection on it;
-   * every box sized to ELK's again unless `boxes` is false, as for a change that
-   * draws no node and hides none, which keeps the boxes open now open.
+   * Draw the level wanted now, and mark the filters and the selection on it,
+   * every box sized to ELK's again; with `boxes` false, as for a change that
+   * draws no node and hides none, the boxes open now stay open. Every box is sized
+   * again either way: a box drawn larger that shrank with a zoom moves the
+   * children a box is centred on, and the frame left as it was sized then stood
+   * 19 layout units off its place, so a fit pressed there measured another
+   * extent (0.51811 against 0.51820, measured on a Feature-Sliced frontend in a
+   * heavy font). The frame keeps its size whatever the zoom, since it is held
+   * around the boxes drawn larger with their border (`canvasMap.js`, `reachOf`).
    */
   function redraw({ boxes = true } = {}) {
     const instance = cy.value;
@@ -366,7 +372,7 @@ export function useGraphCanvas(containerRef, { options, onNodeTap, onBackgroundT
       markWalk(instance, marked);
       markFront(instance);
     });
-    if (boxes) fitBoxes();
+    fitBoxes();
     refreshOverlay();
     noteDrawnStyles(instance);
   }
