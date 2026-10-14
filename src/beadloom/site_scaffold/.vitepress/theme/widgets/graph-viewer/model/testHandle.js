@@ -251,10 +251,16 @@ function readers(source) {
     visibleIds: () => fileNodes().filter((node) => node.visible()).map((node) => node.id()).sort(),
     selection: () => source.selection() || null,
     state: () => ({ ...source.state() }),
-    // Every node's position, whether it is drawn or inside a closed box, which
-    // keeps it where it was: no level moves a node.
-    positions: () =>
-      idRecord((source.map()?.allNodes() || cy().nodes()).map((node) => [node.id(), { ...node.position() }])),
+    // Every node's position as it is drawn now, whether it is drawn or inside a
+    // closed box, which keeps it where it was: no level moves a node, but a
+    // top-level node the overview draws larger off its laid-out centre, which
+    // stands at its drawn box's centre while it is so drawn.
+    positions: () => idRecord((source.map()?.allNodes() || cy().nodes()).map((node) => [node.id(), { ...node.position() }])),
+    // Every node's home: where it stands at every level that draws it as laid
+    // out — for a node the overview drew off its laid-out centre, where it stood
+    // before (`features/overview-map/model/mapTitles.js`, `homeOf`); for any other, where it is.
+    homes: () =>
+      idRecord((source.map()?.allNodes() || cy().nodes()).map((node) => [node.id(), { ...(source.map()?.homeOf(node.id()) || node.position()) }])),
     pan: () => ({ ...cy().pan() }),
     zoom: () => cy().zoom(),
     // The last move that framed a selection or a search: `{ animated, from, to,
@@ -391,11 +397,13 @@ function readers(source) {
     // `{ id: { count, text, shown, x1, y1, x2, y2 } }`, on the canvas in pixels
     // while `shown`, which a node too small to read is not.
     outwardMarks: () => source.outward(),
-    // The overview's last plan: `{ ms, unit, routed, failed, grown, plates }`, how
-    // long it took, the layout units a pixel was at its scale, the names of the
-    // pairs it routed and of those it found no route for, the top-level nodes it
-    // draws larger than their layout to hold their titles, and those whose title
-    // stands on a plate beside its box because no such box fits.
+    // The overview's last plan: `{ ms, unit, routed, failed, grown, broken,
+    // projectPlate }`, how long it took, the layout units a pixel was at its
+    // scale, the names of the pairs it routed and of those it found no route for,
+    // an edge drawn as itself among them on a pair of its own, the top-level
+    // nodes it draws larger than their layout to hold their titles and those whose
+    // title it breaks onto two lines, and the room it keeps for the title of the
+    // box that holds everything (`features/overview-map/model/overviewPlan.js`).
     overviewPlan: () => source.map()?.plan() || null,
     // The pills drawn last: `{ pills, dropped }`, each pill `{ id, text, x1, y1,
     // x2, y2, fontSize, faded, crowded }` on the canvas in pixels, `id` its line's,

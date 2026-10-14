@@ -519,6 +519,7 @@ pytest_add_cli_args_test_selection = [
     "tests/unit/graph/rules/test_the_cross_import_notation_is_read_one_way.py",
     "tests/unit/graph/rules/test_the_units_a_slice_rule_judges.py",
     "tests/unit/graph/rules/test_a_slice_rule_finding_names_what_it_judged.py",
+    "tests/unit/onboarding/scanner/test_init_and_the_public_api_rule_read_one_index.py",
     "tests/unit/application/reindex/test_the_slice_rules_are_written_to_the_index_whole.py",
     "tests/unit/onboarding/scanner/test_init_writes_the_fsd_rules.py",
     "tests/unit/graph/rules/test_a_matcher_selects_by_a_tag_prefix.py",

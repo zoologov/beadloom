@@ -41,7 +41,7 @@
 import { idRecord } from "../../../shared/ids/index.js";
 import { headEndsOf, headLengthOf, routePointsOf } from "../../../entities/graph-edges/index.js";
 import { AGGREGATE, COLLAPSED, GEOMETRY, MAP_MARKS, MAP_TITLE, OUTWARD, OWN_LINE, TALLY } from "../../../shared/map-levels/index.js";
-import { PILL_MARKS, pillStagesOf } from "../../../shared/geometry/index.js";
+import { PILL_MARKS, pathOutside, pillStagesOf } from "../../../shared/geometry/index.js";
 import { BEHIND, IN_FRONT, overlayCanvas } from "../../../shared/canvas-marks/index.js";
 
 /** How opaque a faded pill is drawn. */
@@ -122,9 +122,11 @@ export function pillOverlay(cy, container, { tokens, map }) {
    * drawn. Then the lines at the top, between two top-level nodes as the overview
    * draws them at every level, among what is at the top alone: its leaves and
    * their titles, every box at the top as the room it takes closed, open or not
-   * (`closedRoomsOf`), its lines and their arrowheads. Nothing a box opened draws
-   * inside it or out of it, such as its nodes' lines to the box that holds
-   * everything, moves them. Every other line's pill is placed last, around them all.
+   * (`closedRoomsOf`), its lines, each as it is drawn while its ends are closed
+   * (`closedBoxOf`), and their arrowheads. Nothing a box opened draws inside it or
+   * out of it, such as its nodes' lines to the box that holds everything, or a
+   * line into it run on across the room the box took drawn larger, moves them.
+   * Every other line's pill is placed last, around them all.
    */
   function placesNow(look) {
     const drawn = cy.edges().filter((edge) => edge.visible() && edge.data("route"));
@@ -141,10 +143,13 @@ export function pillOverlay(cy, container, { tokens, map }) {
     // The box that holds everything takes no room.
     const [topRoutes, belowRoutes, topRooms, belowRooms, topFixed, closedTops] = [[], [], [], [], [], []];
     const pointsOf = new Map();
+    // A line at the top as it is drawn while its top-level ends are closed: cut where it enters a box drawn larger.
+    const closedOf = (id) => (isTopBox(cy.getElementById(id)) ? map().closedBoxOf(id) : null);
     drawn.forEach((edge) => {
-      const points = routePointsOf(edge);
-      pointsOf.set(edge.id(), points);
       const ofTop = atTop(edge);
+      const route = routePointsOf(edge);
+      const points = (ofTop && map() && pathOutside(route, closedOf(edge.source().id()), closedOf(edge.target().id()))) || route;
+      pointsOf.set(edge.id(), points);
       (ofTop ? topRoutes : belowRoutes).push({ id: edge.id(), points });
       (ofTop ? topRooms : belowRooms).push(...headBoxesOf(edge, points));
       if (ofTop) topFixed.push(...headBoxesOf(edge, points, true));

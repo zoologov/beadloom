@@ -171,7 +171,7 @@ function nodeRules(tokens) {
         "border-style": "solid",
         "border-color": tokens[UNLAYERED_TONE],
         "text-wrap": "ellipsis",
-        "text-max-width": GEOMETRY.outerWidth - 20,
+        "text-max-width": GEOMETRY.cardLabelWidth,
       },
     },
     // The radius the map gives a drawn node's corners, in layout units (`shared/geometry/corners.js`); a node it gives none keeps Cytoscape's own.

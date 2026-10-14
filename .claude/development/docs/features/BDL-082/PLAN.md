@@ -22,7 +22,12 @@ graph TD
     S1P --> S2a[S2a init: groups, no pages check, both lists, 17 rules in the header]
     S1P --> S2b[S2b the overlays and the fixtures]
     S2a --> S2T[S2 test]
-    S2b --> S2T
+    S2a --> S2c[S2c the viewer on the 21-node fixtures]
+    S2c --> S2T
+    S2T --> S2fix[S2 fix from S2R]
+    S2fix --> S2fix2[S2 fix 2 + fix 3, from the re-review]
+    S2fix2 --> S2fix4[S2 fix 4, ruling 3 refined]
+    S2fix4 --> S2R
     S2T --> S2R[S2 review] --> S2W[S2 docs] --> S2P[S2 PR]
 ```
 
@@ -40,6 +45,11 @@ Parent: `beadloom-us5r`.
 | S1P | `beadloom-vv3e` | coordinator: S1 PR, merge on green | P0 | S1W |
 | S2a | `beadloom-6e2o` | dev: `fsd_layout.py` reads groups (D2); `rules_gen.py` writes no `pages` check, both segment lists, the rule over every layer, the 17-rule header (D3, D4, D5, D6) | P0 | S1P |
 | S2b | `beadloom-keki` | dev: the five fsd overlays restated (D6); the two FSD fixtures gain a group and an `@x` pair; the adopter harness expects the new findings | P0 | S1P |
+| S2c | `beadloom-us5r.1` | dev: the viewer's layout holds on the FSD fixtures with a group and `@x` pairs — 9 browser cases red on the new shapes (found by S2b, 2026-10-11) | P0 | S2a (the S2b edge removed 2026-10-11, owner: the fixtures landed in `c7963f7c`; no shared file) |
+| S2 fix | `beadloom-us5r.2` | dev: S2R's minors 1–3 and nitpick — one slice-index reader shared by `init` and the rule, nested groups at every depth or the limit pinned, one missing-parser line, the sentinel prefix once (added 2026-10-13) | P0 | S2T |
+| S2 fix 2 | `beadloom-us5r.3` | dev: a folder holding code at its top is never a group; groups descended only through code-free folders (re-review Major A, added 2026-10-13) | P0 | S2 fix |
+| S2 fix 3 | `beadloom-us5r.4` | dev: the viewer's test handle reports the drawn position, a `homes` reader added; dead branch removed (re-review Minor 5, added 2026-10-13) | P0 | S2 fix |
+| S2 fix 4 | `beadloom-us5r.5` | dev: owner ruling 3 refined, option (c) — code at a folder's top makes it a group only when a child holds a standard segment (added 2026-10-13) | P0 | S2 fix 2 |
 | S2T | `beadloom-q2el` | test: `init` on the probes and the fixtures; the eight adopter portals; the full tree once | P0 | S2a, S2b |
 | S2R | `beadloom-r8y2` | review: S2, bead id only | P0 | S2T |
 | S2W | `beadloom-rm5a` | tech-writer: the agent-prime SPEC, the onboarding README, the overlay docs, CHANGELOG | P0 | S2R |

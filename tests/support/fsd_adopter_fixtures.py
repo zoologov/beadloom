@@ -33,6 +33,9 @@ BASE_URL = "tsconfig baseUrl"
 PLATFORM_SUFFIX = "a platform suffix (.ios .android .web)"
 RE_EXPORT = "a re-export (export ... from)"
 DYNAMIC_IMPORT = "a dynamic import()"
+#: Not in BDL-080's list: the specification's cross-import API between two entities
+#: (BDL-082 S2b), which lands on the imported entity's node like any other import.
+CROSS_IMPORT_API = "an entity's cross-import API (entities/A/@x/B)"
 
 #: Every form, in the order a measurement reports them.
 FORMS = (
@@ -50,6 +53,7 @@ FORMS = (
     PLATFORM_SUFFIX,
     RE_EXPORT,
     DYNAMIC_IMPORT,
+    CROSS_IMPORT_API,
 )
 
 
@@ -154,6 +158,12 @@ VUE_FSD_FORMS = (
     FormImport(
         DYNAMIC_IMPORT, f"{_V}/app/providers/router.ts", "@/pages/checkout", f"{_V}/pages/checkout"
     ),
+    FormImport(
+        CROSS_IMPORT_API,
+        f"{_V}/entities/cart/model/cartStore.ts",
+        "@/entities/product/@x/cart",
+        f"{_V}/entities/product",
+    ),
 )
 
 _HAPTICS = "modules/trail-haptics"
@@ -211,6 +221,12 @@ RN_FSD_FORMS = (
     FormImport(PLATFORM_SUFFIX, f"{_V}/shared/ui/index.ts", "./button/Button", f"{_V}/shared/ui"),
     FormImport(RE_EXPORT, "app/index.tsx", "@/pages/home", f"{_V}/pages/home"),
     FormImport(RE_EXPORT, f"{_HAPTICS}/index.ts", "./src/TrailHapticsModule", _HAPTICS),
+    FormImport(
+        CROSS_IMPORT_API,
+        f"{_V}/entities/trail/model/trail.ts",
+        "@/entities/waypoint/@x/trail",
+        f"{_V}/entities/waypoint",
+    ),
 )
 
 #: Each FSD fixture's import forms, by stack. Vue has no ``.tsx``/``.jsx``, no platform
@@ -235,6 +251,14 @@ PLANTED: Mapping[str, frozenset[PlantedFinding]] = {
             PlantedFinding(
                 "fsd-layers", "error", f"{_V}/features/apply-coupon", f"{_V}/features/add-to-cart"
             ),
+            # A slice of the group features/payment importing the group's other slice:
+            # "there should be no code sharing in that folder" (BDL-082 S2b).
+            PlantedFinding(
+                "fsd-layers",
+                "error",
+                f"{_V}/features/payment/pay-button",
+                f"{_V}/features/payment/card-form",
+            ),
             # A deep import past entities/product's index.
             PlantedFinding(
                 "fsd-public-api",
@@ -251,6 +275,14 @@ PLANTED: Mapping[str, frozenset[PlantedFinding]] = {
             PlantedFinding("fsd-slice-shape", "warn", f"{_V}/features/start-hike"),
         }
     ),
+}
+
+#: The cross-import each fixture's code makes through an entity's ``@x`` API, as
+#: ``(importer, imported)`` slice folders: legal by the specification, so no finding, and
+#: the one derived edge the reindex marks ``via: @x`` (BDL-082 S2b).
+CROSS_IMPORTS: Mapping[str, frozenset[tuple[str, str]]] = {
+    "vue-fsd": frozenset({(f"{_V}/entities/cart", f"{_V}/entities/product")}),
+    "rn-fsd": frozenset({(f"{_V}/entities/trail", f"{_V}/entities/waypoint")}),
 }
 
 #: The Expo module's bridge: its TypeScript to its Swift and its Kotlin side, which no

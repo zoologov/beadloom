@@ -290,10 +290,37 @@ class TestReindexMissingParserWarning:
             clear_cache()
             result = runner.invoke(main, ["reindex", "--full", "--project", str(project)])
 
-        # Assert
+        # Assert: one line names the unread file and carries the runnable command; the
+        # older warning would repeat it (BDL-082 S2 fix, review S2R minor 1).
         assert result.exit_code == 0, result.output
-        assert "No parser available for" in result.output
-        assert "beadloom[languages]" in result.output
+        assert (
+            "1 TypeScript file, no parser installed — "
+            'install with: uv tool install "beadloom[languages]"'
+        ) in result.output
+        assert "No parser available" not in result.output
+
+    def test_reindex_warns_of_a_configured_language_it_found_no_file_of(
+        self, tmp_path: Path
+    ) -> None:
+        """The older warning stays where no file names the missing parser."""
+        from unittest.mock import patch
+
+        project = _minimal_project(tmp_path)
+        config_content = "languages:\n- .ts\nscan_paths:\n- src\n"
+        (project / ".beadloom" / "config.yml").write_text(config_content)
+        (project / "src").mkdir()
+
+        with patch("beadloom.context_oracle.code_indexer.get_lang_config", return_value=None):
+            from beadloom.context_oracle.code_indexer import clear_cache
+
+            clear_cache()
+            result = CliRunner().invoke(main, ["reindex", "--full", "--project", str(project)])
+        clear_cache()
+
+        assert result.exit_code == 0, result.output
+        assert "No parser available for .ts files." in result.output
+        assert 'uv tool install "beadloom[languages]"' in result.output
+        assert "no parser installed" not in result.output
 
     def test_reindex_no_warning_when_symbols_found(self, tmp_path: Path) -> None:
         """No warning when symbols are successfully extracted."""

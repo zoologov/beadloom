@@ -63,6 +63,10 @@ cohesion check. Work item `.claude/development/docs/features/BDL-082/`.
 1. **FSD by the specification 2.1** (BDL-082): `@x` cross-imports on the entities layer, slice
    groups, the pages-first calibration of the cohesion check, the Steiger plugin's version, the
    best practices in the overlay. Short; it blocks the first adoption.
+1b. **The CI trust boundary** (`beadloom-dlb6`, BDL-UX #321): a short standalone item — read-only
+   token by default with elevation on one job, the tech-writer job limited to same-repository
+   PRs, fork runs approved for every outside contributor, the stale protection comment corrected.
+   Independent of everything else; from an outside audit of 2026-10-11, verified by line.
 2. **The setup wizard v1** as a main-loop skill (`beadloom-nbpb`) — a thin protocol over `init`,
    `config-check`, `doctor` and `setup-*`, its second pass written from the adoption's findings
    before the React Native adoption — and **the graph reviewer v1** as a role (`beadloom-e6s2`)
@@ -92,7 +96,10 @@ A skill, not a subagent: it needs the person's decisions, like `/task-init`. It 
 through adopting Beadloom — detect the stack, `init`, read the graph together, declare the site
 and the forge, hooks, CI, branch protection, the roles in `flow.yml` — as a thin protocol over
 `init`, `config-check`, `doctor` and `setup-*`, every step's options enumerated, the report
-naming what it set up and what it did not. It knows nothing by prose: the keys live in
+naming what it set up and what it did not. It offers adoption **levels**, each useful alone —
+context only; plus architecture checks; plus documentation control; plus the agentic flow — so
+a person who stops at the first gets a working tool and a report of what was not set up (owner,
+2026-10-11; expected to be the first feedback from a teammate with one agent). It knows nothing by prose: the keys live in
 `config-check`, the sequence lives in its checklist, which closes #218 (`init`'s three
 hand-written step sequences). Place: after the first adoption writes the real checklist, before
 the second checks it. Ships via `setup-agentic-flow` with a Cursor adapter. **Needs `/task-init`.**
@@ -131,6 +138,13 @@ the role files are split by function — a short imperative core that survives a
 the narrative rationale in referenced companions — every role declares the size and shape of
 its hand-back, and `config-check` names a role without that contract; measured by the composed
 files' length before and after. The owner: «важный момент».
+Owner, 2026-10-11, slice **I the context says what the Gate judges** (`beadloom-ba9w.12`, BDL-UX
+#317, high): `ctx` surfaces 2 of the 17 rule types and its Markdown output none, and its matcher
+reads two of the linter's five fields — one applicability derivation for `lint` and `ctx`, and a
+list that is complete or says where it is not. With it, from the same outside audit (2026-10-11,
+every claim verified by file and line): the Gate's per-step exception boundary and an `ERROR`
+status (`.13`, #318), a token budget and focus-first chunk order for `ctx` (`.14`, #319), the
+subgraph contract at the node cap (`.15`, #320). Ranked with the rest after the Vue adoption.
 Owner, 2026-10-09, the template slice (`beadloom-cnty`) covers all six flow documents, not
 ACTIVE alone: header fields with a fixed vocabulary (`Status`, `Approval: approved|delegated by
 the owner on <date>`), no quotations in metadata, the section set and order enforced by the

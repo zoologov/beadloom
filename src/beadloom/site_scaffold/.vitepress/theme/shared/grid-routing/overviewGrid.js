@@ -83,7 +83,13 @@ export function sideRange(box, side, drawn = box) {
   // A corner the inset already all but clears keeps the inset's ports: a port in the last of its arc holds
   // the box's corners that little rounder instead (`shared/geometry/corners.js`), unseen, and no line moves for it.
   const corner = radius > inset + CORNER_SLACK ? radius : 0;
-  return [Math.max(low + inset, drawnLow + corner), Math.min(high - inset, drawnHigh - corner)];
+  const range = [Math.max(low + inset, drawnLow + corner), Math.min(high - inset, drawnHigh - corner)];
+  if (drawn === box) return range;
+  // A laid-out box drawn larger keeps a port through its own middle however near a corner of the drawn box it
+  // stands: the drawn box's corner then takes the room the line's end leaves it (`shared/geometry/corners.js`),
+  // as any node's does. A small box drawn flush with a side of its drawn box had no port on that axis otherwise.
+  const middle = (low + high) / 2;
+  return [Math.min(range[0], middle), Math.max(range[1], middle)];
 }
 
 /** The first index of the sorted `tracks` at or past `value`. */

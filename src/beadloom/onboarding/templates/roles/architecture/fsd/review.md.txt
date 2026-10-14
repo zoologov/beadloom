@@ -1,13 +1,15 @@
-<!-- overlay:fsd — FSD boundary review checklist + annotation vocabulary. -->
+<!-- overlay:fsd — FSD boundary review checklist by the specification (2.1) + annotation vocabulary. -->
 ## ARCHITECTURE (Feature-Sliced Design)
 
-Verify the change respects FSD layering:
+Verify the change respects FSD layering as feature-sliced.design 2.1 states it:
 ```
 app → pages → widgets → features → entities → shared
 ```
-- No import from a lower layer to a **higher** one; no cross-slice import within the same layer (must go through a public API / a lower layer).
-- **Public API:** another slice is entered through its `index` only; an import past it is a finding (`slice_public_api`; Steiger `no-public-api-sidestep`, while its `public-api` reports a slice with no `index`) → **Major**.
-- Segments stay within their role (`ui` / `model` / `api` / `lib` / `config`); business logic lives in `model`, IO in `api`; a slice's top holds its segments and its `index` (`slice_shape`).
-- **Cohesion:** a slice holds one nameable responsibility, and its layer's `check` rule (`max_symbols`) is its signal. A slice re-tagged into another layer to pass, or a limit raised in `rules.yml` without the measurement and the reason, is gaming → **Major**; a slice cut into fragments with no responsibility of their own is shatter → **Major**.
+- No import from a lower layer to a **higher** one. Two slices of one layer do not import each other, except through the entities layer's cross-import API: entity B importing `entities/A/@x/B`, which A declares for B alone. An `@x` outside `entities`, an `@x` file imported by a third slice, or a crossing with no `@x` → **Major**.
+- **Slice groups:** a slice group is a folder of related slices with no node of its own; each slice in it is a node `<layer>-<group>-<slice>`, and the group's slices share no code — an import between two of them, or a code file at the group's top, → **Major**.
+- **Public API:** another slice is entered through its `index` (or its `@x/<slice>` entry) only; an import past it is a finding (`slice_public_api`; Steiger `no-public-api-sidestep`, while its `public-api` reports a slice or a segment with no public API) → **Major**. The unsliced layers have public APIs too: a segment of `shared` or `app` is entered through its own `index`, and in `shared/ui` and `shared/lib` a per-component index (`shared/ui/button/index`) is an entry.
+- **Barrels:** `export *` in a public API, or an index on a segment of a sliced layer (there is no `index` on a segment of a sliced layer — the slice's `index` is its public API), → **Minor**; no Beadloom rule reports either, so the review is where they are caught.
+- **Segments by purpose:** a segment's name "describes the purpose of the content, not its essence". A custom segment (`analytics`) is fine; `components`, `hooks`, `types` and the rest of `slice_shape`'s `discouraged:` list are findings (warn) → **Minor**, and a name added to `segments:` without its reason → **Minor**. Business logic lives in `model`, IO in `api`.
+- **Cohesion:** a slice holds one nameable responsibility, and its layer's `check` rule (`max_symbols`) is its signal. `pages` is pages-first: there is no `check` rule for `pages`, and a page that keeps its own UI and logic is the specification's recommendation, not a finding. A slice re-tagged into another layer to pass, or a limit raised in `rules.yml` without the measurement and the reason, is gaming → **Major**; a slice cut into fragments with no responsibility of their own is shatter → **Major**.
+- **`insignificant-slice` stays on** for a project that follows the specification; switching it off is a reasoned exception, stated beside the switch in the Steiger config, as Beadloom's own portal does. A switch-off with no reason → **Minor**.
 - Every new slice is a `component` node tagged with its layer (`fsd-<layer>`), `part_of` the frontend service (a segment of `shared`/`app` is `part_of` that layer's container), its modules carry `beadloom:component=<slice-ref>`, and it has a doc — else `module-coverage` (error) and `lint --strict` go red. Illegal import or missing annotation/doc → **Major**.
-

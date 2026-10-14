@@ -20,7 +20,11 @@ pill stands are described under "Counts" in [the viewer's page](graph-viewer.md)
   - **a line's count on a pill**, an opaque rounded label with a thin border in the line's
     colour, at the place `site-shared-geometry`'s `pillStagesOf` finds on its line, worked out
     again only when what is drawn or the step of the map's scale changes. While the pointer rests
-    on a node, every other pill is faded, as their lines are;
+    on a node, every other pill is faded, as their lines are. Since BDL-082 S2c a line between
+    two top-level nodes is read as it is drawn while its ends are closed, cut where it enters a
+    box drawn larger (`map.closedBoxOf`, `pathOutside`): opening a box the overview drew off its
+    laid-out centre runs its lines on across the room the box took, and that moved three pills of
+    other lines on this repository's portal before;
   - **a closed box's tally**, `in N · out M` in its lower right corner once the box is large
     enough on screen, the edges the budget leaves out included;
   - **a node's "+N"**, the count of its outward edges, on a badge across the middle of its right

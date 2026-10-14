@@ -177,7 +177,20 @@ Not derivable: the five FSD overlays that restate these rules in prose — `src/
 
 Not derivable: the scaffold's `src/beadloom/site_scaffold/steiger.config.js` and `src/beadloom/site_scaffold/package.json:26,29` (the pinned Steiger pair), owned by node `vitepress-site`, are not Python and are reached by no axis above.
 
-### Nodes across the five sections
+### (f) The viewer on the 21-node fixtures — `src/beadloom/site_scaffold/.vitepress/theme/features/overview-map/model/overviewPlan.js` (S2c, added 2026-10-13)
+
+> **Derived by:** `beadloom impact src/beadloom/site_scaffold/.vitepress/theme/features/overview-map/model/overviewPlan.js` over `src/beadloom`
+> **Seed:** none — no name the target reaches performs a declared effect under rule `reaches-an-effect-sink`, so every axis below is unresolved and not empty
+> **Unresolved:** 1 no-seed, 1 node-owns-unread-files, 1 unreadable-target
+
+| Axis | Node | Sites | Owns unread | In scope | Why |
+|---|---|---|---|---|---|
+| co-writers | — | unresolved — this derivation reads Python source and could not read the target, so nothing that file defines was read and no caller or writer of it was found | — | ? | the derivation cannot reach JavaScript (`beadloom-j1ke`); ruled by the owner below |
+| callers | — | unresolved — the same | — | ? | the same |
+
+Ruled in by the owner's two rulings on `beadloom-us5r.1` (2026-10-11: every title inside its box, the legend's one sample per colour of a mixed line) rather than by a derived row, because `impact` reads Python only: `site-overview-map`, `site-graph-viewer`, `site-shared-grid-routing`, `site-shared-map-levels`, `site-shared-geometry`, `site-graph-edges`, `site-edge-pills` (all part_of `vitepress-site`), and `vitepress-site` for the shipped browser specs under `e2e/`. S2c was not in the approved PLAN; it was opened on S2b's measurement (nine browser cases red on the 21-node fixtures) and its edge to S2b removed by the owner on 2026-10-11. The pre-commit scope check still reports every S2c path `outside-the-declared-axes`: it reads this section's tables as zero rows (BDL-UX #316), so the advisory stays until #316 closes and is not a finding against S2c.
+
+### Nodes across the six sections
 
 Seven distinct nodes: `rule-engine`, `import-resolver`, `graph-loader` (part_of `graph`);
 `agent-prime`, `doc-generator` (part_of `onboarding`); `site-generation` (part_of
@@ -218,6 +231,8 @@ source the inner folder, the layer's tag; the group has no node; a code file at 
 top is a finding of `slice_shape` ("a group shares no code"). `rules_gen.py` unchanged in
 shape. Cases: `features/auth/` holding `login` and `register` → two nodes; `register → login`
 a `fsd-layers` error; no false "no index".
+
+*Refined by the owner on 2026-10-13 (option (c), after S2R):* a folder holding code at its top is a group only when a child holds a standard segment, and a slice when its children carry only an index; a code-free folder is a group when its children are slices, at any depth. Both measured probes (a pre-migration slice with an index-bearing component folder; the specification's group with a shared file) hold.
 
 ### D3 — pages-first (S2; ruling 4)
 

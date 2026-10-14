@@ -164,7 +164,7 @@ Any good indexer will answer the first two. None will answer the rest, and that 
 
 You write it down once, in that same graph. Inside, it is simple: **nodes** (services, domains, features, components) and **edges** between them (`part_of`, `uses`, `depends_on`). The graph can be raised from code you already have with `beadloom init --bootstrap`, then reviewed and maintained by hand.
 
-On reindex, Beadloom merges three sources into one SQLite database: the graph itself, the documentation bound to its nodes, and the code parsed through tree-sitter for symbols. After that the graph can be questioned: `beadloom ctx <node>` returns everything about a node at once, `beadloom why <node>` shows what breaks if you touch it.
+On reindex, Beadloom merges three sources into one SQLite database: the graph itself, the documentation bound to its nodes, and the code parsed through tree-sitter for symbols. After that the graph can be questioned: `beadloom ctx <node>` returns a node's context in one bundle, `beadloom why <node>` shows what an edit to it can reach.
 
 ## What is built on the graph
 
@@ -172,7 +172,7 @@ The graph on its own is just data. What makes it useful is what stands on top of
 
 - **[One Gate, and checks per step](#a-rule-becomes-a-command).** Every check under a single exit code. And `beadloom guard` checks one step of the process on its own and returns one of the six verdicts [described above](#a-check-that-passed-and-a-check-with-nothing-to-check-are-different-facts).
 - **[The agentic development flow](#the-agentic-development-flow)** — configurable and tool-agnostic. Five roles: explore, dev, test, review and tech-writer. The adapters for Claude Code and Cursor are equals.
-- **Context on request, for people and agents alike.** `ctx` returns the code, documentation and rules in force for a node. `why` computes the blast radius. `prime` packs an overview of the project into under two thousand tokens. `search` runs full-text over nodes and documentation.
+- **Context on request, for people and agents alike.** `ctx` returns a node's code symbols, documentation, tests and the freshness of its documents, and its `--json` output adds the `deny` and `require` rules the node falls under. It does not list the rules of the other types yet. `why` computes the blast radius. `prime` packs an overview of the project into under two thousand tokens. `search` runs full-text over nodes and documentation.
 - **[Architecture as code](#architecture-as-code).** Boundaries and rules in YAML, checked by `beadloom lint` and blocked by the Gate.
 - **[Tests on the graph](#tests-are-bound-to-the-graph).** Every node shows which tests belong to it. Rules watch over the suite itself, and mutation testing shows whether the tests would notice a fault.
 - **Spec-Driven: the spec first, the code after.** Three documentation spaces: **TO-BE** — what you intend to build, **AS-IS** — what is built, **WORKING** — working notes taken as a task proceeds. The last are exempt from the freshness check on purpose: a progress note describes the work, not the code. `beadloom docs spaces` shows all three and finds tasks whose work is finished while the promised document never appeared.
@@ -301,7 +301,7 @@ rules:
       to:   "beadloom/infrastructure/**"
 ```
 
-Each entry declares exactly one of 15 authoring keys: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, `module_coverage`, `scenario_coverage`, `doc_area_coherence`, `summary_facts`, `test_binding`, `test_import_boundary` and `scenario_binding`. The full reference is in [docs/architecture.md](docs/architecture.md).
+Each entry declares exactly one of 17 authoring keys: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, `module_coverage`, `scenario_coverage`, `doc_area_coherence`, `summary_facts`, `test_binding`, `test_import_boundary`, `scenario_binding`, `slice_public_api` and `slice_shape`. The full reference is in [docs/architecture.md](docs/architecture.md).
 
 A rule that **cannot match anything** reports itself: a matcher that selects no node, a typo in a path pattern, an exemption that suppresses nothing. Their count appears in `lint`'s summary line, so the declared number of rules cannot promise more than was checked.
 
@@ -355,7 +355,7 @@ The workflow checks the repository out with its whole history (`fetch-depth: 0`)
 | `init --bootstrap` | Raise the graph from the structure of the code |
 | `reindex` | Rebuild the index from the graph, documentation and code |
 | `ctx REF_ID` | A context pack for a node (Markdown or `--json`) |
-| `why REF_ID` | What depends on a node and what breaks when it changes |
+| `why REF_ID` | What depends on a node and what an edit to it can reach |
 | `search QUERY` | Full-text search over nodes and documentation |
 | `lint` | Check the architecture rules (`--strict` for CI) |
 | `sync-check` | Documentation freshness against the code |

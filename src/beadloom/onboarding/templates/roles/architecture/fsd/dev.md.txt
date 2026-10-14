@@ -1,33 +1,51 @@
-<!-- overlay:fsd — Feature-Sliced Design layer/slice rules, the graph they map to, and the commands that check them. -->
+<!-- overlay:fsd — Feature-Sliced Design by its specification (2.1): layers, slices, groups, segments, public APIs, the graph they map to, and the commands that check them. -->
 ## ARCHITECTURE (Feature-Sliced Design)
 
-This project follows **Feature-Sliced Design (FSD)** — discover the live layer/slice map with `beadloom graph` / `beadloom ctx`, never hardcode it.
+This project follows **Feature-Sliced Design (FSD)** as feature-sliced.design 2.1 states it — discover the live layer/slice map with `beadloom graph` / `beadloom ctx`, never hardcode it.
 
 ### Layers + import direction
 ```
 app → pages → widgets → features → entities → shared
 ```
-- A module may import only from layers **below** it; **a lower layer can never import a higher one** (`shared` imports nothing above it; `app` may import anything). No cross-imports between slices of the SAME layer — go through `shared`/`entities` or lift to a higher layer. (`processes` is deprecated since FSD 2.1 and carries no tag.)
-- Each layer is split into **slices** (a business domain, e.g. `features/auth`), and each slice into **segments** (`ui`, `model`, `api`, `lib`, `config`).
+- A module may import only from layers **below** it; **a lower layer can never import a higher one** (`shared` imports nothing above it; `app` may import anything). `processes` is deprecated by the specification and carries no tag.
+- Two slices of ONE layer do not import each other. The one sanctioned exception is the cross-import API of the entities layer, below. Anything else two slices share moves down a layer (`entities`, `shared`), or the code that needs both moves up.
+- Each sliced layer (`pages`, `widgets`, `features`, `entities`) is split into **slices** (a business domain, e.g. `features/auth`), and each slice into **segments**. `shared` and `app` have segments and no slices.
 - Boundaries are machine-enforced (`beadloom lint --strict`); a new shadow module fails `module-coverage` (error).
+
+### Pages first
+- FSD 2.1 is pages-first: "we recommend starting with pages, and possibly even stopping there". Start in `pages`: keep a page's UI and logic in its own slice, and extract a piece to a lower layer when a second page reuses it, not before. Until then duplication between two pages is allowed — it is cheaper than a slice nobody else uses.
+- "There's no limit to how much code you can place in a page slice as long as your team still finds it easy to navigate", so `beadloom init` writes no `check` rule for `pages`: a page carries no size signal.
+- "not everything needs to be a feature": a feature is an interaction users care about, and reuse on several pages is the specification's indicator for one. A widget is a large self-sufficient block, reused or one of several on its page.
 
 ### The graph a slice maps to
 - A **slice** (`features/auth`) is a `component` node tagged with its layer (`fsd-features`), `part_of` the frontend service — the root node of a single-app repository, the app's node in a monorepo. A layer directory is no node: two slices of one layer share no container, so an import between them is a same-layer crossing the layer rule reports.
+- A **slice group** is a folder of a sliced layer holding closely related slices: "there should be no code sharing in that folder". A folder is a slice when it holds a standard segment or an `index`, and a folder holding neither is a group when it has no code file at its top and a slice below it (at any depth) or when it has code at its top and a folder in it holds a standard segment, and one slice otherwise; the group has no node, and each slice in it is one node with the ref id `<layer>-<group>-<slice>` (`features/auth/login` → `features-auth-login`; a group inside a group adds its name, `features/account/settings/profile` → `features-account-settings-profile`). Two slices of one group are two slices of one layer: an import between them is a crossing, and a code file at the group's top is a finding. A slice not yet split into segments (`features/checkout/{Checkout.vue, components/Summary/index.ts}`) stays one node with all its files, and the shape rule reports what stands at its top. Steiger reads a slice by its segments alone, which is the test a folder with code at its top is held to here: in `features/checkout` it finds no slice and judges none of those files as one, where Beadloom writes one slice, `features-checkout`.
 - `shared` and `app` have segments, not slices. Each is a `component` container tagged with its layer, and its segments (`shared/geometry`) are `component` nodes with the same tag, `part_of` that container — so segments of one layer import one another freely.
 - The layer rule is a `layers` rule over the six `fsd-*` tags with `scope:` the frontend service. Read it in `.beadloom/_graph/rules.yml`, never from memory.
 
 ### A slice is entered through its public API
-- Another slice reaches yours through its `index` (its public API) and nowhere else. An import that lands past another slice's `index` is a finding: `slice_public_api` in the graph, Steiger's `no-public-api-sidestep` file by file (its `public-api` reports a slice that has no `index` at all). Inside your own slice, import relatively rather than through your own `index`.
-- A slice's top holds its segments and its `index` and nothing else (`slice_shape`).
+- Another slice reaches yours through its public API and nowhere else: its `index` (an environment-specific `index.server.ts` counts as the same entry). An import that lands past it is a finding: `slice_public_api` in the graph, Steiger's `no-public-api-sidestep` file by file. Steiger's `public-api` reports a slice or a segment with no public API at all.
+- **Cross-imports between entities (`@x`).** When entity B needs entity A, A declares a public API for B alone: `entities/A/@x/B` (a `B.ts` file or a `B/` folder with its `index`), imported by entity B alone, read "A crossed with B". The specification asks for it on the entities layer only, and to keep such imports few. An `@x` file imported by a third slice is a finding, and so is an `@x` outside `entities` (Steiger accepts one on any sliced layer; the rules here follow the specification's text).
+- **The public API of `shared` and `app`:** a segment of `shared` or `app` is entered through its own `index`. In `shared/ui` and `shared/lib` each component or library carries an index of its own (`shared/ui/button/index`), which is an entry, not a node: `@/shared/ui/button` is clean, `@/shared/ui/button/Button` is past it.
+- Inside your own slice, import relatively and write the full path rather than going through your own `index`; that is how a circular import through the barrel is avoided.
+
+### Barrel pitfalls
+- No `export *` in a public API: list what the slice exposes by name. Steiger has `no-wildcard-exports`, off in `recommended`, and no Beadloom rule reads it — turn it on in the Steiger config or catch it in review.
+- There is no `index` on a segment of a sliced layer (`features/comments/ui/index.ts` beside `features/comments/index.ts`): the slice's index is its one public API. No Beadloom rule reports it; catch it in review.
+- In `shared/ui` and `shared/lib`, a per-component index rather than one barrel over everything, so a page that needs a button does not load the carousel.
+
+### Segments by purpose
+- The standard segments are `ui`, `api`, `model`, `lib`, `config`; `shared` also commonly holds `routes` and `i18n`, and `app` holds `routes`, `store`, `styles`, `entrypoint`. A custom segment is fine when its name "describes the purpose of the content, not its essence" — `analytics` is a purpose; `components`, `hooks`, `types` are essences and bad segment names.
+- `slice_shape` (warn) reports a folder at a slice's top whose name is in its `discouraged:` list (Steiger's `segments-by-purpose` names) and not in its `segments:` list, and a code file at a slice's top other than its `index`. Inside a segment, organise the code as you see fit. Both lists are yours to edit in `rules.yml`, with the reason beside the edit.
 
 ### Cohesion (FSD)
 - A slice holds one responsibility you can name in a phrase. A slice that needs "and" is split into slices of the layers its parts belong to — a piece every slice needs moves down to `shared`, a business interaction to `features`.
-- Its size is a SIGNAL per layer: a `check` rule per FSD tag with `max_symbols` over the symbols the slice owns (`beadloom init` writes 80 for `widgets` and 60 for every other layer, calibrated on Beadloom's own portal). A slice past it is split by responsibility; it is never re-tagged into another layer to dodge the count, and a limit is recalibrated in `rules.yml` with its reason.
-- Not shattered either: a feature one widget alone uses is still a feature when it has a responsibility of its own. Steiger's `insignificant-slice` reports it, and that report is weighed, not obeyed.
+- Its size is a SIGNAL per layer, never a target: a `check` rule per FSD tag with `max_symbols` over the symbols the slice owns. `beadloom init` writes 80 for `widgets`, 60 for `app`, `features`, `entities` and `shared`, and no `check` rule for `pages`, calibrated on Beadloom's own portal. A slice past its signal is a candidate for a split by responsibility; it is never re-tagged into another layer to dodge the count, and a limit is recalibrated in `rules.yml` with its reason.
+- Not shattered either. The migration guide calls Steiger's `insignificant-slice` and `excessive-slicing` "the most helpful rules": `insignificant-slice` stays on and reports an entity or feature only one page uses, which is merged into that page unless it has a responsibility of its own the team names. Beadloom's own portal switches it off, for a reason written beside the switch in its `steiger.config.js` (each slice is a graph node, so beads touching disjoint slices run in parallel): an example of a reasoned exception, not a default.
 
 ### Annotation vocabulary (FSD)
 Emit on every new/changed module so it maps to its graph node:
-- `// beadloom:component=<slice-ref>` — the slice's node (`features/auth` → its ref), or the segment's node inside `shared`/`app`.
+- `// beadloom:component=<slice-ref>` — the slice's node (`features/auth` → its ref, `features/auth/login` in a group → `features-auth-login`), or the segment's node inside `shared`/`app`.
 (Use the language's comment syntax.) A new module with no annotation (and no matching node `source`) is invisible to the graph and fails `module-coverage` (error) — classify it as a node with a doc.
 
 ### Completion commands (FSD)
@@ -37,4 +55,3 @@ beadloom reindex && beadloom sync-check && beadloom lint --strict   # the graph:
 beadloom ci                           # the Gate: graph and documents
 ```
 The Gate does not run Steiger. When the project's pipeline runs it, the Gate's verdict names it under `Not run by this gate:` — so a green Gate is not a green Steiger, and you run both.
-

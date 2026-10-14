@@ -29,11 +29,11 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/test_import_boundary.py` — `test_import_boundary`: chooses which recorded TEST imports a boundary judges, then hands them to `forbid_import`'s own evaluator (BDL-074 C3).
 - `rules/scenario_binding.py` — `scenario_binding`: a scenario's `@node:` tag against the node folder its feature file sits in. Whether the scenario's steps execute that node is NOT judged (see below) (BDL-074 C3).
 - `rules/slices.py` — the two Feature-Sliced Design slice rules, `slice_public_api` and `slice_shape`, judged per slice over the slice's folder on disk, and `slice_rule_inert_reason`, which `liveness.py` reads (BDL-080 S3c). Since BDL-082 S1b they read feature-sliced.design 2.1: `@x` cross-import APIs, the segments of `shared` and `app` with per-component indexes, and `slice_shape` as a deny-list by purpose (see **The slice rules** below).
-- `rules/slice_units.py` — what the two slice rules judge, read off the graph and the folders (BDL-082 S1b): `read_units` returns a `SliceUnits` whose carriers are split into **slices**, **containers** (a carrier another carrier sharing one of its tags is `part_of`: the `shared` or `app` layer node) and **segments** (a carrier `part_of` a container), plus the slice **groups** no node claims. It also holds the helpers both slice modules share: `INDEX`, `SLICED_LAYER_FOLDERS`, `stem`, `inside`, `has_index`, `node_sources`, `carriers`.
+- `rules/slice_units.py` — what the two slice rules judge, read off the graph and the folders (BDL-082 S1b): `read_units` returns a `SliceUnits` whose carriers are split into **slices**, **containers** (a carrier another carrier sharing one of its tags is `part_of`: the `shared` or `app` layer node) and **segments** (a carrier `part_of` a container), plus the slice **groups** no node claims. It also holds the helpers both slice modules share: `INDEX`, `SLICED_LAYER_FOLDERS`, `stem`, `inside`, `has_index`, `node_sources`, `carriers`. `is_index_file` is the one reader of what an `index` is — a code file whose name before its first dot is `index`, over the import resolver's `MODULE_EXTENSIONS` — used by `has_index` and, through the package's re-export, by `init`'s FSD layout, so `init` and `fsd-public-api` agree on which folder has a public API (BDL-082 S2 fix).
 - `rules/cross_imports.py` — feature-sliced.design's `@x` notation, read once for two rules (BDL-082 S1a): `located` (which file of a slice an import reaches) and `cross_import_name` (whether that file is an `@x` API, and for which slice), which `slice_public_api` reads; and the **edge fact** the reindex records from the same two answers (`edge_cross_import`, `edge_extra`) and the layer rule reads back (`read_cross_import_facts` → `CrossImportFact`). See **`@x` on a same-layer edge** below.
 - `rules/suite_tables.py` — the `test_files` and `test_imports` tables read for the suite rules (`IndexedTestFile` carries each file's `path`, `ref_id`, `placement` and, since BDL-074 F1, its recorded `kind`), and `NodeSelection` (which nodes a matcher selects, and whether a node is one of them or `part_of` one). Every reader returns `None` for an index written before those tables existed, so a rule says "reindex" rather than reporting every node untested (BDL-074 C3).
 - `rules/listed_exemptions.py` — `ExemptionLedger`: what a `ListedExemption` does — which entry excuses a subject, which entries excuse nothing (dead) and which exemptions are past their `until` date while still excusing something (expired). `excused` counts the subjects the entries excused in a run, and `exemptions_used` (BDL-074 F1) how many exemptions excused at least one, which the `files` leg states as `excused by K exemption(s)`. The counterpart of `exemptions.py` for exemptions that list paths or node ids rather than a from/to glob pair (BDL-074 C3).
-- `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports.
+- `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports. Since BDL-082 S2a the re-exports include `DEFAULT_SLICE_SEGMENTS` and `DEFAULT_DISCOURAGED_SEGMENTS` (from `types.py`), which `init` reads to write `fsd-slice-shape` and to tell a slice by its standard segments, and since the S2 fix `is_index_file` (from `slice_units.py`); the `rule_engine.py` shim re-exports all three.
 
 ---
 
@@ -786,10 +786,11 @@ its `tags` whose `source` is a folder on disk. `read_units` sorts them by the gr
   group.
 
 Containers and segments exist only when a rule's `tags` name the unsliced layers' tags
-(`fsd-shared`, `fsd-app`). The rules `init` writes as of BDL-082 S1 name the sliced layers'
-tags alone, so on a freshly initialised project neither rule judges `shared` or `app` until a
-rule carries those tags (measured by S1T: 0 findings with `init`'s tags, 4 with the two tags
-added, on one probe).
+(`fsd-shared`, `fsd-app`). Since BDL-082 S2a the `fsd-public-api` rule `init` writes names
+them beside the four sliced layers' tags, so a freshly initialised project has the segments of
+`shared` and `app` judged for their public API; `fsd-slice-shape` names the sliced layers' tags
+alone. Before S2a, `init` wrote the sliced layers' tags only, and S1T measured 0 findings with
+those tags and 4 with the two tags added, on one probe.
 
 #### `slice_public_api`
 

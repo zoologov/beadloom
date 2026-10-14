@@ -40,7 +40,9 @@ commands and `CLAUDE.md` rather than reimplemented per artifact. The order is:
    all four `ru` fragments ship.
 3. one **ARCHITECTURE** overlay — `ddd` or `fsd` (peers)
    (`templates/roles/architecture/<arch>/<role>.md.txt`): the methodology's
-   layer/boundary rules + the `# beadloom:` annotation vocabulary.
+   layer/boundary rules + the `# beadloom:` annotation vocabulary. The `fsd`
+   overlays state feature-sliced.design 2.1 since BDL-082 S2b, the slice groups
+   included; the `dev` overlay names which folder of a sliced layer is a group.
 4. one+ **STACK** overlays in **sorted** order — `python` / `fastapi` /
    `javascript` / `typescript` / `vuejs`
    (`templates/roles/stack/<stack>/<role>.md.txt`): stack idioms + lint/type/test
@@ -122,4 +124,7 @@ Tests: `tests/test_role_configurator.py`, `tests/test_flow_composition.py`,
 `tests/test_the_explore_role_is_composed_like_the_others.py` (the shared fragments reaching every
 role), and
 `tests/integration/services/bd_seam/test_what_the_bd_seam_claims_holds_for_the_installed_bd.py` (the
-`_landing` and `_tracker` texts against the behaviour they describe)
+`_landing` and `_tracker` texts against the behaviour they describe). The five `fsd` overlays'
+statements of feature-sliced.design 2.1 (`@x` on entities only, slice groups, pages-first,
+custom segments by purpose, the barrel pitfalls, the public API of `shared` and `app`; BDL-082
+S2b) are held by `tests/unit/onboarding/role_composer/test_the_fsd_overlays_say_the_specification.py`.

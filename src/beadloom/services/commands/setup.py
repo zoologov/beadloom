@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 import click
 
-from beadloom.services.commands._root import _warn_missing_parsers, main
+from beadloom.services.commands._root import _echo_unread_code, _warn_missing_parsers, main
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -1764,6 +1764,7 @@ def init(
         if result.get("reindex"):
             ri = result["reindex"]
             click.echo(f"  Index: {ri['symbols']} symbols, {ri['imports']} imports")
+            _echo_unread_code(project_root, prefix="  ")
             _echo_test_binding(project_root, prefix="  ")
         if result.get("import"):
             click.echo(f"  Imported: {len(result['import'])} documents")
@@ -1853,10 +1854,12 @@ def init(
             f"{ri.imports_indexed} imports"
             + (f", {dep_count} dependency edges" if dep_count else "")
         )
+        unread_named = _echo_unread_code(project_root, prefix="\u26a0 ")
         _echo_test_binding(project_root, prefix="\u2713 ")
 
-        # Warn about missing language parsers when symbols == 0.
-        if ri.symbols_indexed == 0:
+        # Warn about missing language parsers when symbols == 0, unless the line above
+        # already named the files no parser read.
+        if ri.symbols_indexed == 0 and not unread_named:
             _warn_missing_parsers(project_root)
 
         _verdict_on_the_generated_graph(project_root, graph_before=graph_before)
@@ -1925,5 +1928,6 @@ def init(
 
             do_reindex(project_root)
         if "reindex" in result:
+            _echo_unread_code(project_root, prefix="  ")
             _echo_test_binding(project_root, prefix="  ")
         _verdict_on_the_generated_graph(project_root, graph_before=graph_before)

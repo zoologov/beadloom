@@ -10,6 +10,17 @@ So the units a graph is written from are:
   per layer would be a tagged container shared by every slice in it, and the layer rule
   reads two ends inside one tagged container as internal: two widgets importing each
   other would pass.
+- **a slice of a group** (BDL-082 S2a, RFC D2): a folder of a sliced layer is a slice
+  when it holds a standard segment or an ``index`` at its top; a folder that holds
+  neither and has a slice below it is a *group*, which the specification gives "no code
+  sharing". The group has no unit; each folder in it
+  is one slice, named ``<layer>-<group>-<slice>``, so ``register`` importing ``login`` is
+  an edge between two slices of one layer. Groups are read at any depth: a group inside
+  a group is read as its slices too, named ``<layer>-<group>-<group>-<slice>``. A folder
+  holding code at its top is a group only when a folder in it holds a standard segment,
+  and otherwise one slice (the owner's ruling of 2026-10-13): a slice not yet split into
+  segments stays one unit with all its files, while the code at a group's top belongs to
+  no unit, and the shape rule reports both.
 - **a container** for ``app`` and for ``shared``, and **a segment** for each folder in
   them, the segment a part of its container. Two segments of one layer import each other
   freely in FSD, which the tagged container says to the layer rule.
@@ -32,8 +43,7 @@ Swift target does: the whole ``src/`` and the routes folder when the layers are 
 ``src/``, else the layer and legacy folders at the root. Code elsewhere is clustered as
 before.
 
-Not read: slice groups (a folder of slices inside a layer is read as one slice, and the
-shape rule names its folders), and an FSD tree inside one package of a monorepo.
+Not read: an FSD tree inside one package of a monorepo.
 """
 
 # beadloom:domain=onboarding
@@ -44,6 +54,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from beadloom.graph.rules import DEFAULT_SLICE_SEGMENTS, is_index_file
 from beadloom.onboarding.presets import FSD_LAYERS, fsd_root
 from beadloom.onboarding.scanner.constants import (
     _CLUSTER_SKIP,
@@ -156,14 +167,11 @@ def _layer_units(project_root: Path, layer_folder: Path) -> list[FsdUnit]:
     layer = layer_folder.name
     rel = layer_folder.relative_to(project_root).as_posix()
     if layer not in SEGMENTED_LAYERS:
-        units = []
-        for slice_folder in _subfolders(layer_folder):
-            files = _code_files(project_root, slice_folder)
-            if files:
-                name = f"{layer}-{_sanitize_ref_id(slice_folder.name)}"
-                directory = f"{rel}/{slice_folder.name}"
-                units.append(FsdUnit(name, directory, layer, SLICE, None, files))
-        return units
+        return [
+            unit
+            for folder in _subfolders(layer_folder)
+            for unit in _slices_of(project_root, [folder], layer)
+        ]
     segments = [
         FsdUnit(
             f"{layer}-{_sanitize_ref_id(segment.name)}",
@@ -184,6 +192,75 @@ def _layer_units(project_root: Path, layer_folder: Path) -> list[FsdUnit]:
     if not own and not segments:
         return []
     return [FsdUnit(layer, rel, layer, CONTAINER, None, own), *segments]
+
+
+def _holds_a_segment(folder: Path) -> bool:
+    """Whether *folder* holds a standard segment at its top: Steiger's own slice test."""
+    return any(
+        child.is_dir() and child.name in DEFAULT_SLICE_SEGMENTS for child in folder.iterdir()
+    )
+
+
+def _is_slice(folder: Path) -> bool:
+    """Whether *folder* holds a standard segment or an ``index`` code file at its top.
+
+    The ``index`` is read by the public-API rule's own reader, so ``init`` and
+    ``fsd-public-api`` agree on which folders have a public API.
+    """
+    return _holds_a_segment(folder) or any(is_index_file(child) for child in folder.iterdir())
+
+
+def _holds_code_at_top(folder: Path) -> bool:
+    """Whether *folder* holds a code file directly, not only in its folders."""
+    return any(child.is_file() and child.suffix in _CODE_EXTENSIONS for child in folder.iterdir())
+
+
+def _is_group(folder: Path) -> bool:
+    """Whether *folder*, no slice itself, is a group of the slices below it.
+
+    The owner's ruling 3 as refined on 2026-10-13: a folder with no code at its top is a
+    group when a folder in it is a slice or a group, at any depth; a folder with code at its
+    top is a group only when a folder in it holds a standard segment, and otherwise a slice,
+    so a slice not yet split into segments stays whole while a group with a shared file in it
+    keeps its slices. A linked folder is not looked into: a link back up the tree would
+    never end.
+    """
+    if folder.is_symlink():
+        return False
+    children = _subfolders(folder)
+    if _holds_code_at_top(folder):
+        return any(_holds_a_segment(child) for child in children)
+    return any(_is_slice(child) or _is_group(child) for child in children)
+
+
+def _slices_of(project_root: Path, path: list[Path], layer: str) -> list[FsdUnit]:
+    """The slices the folder at the end of *path*, in a sliced layer, is read as.
+
+    A folder that is no slice but a group (:func:`_is_group`, RFC D2) has no unit, and
+    every folder in it is read the same way: a slice, a group in its turn, or one slice of
+    the group whether slice-shaped or not, since a group shares no code and a folder read as
+    a slice makes an import of it from a sibling a same-layer crossing. Each slice is named
+    by the whole *path*, ``<layer>-<group>-...-<slice>``.
+    """
+    folder = path[-1]
+    if _is_slice(folder) or not _is_group(folder):
+        return _slice_unit(project_root, path, layer)
+    return [
+        unit
+        for child in _subfolders(folder)
+        for unit in _slices_of(project_root, [*path, child], layer)
+    ]
+
+
+def _slice_unit(project_root: Path, path: list[Path], layer: str) -> list[FsdUnit]:
+    """One slice unit for the folder at the end of *path*, or none when it holds no code."""
+    folder = path[-1]
+    files = _code_files(project_root, folder)
+    if not files:
+        return []
+    name = "-".join([layer, *(_sanitize_ref_id(part.name) for part in path)])
+    directory = folder.relative_to(project_root).as_posix()
+    return [FsdUnit(name, directory, layer, SLICE, None, files)]
 
 
 def read_fsd_layout(project_root: Path, *, skip: Collection[str] = ()) -> FsdLayout:

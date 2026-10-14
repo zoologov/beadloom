@@ -29,11 +29,18 @@ The edge kinds the viewer draws, how each one looks, and which edges a walk foll
   aggregated line that carries edges of one style keeps that style's dash: `uses` is dotted at
   the overview too. One that carries several styles (`SEVERAL_STYLES`, from
   `site-shared-map-levels`) is drawn solid in the colour of the kind it carries most (RFC D8),
-  and while such a line is drawn the legend adds an entry of its own, `SEVERAL_KINDS`: "several
-  kinds: solid, in the colour of the kind it carries most", with a solid sample in a neutral
-  tone (the owner's ruling of 2026-10-10). At a level that draws no such line the entry is
-  absent. On this repository's portal, measured by S4T on 2026-10-10, 17 lines of several kinds
-  are drawn at the whole-graph fit and none at full detail.
+  and while such a line is drawn the legend adds an entry of its own (the owner's ruling of
+  2026-10-10). Since BDL-082 S2c, by the owner's ruling of 2026-10-11, that is one entry per
+  colour such lines are drawn in, `severalKindsOf(key)`: "several kinds, mostly uses at runtime"
+  with a solid indigo sample, "several kinds, mostly depends on" with a solid grey one, and
+  "several kinds, one of them a violation" where a line carries a violation. The single grey
+  sample S4b drew stood for an indigo line it did not look like. `drawnStyles` now holds the
+  styles of the lines of one style only and `drawnSeveral` the styles of the lines of several,
+  so an entry is drawn exactly while a line in its colour and its dash is; the browser case
+  compares the sample's colour and dash with the line's, not the entry's words. At a level that
+  draws no such line no such entry is drawn. On this repository's portal the line
+  `mcp-server -> doc-sync`, drawn solid indigo, carries two edges, `uses: mcp-server->doc-sync`
+  and `depends_on: mcp-server->sync-check`, a tie the first of them decides (measured 2026-10-11).
 - **Walks** (`model/adjacency.js`). A neighbourhood follows every drawn kind in the direction its
   arrow points (`adjacencyOf`). The impact walk goes from a node to what depends on it
   (`dependentsOf`), and a table names, per edge kind, the end that depends on the other. In the
@@ -67,8 +74,6 @@ The edge kinds the viewer draws, how each one looks, and which edges a walk foll
 - `EDGE_STYLES` (each entry with `strength`, and `dash` in pixels for a dashed look),
   `DRAWN_KINDS`, `VIOLATION_KEY`, `CONTAINMENT_KIND`, `DOT_PATTERN`, `contractStyleKey(look)`,
   `dashOf(look)`.
-- `SEVERAL_KINDS` (the legend entry of a line of several kinds: `legend`, `line`, `arrow`,
-  `tone`, `strength`).
 - `isDrawnKind(kind)`, `isViolation(edge)`, `styleKeyOf(edge)`, `legendKeysOf(styleKeys)` (the
   style keys of the lines drawn now; it took the data edges before BDL-080 S4b).
 - `NEIGHBOURHOOD_KINDS`, `DEPENDENT_ENDS`, `DEPENDENCY_KINDS`, `edgeKeyOf(edge)`,
@@ -80,8 +85,10 @@ The edge kinds the viewer draws, how each one looks, and which edges a walk foll
 - `LINE_MARKS`, `arrowScaleOf`, `cornerRadiiOf`, `dashOffsetOf`, `dashOnScreen`,
   `edgeCornerRadiiOf`, `endHeadLength`, `headLengthOf`, `lineWidthOf`, `routePointsOf`.
 - `EdgeLegend` (Vue component): props `keys`, `colours` (style key -> its rest colour) and
-  `several` (whether a line of several kinds is drawn now; it then renders the
-  `[data-legend-several]` entry).
+  `several` (the style keys the lines of several kinds drawn now are drawn in; it renders one
+  `[data-legend-several="<key>"]` entry per key, in that key's colour, solid). `SEVERAL_KINDS`
+  is gone since BDL-082 S2c: `severalKindsOf(key)` in `model/edgeKinds.js` gives the look, which
+  the legend imports from inside the slice.
 
 ## Depends on
 

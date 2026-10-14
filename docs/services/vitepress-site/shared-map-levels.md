@@ -51,6 +51,8 @@ from the map's lines.
   data keys `MAP_TITLE`, `MAP_BOX`, `TALLY` and `OUTWARD`. `scaleOf(element)` reads the map's
   scale an element carries.
 - `nodeSizes.js` — a node's sizes in layout units (`GEOMETRY`: a card 163 by 47 with its border,
+  the widest its own label is drawn, `cardLabelWidth` 143, past which the stylesheet cuts it
+  short and a top-level leaf keeps the map's title instead (BDL-082 S2c),
   the room an open box keeps above its children for its title, `boxTitleRoom` 36, and the borders
   and status mark); `drawnSizeOf`, the size a node's shape is drawn at, read from its data as
   the stylesheet sizes it; and `rimOf`, how far its border reaches outside that shape (none for

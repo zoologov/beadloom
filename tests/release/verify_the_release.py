@@ -47,7 +47,7 @@ The checks, in the order they run and are reported:
   ``.github/workflows/beadloom-portal.yml`` with ``fetch-depth: 0``.
 * **fsd init** -- on the Feature-Sliced project ``init --yes`` exits 1 and names the planted
   cross-import among the code's crossings of the rules it wrote.
-* **fsd preset**, **fsd rules**, **fsd steiger** -- it writes ``preset: fsd``, the nine FSD
+* **fsd preset**, **fsd rules**, **fsd steiger** -- it writes ``preset: fsd``, the eight FSD
   rules into ``rules.yml`` and a ``lint:fsd`` script into the project's ``package.json``.
 * **fsd lint** -- ``lint --strict`` exits 1 and reports the planted cross-import
   ``features-cart -> features-auth``, which only the Vite alias ``init`` read resolves.
@@ -139,18 +139,22 @@ POWERED_BY = "Powered by Beadloom"
 PORTAL_NODE = "quayside-portal"
 SITE_ALIAS_TARGET = "service"
 
-#: The nine rules ``init`` writes for a Feature-Sliced frontend.
+#: The eight rules ``init`` writes for a Feature-Sliced frontend: no cohesion check for
+#: ``pages``, which FSD 2.1 makes pages-first (BDL-082 S2a; 9.0.0 wrote nine).
 FSD_RULES = (
     "fsd-layers",
     "fsd-public-api",
     "fsd-slice-shape",
     "fsd-cohesion-app",
-    "fsd-cohesion-pages",
     "fsd-cohesion-widgets",
     "fsd-cohesion-features",
     "fsd-cohesion-entities",
     "fsd-cohesion-shared",
 )
+
+#: The rule ``init`` no longer writes: a release that writes it is wrong however many
+#: of :data:`FSD_RULES` it holds (BDL-082 S2a, pages-first).
+NOT_FSD_RULES = ("fsd-cohesion-pages",)
 
 #: The cross-import planted inside the features layer, through the Vite alias ``@features``.
 PLANTED_CROSSING = ("features-cart", "features-auth")
@@ -1097,7 +1101,7 @@ def check_fsd_init(room: Room, project: Path, report: Report) -> None:
 
 
 def check_fsd_scaffold(room: Room, project: Path, report: Report) -> None:
-    """What ``init`` wrote: ``preset: fsd``, the nine rules, and the ``lint:fsd`` script."""
+    """What ``init`` wrote: ``preset: fsd``, the eight rules, and the ``lint:fsd`` script."""
     beadloom = project / ".beadloom"
     documents, unread = _yaml_documents(
         room, project, beadloom / "config.yml", beadloom / "_graph" / "rules.yml"
@@ -1113,6 +1117,7 @@ def check_fsd_scaffold(room: Room, project: Path, report: Report) -> None:
     listed = rules.get("rules") if isinstance(rules, dict) else None
     names = [str(rule.get("name")) for rule in listed or [] if isinstance(rule, dict)]
     missing = [name for name in FSD_RULES if name not in names]
+    missing += [f"no {name}" for name in NOT_FSD_RULES if name in names]
     report.record(
         f"fsd rules: init writes the {len(FSD_RULES)} FSD rules into rules.yml",
         "behaviour",

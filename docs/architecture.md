@@ -4,7 +4,7 @@
 
 > 📘 **reference** — overview/deep-dive, not tied to a single code symbol. It aligns with (does not replace) the generated [`/architecture` C4 overview](services/cli.md#beadloom-docs-site) on the published portal.
 
-Beadloom turns Architecture as Code into Architectural Intelligence — structured, queryable knowledge about your system that humans and AI agents consume in <20ms.
+Beadloom turns Architecture as Code into Architectural Intelligence — structured, queryable knowledge about your system that humans and AI agents consume.
 
 ## System Design
 
@@ -64,7 +64,7 @@ The **`component` kind** (BDL-051) and the **`module-coverage` lint** (promoted 
 
 The `application/reindex/` orchestrator drives the indexing pipeline, calling
 each domain in order; the resulting SQLite index is then read back by Context
-Oracle for sub-20ms context bundles.
+Oracle for context bundles.
 
 ```
 YAML Graph Files (.beadloom/_graph/*.yml)
@@ -173,12 +173,16 @@ cross-import API A opens to B alone: the reindex records `via: "@x"` on the deri
 import behind it goes through that API, and a `layers` rule accepts the edge only on the layer its
 `layers:` list names `entities`, as the specification says ("only use this notation on the Entities
 layer"). Steiger accepts `@x` on every layer, so `features/a/@x/b` is a finding here and clean
-there. A slice group (`features/auth/{login,register}`) shares no code at its top. `init` 9.0.0 reads a
-group as one slice, and BDL-082 S2 makes it write a node per inner slice. Custom segments are fine when named by purpose
-(`analytics/`), and the names the specification and Steiger discourage (`components/`, `hooks/`,
-`types/`) are findings. `shared` and `app` are made of segments with a public API each, judged once
-the public-API rule carries their tags, and neither layer nor its segments is judged for shape, so
-`app/store` is clean here where Steiger reports it. The full rules, findings and differences are in
+there. A slice group (`features/auth/{login,register}`) shares no code at its top. `init` 9.0.0
+read a group as one slice; since BDL-082 S2 it writes a node per slice in it,
+`<layer>-<group>-<slice>`. A folder of a sliced layer holding neither a standard segment nor an
+`index` is a group when it has no code file at its top and a slice below it, at any depth, or
+when it has code at its top and a folder in it holds a standard segment, and one slice
+otherwise. Custom segments are fine when named by purpose (`analytics/`), and the names the
+specification and Steiger discourage (`components/`, `hooks/`, `types/`) are findings. `shared`
+and `app` are made of segments with a public API each, judged when the public-API rule carries
+their tags, as the rule `init` writes does since BDL-082 S2, and neither layer nor its segments is
+judged for shape, so `app/store` is clean here where Steiger reports it. The full rules, findings and differences are in
 the [rule-engine SPEC](domains/graph/features/rule-engine/SPEC.md).
 
 > Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / `scenario_coverage` / `doc_area_coherence` / `summary_facts` / `test_binding` / `test_import_boundary` / `scenario_binding` / `slice_public_api` / `slice_shape` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
@@ -232,7 +236,8 @@ the `forbid` and `layers` rules use (their internal `rule_type` is `forbid` and 
 
 ### Cache Architecture
 
-Context bundles use a two-tier cache to achieve <20ms response times:
+Context bundles use a two-tier cache. No response time is measured for it, so this document
+states none (BDL-UX #322):
 
 **L1 — In-memory (ContextCache):**
 - Key: `(ref_id, depth, max_nodes, max_chunks)`

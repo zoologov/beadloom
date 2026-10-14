@@ -13,7 +13,8 @@ What the cases hold, each read from the fixture's code in
 - ``init`` exits with the code its fixture's code earns (1 on the Vue fixture, whose code
   breaks the error rules twice on purpose; 0 on the React Native one) and writes the six
   layers itself, and the layer rule judges edges;
-- ``lint`` reports exactly the planted findings;
+- ``lint`` reports exactly the planted findings, and none on the cross-import each fixture
+  makes through an entity's ``@x`` API, whose edge the reindex marks ``via: @x`` (BDL-082);
 - every import form of the RFC's list resolves to the folder its reader names, and every
   import into the project resolves at all;
 - the Expo module's TypeScript is joined to its Swift and its Kotlin side.
@@ -35,6 +36,7 @@ from click.testing import CliRunner
 from beadloom.services.cli import main
 from tests.support.adopter_portals import FIXTURES_BY_STACK, FSD_LAYERS, adopt
 from tests.support.fsd_adopter_fixtures import (
+    CROSS_IMPORTS,
     EXPO_BRIDGES,
     EXPO_ROUTER_FILES,
     EXPO_ROUTER_ROUTES,
@@ -101,7 +103,7 @@ def adopted(tmp_path_factory: pytest.TempPathFactory) -> Callable[[str], Adopted
 
 def test_the_two_fsd_fixtures_are_claimed_stacks() -> None:
     assert _FSD_STACKS == ["vue-fsd", "rn-fsd"]
-    assert set(IMPORT_FORMS) == set(PLANTED) == set(_FSD_STACKS)
+    assert set(IMPORT_FORMS) == set(PLANTED) == set(CROSS_IMPORTS) == set(_FSD_STACKS)
 
 
 @pytest.mark.parametrize("stack", _FSD_STACKS)
@@ -159,6 +161,27 @@ def test_lint_reports_exactly_the_findings_the_fixtures_code_plants(
 
     assert found == PLANTED[stack]
     assert fixture.lint_exit == fixture.portal.fixture.init_exit
+
+
+@pytest.mark.parametrize("stack", _FSD_STACKS)
+def test_the_cross_import_through_an_entitys_x_api_is_the_one_edge_marked_via_x(
+    adopted: Callable[[str], Adopted], stack: str
+) -> None:
+    """BDL-082 S2b: the specification's ``entities/A/@x/B``, imported by entity B alone, is
+    a legal crossing; the reindex records it on the derived edge, and the lint above
+    names no finding on it."""
+    fixture = adopted(stack)
+    sources = fixture.sources()
+
+    marked = {
+        (sources[src], sources[dst])
+        for src, dst, extra in fixture.query(
+            "SELECT src_ref_id, dst_ref_id, extra FROM edges WHERE kind = 'depends_on'"
+        )
+        if json.loads(extra or "{}").get("via") == "@x"
+    }
+
+    assert marked == CROSS_IMPORTS[stack]
 
 
 @pytest.mark.parametrize("stack", _FSD_STACKS)

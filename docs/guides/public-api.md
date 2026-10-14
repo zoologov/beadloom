@@ -59,7 +59,8 @@ makes it.
    vocabulary as much as on the key that carries it. The portal's other JSON files,
    `dashboard.data.json` and `landscape.data.json`, are not outputs on this list: their keys
    carry no promise (item 5).
-   Key added after 9.0.0 (BDL-082 S1a, unreleased): an edge of `export` carries `via` with the
+   Key added after 9.0.0, in the next minor release (BDL-082 S1a, unreleased): an edge of
+   `export` carries `via` with the
    vocabulary `@x` when every import behind the edge goes through the target slice's `@x`
    cross-import API, and no `via` key otherwise. The export stays `schema_version` 2.
 4. **The MCP tools** the server lists, with their arguments and the keys of what they return. The
@@ -89,7 +90,8 @@ makes it.
    [`dashboard-data.md`](../services/vitepress-site/dashboard-data.md), the second is described
    in [`landscape-data.md`](../services/vitepress-site/landscape-data.md), and neither carries a
    promise.
-   Key added after 9.0.0 (BDL-082 S1a, unreleased): a `depends_on` edge carries `via` with the
+   Key added after 9.0.0, in the next minor release (BDL-082 S1a, unreleased): a `depends_on`
+   edge carries `via` with the
    vocabulary `@x`, on the same edges and with the same meaning as in `export` (item 3), beside
    `violation`. The file stays schema 2.
 6. **The files generated for an adopter**: what `init`, `docs site`, `docs generate`,
@@ -110,7 +112,14 @@ makes it.
    `lint:fsd` script in `package.json`; and, for any project whose `babel.config.*`,
    `.babelrc` or `vite.config.*` declares aliases, the `imports.aliases` block of
    `.beadloom/config.yml`.
-   Key added after 9.0.0 (BDL-082 S1b, unreleased): `discouraged:` of a `slice_shape` rule, a
+   Changed after 9.0.0, in the next minor release (BDL-082 S2a, unreleased): for a
+   Feature-Sliced frontend `init` writes eight rules where 9.0.0 wrote nine. The cohesion
+   check for `pages` is no longer written, `fsd-public-api` also carries `fsd-shared` and
+   `fsd-app`, and `fsd-slice-shape` is written with `discouraged:`. A slice inside a slice
+   group is a node of its own, `<layer>-<group>-<slice>`. `init` writes `rules.yml` only where
+   none exists, so a project initialised by 9.0.0 keeps the file it has.
+   Key added after 9.0.0, in the next minor release (BDL-082 S1b, unreleased): `discouraged:`
+   of a `slice_shape` rule, a
    list of folder names a slice's top is discouraged from holding. Omitted, it is the 69 names
    of the `segments-by-purpose` rule of `@feature-sliced/steiger-plugin`, in the release the
    portal scaffold pins. `segments:` keeps its
@@ -144,7 +153,7 @@ promise this document makes.
 |---|---|
 | A command, option, key, MCP tool or generated file is removed or renamed | MAJOR |
 | A value is removed from a vocabulary, or a value keeps its name and changes its meaning | MAJOR |
-| The same input gets a different exit code, including a configuration that was accepted and is now refused | MAJOR |
+| The same input gets a different exit code, including a configuration that was accepted and is now refused, except a false finding removed (below) | MAJOR |
 | A reported value that a `--fail-if` threshold judges moves on a project nobody edited | MAJOR |
 | A data file schema the released viewer cannot read | MAJOR |
 | A command, option, key, MCP tool or generated file is added | MINOR |
@@ -155,6 +164,27 @@ promise this document makes.
 A value added to a vocabulary is minor because a reader is expected to tolerate a value it does
 not know, as the portal viewer does with an activity level it has not seen. A value removed is
 major because a reader that matched it stops matching, and nothing tells it so.
+
+**A false finding removed is a fix** (the owner's ruling of 2026-10-11, BDL-082). The exit-code
+row above is about a reading the project promised. When a rule read an input against the very
+convention it claims to check, and a release corrects that reading, the findings it removes were
+never part of the promise:
+
+| Change to an exit code | Version part |
+|---|---|
+| A release removes findings that were false on an input a rule read against its own convention, and no input moves from passing to failing | MINOR, or PATCH when the release adds nothing |
+| A release adds findings on an input nobody changed | MAJOR |
+
+The two cases are told apart by what the rule meant before the release. The first release
+named against this guide gave the rules input they had never had: imports the release before
+it did not read became `depends_on` edges, so `lint --strict` could fail on a project nobody
+edited. That was a new semantic, and its change log listed it under *Breaking*, together with
+the exit code it moved from 1 to 0 at the same time. BDL-082 corrected a misread convention:
+`fsd-layers` and `fsd-public-api` reported the specification's own `@x` example as findings,
+and feature-sliced.design 2.1 allows that import on the entities layer. That example moves
+from exit 1 to 0, and no probe written from the specification's reference pages
+moved from 0 to 1 (measured by `beadloom-wvzg` on 2026-10-11). So BDL-082 is a minor release,
+and its change log measures both directions.
 
 A threshold verdict is the case that is easiest to miss. `status --debt-report --fail-if score>N`
 returns its exit code from a score, so a release that changes how the score is counted changes an

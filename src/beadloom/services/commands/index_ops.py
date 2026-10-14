@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import click
 
-from beadloom.services.commands._root import _warn_missing_parsers, main
+from beadloom.services.commands._root import _echo_unread_code, _warn_missing_parsers, main
 
 if TYPE_CHECKING:
     from beadloom.infrastructure.git_activity import GitHistory
@@ -83,6 +83,7 @@ def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
         click.echo(f"Symbols: {result.symbols_indexed}")
         click.echo(f"Imports: {result.imports_indexed}")
         click.echo(f"Rules:   {result.rules_loaded}")
+    unread_named = _echo_unread_code(project_root)
     _echo_tests_line(project_root)
     _echo_activity_line(result.activity_history)
     if result.errors:
@@ -98,8 +99,9 @@ def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
         for info in result.infos:
             click.echo(f"  [info] {info}")
 
-    # Warn about missing language parsers when symbols == 0.
-    if result.symbols_indexed == 0 and not result.nothing_changed:
+    # Warn about missing language parsers when symbols == 0, unless the unread-code line
+    # already named the files no parser read.
+    if result.symbols_indexed == 0 and not result.nothing_changed and not unread_named:
         _warn_missing_parsers(project_root)
 
 

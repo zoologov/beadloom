@@ -385,7 +385,14 @@ boxes; no box moves.
   Since S4f a plate also keeps off a line drawn as itself, which no route moves. A node that
   such a line ends at is drawn larger only by a box that keeps the line outside it, its end on
   the border (`keepsOutside`); otherwise its title, broken onto two lines, is drawn in its
-  laid-out box where it fits there.
+  laid-out box where it fits there. **Since BDL-082 S2c every title is drawn inside its box**
+  (the owner's ruling of 2026-10-11): a box that cannot grow centred grows off its centre,
+  always holding its laid-out box, and one no clear box fits is drawn at the least box for its
+  title all the same; the plates are retired for nodes, but on an overview held at the smallest
+  zoom (ruling 11), and the project box's title keeps its plate. An edge drawn as itself between
+  two top-level nodes is routed by the overview's plan too, so it keeps the overview's pitch and
+  head runs at any scale, and no such line holds a grown box back (see
+  [the overview map](overview-map.md)).
 - **Calm by default.** Lines at rest are thin and light. Hovering or selecting a box brings its
   lines and pills forward (`is-in-front`) and fades the rest (`is-behind`), and the pointer gone,
   all are back at rest. A closed box large enough on screen says how many edges come in and go out
@@ -444,8 +451,10 @@ that leaves the page removes only its own. Records keyed by a node id have no pr
 `outwardMarks` answer such a record before the map has drawn a count and after. It reads:
 
 - the canvas: `ready` (false while the view is animated or a change is still to be read),
-  `visibleIds`, `selection`, `state`, `positions`, `pan`, `zoom`, `move` (the last move that
-  framed a selection or a search, `site-navigate-graph`'s `lastMove()`: `{ animated, from, to,
+  `visibleIds`, `selection`, `state`, `positions` (where each node is drawn now) and `homes`
+  (where it stands at every level that draws it as laid out; the two differ only for a node the
+  overview draws off its laid-out centre, BDL-082 `beadloom-us5r.4`), `pan`, `zoom`, `move`
+  (the last move that framed a selection or a search, `site-navigate-graph`'s `lastMove()`: `{ animated, from, to,
   frames, done }`, or `null` before any), `boxes` (page coordinates), `nodeBoxes` (drawn boxes,
   graph coordinates), `colours`, `statusLooks` (with `mark`);
 - the looks: `nodeLooks` (fill, border and its position, title, status mark, shape, size,
@@ -463,7 +472,8 @@ that leaves the page removes only its own. Records keyed by a node id have no pr
 - the map: `openBoxes`, `level` (`{ fitZoom, zoom, scale, extent, open, collapsed }`),
   `aggregatedEdges`, `ownLines`, `outwardMarks` (each node's "+N"), `hiddenEdgeCounts`;
 - the overview: `overviewPlan` (`{ ms, unit, routed, failed, grown, broken, plates,
-  projectPlate }`), `pills` (`{ pills, dropped }`, each pill `crowded` or not), `titles`,
+  projectPlate }`, `routed` naming an edge drawn as itself as `"\nedge\n" + id` and `plates`
+  empty but on an overview held at the smallest zoom, since BDL-082 S2c), `pills` (`{ pills, dropped }`, each pill `crowded` or not), `titles`,
   `boxTitles`, `boxTallies`.
 
 Since BDL-080 S1c `visibleIds`, `boxes`, `nodeLooks` and the handle's other node readers count
@@ -501,7 +511,18 @@ What stays in `widgets/graph-viewer/`:
   `map()`.
 - `model/canvasLayout.js` — `layoutInputOf`, `applyGeometry`, `fitCompounds`, `isLoop`; a node's
   `stack` is read from `STACK_LANES`.
-- `model/canvasMap.js` — `canvasMap`, the level drawn on Cytoscape. Its parts were split out by
+- `model/canvasMap.js` — `canvasMap`, the level drawn on Cytoscape. Since BDL-082
+  `beadloom-us5r.6`, `reachOf` holds the frame around the boxes drawn larger at a level with
+  their border (`REACH_RIM`, a card's border, 1.5 layout units), so the frame is one size at
+  every zoom of a level and the whole-graph fit is one zoom wherever it is pressed from. Before,
+  a box drawn against the frame widened it by its border at the fit and not once a zoom had
+  shrunk it: on `vue-fsd` a Fit pressed after two steps in landed at 0.51408 where the page
+  opened at 0.51318 (macOS, measured), the class the Linux runner's wider fonts turned into a red
+  case. Since `beadloom-us5r.7`, `useGraphCanvas.redraw` sizes every box on every redraw, a
+  level drawn again only because a box drawn larger changed size included: one zoom step in
+  shrank such boxes, the compounds were not sized again, and Cytoscape centred the frame on its
+  children's new bounding box, 18.9 layout units off its place, so a Fit pressed there measured
+  routes past the frame (0.51811 against 0.51820 on `vue-fsd` in a heavy font, measured). Its parts were split out by
   job in `beadloom-btkd.17` and now live in `site-overview-map`; it re-exports none of their
   names (`beadloom-btkd.20`). Since BDL-080 S4b it also returns `isTopBox(id)` and
   `closedRoomsOf(id)`, which the pills are placed around, and `ofTopLevel` no longer counts a top
@@ -583,8 +604,9 @@ handle by oracles in `e2e/support/`, which import nothing from the theme.
   portal with two edges more (`support/perturbedGraph.js`) and an adopter-sized graph in no layer
   ranks.
 - `e2e/overview.spec.js` (support `overview.js`): the overview's routing, gaps, pills, titles,
-  plates, grown and broken titles, the frame, the plan kept across zoom and opening, calm hover,
-  tallies, and pure cases of the router and the pill search.
+  plates, grown and broken titles, the frame, the plan kept across zoom and opening, a box drawn
+  off its laid-out centre found back at its home once it opens (BDL-082 `beadloom-us5r.4`), calm
+  hover, tallies, and pure cases of the router and the pill search.
 - `e2e/map.spec.js`: the levels, the budget and its counts, a filter composed with the level, the
   root's loops, marks keeping their size, the landscape without levels.
 - `e2e/levels.spec.js` (support `levels.js`): opening by readability, the sibling rule, "+N", own

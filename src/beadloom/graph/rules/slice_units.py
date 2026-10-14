@@ -52,12 +52,19 @@ def inside(path: str, folder: str) -> bool:
     return path == folder or path.startswith(f"{folder}/")
 
 
+def is_index_file(path: Path) -> bool:
+    """Whether *path* is a public API file: a code file named ``index``.
+
+    The one reader of what an ``index`` is, for the slice rules and for ``init``, which
+    reads a folder holding one as a slice (BDL-082 S2 fix): two readers over two extension
+    sets disagreed on ``index.py`` one way and on ``index.mjs`` the other.
+    """
+    return path.is_file() and stem(path.name) == INDEX and path.suffix in MODULE_EXTENSIONS
+
+
 def has_index(folder: str, project_root: Path) -> bool:
     """Whether *folder* holds a code file named ``index`` at its top."""
-    return any(
-        path.is_file() and stem(path.name) == INDEX and path.suffix in MODULE_EXTENSIONS
-        for path in (project_root / folder).iterdir()
-    )
+    return any(is_index_file(path) for path in (project_root / folder).iterdir())
 
 
 def node_sources(conn: sqlite3.Connection) -> list[tuple[str, str]]:

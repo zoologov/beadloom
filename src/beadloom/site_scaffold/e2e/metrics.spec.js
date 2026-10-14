@@ -19,10 +19,10 @@
 // on the graph the viewer was built on the fit once landed where the floor held
 // at the size itself, by rounding (10.24 px), and on a Feature-Sliced frontend an
 // 11 px title is drawn at 9.93 px (11 x 1.25 x a fit zoom of 0.7218, measured).
-// A title stands inside its box, or on the plate the overview's plan stood it
-// on: the plan does so only where no box holds it (`overview.spec.js` holds
-// that, and that no line runs under a plate), and every plate's title is broken
-// onto two lines where its name breaks (the owner's ruling, 2026-10-10).
+// Every title stands inside its box: a box too small for its title is drawn
+// larger, its title broken onto two lines where its name breaks if one line
+// does not fit, and no top-level node's title stands on a plate (the owner's
+// ruling, 2026-10-11, which retired the plates of 2026-10-10).
 //
 // What the cases cannot see. They read the state the viewer drew through its test
 // handle and compare no pixels. Arrowheads are the triangles Cytoscape's source
@@ -361,13 +361,12 @@ test.describe("on this portal's architecture graph", () => {
   });
 
   for (const layout of [...LAYOUTS, IN_A_WIDE_FONT]) {
-    test(`at the whole-graph fit every closed box and top-level node is titled at 10 px within a step of the map's scale, inside its box or on the plate the plan stood it on${layout.name}`, async ({ page, request }) => {
+    test(`at the whole-graph fit every closed box and top-level node is titled at 10 px within a step of the map's scale, inside its box${layout.name}`, async ({ page, request }) => {
       const data = await layout.data(request);
       const tree = treeOf(data);
       await openLayout(page, layout, data);
       const view = await viewOf(page);
       const floor = layout.served ? SMALLEST_TITLE_PX / half : await smallestTitleOnScreen(page);
-      const plated = new Set((await viewer(page, "overviewPlan")).plates);
       const boxes = await screenBoxes(page, view);
       const titles = await viewer(page, "titles");
       const zoom = await viewer(page, "zoom");
@@ -382,12 +381,12 @@ test.describe("on this portal's architecture graph", () => {
         if (!title && !(label && !label.isParent && label.labelValign === "center" && label.fontSize * zoom >= floor - 0.01)) wrong.push(`${id}: no title`);
         else if (!title) continue;
         else if (title.fontSize < floor - 0.01) wrong.push(`${id}: ${title.fontSize.toFixed(2)} px`);
-        else if (!title.inside && !plated.has(id)) wrong.push(`${id}: on a plate the plan did not stand it on`);
-        else if (title.inside && !(title.x1 >= boxes[id].x1 - 0.5 && title.x2 <= boxes[id].x2 + 0.5 && title.y1 >= boxes[id].y1 - 0.5 && title.y2 <= boxes[id].y2 + 0.5))
+        else if (!title.inside) wrong.push(`${id}: on a plate outside its box`);
+        else if (!(title.x1 >= boxes[id].x1 - 0.5 && title.x2 <= boxes[id].x2 + 0.5 && title.y1 >= boxes[id].y1 - 0.5 && title.y2 <= boxes[id].y2 + 0.5))
           wrong.push(`${id}: outside its box`);
       }
       const project = (await viewer(page, "boxTitles")).find((title) => title.id === tree.wrapper);
-      measured(`${top.length} top-level node(s); titles ${spread(top.filter((id) => byId.has(id)).map((id) => byId.get(id).fontSize))} px, floor ${floor.toFixed(2)} px; on a plate: ${[...plated].join(", ") || "none"}; ${wrong.length} wrong; the project box's title ${project ? `${project.fontSize.toFixed(2)} px${project.plate ? " on a plate" : ""}` : "not drawn"}`);
+      measured(`${top.length} top-level node(s); titles ${spread(top.filter((id) => byId.has(id)).map((id) => byId.get(id).fontSize))} px, floor ${floor.toFixed(2)} px; ${wrong.length} wrong; the project box's title ${project ? `${project.fontSize.toFixed(2)} px${project.plate ? " on a plate" : ""}` : "not drawn"}`);
 
       expect(wrong).toEqual([]);
     });

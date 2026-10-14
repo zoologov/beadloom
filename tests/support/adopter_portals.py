@@ -282,8 +282,12 @@ FSD_LAYERS = ("app", "pages", "widgets", "features", "entities", "shared")
 
 #: A Vite + Vue 3 + TypeScript + Pinia storefront in the FSD layout under ``src/``, with
 #: two folders from before the move beside the layers (BDL-080 S3d, RFC D6). Its code
-#: breaks the rules ``init`` writes twice on purpose (a cross-import inside ``features``
-#: and a deep import past ``entities/product``'s index), so ``init`` exits 1 and names them.
+#: breaks the rules ``init`` writes three times on purpose (a cross-import inside
+#: ``features``, one between the two slices of the slice group ``features/payment``, and a
+#: deep import past ``entities/product``'s index), so ``init`` exits 1 and names them. Its
+#: ``entities/cart`` imports ``entities/product/@x/cart``, the cross-import API the
+#: specification sanctions between entities, which is no finding (BDL-082 S2b). The group
+#: has no node; each slice in it is one, so the fixture has 20 modules and 21 nodes.
 VUE_FSD = AdopterFixture(
     stack="vue-fsd",
     project="heron-market",
@@ -302,6 +306,8 @@ VUE_FSD = AdopterFixture(
         "src/widgets/site-header",
         "src/features/add-to-cart",
         "src/features/apply-coupon",
+        "src/features/payment/card-form",
+        "src/features/payment/pay-button",
         "src/entities/cart",
         "src/entities/product",
         "src/shared",
@@ -321,6 +327,8 @@ VUE_FSD = AdopterFixture(
         ("src/pages/catalog", "src/widgets/site-header"),
         ("src/pages/checkout", "src/entities/cart"),
         ("src/pages/checkout", "src/features/apply-coupon"),
+        ("src/pages/checkout", "src/features/payment/card-form"),
+        ("src/pages/checkout", "src/features/payment/pay-button"),
         ("src/pages/checkout", "src/widgets/site-header"),
         ("src/widgets/product-grid", "src/entities/product"),
         ("src/widgets/product-grid", "src/features/add-to-cart"),
@@ -332,6 +340,10 @@ VUE_FSD = AdopterFixture(
         ("src/features/apply-coupon", "src/features/add-to-cart"),
         ("src/features/apply-coupon", "src/shared/lib"),
         ("src/features/apply-coupon", "src/shared/ui"),
+        ("src/features/payment/card-form", "src/entities/cart"),
+        ("src/features/payment/pay-button", "src/features/payment/card-form"),
+        ("src/features/payment/pay-button", "src/shared/ui"),
+        ("src/entities/cart", "src/entities/product"),
         ("src/entities/cart", "src/shared/lib"),
         ("src/entities/product", "src/shared/api"),
         ("src/entities/product", "src/shared/lib"),
@@ -350,7 +362,9 @@ _HAPTICS = "modules/trail-haptics"
 #: layers under ``src/``, ``.tsx`` beside ``.jsx`` and ``.js``, platform suffixes, a Babel
 #: ``module-resolver`` alias and one local Expo module with a Swift and a Kotlin side
 #: (BDL-080 S3d, RFC D6). Its code passes the error rules ``init`` writes and breaks one
-#: warn rule (a ``hooks/`` folder in a slice), so ``init`` exits 0.
+#: warn rule (a ``hooks/`` folder in a slice), so ``init`` exits 0. Its ``entities/trail``
+#: imports ``entities/waypoint/@x/trail``, the cross-import API the specification
+#: sanctions between entities, which is no finding (BDL-082 S2b): 18 modules, 19 nodes.
 RN_FSD = AdopterFixture(
     stack="rn-fsd",
     project="moss-trail",
@@ -368,6 +382,7 @@ RN_FSD = AdopterFixture(
         "src/widgets/trail-list",
         "src/features/start-hike",
         "src/entities/trail",
+        "src/entities/waypoint",
         "src/shared",
         "src/shared/api",
         "src/shared/config",
@@ -394,6 +409,7 @@ RN_FSD = AdopterFixture(
         ("src/entities/trail", "src/shared/api"),
         ("src/entities/trail", "src/shared/lib"),
         ("src/entities/trail", "src/shared/ui"),
+        ("src/entities/trail", "src/entities/waypoint"),
         ("src/shared/api", "src/shared/config"),
         ("src/screens", "src/entities/trail"),
     ),

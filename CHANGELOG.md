@@ -7,8 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**This release is minor by the [public-API guide](docs/guides/public-api.md#how-a-change-sets-the-version):
+it adds keys and values, and the only exit codes it moves are false findings removed on inputs
+9.0.0 read against the feature-sliced.design specification, with no input moving from passing
+to failing in the probes measured below (the owner's ruling of 2026-10-11).**
+
 ### Added
 
+- **`init` and `reindex` name the code files they read no symbol from (`beadloom-6e2o`,
+  BDL-082 S2a).** A code file under the scan paths whose language has no parser installed is
+  counted by language and named on its own line, for instance `8 TypeScript files, no parser
+  installed — install with: uv tool install "beadloom[languages]"`: after `init`'s `Index:`
+  line in all three branches (`--yes`, `--bootstrap`, the wizard) and after the counts of
+  `reindex`, whether or not anything changed. Where it is printed, the older `No parser
+  available` warning is not, so `init --bootstrap` and `reindex --full` announce a missing
+  parser once (`beadloom-us5r.2`). Information only, and no exit code moves on it.
+  Measured before this change
+  on the specification's slice-group example with the TypeScript grammar unavailable: `init`
+  printed `Index: 0 symbols, 0 imports` and nothing else, and every FSD rule then had no import
+  to judge. Measured after it on the fixture `tests/fixtures/site/vue-fsd` as it stood then
+  (19 nodes and two planted violations; it holds three since `beadloom-keki`), in an
+  environment installed without the extra: `init --yes` exits 0 where it exits 1 with the
+  grammar, because the violations are unread, and now says why, in three lines: 26 TypeScript,
+  10 Vue and 3 JavaScript files.
 - **`discouraged:`, an optional key of a `slice_shape` rule in `rules.yml` (`beadloom-8sml`,
   BDL-082 RFC D4).** A list of folder names a slice's top is discouraged from holding. Omitted,
   it is the 69 names of `@feature-sliced/steiger-plugin` 0.8.0's `segments-by-purpose` rule. An
@@ -25,6 +46,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The portal draws every title inside its box, routes every line between two top-level nodes
+  itself, and names each colour of a line of several kinds in the legend (`beadloom-us5r.1`,
+  BDL-082 S2c; the owner's two rulings of 2026-10-11).** A top-level box too small for its
+  title is drawn larger and holds its laid-out box: centred where that keeps clear, otherwise
+  off its centre a lane from every other box, and where neither fits at the least box for its
+  title all the same. No node's title stands on a plate beside its box any more, except on a
+  map that does not fit the canvas at the smallest zoom, which keeps its plates by the earlier
+  deferral, and the frame's title above the frame. An edge drawn as itself between two
+  top-level nodes now follows the overview's own route rather than ELK's, whose runs are
+  spaced in layout units. The legend's single grey "several kinds" sample is replaced by one
+  entry per colour such lines are drawn in, "several kinds, mostly uses at runtime" with a
+  solid indigo sample and "several kinds, mostly depends on" with a solid grey one. A top-level
+  leaf whose label is cut short on its card keeps the map's title, drawn whole, at every zoom.
+  The overview's router keeps a port through the middle of a box drawn larger however near
+  the drawn box's corner it stands, and ends no planned line at the point where an edge of the
+  file ends on a top-level box's own border. Measured on the `vue-fsd` fixture (21 nodes)
+  before and after: 8 of the shipped browser cases failed (4 titles on plates with lines under them, lines 4.22 px apart, two arrowheads
+  with 2.80 and 3.36 px before a bend), and none fail after; on this repository's portal
+  `ai_agents` was drawn 8 px wide with its title on a plate beside it, and is now a box 59 px
+  wide with its title inside. The test handle's `overviewPlan().routed` names an edge drawn as
+  itself as `"\nedge\n" + id`, and its `plates` is empty but on the map held at the smallest
+  zoom.
+
+- **`init` reads a slice group as the slices in it (`beadloom-6e2o`, BDL-082 RFC D2).** A
+  folder of `pages`, `widgets`, `features` or `entities` is a slice when it holds a standard
+  segment (`ui`, `model`, `api`, `lib`, `config`) or an `index` at its top. A folder holding
+  neither is a group when it has no code file at its top and a slice below it, at any depth,
+  or when it has code at its top and a folder in it holds a standard segment; otherwise it is
+  one slice (`beadloom-us5r.2`, `beadloom-us5r.3`, `beadloom-us5r.5`, the owner's ruling of
+  2026-10-13). A group gets no node, and each slice in it is one, `<layer>-<group>-<slice>`
+  (a group inside a group adds its name), tagged with the layer. `init` reads an `index` with
+  the public-API rule's own reader. Measured on 2026-10-13:
+  `features/account/settings/{profile,billing}`, where `account` holds only `settings`, gives
+  7 nodes against 6, 0 `fsd-public-api` errors against 1, and `billing → profile` as 1
+  `fsd-layers` error, invisible when `features-account` was one node;
+  `features/checkout/{Checkout.vue, store.ts, store2.ts, components/Total.vue,
+  components/Summary/{index.ts, Summary.vue}}`, a slice not yet split into segments, is one
+  node holding its 6 files, where reading groups at any depth without the code-at-top clause
+  wrote one node for `Summary` and left 4 files in no node; the specification's group with
+  `helpers.ts` at its top stays `features-auth-login` and `features-auth-register`,
+  `register → login` 1 `fsd-layers` error and `helpers.ts` 1 group-top warning.
+  Measured on 2026-10-11 on the
+  specification's example (`features/auth/{login,register}`, `register` importing `login`, a
+  page importing both) after `init --yes`, `lint --strict`, `30624370` against this tree:
+  5 nodes against 6 (`features-auth` becomes `features-auth-login` and
+  `features-auth-register`), 2 false `fsd-public-api` "no index" errors against 0, and the
+  sharing the specification forbids, invisible before, is 1 `fsd-layers` error
+  (`features-auth-register → features-auth-login`). The exit code stays 1. Steiger reports the
+  same import (`fsd/forbidden-imports`).
+- **`init` writes no cohesion check for `pages` (`beadloom-6e2o`, BDL-082 RFC D3).** FSD 2.1 is
+  pages-first: "There's no limit to how much code you can place in a page slice as long as your
+  team still finds it easy to navigate". The five other `fsd-cohesion-<layer>` checks stay, so
+  `init` writes 8 FSD rules where 9.0.0 wrote 9. An existing `rules.yml` is never rewritten:
+  `init` writes one only where none exists, so an adopter who upgrades keeps
+  `fsd-cohesion-pages` until they remove it. Measured on a pages-first probe (a 90-symbol page,
+  `app`, `shared`): 1 `fsd-cohesion-pages` warning against 0; with a 90-symbol feature beside
+  it, its `fsd-cohesion-features` warning stays. Exit code 0 on both, before and after.
+- **The rules `init` writes for a Feature-Sliced frontend say the specification
+  (`beadloom-6e2o`, BDL-082 RFC D4, D5, D6).** `fsd-public-api` is tagged with every layer,
+  `fsd-shared` and `fsd-app` included, so a sidestep into a segment of `shared` or `app` is a
+  finding on a project `init` set up. `fsd-slice-shape` is written with `segments:` and the 69
+  `discouraged:` names and the specification's reason ("name by purpose, not essence"). The
+  header lists the 17 rules `@feature-sliced/steiger-plugin` 0.8.0 turns on in `recommended`,
+  one line each, where 9.0.0 named 5, and the comments state `@x` on the entities layer, slice
+  groups and the public API of `shared` and `app`. On the two FSD fixtures
+  (`tests/fixtures/site/vue-fsd`, `rn-fsd`) `init --yes` writes the same nodes (19 and 18) and
+  `lint --strict` reports the same findings before and after.
+- **The roles `setup-agentic-flow` composes for a Feature-Sliced project say the specification
+  (`beadloom-keki`, BDL-082 RFC D6).** The five `fsd` overlays (dev, explore, review, test,
+  tech-writer) state `@x` on the entities layer only (`entities/A/@x/B`, imported by entity B
+  alone), slice groups and their `<layer>-<group>-<slice>` nodes, pages-first (start in
+  `pages`, extract on a second page's reuse, no size signal for a page), custom segments named
+  by purpose with the `discouraged:` names, the three barrel pitfalls (`export *`, an index on a
+  segment of a sliced layer, one index per component in `shared/ui` and `shared/lib`) and the
+  public API of `shared` and `app`. `insignificant-slice` stays on for an adopter; Beadloom's own
+  portal switches it off with its reason written beside the switch, and the overlay names that
+  as a reasoned exception, not a default. Removed, because the specification contradicts them:
+  "no cross-imports between slices of the same layer" with no exception, a size signal that
+  asked to split a page, and a slice's top holding "its segments and its `index` and nothing
+  else". A project that composes `ddd`, this repository included, gets no changed file. The two
+  FSD fixtures gain what the overlays describe: `vue-fsd` a group `features/payment/{card-form,
+  pay-button}` with one planted import between its slices and an `@x` pair in `entities`
+  (21 nodes where it had 19; `lint --strict` exit 1 with 3 errors where it had 2, the new one
+  `fsd-layers` `features-payment-pay-button → features-payment-card-form`), and `rn-fsd` an
+  `@x` pair (19 nodes where it had 18; exit 0 and its 1 warning unchanged). Neither `@x` pair
+  is a finding, and each is the one `depends_on` edge marked `via: @x`. On the two new graphs
+  the portal's layout of 9.0.0 fails 8 browser cases on `vue-fsd` and 1 on `rn-fsd`. With the
+  portal change above (`beadloom-us5r.1`) both fixtures' browser suites pass, measured on
+  2026-10-13 with Node 22.9.0, and the strict xfail marks are removed.
 - **Exit codes move only on inputs 9.0.0 read against the specification.** Measured by
   `beadloom-wvzg` on 2026-10-11 on Darwin arm64, CPython 3.13, on scratch projects written from
   feature-sliced.design's reference pages: each probe copied twice, `init --yes` then
@@ -131,10 +241,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   row and records no `@x` fact, so declaring an `@x` pair by hand turns it into a `fsd-layers`
   error (coordinator's ruling on `beadloom-r4ck`: an authored edge is an authored claim, the fact
   describes derived imports). Let the reindex derive the edge from the imports instead.
-- **The rules `init` writes do not yet judge `shared` and `app`.** The public-API rule `init`
-  writes carries the sliced layers' tags only, so on a freshly initialised project the segments
-  of `shared` and `app` are judged only after `fsd-shared` and `fsd-app` are added to its
-  `tags:`. BDL-082 S2 has `init` write them.
+- **A project initialised by 9.0.0 keeps the FSD rules 9.0.0 wrote.** `init` writes
+  `rules.yml` only where none exists, so such a project keeps `fsd-cohesion-pages`, a
+  `fsd-public-api` without `fsd-shared` and `fsd-app`, and a `fsd-slice-shape` without
+  `discouraged:` (whose default then applies) until its owner edits the file, and its graph
+  keeps a slice group as one node until `init` writes the graph again.
 
 ## [9.0.0] - 2026-10-10
 

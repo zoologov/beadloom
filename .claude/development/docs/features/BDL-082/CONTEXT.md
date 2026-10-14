@@ -40,6 +40,8 @@ Python >= 3.10, ruff, mypy --strict, pytest; documents in English; commits
 | 2026-10-11 | A slice holds a standard segment or an index; a folder holding neither whose children are slices is a group; ref id `<layer>-<group>-<slice>` | Owner's ruling 3 |
 | 2026-10-11 | No cohesion check for `pages` (pages-first); `insignificant-slice` on for adopters; the shape rule is a deny-list by purpose; `shared`/`app` segments have a public API with per-component indexes as entries | Owner's rulings 4–7 |
 | 2026-10-11 | Monorepo FSD after the adoptions | Owner's ruling 8 |
+| 2026-10-11 | Every title is drawn inside its box: a box is never smaller than its title needs; title plates for nodes are retired (S2c) | Owner, on the 9.0.0 portal («все надписи должны быть в блоках») |
+| 2026-10-11 | The public-API guide: removing a false finding on an input a rule read wrongly is a fix, not Breaking; adding findings on unchanged input stays MAJOR — BDL-082 is MINOR | Owner («согласен с minor»); written by S2W |
 
 ## Related Files
 
@@ -53,3 +55,5 @@ Python >= 3.10, ruff, mypy --strict, pytest; documents in English; commits
 - **Phase:** Development
 - **Current bead:** see ACTIVE.md
 - **Blockers:** none
+
+- 2026-10-13 (owner, after S2R's third pass): **ruling 3 refined, option (c).** A folder that holds code files at its top is a group only when at least one child holds a standard segment (`ui`, `model`, `api`, `lib`, `config` — Steiger's own slice test), and a slice when its children carry only an index; a folder with no code at its top is a group when its children are slices, at any depth. Measured probes: a pre-migration slice `features/checkout/{..., components/Summary/index.ts}` stays one node; the specification's group `features/auth/{helpers.ts, login/{index, ui/}, register/{index, ui/}}` stays two nodes with `register → login` an error. Fix bead `beadloom-us5r.3` had landed option (a) (code at the top ⇒ always a slice), which hid that crossing; superseded.

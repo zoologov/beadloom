@@ -10,6 +10,32 @@ import { architectureData, openArchitecture, openEveryBox, parentMap, viewer, wa
 import { drag, gesturesOnALeaf, pressEveryToolbarButton } from "./support/pointer.js";
 import { landscapeData } from "./support/landscape.js";
 import { LACKING, requireShape } from "./support/shape.js";
+import { WIDE_FONT, drawInFont } from "./support/fonts.js";
+
+/** A heavy font: titles wider than in the wide font, as on a runner whose fonts draw them wider than macOS does. */
+const HEAVY_FONT = '"Arial Black", "DejaVu Sans", sans-serif';
+
+/**
+ * What a fit read, for a message: the canvas's size, the box around every node
+ * and route the fit measures, the boxes drawn larger and the zoom. A fit that
+ * lands elsewhere on one system names there which of them moved.
+ */
+async function fitReading(page, label) {
+  const canvas = await page.getByTestId("graph-canvas").boundingBox();
+  const read = await page.evaluate(() => {
+    const handle = window.__beadloomViewer;
+    const boxes = handle.nodeBoxes();
+    const grown = handle.overviewPlan()?.grown || [];
+    const points = [...Object.values(boxes).flatMap((b) => [{ x: b.x1, y: b.y1 }, { x: b.x2, y: b.y2 }]), ...handle.edgeRoutes().flatMap((r) => r.points)];
+    const extent = points.reduce((a, p) => ({ x1: Math.min(a.x1, p.x), y1: Math.min(a.y1, p.y), x2: Math.max(a.x2, p.x), y2: Math.max(a.y2, p.y) }), { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity });
+    const size = (b) => (b ? `${(b.x2 - b.x1).toFixed(2)}x${(b.y2 - b.y1).toFixed(2)}@${b.x1.toFixed(2)},${b.y1.toFixed(2)}` : "none");
+    return { zoom: handle.zoom(), extent: size(extent), grown: grown.map((id) => `${id} ${size(boxes[id])}`).join("; ") };
+  });
+  return `${label}: zoom ${read.zoom}, canvas ${canvas?.width}x${canvas?.height}, extent ${read.extent}, drawn larger: ${read.grown || "none"}`;
+}
+
+/** Wait for two frames: what the map draws after a change of the view is drawn by then. */
+const twoFrames = (page) => page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
 
 /** A point on the canvas, inside a compound parent's box, that lies on no other node. */
 function pointInsideParentOnly(boxes, canvas) {
@@ -135,10 +161,41 @@ for (const { name, path, requireANode } of GRAPH_PAGES) {
   });
 }
 
+for (const [name, font] of [["", null], [", in a wide font", WIDE_FONT], [", in a heavy font", HEAVY_FONT]]) {
+  test(`the whole-graph fit is one zoom whatever zoom it starts from${name}`, async ({ page }) => {
+    // A box the overview draws larger to hold its title can reach past the laid-out graph, and a wider font
+    // makes it reach further: the fit is held to one zoom from the fit itself, from a zoom in and from a zoom
+    // out, so a fit pressed anywhere lands where the page opened. (A selection opens the panel, whose width a
+    // fit leaves out, so a fit with it open is another zoom by design.)
+    if (font) await drawInFont(page, font);
+    await openArchitecture(page);
+    const fitted = await viewer(page, "zoom");
+    const fit = async () => {
+      await page.getByRole("button", { name: "Fit" }).click();
+      await twoFrames(page);
+      return viewer(page, "zoom");
+    };
+    const after = {};
+    after.fit = await fit();
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    after["one step in"] = await fit();
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    after["two steps in"] = await fit();
+    await page.getByRole("button", { name: "Zoom out" }).click();
+    await page.getByRole("button", { name: "Zoom out" }).click();
+    after["zoom out"] = await fit();
+    test.info().annotations.push({ type: "measured", description: `first fit ${fitted}; ${Object.entries(after).map(([from, zoom]) => `${from} ${zoom}`).join("; ")}` });
+    const off = Object.entries(after).filter(([, zoom]) => Math.abs(zoom - fitted) >= 0.5e-5).map(([from, zoom]) => `${from}: ${zoom} where the first fit was ${fitted}`);
+    expect(off, await fitReading(page, "the last fit")).toEqual([]);
+  });
+}
+
 test("the keys and the buttons zoom, fit and clear the selection", async ({ page }) => {
   await openArchitecture(page);
   const canvas = page.getByTestId("graph-canvas");
   const fitted = await viewer(page, "zoom");
+  const first = await fitReading(page, "the first fit");
 
   await canvas.focus();
   await page.keyboard.press("+");
@@ -148,17 +205,17 @@ test("the keys and the buttons zoom, fit and clear the selection", async ({ page
   await page.keyboard.press("-");
   expect(await viewer(page, "zoom")).toBeLessThan(zoomedIn);
   await page.keyboard.press("0");
-  expect(await viewer(page, "zoom")).toBeCloseTo(fitted, 5);
+  expect(await viewer(page, "zoom"), `${first}\n${await fitReading(page, "the fit after the keys")}`).toBeCloseTo(fitted, 5);
 
   await page.getByRole("button", { name: "Zoom in" }).click();
   expect(await viewer(page, "zoom")).toBeGreaterThan(fitted);
   await page.getByRole("button", { name: "Fit" }).click();
-  expect(await viewer(page, "zoom")).toBeCloseTo(fitted, 5);
+  expect(await viewer(page, "zoom"), `${first}\n${await fitReading(page, "the fit after a zoom in")}`).toBeCloseTo(fitted, 5);
 
-  const [first] = await viewer(page, "visibleIds");
-  await page.goto(`architecture.html?focus=${encodeURIComponent(first)}`);
+  const [chosen] = await viewer(page, "visibleIds");
+  await page.goto(`architecture.html?focus=${encodeURIComponent(chosen)}`);
   await page.waitForFunction(() => window.__beadloomViewer?.ready() === true);
-  expect(await viewer(page, "selection")).toBe(first);
+  expect(await viewer(page, "selection")).toBe(chosen);
   await page.getByTestId("graph-canvas").focus();
   await page.keyboard.press("Escape");
   expect(await viewer(page, "selection")).toBeNull();

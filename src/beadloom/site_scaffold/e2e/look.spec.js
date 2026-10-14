@@ -387,7 +387,9 @@ test("a node's status moves nothing: every node and box is laid out where it is 
   requireShape(data.nodes.some(flagged), "no node has a finding or a stale doc");
   await page.route("**/architecture.data.json", (route) => route.fulfill({ json: data }));
   await openArchitecture(page);
-  const flaggedLayout = { positions: await viewer(page, "positions"), boxes: (await viewer(page, "elkGeometry")).boxes };
+  // Where each node is laid out, its home: a status mark takes room in a title, so a box the overview draws
+  // larger may grow by another amount, and where it is drawn off its laid-out centre, stand elsewhere.
+  const flaggedLayout = { positions: await viewer(page, "homes"), boxes: (await viewer(page, "elkGeometry")).boxes };
 
   const calm = {
     ...data,
@@ -396,7 +398,7 @@ test("a node's status moves nothing: every node and box is laid out where it is 
   await page.unroute("**/architecture.data.json");
   await page.route("**/architecture.data.json", (route) => route.fulfill({ json: calm }));
   await openArchitecture(page);
-  const calmLayout = { positions: await viewer(page, "positions"), boxes: (await viewer(page, "elkGeometry")).boxes };
+  const calmLayout = { positions: await viewer(page, "homes"), boxes: (await viewer(page, "elkGeometry")).boxes };
 
   const apart = (a, b) => Math.max(...Object.keys(a).map((key) => Math.abs(a[key] - b[key])));
   const moved = Object.keys(calmLayout.positions).filter((id) => apart(calmLayout.positions[id], flaggedLayout.positions[id]) > ROUNDING);

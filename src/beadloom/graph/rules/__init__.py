@@ -96,6 +96,7 @@ from beadloom.graph.rules.scenario_coverage import (
     SCENARIO_COVERAGE_RULE_TYPE,
     evaluate_scenario_coverage_rules,
 )
+from beadloom.graph.rules.slice_units import is_index_file
 from beadloom.graph.rules.slices import (
     SLICE_PUBLIC_API_RULE_TYPE,
     SLICE_SHAPE_RULE_TYPE,
@@ -115,8 +116,10 @@ from beadloom.graph.rules.test_import_boundary import (
     evaluate_test_import_boundary_rules,
 )
 from beadloom.graph.rules.types import (
+    DEFAULT_DISCOURAGED_SEGMENTS,
     DEFAULT_DOC_AREA_MIN_SUPPORT,
     DEFAULT_DOC_AREA_THRESHOLD,
+    DEFAULT_SLICE_SEGMENTS,
     LIVE_EDGE_LIFECYCLES,
     LIVENESS_RULE_TYPE,
     MATCHING_FORM_HINT,
@@ -363,8 +366,10 @@ def evaluate_all(
 __all__ = [
     "ADVISORY_RULE_TYPES",
     "BEAD_NOT_VERIFIED",
+    "DEFAULT_DISCOURAGED_SEGMENTS",
     "DEFAULT_DOC_AREA_MIN_SUPPORT",
     "DEFAULT_DOC_AREA_THRESHOLD",
+    "DEFAULT_SLICE_SEGMENTS",
     "DOC_AREA_RULE_TYPE",
     "EXPIRED_EXEMPTION_HINT",
     "INERT_RULE_HINT",
@@ -441,6 +446,7 @@ __all__ = [
     "flagged_layer_edges",
     "inert_rule_names",
     "is_advisory",
+    "is_index_file",
     "layer_membership",
     "layer_of",
     "layer_rule_reach",
