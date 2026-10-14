@@ -1,13 +1,13 @@
 # ACTIVE: BDL-082 — FSD by the specification 2.1
 
-> **Last updated:** 2026-10-11
-> **Phase:** Development
+> **Last updated:** 2026-10-14
+> **Phase:** Completed
 
 ---
 
 ## Current Bead
 
-**Bead:** S2P `beadloom-iuky` (S2W closed 2026-10-13); S2a landed `df4d8cc3`; S1 merged (PR #101); S1T landed `49e0df97`, S1a `2ab2a56b`, S1b `2d446b23`; then S1T, S1R, S1W, S1P; S2 after S1's PR.
+**Bead:** none — BDL-082 shipped 2026-10-14 (S1 PR #101, S2 PR #102); S2a landed `df4d8cc3`; S1 merged (PR #101); S1T landed `49e0df97`, S1a `2ab2a56b`, S1b `2d446b23`; then S1T, S1R, S1W, S1P; S2 after S1's PR.
 **Goal:** a spec-following FSD project gets no false finding and every real one; the overlays say the specification.
 **Done when:** every PRD goal's *Done when* holds; two PRs merged; MINOR by the public-API guide.
 
@@ -19,7 +19,7 @@
 - [x] S1R; S1W
 - [x] S1 PR merged 2026-10-11
 - [x] S2a, S2b, S2c landed; S2T; S2R (four passes, four fix beads); S2W
-- [ ] S2 PR
+- [x] S2 PR merged 2026-10-14 (#102)
 
 ## Results
 
@@ -40,7 +40,9 @@
 | `beadloom-r8y2` | S2R | ✓ done | Major 1 (two prose lines sync-check cannot see) + Minor 4 → S2W; Major 2 (S2c unreviewed) → review widened to S2c, relaunch after the fix bead; Minors 1–3 + nitpick → `beadloom-us5r.2` |
 | `beadloom-us5r.2` | S2 fix | ✓ done (commit `db75ab46`, 26 files; green in a clean room over 26 files: ruff, mypy 3.10–3.13, integration 5989, top-level 3570, self_check 1053, unit+acceptance 3770 passed / 1 known room-only failure #311; on the tree fixtures + probes 181 passed, vue-fsd 21/3, rn-fsd 19/1, lint 0 errors; `ci` rc 1 on 13 stale pairs all S2W's; 16 of S2W's pairs re-baselined by editing their documents, text unreviewed — listed on `beadloom-rm5a`) |
 | `beadloom-rm5a` | S2W | ✓ done (commit `92e445f8`, 21 files; 15 stale + 16 re-baselined pairs read, stale 15 → 0; on the tree `beadloom ci` rc 0, reindex, sync-check, docs audit, docs quality, lint --strict rc 0, self_check 1099 passed; the Gate did not run pytest, ruff, mypy, lint:fsd; open: the 17-key fact unreadable by docs audit (Debt bead), the MINOR/MAJOR case to measure at the release, #323 to the owner) |
-| `beadloom-iuky` | S2P | in progress | 2026-10-13: fresh branch, PR, merge on green |
+| `beadloom-iuky` | S2P | ✓ done (PR #102 squash-merged 2026-10-14, main `e8e49491`; required checks green; vue-fsd green after fix 5 + 5b; site-e2e cancelled at its limit, `beadloom-ba9w.11`) |
+| `beadloom-us5r.6` | S2 fix 5 | ✓ done (commit `b600a757`; the frame holds grown boxes with their border; macOS: vue-fsd 328, rn-fsd 327, own 372 passed) — the Linux runner still fails the case (0.51932 vs 0.51880) |
+| `beadloom-us5r.7` | S2 fix 5b | ✓ done (commit `beb47975`; cause: the frame moved 18.9 units on a one-step zoom because boxes were not re-sized; every redraw sizes them; macOS vue-fsd 329, rn-fsd 328, own 373; Linux runner green) |
 
 ## Notes
 

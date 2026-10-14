@@ -1,6 +1,6 @@
 # CONTEXT: BDL-082 — FSD by the specification 2.1
 
-> **Status:** Approved
+> **Status:** Done
 > **Approval:** delegated by the owner on 2026-10-11.
 > **Created:** 2026-10-11
 
@@ -52,7 +52,7 @@ Python >= 3.10, ruff, mypy --strict, pytest; documents in English; commits
 
 ## Current Phase
 
-- **Phase:** Development
+- **Phase:** Completed (shipped 2026-10-14: PR #101 main `30624370`, PR #102 main `e8e49491`)
 - **Current bead:** see ACTIVE.md
 - **Blockers:** none
 
