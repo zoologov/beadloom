@@ -45,6 +45,7 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 325 | 2026-10-14 | high | a project root below the git root is not refused: `install-hooks` fails on a path, the hook bodies run without the project, and `sync-check --since` passes over two empty sides |
 | 324 | 2026-10-13 | low | the `init` wizard cancelled at the graph review re-indexes and takes the verdict, and does not print the line naming the code no installed parser read |
 | 323 | 2026-10-13 | medium | an `@x` API inside a slice group has no form both linters accept: Beadloom reads `invoice/@x/receipt`, Steiger reads `invoice/@x/payment/receipt/index` |
 | 322 | 2026-10-11 | low | the README pair says 15 authoring keys (the loader has 17), `ctx` is said to return the rules in force, `why` what breaks, and `architecture.md` claims `<20ms` three times unmeasured |
@@ -142,6 +143,14 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+325. [2026-10-14] [HIGH] a project root below the git root is not refused: `install-hooks` fails on a path, the hook bodies run without the project, and `sync-check --since` passes over two empty sides
+
+    **Severity:** high (the owner's first team adoption was planned into a subfolder of a monorepo, with `.git` one level up; in that layout `sync-check --since` is green over every pair whatever changed, and nothing says so)
+    **Command:** `beadloom init`, `beadloom doctor`, `beadloom install-hooks`, `beadloom sync-check --since <ref>`, `beadloom diff --since`, `beadloom review-brief`, `beadloom export`
+    **Context:** read in the code at `c126ecff` on 2026-10-11, nothing run; filed during the ROADMAP re-rank of 2026-10-14. The project root is the current directory or `--project`, and no command searches upward for `.git`. With `.beadloom` in `frontend/` and `.git` above it: `install-hooks` builds `<project>/.git/hooks` (`services/commands/docsync.py:938`, the same in `services/commands/waves.py:288`) and fails — in a worktree too, since neither asks git for the real hooks path; the hook bodies git runs from the repository root call the commands without `--project`, so `scope-check` writes `NOT CHECKED`; `sync-check --since` reads `git show <ref>:<path>` with the path relative to the subfolder (`doc_sync/engine.py:879`, `:898`), both sides come back empty and every pair is called fresh — a false green; `diff --since` calls everything added for the same reason; `review-brief` mixes two path frames (git's and the project's); git activity on the dashboard reads as zero; `export` leaves `commit_sha` empty on purpose when the project root is not the repository root (`graph/federation/export.py:94`), so the portal's source links carry no revision either; the pages, tech-writer and room workflows are written under `<project>/.github/workflows`, which GitHub never reads. Covered by tests: the path translation in `git_baseline` and the empty commit in `export`. Nothing else is.
+    **Issue:** half the tool degrades in a layout no command names as unsupported, and one of the degradations is a green verdict over an empty comparison. The owner's target topology (2026-10-12: every monorepo split into one repository per entity) makes the layout a transition-period case, so the fix is a refusal, not support.
+    **Expected:** `init` and `doctor` say, in words and at a non-zero exit, that the git root is above the project root and that the project root must be the git root; `sync-check --since` refuses over a subfolder project instead of passing; the composed `CLAUDE.md` states the rule. The FSD-root-inside-the-repository key (a tree not under `src/`, the project root staying the git root) is a separate, optional stopgap, taken only if the frontend's split runs past about six months. Tracked by `beadloom-7pd6`.
 
 323. [2026-10-13] [MEDIUM] an `@x` API inside a slice group has no form both linters accept: Beadloom reads `invoice/@x/receipt`, Steiger reads `invoice/@x/payment/receipt/index`
 
