@@ -13,7 +13,8 @@ The unified `beadloom ci` gate for the application domain.
 Compose Beadloom's individual checkers into ONE `GateResult` with a single `ok`
 verdict, so CI is the only true enforcement point — identical for any author,
 whether Claude Code, Cursor, or a human. `run_ci_gate` runs every step in order
-and never short-circuits, so a later failure is never hidden by an earlier one.
+and never short-circuits, so a later failure is never hidden by an earlier one —
+and a step that raises reads `ERROR` while the steps after it still run.
 
 ### Steps
 
@@ -502,9 +503,35 @@ finding is held against.
 **It is not a step either, and the tracker is asked only when there is a finding.** Same `ok`,
 same exit code, same findings; a green run attributes nothing and shells out to nothing.
 
+### A step that raises is reported, and the run goes on
+
+Until BDL-083 S1e (BDL-UX #318) the promise above held for a step that FAILED and not for a
+step that raised. The steps ran in a row with no boundary, so an exception in one ended the
+run. Measured on 2026-10-18 at `3e95a208`: `beadloom ci` over this repository with the
+`docs-audit` step made to raise exited 1 and printed nothing, the exception left the command,
+and the seven steps after `docs-audit` never ran. A full pipe (#226) and an unreadable configuration (#287) were two
+instances of the class, each fixed at its own site.
+
+Every step now runs through `gate_boundary.run_bounded`. An `Exception` a step raises becomes a
+`GateStep` whose `error` is `<class>: <message>` and whose status is `ERROR` — not `PASS`,
+because it checked nothing, and not `SKIP`, because it did not choose not to run. It fails the
+gate, and it carries one `error` finding whose rule is the step's name and whose `why` names
+the function, file and line that raised. `KeyboardInterrupt` and `SystemExit` are not caught:
+they are the operator and the process ending the run, not a checker failing.
+
+Every surface counts the crashed steps. The rich verdict reads
+`FAIL — 1 step(s) crashed: docs-audit — gate blocked`, the clause inside the line because the
+pre-push hook finds the verdict by a pattern that ends on `gate blocked`. A `Crashed` block lists
+each crashed step with its exception, under the verdict and apart from the findings, because a
+crashed step is a check that did not happen rather than a finding about the project. The JSON
+report carries `error` on every step (`null` when the step returned) and a top-level `crashed`
+list of step names. The GitHub format adds one `::notice::` with the same clause. The MCP
+`complete_bead` tool returns `FAIL` with the crashed step's finding among its findings.
+
 ## Invariants
 
-- Every step runs; the gate never short-circuits on the first failure.
+- Every step runs; the gate never short-circuits on the first failure, and never on a step
+  that raises: that step reads `ERROR`, fails the gate, and the steps after it report.
 - A skipped step counts as passed (it cannot block the build).
 - `docs-audit` blocks on `stale>0` and never counts an unverified fact as
   passing; `sync-check` `surface_drift`, `unverified` and
@@ -537,11 +564,22 @@ Module `src/beadloom/application/gate_step.py` — the shape a step reports in,
 re-exported from `gate.py` so no caller's import path changed:
 
 - `GateStep` — one step: `name`, `passed`, `skipped`, `findings`, `summary`,
-  `not_verified`, and the `status` property (`PASS` / `WARN` / `FAIL` / `SKIP`).
+  `not_verified`, `error` (the exception a step raised, as `<class>: <message>`, or `None`),
+  and the `status` property (`PASS` / `WARN` / `FAIL` / `SKIP` / `ERROR`). `ERROR` is read
+  first, so a step that raised is not described by a flag it set before raising.
 - `gate_step_line(step) -> str` — the step's own report line, `[STATUS] name: summary`.
   `_format_gate_rich` renders it and `beadloom init` quotes it, so the line `init`
   attributes to `beadloom ci` is the line `beadloom ci` prints (BDL-067 `.14`).
 - `Finding` — the shared agent-actionable finding shape.
+
+Module `src/beadloom/application/gate_boundary.py` — the per-step exception boundary:
+
+- `run_bounded(name, run) -> GateStep` — run one step, and report an `Exception` it raises
+  as the `ERROR` step `name` instead of letting it end the run.
+- `crashed_step(name, exc) -> GateStep` — that step: `passed=False`, `error`, one `error`
+  finding naming where the exception was raised, and the summary `crashed — <error>`.
+- `crashed_clause(steps) -> str` — `N step(s) crashed: a, b` over the steps that raised, or
+  an empty string; re-exported from `gate.py`, and the clause every surface prints.
 
 Module `src/beadloom/application/gate_declarations.py` — what an unusable opt-in
 declaration costs a leg, for the two legs that are opt-in:
@@ -570,8 +608,9 @@ Module `src/beadloom/application/gate.py`:
 - `GateResult` — aggregate: `steps`, the room census (`room`, a
   `RoomCensus | None`), the coverage statement (`coverage`, a
   `GateCoverage | None`), the ownership report (`ownership`, a
-  `GateOwnership | None`), plus the `ok` and `findings` properties. `None` means
-  nothing derived it, and a surface that was not told makes no claim.
+  `GateOwnership | None`), plus the `ok`, `findings` and `crashed` properties (the last
+  is the steps whose `error` is set, in step order). `None` means nothing derived it, and
+  a surface that was not told makes no claim.
 - `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex,
   performed_elsewhere=(), tracker=None) -> GateResult` — run every gate step and
   aggregate the result. `performed_elsewhere` names verifications the CALLER runs
@@ -601,6 +640,9 @@ Module `src/beadloom/application/gate_ownership.py`:
 ## Testing
 
 Tests: `tests/test_gate.py`, `tests/integration/doc_sync/audit/test_ci_gate.py`,
+`tests/integration/application/gate/test_a_step_that_raises_does_not_abort_the_gate.py` (a
+fault injected in each step in turn, and the scenarios in
+`tests/acceptance/application/ci-gate/a_step_that_raises.feature`),
 `tests/test_gate_not_run.py`, `tests/test_gate_finding_owner.py` (and the scenarios in
 `tests/acceptance/application/gate-ownership/ownership_by_changed_files.feature`),
 `tests/test_f3_gate_coverage.py`, `tests/test_the_gate_blocks_each_break_class.py`,

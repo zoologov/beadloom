@@ -282,6 +282,13 @@ verdict is found by `GATE_VERDICT_PATTERN`, which a test holds against `_format_
 exit code with no verdict line is reported as "the Gate did not run" and refused whatever the
 code was, never as stale documentation.
 
+Since BDL-083 S1e a step that raises no longer ends `ci` (BDL-UX #318): the application layer
+reports it as an `ERROR` step and the command renders it. `_gate_verdict_line` puts the
+`N step(s) crashed: <steps>` clause inside the verdict, before `gate blocked`, so the line
+still matches `GATE_VERDICT_PATTERN`; `_gate_crashed_lines` prints a `Crashed` block under it
+with each step's exception. `--format json` adds `error` to every step and a top-level
+`crashed` list, and `--format github` adds one `::notice::` with the clause.
+
 The pre-commit hook gained an architecture-lint leg, `_hook_architecture_lint`, that runs
 `beadloom lint --staged --strict --format rich` and finds its verdict by
 `graph.lint_scope.COMMIT_SCOPE_LEAD`. An error on a node the commit touches warns in the warn

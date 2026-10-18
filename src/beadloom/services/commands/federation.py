@@ -490,11 +490,13 @@ def ci(
     """Run the unified CI gate (reindex -> lint -> sync-check -> config-check -> federate).
 
     Composes the existing checkers into one verdict with a single exit code:
-    0 when every step passed, 1 when any step failed. The output names EVERY
-    step that ran and its honest result (PASS/WARN/FAIL/SKIP) — never a green that
-    silently skipped a step. ``--format`` applies uniformly across all steps
-    (findings share the agent-actionable {kind, rule, severity, locations, why,
-    remediation} shape). With ``--hub`` the cross-service landscape gate runs.
+    0 when every step passed, 1 when any step failed or crashed. The output names
+    EVERY step that ran and its honest result (PASS/WARN/FAIL/SKIP/ERROR) — never a
+    green that silently skipped a step, and never a traceback in place of a verdict:
+    a step that raises reads ERROR and the steps after it still run. ``--format``
+    applies uniformly across all steps (findings share the agent-actionable {kind,
+    rule, severity, locations, why, remediation} shape). With ``--hub`` the
+    cross-service landscape gate runs.
     """
     from beadloom.application.gate import run_ci_gate
 
@@ -553,11 +555,41 @@ def _format_gate_rich(result: GateResult) -> str:
             if remediation:
                 lines.append(f"      fix: {remediation}")
     lines.append("")
-    lines.append("PASS — gate clean" if result.ok else "FAIL — gate blocked")
+    lines.append(_gate_verdict_line(result))
+    lines.extend(_gate_crashed_lines(result))
     lines.extend(_gate_room_lines(result))
     lines.extend(_gate_coverage_lines(result))
     lines.extend(_gate_ownership_lines(result))
     return "\n".join(lines)
+
+
+def _gate_verdict_line(result: GateResult) -> str:
+    """``PASS``/``FAIL`` and, when a step raised, how many did and which (BDL-UX #318).
+
+    The clause sits INSIDE the line, before ``gate blocked``: the pre-push hook finds
+    the verdict by ``GATE_VERDICT_PATTERN``, which ends on those words, and a verdict
+    it cannot find is reported as a Gate that did not run.
+    """
+    from beadloom.application.gate import crashed_clause
+
+    if result.ok:
+        return "PASS — gate clean"
+    clause = crashed_clause(result.steps)
+    return f"FAIL — {clause} — gate blocked" if clause else "FAIL — gate blocked"
+
+
+def _gate_crashed_lines(result: GateResult) -> list[str]:
+    """The crashed steps under a heading of their own, each with what it raised.
+
+    Under the verdict rather than among the findings, because a crashed step is not
+    a finding about the project: it is a check that did not happen in this run.
+    """
+    crashed = result.crashed
+    if not crashed:
+        return []
+    lines = ["Crashed (the step raised; what it checks was not checked):"]
+    lines.extend(f"  - {step.name}: {step.error}" for step in crashed)
+    return lines
 
 
 def _gate_room_lines(result: GateResult) -> list[str]:
@@ -630,11 +662,16 @@ def _format_gate_json(result: GateResult) -> str:
             "passed": step.passed,
             "skipped": step.skipped,
             "summary": step.summary,
+            "error": step.error,
             "findings": step.findings,
         }
         for step in result.steps
     ]
-    payload: dict[str, object] = {"ok": result.ok, "steps": steps}
+    payload: dict[str, object] = {
+        "ok": result.ok,
+        "steps": steps,
+        "crashed": [step.name for step in result.crashed],
+    }
     coverage = result.coverage
     if coverage is not None:
         payload["not_run"] = {
@@ -677,6 +714,7 @@ def _format_gate_github(result: GateResult) -> str:
     ``file``/``line`` parameters are comma-separated key=value pairs, NOT a
     ``file=<path:line>`` colon-joined string (which GitHub does not parse).
     """
+    from beadloom.application.gate import crashed_clause
     from beadloom.application.rooms import room_line
 
     lines: list[str] = []
@@ -689,6 +727,9 @@ def _format_gate_github(result: GateResult) -> str:
         )
     for step in result.steps:
         lines.append(f"::notice::{step.name} {step.status}: {step.summary}")
+    clause = crashed_clause(result.steps)
+    if clause:
+        lines.append(f"::notice::{clause}")
     if result.coverage is not None and result.coverage.not_performed:
         named = ", ".join(
             f"{v.duty} (`{v.command}`)" for v in result.coverage.not_performed

@@ -37,6 +37,11 @@ class GateStep:
       ``WARN``, because *unverifiable is not clean*: a green that describes the
       checker's own ignorance is the defect BDL-UX #174/#175/#178 are all made
       of, and the honest word costs nothing.
+    - ``error``    — the exception the step raised instead of reporting, as
+      ``<class>: <message>``, or ``None`` when the step returned. A step that
+      raised has checked nothing, so it is neither PASS nor SKIP: it reads
+      ``ERROR`` and fails the gate (BDL-UX #318). Set only by the boundary in
+      :mod:`beadloom.application.gate_boundary`, never by a step about itself.
     - ``findings`` — the step's findings in the shared shape (empty on PASS/SKIP).
     - ``summary``  — a short human line for the ``rich`` report.
 
@@ -64,9 +69,17 @@ class GateStep:
     this run measured it, and a surface that was not told makes no pair claim.
     """
 
+    error: str | None = None
+
     @property
     def status(self) -> str:
-        """``PASS`` / ``WARN`` / ``FAIL`` / ``SKIP`` — never an ambiguous green."""
+        """``ERROR`` / ``SKIP`` / ``FAIL`` / ``WARN`` / ``PASS`` — never an ambiguous green.
+
+        ``ERROR`` comes first: a step that raised is not described by any of the
+        flags it may have set before it raised.
+        """
+        if self.error is not None:
+            return "ERROR"
         if self.skipped:
             return "SKIP"
         if not self.passed:

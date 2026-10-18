@@ -14,7 +14,10 @@ Two honesty invariants (the Phase-0 lesson):
 1. **No silent skip.** Every step records its outcome — ``PASS`` / ``FAIL`` /
    ``SKIP`` — so the report never shows a green that quietly skipped a step.
 2. **No short-circuit.** All steps run and ALL findings are collected even after
-   an earlier failure, so one run surfaces every problem at once.
+   an earlier failure, so one run surfaces every problem at once. That includes a
+   step that RAISES: each step runs inside the boundary in
+   :mod:`beadloom.application.gate_boundary`, so an exception becomes a step that
+   reads ``ERROR`` and the steps after it still run (BDL-UX #318).
 
 Findings are projected to the shared agent-actionable shape
 (``{kind, rule, severity, locations, why, remediation}``, reused from
@@ -30,6 +33,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom.application.gate_boundary import crashed_clause, run_bounded
 from beadloom.application.gate_coverage import GateCoverage, derive_gate_coverage
 from beadloom.application.gate_document_pairs import step_readme_pair
 from beadloom.application.gate_issue_log import step_issue_log
@@ -76,7 +80,14 @@ if TYPE_CHECKING:
 #: modules and test modules name ``beadloom.application.gate`` for these three,
 #: and a decomposition that also rewrites its callers is two changes reviewed as
 #: one (BDL-069, ``beadloom-rqma.8``).
-__all__ = ["Finding", "GateResult", "GateStep", "gate_step_line", "run_ci_gate"]
+__all__ = [
+    "Finding",
+    "GateResult",
+    "GateStep",
+    "crashed_clause",
+    "gate_step_line",
+    "run_ci_gate",
+]
 
 #: The ``lint`` step's summary when ``rules.yml`` could not be loaded at all.
 #: Named rather than spelled twice because that step is the one case where the
@@ -167,6 +178,11 @@ class GateResult:
         """All findings across every step, in step order."""
         return [f for step in self.steps for f in step.findings]
 
+    @property
+    def crashed(self) -> list[GateStep]:
+        """The steps that raised instead of reporting, in step order (BDL-UX #318)."""
+        return [step for step in self.steps if step.error is not None]
+
 
 # ---------------------------------------------------------------------------
 # Orchestrator
@@ -206,25 +222,38 @@ def run_ci_gate(
     """
     # Built in execution order rather than as one literal: `sync-check` needs the
     # index `reindex` writes, and the doc-spaces step needs the excused-pair count
-    # `sync-check` measured. Order is behaviour here, not layout.
+    # `sync-check` measured. Order is behaviour here, not layout. Every step runs
+    # through the boundary, which reports a step that raised as ERROR and lets the
+    # rest run; the lambdas look each step function up when it is called, which is
+    # also what lets a test break one step at a time.
     steps: list[GateStep] = [
-        _step_reindex(project_root, no_reindex=no_reindex),
-        lint_step(project_root),
+        run_bounded("reindex", lambda: _step_reindex(project_root, no_reindex=no_reindex)),
+        run_bounded("lint", lambda: lint_step(project_root)),
     ]
-    sync = _step_sync_check(project_root)
+    sync = run_bounded("sync-check", lambda: _step_sync_check(project_root))
     steps.append(sync)
-    steps.append(_step_docs_audit(project_root))
-    steps.append(_step_docs_quality(project_root))
-    steps.append(_step_issue_numbers(project_root))
-    steps.append(step_readme_pair(project_root))
+    steps.append(run_bounded("docs-audit", lambda: _step_docs_audit(project_root)))
+    steps.append(run_bounded("docs-quality", lambda: _step_docs_quality(project_root)))
+    steps.append(run_bounded("issue-log", lambda: _step_issue_numbers(project_root)))
+    steps.append(run_bounded("readme-pair", lambda: step_readme_pair(project_root)))
     # The excused-pair count travels from the step that produced it, so the two
-    # lines of one run cannot say different numbers about one word.
-    steps.append(_step_doc_spaces(project_root, pairs_excused=sync.pairs_excused))
-    steps.append(_step_scope_check(project_root))
-    steps.append(_step_config_check(project_root))
-    steps.append(_step_doctor(project_root))
+    # lines of one run cannot say different numbers about one word. A sync-check
+    # that crashed measured nothing, and its count is `None`.
+    steps.append(
+        run_bounded(
+            "doc-spaces",
+            lambda: _step_doc_spaces(project_root, pairs_excused=sync.pairs_excused),
+        )
+    )
+    steps.append(run_bounded("scope-check", lambda: _step_scope_check(project_root)))
+    steps.append(run_bounded("config-check", lambda: _step_config_check(project_root)))
+    steps.append(run_bounded("doctor", lambda: _step_doctor(project_root)))
     if hub_exports:
-        steps.append(_step_federate(project_root, hub_exports, fail_on))
+        steps.append(
+            run_bounded(
+                "federate", lambda: _step_federate(project_root, hub_exports, fail_on)
+            )
+        )
     performed = tuple(step.name for step in steps) + performed_elsewhere
     result = GateResult(
         steps=steps,
