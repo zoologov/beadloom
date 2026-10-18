@@ -1,20 +1,21 @@
-"""A gate finding names its owner (BDL-068 S6, offered by beadloom-0mdo.76).
+"""A gate finding names its owner: the bead whose commits changed its files.
 
-This branch carried a red Gate across two waves of S6 — two stale docs owned by
-no bead in the running plan — and every gate owner in those waves had to be told
-by the coordinator, by hand, that the red was not theirs. A red everyone learns
-to ignore, arriving on the instrument rather than in the suite.
+BDL-068 S6 (offered by beadloom-0mdo.76) added the report, attributing a finding to
+every claimed bead whose ``refs:`` declared the node that covers it. BDL-083 S1c
+(``beadloom-b23f``; BDL-UX #329; RFC D3) replaced that rule after the first outside
+adopter measured it: a bead was told it owned 36 findings on files it never touched,
+because its ``refs:`` named the node that covers the frontend's source whole.
 
 Four properties, and the last three are what keep the first from lying:
 
-1. a finding whose node a claimed bead declares names that bead;
-2. ``unowned`` is a VERDICT — a node was derived and no claim covers it — and it
-   is a different fact from ``unattributed``, where no node could be derived at
-   all;
-3. a tracker that cannot answer is a reason on the whole report, never an
-   absence of owners, because "nobody owns this" and "nobody was asked" would
-   otherwise read alike;
-4. none of it touches the verdict or the exit code.
+1. a finding is owned by a claimed bead whose commits on the branch changed a file
+   the finding is about, and by no bead whose node merely covers that file;
+2. ``unattributed`` is the answer when no claimed bead's commits changed such a
+   file, with the reason on the finding;
+3. a tracker that cannot answer, a missing index and a git that cannot list the
+   branch's commits are a reason on the whole report, never an absence of owners;
+4. none of it touches the verdict or the exit code, and every surface prints the
+   rule it attributed by.
 """
 
 from __future__ import annotations
@@ -26,14 +27,16 @@ from click.testing import CliRunner
 
 from beadloom.application.gate import run_ci_gate
 from beadloom.application.gate_ownership import (
+    ATTRIBUTION_RULE,
+    NO_TRACKER,
     OWNED,
     UNATTRIBUTED,
-    UNOWNED,
     derive_gate_ownership,
     gate_ownership_lines,
 )
 from beadloom.application.guards.contract import ClaimedBead
 from beadloom.services.cli import main
+from tests.support.committed_project import commit_project, git
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -79,6 +82,8 @@ nodes:
     kind: domain
     summary: "Beta domain"
     source: src/beta
+    docs:
+      - docs/beta.md
   - ref_id: alpha-inner
     kind: component
     summary: "A component of alpha"
@@ -104,42 +109,41 @@ rules:
       edge_kind: part_of
 """
 
+_IDENTITY = ("-c", "user.name=Test Committer", "-c", "user.email=committer@example.invalid")
+
 
 def _project(tmp_path: Path) -> Path:
-    """A project whose gate fails with one finding, about the node ``beta``."""
+    """A committed project on a working branch; its gate fails with one finding, about ``beta``."""
     root = tmp_path / "proj"
     graph = root / ".beadloom" / "_graph"
     graph.mkdir(parents=True)
     (graph / "graph.yml").write_text(_GRAPH, encoding="utf-8")
     (graph / "rules.yml").write_text(_RULES, encoding="utf-8")
+    (root / ".gitignore").write_text(".beadloom/*.db*\n", encoding="utf-8")
     for domain in ("alpha", "beta"):
         (root / "src" / domain).mkdir(parents=True)
         (root / "src" / domain / f"{domain}.py").write_text("x = 1\n", encoding="utf-8")
     (root / "src" / "alpha" / "inner.py").write_text("y = 2\n", encoding="utf-8")
-    from beadloom.application.reindex import reindex
-
-    reindex(root)
-    return root
-
-
-def _document_of_beta(root: Path) -> Path:
-    """Give ``beta`` a document, so the doc-path route has something to join on."""
     (root / "docs").mkdir()
     (root / "docs" / "beta.md").write_text("# Beta\n", encoding="utf-8")
-    graph = root / ".beadloom" / "_graph" / "graph.yml"
-    graph.write_text(
-        graph.read_text(encoding="utf-8").replace(
-            '    source: src/beta\n', '    source: src/beta\n    docs:\n      - docs/beta.md\n'
-        ),
-        encoding="utf-8",
-    )
+    commit_project(root)
+    git(root, "branch", "-M", "main")
+    git(root, "switch", "-q", "-c", "features/X")
     from beadloom.application.reindex import reindex
 
     reindex(root)
     return root
 
 
-def _bead(bead_id: str, refs: str) -> ClaimedBead:
+def _commit(root: Path, path: str, message: str) -> None:
+    """Change *path* and commit it with *message*."""
+    target = root / path
+    target.write_text(target.read_text(encoding="utf-8") + "# changed\n", encoding="utf-8")
+    git(root, "add", path)
+    git(root, *_IDENTITY, "commit", "-q", "-m", message)
+
+
+def _bead(bead_id: str, refs: str = "beta") -> ClaimedBead:
     return ClaimedBead(id=bead_id, title=bead_id, declaration=f"refs: {refs}")
 
 
@@ -156,109 +160,186 @@ def _finding(**fields: object) -> Finding:
     return base
 
 
+def _on(path: str) -> Finding:
+    return _finding(locations=[{"file": path}])
+
+
 class TestWhoOwnsAFinding:
-    def test_a_claimed_bead_that_declares_the_node_owns_the_finding(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_bead_whose_commit_changed_the_file_owns_the_finding(self, tmp_path: Path) -> None:
         root = _project(tmp_path)
+        _commit(root, "src/beta/beta.py", "beta moves (bd-1)")
         ownership = derive_gate_ownership(
-            root,
-            findings=[_finding(node="beta")],
-            tracker=_Tracker(_bead("bd-1", "beta")),
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
         )
         assert [owner.verdict for owner in ownership.owners] == [OWNED]
         assert ownership.owners[0].beads == ("bd-1",)
-        assert ownership.owners[0].node == "beta"
+        assert ownership.owners[0].where == "src/beta/beta.py, changed by its commits"
 
-    def test_a_node_no_claimed_bead_declares_is_unowned(self, tmp_path: Path) -> None:
+    def test_a_bead_whose_node_covers_the_file_owns_nothing_it_did_not_commit_to(
+        self, tmp_path: Path
+    ) -> None:
+        """The #329 shape: the node covers the directory, the commits are elsewhere."""
         root = _project(tmp_path)
+        _commit(root, "src/alpha/alpha.py", "alpha moves (bd-1)")
         ownership = derive_gate_ownership(
-            root,
-            findings=[_finding(node="beta")],
-            tracker=_Tracker(_bead("bd-1", "alpha")),
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1", "beta"))
         )
-        assert [owner.verdict for owner in ownership.owners] == [UNOWNED]
+        assert [owner.verdict for owner in ownership.owners] == [UNATTRIBUTED]
         assert ownership.owners[0].beads == ()
         assert ownership.none_owned
 
-    def test_unowned_is_reported_as_a_verdict_not_as_a_blank(
+    def test_of_two_beads_in_flight_only_the_one_that_changed_the_file_owns_it(
         self, tmp_path: Path
     ) -> None:
         root = _project(tmp_path)
+        _commit(root, "src/beta/beta.py", "beta moves (bd-a)")
         ownership = derive_gate_ownership(
             root,
-            findings=[_finding(node="beta")],
-            tracker=_Tracker(_bead("bd-1", "alpha")),
+            findings=[_on("src/beta/beta.py")],
+            tracker=_Tracker(_bead("bd-a"), _bead("bd-b", "root")),
         )
-        text = "\n".join(gate_ownership_lines(ownership))
-        assert "unowned" in text
-        assert "no bead claimed now declares" in text
+        assert ownership.owners[0].beads == ("bd-a",)
+        assert [claim.bead_id for claim in ownership.owning_nothing()] == ["bd-b"]
 
-    def test_a_finding_with_no_node_and_no_path_is_unattributed(
+    def test_a_finding_about_a_node_is_owned_by_the_bead_that_changed_a_file_it_owns(
+        self, tmp_path: Path
+    ) -> None:
+        root = _project(tmp_path)
+        _commit(root, "src/alpha/alpha.py", "alpha moves (bd-1)")
+        ownership = derive_gate_ownership(
+            root, findings=[_finding(node="alpha")], tracker=_Tracker(_bead("bd-1", "root"))
+        )
+        assert ownership.owners[0].verdict == OWNED
+
+    def test_a_nested_nodes_file_does_not_make_its_parent_s_finding_owned(
+        self, tmp_path: Path
+    ) -> None:
+        root = _project(tmp_path)
+        _commit(root, "src/alpha/inner.py", "inner moves (bd-1)")
+        ownership = derive_gate_ownership(
+            root, findings=[_finding(node="alpha")], tracker=_Tracker(_bead("bd-1", "alpha"))
+        )
+        assert ownership.owners[0].verdict == UNATTRIBUTED
+        assert (
+            ownership.owners[0].where == "no claimed bead's commits changed the files alpha owns"
+        )
+
+    def test_a_document_located_in_the_documentation_root_s_frame_is_matched(
+        self, tmp_path: Path
+    ) -> None:
+        """The sync steps locate a document as the ``docs`` table stores it."""
+        root = _project(tmp_path)
+        _commit(root, "docs/beta.md", "the beta document (bd-1)")
+        ownership = derive_gate_ownership(
+            root, findings=[_on("beta.md")], tracker=_Tracker(_bead("bd-1"))
+        )
+        assert ownership.owners[0].verdict == OWNED
+        assert ownership.owners[0].files == ("docs/beta.md",)
+
+    def test_a_stale_pair_is_owned_by_the_bead_that_changed_its_code_file(
+        self, tmp_path: Path
+    ) -> None:
+        from beadloom.application.gate import _sync_finding
+
+        root = _project(tmp_path)
+        _commit(root, "src/beta/beta.py", "beta moves (bd-1)")
+        stale = _sync_finding(
+            {
+                "doc_path": "beta.md",
+                "code_path": "src/beta/beta.py",
+                "ref_id": "beta",
+                "status": "stale",
+                "reason": "hash",
+            }
+        )
+        ownership = derive_gate_ownership(root, findings=[stale], tracker=_Tracker(_bead("bd-1")))
+        assert ownership.owners[0].verdict == OWNED
+
+    def test_a_commit_names_a_bead_only_by_its_whole_id(self, tmp_path: Path) -> None:
+        root = _project(tmp_path)
+        _commit(root, "src/beta/beta.py", "the neighbours (bd-10, bd-1.2)")
+        ownership = derive_gate_ownership(
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
+        )
+        assert ownership.owners[0].verdict == UNATTRIBUTED
+        assert ownership.claims[0].commits == 0
+
+    def test_a_commit_naming_no_claimed_bead_attributes_nothing(self, tmp_path: Path) -> None:
+        """An older commit of the branch, made under a bead that is closed now."""
+        root = _project(tmp_path)
+        _commit(root, "src/beta/beta.py", "the first work item (bd-0)")
+        ownership = derive_gate_ownership(
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
+        )
+        assert ownership.owners[0].verdict == UNATTRIBUTED
+
+    def test_a_commit_already_on_the_trunk_is_nobody_s_work_in_flight(
+        self, tmp_path: Path
+    ) -> None:
+        root = _project(tmp_path)
+        git(root, "switch", "-q", "main")
+        _commit(root, "src/beta/beta.py", "landed (bd-1)")
+        git(root, "switch", "-q", "-c", "features/Y")
+        ownership = derive_gate_ownership(
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
+        )
+        assert ownership.owners[0].verdict == UNATTRIBUTED
+
+    def test_a_finding_with_no_file_and_no_node_is_unattributed_and_says_why(
         self, tmp_path: Path
     ) -> None:
         root = _project(tmp_path)
         ownership = derive_gate_ownership(
-            root,
-            findings=[_finding(rule="reindex")],
-            tracker=_Tracker(_bead("bd-1", "alpha")),
+            root, findings=[_finding(rule="reindex")], tracker=_Tracker(_bead("bd-1"))
         )
         assert [owner.verdict for owner in ownership.owners] == [UNATTRIBUTED]
-        assert ownership.owners[0].node is None
+        assert ownership.owners[0].where == "it locates no file and names no node"
         text = "\n".join(gate_ownership_lines(ownership))
-        assert "unattributed" in text
+        assert "1 about no file a commit could have changed" in text
 
-    def test_a_path_resolves_to_the_node_that_owns_it(self, tmp_path: Path) -> None:
-        root = _project(tmp_path)
-        ownership = derive_gate_ownership(
-            root,
-            findings=[_finding(locations=[{"file": "src/beta/beta.py"}])],
-            tracker=_Tracker(_bead("bd-1", "beta")),
-        )
-        assert ownership.owners[0].node == "beta"
-        assert ownership.owners[0].verdict == OWNED
-        assert "src/beta/beta.py" in ownership.owners[0].where
-
-    def test_a_doc_path_resolves_to_the_node_the_document_is_declared_for(
-        self, tmp_path: Path
-    ) -> None:
-        """Half this gate's findings are about documents, which no source owns.
-
-        A doc path is joined through the ``docs`` table, and the documentation
-        root is read from the project's own configuration rather than assumed,
-        so a project that renames ``docs/`` is still joined correctly.
-        """
-        root = _document_of_beta(_project(tmp_path))
-        ownership = derive_gate_ownership(
-            root,
-            findings=[_finding(locations=[{"file": "docs/beta.md"}])],
-            tracker=_Tracker(_bead("bd-1", "beta")),
-        )
-        assert ownership.owners[0].node == "beta"
-        assert ownership.owners[0].where == "documented node of docs/beta.md"
-
-    def test_a_bead_declaring_a_parent_owns_a_finding_about_its_child(
+    def test_an_uncommitted_change_is_unattributed_and_counted_as_uncommitted(
         self, tmp_path: Path
     ) -> None:
         root = _project(tmp_path)
+        (root / "src" / "beta" / "beta.py").write_text("x = 2\n", encoding="utf-8")
         ownership = derive_gate_ownership(
-            root,
-            findings=[_finding(node="alpha-inner")],
-            tracker=_Tracker(_bead("bd-1", "alpha")),
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
         )
-        assert ownership.owners[0].verdict == OWNED
-        assert ownership.owners[0].beads == ("bd-1",)
+        assert ownership.owners[0].verdict == UNATTRIBUTED
+        assert ownership.owners[0].uncommitted
+        text = "\n".join(gate_ownership_lines(ownership))
+        assert "1 on files the working tree changes and no commit holds yet" in text
 
-    def test_a_child_declaration_does_not_own_a_finding_about_its_parent(
+
+class TestTheLinesNameTheRule:
+    def test_the_block_names_the_rule_the_base_and_each_owner_s_clause(
         self, tmp_path: Path
     ) -> None:
         root = _project(tmp_path)
+        _commit(root, "src/beta/beta.py", "beta moves (bd-a)")
         ownership = derive_gate_ownership(
             root,
-            findings=[_finding(node="alpha")],
-            tracker=_Tracker(_bead("bd-1", "alpha-inner")),
+            findings=[_on("src/beta/beta.py")],
+            tracker=_Tracker(_bead("bd-a"), _bead("bd-b")),
         )
-        assert ownership.owners[0].verdict == UNOWNED
+        lines = gate_ownership_lines(ownership)
+        assert lines[0] == "Findings by owner:"
+        assert lines[1] == f"  attributed {ATTRIBUTION_RULE}, over main..HEAD"
+        assert "  owned by bd-a: 1 finding(s), by the files its commits changed" in lines
+        assert "  bd-b owns no finding: no commit on main..HEAD names its id" in lines
+
+    def test_a_bead_whose_commits_explain_nothing_is_told_so_in_its_own_words(
+        self, tmp_path: Path
+    ) -> None:
+        root = _project(tmp_path)
+        _commit(root, "src/alpha/alpha.py", "alpha moves (bd-b)")
+        ownership = derive_gate_ownership(
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-b"))
+        )
+        assert (
+            "  bd-b owns no finding: its 1 commit(s) changed none of the files these "
+            "findings are about"
+        ) in gate_ownership_lines(ownership)
 
 
 class TestWhatTheReportWillNotClaim:
@@ -267,72 +348,42 @@ class TestWhatTheReportWillNotClaim:
     ) -> None:
         root = _project(tmp_path)
         tracker = _SilentTracker()
-        ownership = derive_gate_ownership(
-            root, findings=[_finding(node="beta")], tracker=tracker
-        )
+        ownership = derive_gate_ownership(root, findings=[_finding(node="beta")], tracker=tracker)
         assert tracker.asked == 1
-        assert ownership.reason is not None
+        assert ownership.reason == NO_TRACKER
         assert ownership.owners == ()
         assert not ownership.none_owned
-        assert "could not" in "\n".join(gate_ownership_lines(ownership))
 
-    def test_a_project_with_no_index_says_so_rather_than_calling_everything_unowned(
+    def test_a_project_with_no_index_says_so_rather_than_calling_everything_unattributed(
         self, tmp_path: Path
     ) -> None:
         root = tmp_path / "bare"
         root.mkdir()
         ownership = derive_gate_ownership(
-            root,
-            findings=[_finding(node="beta")],
-            tracker=_Tracker(_bead("bd-1", "alpha")),
+            root, findings=[_finding(node="beta")], tracker=_Tracker(_bead("bd-1")), base="main"
         )
         assert ownership.owners == ()
         assert ownership.reason is not None
         assert "index" in ownership.reason
 
-    def test_a_claim_whose_own_declaration_cannot_be_read_qualifies_unowned(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_git_that_cannot_list_the_branch_s_commits_is_a_reason(self, tmp_path: Path) -> None:
         root = _project(tmp_path)
         ownership = derive_gate_ownership(
             root,
-            findings=[_finding(node="beta")],
-            tracker=_Tracker(
-                _bead("bd-1", "alpha"),
-                ClaimedBead(id="bd-2", title="bd-2", declaration="no scope here"),
-            ),
+            findings=[_on("src/beta/beta.py")],
+            tracker=_Tracker(_bead("bd-1")),
+            base="no-such-ref",
         )
-        assert ownership.owners[0].verdict == UNOWNED
-        assert [claim.bead_id for claim in ownership.unread] == ["bd-2"]
-        text = "\n".join(gate_ownership_lines(ownership))
-        assert "bd-2" in text
-        assert "not a proof" in text
+        assert ownership.owners == ()
+        assert ownership.reason is not None
+        assert "no-such-ref" in ownership.reason
 
     def test_no_finding_means_the_tracker_is_never_asked(self, tmp_path: Path) -> None:
         root = _project(tmp_path)
-        tracker = _Tracker(_bead("bd-1", "alpha"))
+        tracker = _Tracker(_bead("bd-1"))
         ownership = derive_gate_ownership(root, findings=[], tracker=tracker)
         assert tracker.asked == 0
         assert gate_ownership_lines(ownership) == []
-
-
-class TestThePopulationTheClaimIsReadFrom:
-    def test_the_owner_is_a_bead_and_never_the_work_item(self, tmp_path: Path) -> None:
-        """The decision, pinned: a claim is a bead, not the branch's approval.
-
-        The work item's axes keep every node of this branch in scope, so an
-        owner derived from them would name the work item for every finding —
-        the one sentence every agent on the branch already shares, and not the
-        sentence the coordinator had to write by hand.
-        """
-        root = _project(tmp_path)
-        ownership = derive_gate_ownership(
-            root,
-            findings=[_finding(node="beta")],
-            tracker=_Tracker(_bead("bd-1", "alpha")),
-        )
-        assert ownership.claimed == ("bd-1",)
-        assert ownership.owners[0].verdict == UNOWNED
 
 
 class TestTheVerdictIsUnchanged:
@@ -340,48 +391,50 @@ class TestTheVerdictIsUnchanged:
         self, tmp_path: Path
     ) -> None:
         root = _project(tmp_path)
+        _commit(root, "src/beta/beta.py", "beta moves (bd-1)")
         without = run_ci_gate(root, fail_on=None, hub_exports=[], no_reindex=True)
         with_owner = run_ci_gate(
             root,
             fail_on=None,
             hub_exports=[],
             no_reindex=True,
-            tracker=_Tracker(_bead("bd-1", "beta")),
+            tracker=_Tracker(_bead("bd-1")),
         )
         assert without.ok is with_owner.ok
         assert [(s.name, s.status) for s in without.steps] == [
             (s.name, s.status) for s in with_owner.steps
         ]
         assert with_owner.ownership is not None
-        assert with_owner.ownership.owners[0].verdict == OWNED
+        assert with_owner.ownership.owned
 
     def test_ownership_is_not_a_step(self, tmp_path: Path) -> None:
         root = _project(tmp_path)
         result = run_ci_gate(
-            root,
-            fail_on=None,
-            hub_exports=[],
-            no_reindex=True,
-            tracker=_Tracker(_bead("bd-1", "beta")),
+            root, fail_on=None, hub_exports=[], no_reindex=True, tracker=_Tracker(_bead("bd-1"))
         )
         assert "ownership" not in {step.name for step in result.steps}
 
-    def test_a_run_given_no_tracker_makes_no_ownership_claim(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_run_given_no_tracker_makes_no_ownership_claim(self, tmp_path: Path) -> None:
         root = _project(tmp_path)
         result = run_ci_gate(root, fail_on=None, hub_exports=[], no_reindex=True)
         assert result.ownership is None
 
 
-class TestASyncFindingNamesItsNode:
-    def test_a_stale_pair_carries_the_ref_id_as_a_field(self) -> None:
+class TestASyncFindingNamesItsNodeAndItsFiles:
+    def test_a_stale_pair_carries_the_ref_id_and_both_files(self) -> None:
         from beadloom.application.gate import _sync_finding
 
         finding = _sync_finding(
-            {"doc_path": "docs/x.md", "ref_id": "beta", "status": "stale", "reason": "hash"}
+            {
+                "doc_path": "x.md",
+                "code_path": "src/x.py",
+                "ref_id": "beta",
+                "status": "stale",
+                "reason": "hash",
+            }
         )
         assert finding["node"] == "beta"
+        assert finding["locations"] == [{"file": "x.md"}, {"file": "src/x.py"}]
 
     def test_a_missing_pair_carries_the_ref_id_as_a_field(self) -> None:
         from beadloom.application.gate import _sync_finding
@@ -407,43 +460,52 @@ class TestASyncFindingNamesItsNode:
 
 
 class TestTheSurfacesSayTheSameThing:
-    def test_the_json_surface_carries_a_verdict_for_every_finding(
+    def test_the_json_surface_carries_the_rule_the_base_and_a_verdict_per_finding(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         root = _project(tmp_path)
         _claim_beads(monkeypatch, _bead("bd-1", "alpha"))
-        result = CliRunner().invoke(
-            main, ["ci", "--project", str(root), "--format", "json"]
-        )
+        result = CliRunner().invoke(main, ["ci", "--project", str(root), "--format", "json"])
         payload = json.loads(result.stdout)
-        assert payload["ownership"]["reason"] is None
-        verdicts = {row["verdict"] for row in payload["ownership"]["findings"]}
-        assert verdicts == {UNOWNED}
-        assert payload["ownership"]["claimed"] == ["bd-1"]
+        ownership = payload["ownership"]
+        assert ownership["reason"] is None
+        assert ownership["rule"] == ATTRIBUTION_RULE
+        assert ownership["base"] == "main"
+        assert {row["verdict"] for row in ownership["findings"]} == {UNATTRIBUTED}
+        assert ownership["claimed"] == ["bd-1"]
+        assert ownership["claims"] == [{"bead": "bd-1", "commits": 0}]
 
     def test_the_human_surface_prints_the_block_under_the_verdict(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         root = _project(tmp_path)
         _claim_beads(monkeypatch, _bead("bd-1", "alpha"))
-        result = CliRunner().invoke(
-            main, ["ci", "--project", str(root), "--format", "rich"]
-        )
-        assert "Findings by owner" in result.output
+        result = CliRunner().invoke(main, ["ci", "--project", str(root), "--format", "rich"])
+        assert ATTRIBUTION_RULE in result.output
         assert result.output.index("FAIL — gate blocked") < result.output.index(
             "Findings by owner"
         )
 
-    def test_the_github_surface_states_that_no_finding_is_owned(
+    def test_the_github_surface_names_the_rule_and_that_no_finding_is_owned(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         root = _project(tmp_path)
         _claim_beads(monkeypatch, _bead("bd-1", "alpha"))
-        result = CliRunner().invoke(
-            main, ["ci", "--project", str(root), "--format", "github"]
-        )
-        assert "::notice::" in result.output
+        result = CliRunner().invoke(main, ["ci", "--project", str(root), "--format", "github"])
+        assert f"::notice::attributed {ATTRIBUTION_RULE}, over main..HEAD" in result.output
         assert "no finding of this run is owned by a bead claimed now" in result.output
+
+    def test_the_mcp_payload_is_the_json_report_s(self, tmp_path: Path) -> None:
+        from beadloom.application.gate_ownership import ownership_payload
+        from beadloom.services.mcp_server import _finding_owners
+
+        root = _project(tmp_path)
+        result = run_ci_gate(
+            root, fail_on=None, hub_exports=[], no_reindex=True, tracker=_Tracker(_bead("bd-1"))
+        )
+        assert result.ownership is not None
+        assert _finding_owners(result) == ownership_payload(result.ownership)
+        assert _finding_owners(result)["rule"] == ATTRIBUTION_RULE
 
 
 def _claim_beads(monkeypatch: pytest.MonkeyPatch, *beads: ClaimedBead) -> None:

@@ -867,23 +867,17 @@ def _finding_owners(gate: GateResult) -> dict[str, object]:
     """Which bead claimed now owns each finding this run is refusing to close on.
 
     The agent reading this holds one of those beads, so the distinction it needs
-    is between a finding its own claim covers and one nobody's does. A report
-    that could not be produced states its reason rather than an empty list, so
-    "nobody owns these" and "nobody was asked" do not read alike (BDL-068 S6).
+    is between a finding its own commits explain and one no claimed bead's do
+    (BDL-UX #329). A report that could not be produced states its reason rather
+    than an empty list, so "nobody owns these" and "nobody was asked" do not read
+    alike (BDL-068 S6). The payload is the JSON report's, rule and base included.
     """
+    from beadloom.application.gate_ownership import ownership_payload
+
     ownership = gate.ownership
     if ownership is None:
         return {}
-    return {
-        "reason": ownership.reason,
-        "claimed": list(ownership.claimed),
-        "none_owned": ownership.none_owned,
-        "findings": [
-            {"rule": owner.rule, "verdict": owner.verdict, "node": owner.node,
-             "beads": list(owner.beads)}
-            for owner in ownership.owners
-        ],
-    }
+    return ownership_payload(ownership)
 
 
 def handle_complete_bead(

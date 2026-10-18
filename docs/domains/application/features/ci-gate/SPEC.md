@@ -484,17 +484,20 @@ next one, and the cost is never the red itself but the work of proving a second 
 real against a background that already holds one.
 
 `GateResult` therefore carries a `GateOwnership` beside its room census and its coverage
-statement: one verdict per finding, held against the beads the tracker reports claimed while
-the run happened. `owned` names the beads. `unowned` says a node was derived and no claim
-covers it. `unattributed` says no node could be derived from the finding at all, which is a
-different absence and must not read as the same one. A tracker that cannot answer, and a
-project with no index, are a reason on the whole report rather than a page of `unowned`.
+statement: one verdict per finding, held against the commits of the beads the tracker reports
+claimed while the run happened. Since BDL-083 S1c (BDL-UX #329) `owned` names the claimed
+beads whose commits on the branch — a commit naming the bead's id in its message — changed a
+file the finding is about, and `unattributed` says no claimed bead's commits did, or that the
+finding is about no file. A bead whose `refs:` name a node covering a directory owns nothing
+it did not commit to. A tracker that cannot answer, a project with no index and a git that
+cannot list the branch's commits are a reason on the whole report rather than a page of
+`unattributed`, and every surface prints the rule it attributed by and the base.
 
 **The claim is a bead, not the branch's approval.** The work item's `## Axes` answer whether a
 change is inside the approval, which the `scope-check` step of this same run already asks, and
 which every agent on one branch shares; a wave's plan names beads that have not started and
-beads whose wave is over. `gate-ownership` (DOC) states both trade-offs and the three routes a
-finding takes to reach a node.
+beads whose wave is over. `gate-ownership` (DOC) states both trade-offs and which files a
+finding is held against.
 
 **It is not a step either, and the tracker is asked only when there is a finding.** Same `ok`,
 same exit code, same findings; a green run attributes nothing and shells out to nothing.
@@ -587,14 +590,19 @@ Module `src/beadloom/application/gate_coverage.py`:
 
 Module `src/beadloom/application/gate_ownership.py`:
 
-- `derive_gate_ownership(project_root, *, findings, tracker) -> GateOwnership` —
-  one verdict per finding, held against the beads the tracker reports claimed.
-- `gate_ownership_lines(ownership) -> list[str]` — the block all surfaces quote.
+- `derive_gate_ownership(project_root, *, findings, tracker, base=None) -> GateOwnership` —
+  one verdict per finding, held against the files the claimed beads' commits changed on
+  `base..HEAD` (`None` takes `declared_scope.trunk_ref`).
+- `ownership_sentences(ownership) -> list[str]` — the sentences every surface prints, the
+  rule first; `gate_ownership_lines(ownership)` is the rich block built from them.
+- `ownership_payload(ownership) -> dict` — the JSON report's `ownership`, and the MCP
+  `complete_bead` tool's `owners`.
 
 ## Testing
 
 Tests: `tests/test_gate.py`, `tests/integration/doc_sync/audit/test_ci_gate.py`,
-`tests/test_gate_not_run.py`, `tests/test_gate_finding_owner.py`,
+`tests/test_gate_not_run.py`, `tests/test_gate_finding_owner.py` (and the scenarios in
+`tests/acceptance/application/gate-ownership/ownership_by_changed_files.feature`),
 `tests/test_f3_gate_coverage.py`, `tests/test_the_gate_blocks_each_break_class.py`,
 `tests/test_a_remediation_can_be_followed.py`, `tests/test_a_stale_line_names_its_pair.py`;
 scenarios in `tests/acceptance/features/remediation_that_can_be_followed.feature`

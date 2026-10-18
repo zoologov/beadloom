@@ -17,7 +17,10 @@ stages, which paths a branch changes against a ref, and which branch is checked
 out. BDL-068 S1.6 widened it from the first two to the last two rather than
 opening a second subprocess call to ``git`` elsewhere in the product: two
 readers of one tool are two things that can disagree about what a path is
-relative to, and ``_project_relative`` is the answer to that.
+relative to, and ``_project_relative`` is the answer to that. BDL-083 S1c added
+a fifth for the same reason: which commits a branch holds against a ref, with the
+message and the paths of each, so the Gate can attribute a finding to the bead
+whose commits changed its files.
 
 What it deliberately does NOT do: judge freshness. That is
 :func:`~beadloom.doc_sync.engine.check_sync`'s job, which pairs this answer with
@@ -29,6 +32,7 @@ a clean one is the defect this module was written for.
 from __future__ import annotations
 
 import subprocess
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -43,6 +47,16 @@ _TEXT_ERRORS = "surrogateescape"
 #: Rename / copy status letters — their record carries the OLD path as a second
 #: NUL-separated field, and both endpoints count as changed.
 _RENAME_STATUS = frozenset("RC")
+
+#: Separators of one ``git log`` record: before each commit, and after its hash and
+#: its message. Neither byte occurs in a hash, and a commit message that holds one
+#: is not a message any tool writes.
+_COMMIT_START = "\x1e"
+_COMMIT_FIELD = "\x1f"
+_COMMIT_FORMAT = f"--format={_COMMIT_START}%H{_COMMIT_FIELD}%B{_COMMIT_FIELD}"
+
+#: The fields of one record: the hash, the message, and the NUL-separated paths.
+_COMMIT_FIELDS = 3
 
 #: The shortest possible porcelain record is ``XY p`` — two status letters, a
 #: space, and a one-character path.
@@ -148,6 +162,63 @@ def paths_changed_since(project_root: Path, ref: str) -> frozenset[str] | None:
         return None
     paths = [field for field in raw.split("\0") if field]
     return frozenset(_project_relative(paths, prefix.strip()))
+
+
+@dataclass(frozen=True)
+class BranchCommit:
+    """One commit a branch holds: its hash, the message it was made with, its paths."""
+
+    sha: str
+    message: str
+    paths: frozenset[str]
+    """Project-relative paths the commit added, modified or deleted."""
+
+
+def commits_since(project_root: Path, ref: str) -> tuple[BranchCommit, ...] | None:
+    """The commits ``HEAD`` holds that *ref* does not, newest first, or ``None``.
+
+    ``ref..HEAD`` is the set ``ref...HEAD`` diffs — the commits made since the
+    branch left *ref* — listed one by one instead of folded into one diff,
+    because the question is which commit changed a path, not whether one did.
+    ``--no-renames`` reports a rename as its deletion and its addition, so both
+    paths are changed by the commit; a merge commit lists no path of its own.
+
+    ``None`` means git could not answer — no work tree, no ``git``, an unknown
+    ref — and callers must treat it as *not checked*, never as *no commits*.
+    """
+    prefix = _run_git(project_root, ["rev-parse", "--show-prefix"])
+    if prefix is None:
+        return None
+    if _run_git(project_root, ["rev-parse", "--verify", "--quiet", ref]) is None:
+        return None
+    raw = _run_git(
+        project_root,
+        ["log", _COMMIT_FORMAT, "--name-only", "-z", "--no-renames", f"{ref}..HEAD"],
+    )
+    if raw is None:
+        return None
+    return tuple(_parse_commits(raw, prefix.strip()))
+
+
+def _parse_commits(raw: str, prefix: str) -> list[BranchCommit]:
+    """Records of ``git log`` in :data:`_COMMIT_FORMAT` with ``--name-only -z``."""
+    commits: list[BranchCommit] = []
+    for record in raw.split(_COMMIT_START):
+        fields = record.split(_COMMIT_FIELD)
+        if len(fields) != _COMMIT_FIELDS:
+            continue
+        sha, message, names = fields
+        # `-z` ends the format with a NUL, and git separates it from the path list
+        # with a newline; neither is part of a path.
+        paths = [name.lstrip("\n") for name in names.split("\0")]
+        commits.append(
+            BranchCommit(
+                sha=sha.strip(),
+                message=message,
+                paths=frozenset(_project_relative([p for p in paths if p], prefix)),
+            )
+        )
+    return commits
 
 
 def ref_exists(project_root: Path, ref: str) -> bool:

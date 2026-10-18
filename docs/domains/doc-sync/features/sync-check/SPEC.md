@@ -592,6 +592,12 @@ that.
   second answers `HEAD` on a detached checkout, which reads as a branch named
   `HEAD` rather than as the absence of one.
 - `ref_exists(project_root, ref) -> bool` — whether git resolves *ref* here.
+- `commits_since(project_root, ref) -> tuple[BranchCommit, ...] | None` — the commits
+  `HEAD` holds that *ref* does not (`ref..HEAD`), newest first, each a `BranchCommit(sha,
+  message, paths)` with the project-relative paths it added, modified or deleted
+  (`--no-renames`, so a rename changes both of its paths). Added by BDL-083 S1c for the
+  Gate's ownership report, which attributes a finding to the bead whose commits changed its
+  files. `None` means git could not answer, never *no commits*.
 
 Module `src/beadloom/doc_sync/surface_ledger.py` — the committed surface record:
 

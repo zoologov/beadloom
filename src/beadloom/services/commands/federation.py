@@ -650,24 +650,9 @@ def _format_gate_json(result: GateResult) -> str:
         }
     ownership = result.ownership
     if ownership is not None:
-        payload["ownership"] = {
-            "reason": ownership.reason,
-            "claimed": list(ownership.claimed),
-            "none_owned": ownership.none_owned,
-            "findings": [
-                {
-                    "rule": owner.rule,
-                    "verdict": owner.verdict,
-                    "node": owner.node,
-                    "beads": list(owner.beads),
-                    "where": owner.where,
-                }
-                for owner in ownership.owners
-            ],
-            "unread_claims": [
-                {"bead": claim.bead_id, "why": claim.why} for claim in ownership.unread
-            ],
-        }
+        from beadloom.application.gate_ownership import ownership_payload
+
+        payload["ownership"] = ownership_payload(ownership)
     census = result.room
     if census is not None:
         payload["room"] = {
@@ -723,21 +708,19 @@ def _format_gate_github(result: GateResult) -> str:
 
 
 def _gate_ownership_notices(result: GateResult) -> list[str]:
-    """The ownership block as GitHub notices — the same claim, one line each."""
-    ownership = result.ownership
-    if ownership is None:
+    """The ownership block as GitHub notices — the same sentences, one notice each.
+
+    The rule the attribution was made by is the first of them, so a reader of the
+    annotations sees what "owned by" is a claim about (BDL-UX #329).
+    """
+    from beadloom.application.gate_ownership import ownership_sentences
+
+    if result.ownership is None:
         return []
-    if ownership.reason is not None:
-        return [f"::notice::findings by owner: {ownership.reason}"]
-    lines = [
-        f"::notice::owned by {bead}: {count} finding(s)"
-        for bead, count in ownership.by_bead()
-    ]
-    if ownership.none_owned:
-        lines.append(
-            "::notice::no finding of this run is owned by a bead claimed now"
-        )
-    return lines
+    sentences = ownership_sentences(result.ownership)
+    if result.ownership.reason is not None:
+        return [f"::notice::findings by owner: {sentence}" for sentence in sentences]
+    return [f"::notice::{sentence}" for sentence in sentences]
 
 
 def _finding_github_params(finding: dict[str, object]) -> str:

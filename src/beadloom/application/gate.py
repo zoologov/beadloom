@@ -1112,7 +1112,11 @@ def _sync_finding(row: dict[str, object]) -> Finding:
     code_path = str(row.get("code_path", ""))
     reason = str(row.get("reason", "stale"))
     ref_id = str(row.get("ref_id", ""))
-    locations: list[Finding] = [{"file": doc_path}] if doc_path else []
+    # The code file is the pair's second location, after the document: a pair is
+    # stale because one of its two files moved, and the ownership report needs both
+    # to find the bead whose commits moved it (BDL-UX #329). Surfaces that print one
+    # location read the first, which stays the document.
+    locations: list[Finding] = [{"file": path} for path in (doc_path, code_path) if path]
     if str(row.get("status")) == STATUS_MISSING:
         gone = code_path if reason == "code_missing" else doc_path
         return {

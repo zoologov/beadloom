@@ -366,7 +366,9 @@ claimed and the `bd` seam lives in THIS layer: `architecture-layers` (severity
 nothing about ownership; it supplies the port and renders the block the
 application layer computed, under the verdict beside the room and coverage lines.
 `--format json` carries the same report as `ownership`, and `--format github`
-renders one `::notice::` per owning bead plus the headline when nothing is owned.
+renders the same sentences one `::notice::` each — the rule the attribution was
+made by first, then one per owning bead:
+`owned by <bead>: N finding(s), by the files its commits changed` (BDL-UX #329).
 It is the same arrangement `guard` already uses for the flow guards.
 
 ## The one command that ends in a verdict
