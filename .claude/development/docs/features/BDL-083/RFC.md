@@ -554,15 +554,16 @@ matchability is the matcher itself on a synthetic path built from the glob's lit
 (`os/**` → `os`, `bcrypt*` → `bcrypt`), so liveness and the matcher cannot disagree on "/"
 again (#328). The same two sentences apply to `test_import_boundary`'s `to:`.
 
-### D3 — Ownership by the files a bead changed (S1)
+### D3 — Ownership by the files a bead changed (S1; amended 2026-10-19)
 
-`derive_gate_ownership` attributes a finding to a bead by the files the bead changed — the
-paths of its commits on the branch, and the paths its `refs:` name *as files*; a `refs:` entry
-that is a node covers the node's `source:` only when the finding's path is under it *and* the
-bead's commits touch that path. A finding on a path no in-flight bead changed is `unattributed`,
-never owned by the neighbour whose node covers the directory. The summary line prints the rule:
-"owned by <bead>: N finding(s), by the files its commits changed" (#329). The branch's older
-commits (a parent branch not yet merged) are excluded by D4's base.
+`derive_gate_ownership` attributes a finding to a bead by the files the bead's commits on the
+branch changed, and by nothing else. A `refs:` declaration names graph nodes and no file, so it
+attributes nothing (the clause "the paths its `refs:` name as files" of the approved text was
+unimplementable as written and is withdrawn by the owner's ruling of 2026-10-19, S1R Minor 1).
+A finding on a path no in-flight bead's commits changed is `unattributed`, never owned by the
+neighbour whose node covers the directory. The summary line prints the rule: "owned by <bead>:
+N finding(s), by the files the commits carrying `Bead: <id>` changed" (#329; D10 names the
+binding). The branch's older commits (a parent branch not yet merged) are excluded by D4's base.
 
 ### D4 — The base is the merge-base with the parent branch (S1; ruling 4)
 
@@ -624,6 +625,16 @@ bead closes; *won't fix* — the owner's ruling with a reason, archived as a clo
 output is the bead lists of S4–S7 and the stub lines for numbers 262 and higher; #196 and #288
 are accounted for in the archive. Each surviving entry gains `measured_on: <date> <version>`,
 read by the issue-log leg from S7 on.
+
+### D10 — A commit is a bead's by its `Bead:` trailer (S1; owner's ruling 2026-10-19)
+
+A commit belongs to a bead when its message carries the git trailer `Bead: <bead-id>`, and
+only then; a bead id mentioned anywhere else in the message (a landing-lock note, a test bead
+naming what it measured) binds nothing (S1R Minor 3). The composed commit format gains the
+trailer — `[{ISSUE-KEY}] <type>: <description>` with `Bead: <bead-id>` in the trailer block —
+in the flow template, so every adopter's `CLAUDE.md` and role files carry it after
+`setup-agentic-flow`; this repository recomposes its own. Commits without the trailer are
+`unattributed` under D3, which is the honest reading of a branch written before the rule.
 
 ## Public API (MAJOR)
 
