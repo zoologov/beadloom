@@ -1,0 +1,7 @@
+"""The digest section renders its title above its lines."""
+
+from digest.sections import Section
+
+
+def test_a_section_renders_its_title_first() -> None:
+    assert Section("Uploads", ("a.csv: 3",)).render() == "Uploads\na.csv: 3"

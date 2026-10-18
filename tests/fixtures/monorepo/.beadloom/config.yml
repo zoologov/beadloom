@@ -1,0 +1,13 @@
+# The monorepo fixture's configuration, written as the adopter wrote it after `init`: the
+# project root is the git root, the code is in two projects below it.
+languages:
+- .py
+- .ts
+scan_paths:
+- backend/src
+- frontend/src
+sync:
+  hook_mode: warn
+tests:
+  roots: [backend/tests]
+  beside_code: true

@@ -1,0 +1,34 @@
+# The backend's domains and its one feature. The domain `digest` and the feature
+# `application-digest` share the subpackage name `digest`, under two roots of one tree.
+nodes:
+  - ref_id: digest
+    kind: domain
+    summary: "The digest: the sections a day's metrics are reported in"
+    source: backend/src/digest/
+    tags: [layer-domain]
+    docs:
+      - docs/backend/digest.md
+  - ref_id: file-history
+    kind: domain
+    summary: "The file history: what the desk recorded about each uploaded file"
+    source: backend/src/file_history/
+    tags: [layer-domain]
+    docs:
+      - docs/backend/file-history.md
+  - ref_id: application-digest
+    kind: feature
+    summary: "The daily-digest use case: the digest's sections built from the file history"
+    source: backend/src/application/digest/
+    tags: [layer-application]
+    docs:
+      - docs/backend/application-digest.md
+edges:
+  - src: digest
+    dst: backend
+    kind: part_of
+  - src: file-history
+    dst: backend
+    kind: part_of
+  - src: application-digest
+    dst: digest
+    kind: part_of
