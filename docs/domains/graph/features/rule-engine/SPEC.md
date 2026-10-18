@@ -9,13 +9,14 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model), plus the vocabulary the model is matched in: `import_path_as_path` / `matches_import_target` / `MATCHING_FORM_HINT`. The `until:` grammar is no longer here: `exit_condition_deadline` moved to `infrastructure/exit_condition.py` in BDL-070 B2, because `onboarding` declares an exit condition too and was importing this peer domain to read what one is. `beadloom.graph.rules.exit_condition_deadline` still answers — `rules/__init__.py` re-exports it.
 - `rules/loader.py` — `load_rules` / `validate_rules` (YAML → typed rules + DB validation); `AUTHORING_KEYS`, derived from the one dispatch table; the memo that lets one `init` parse `rules.yml` once, and `forget_parsed_rules()`.
 - `rules/attribution.py` — which node a source FILE belongs to, and how many files belong to none.
-- `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers. `evaluate_one_import_rule` — one `forbid_import` rule over a list of imports — is public since BDL-074 C3, because `test_import_boundary` runs it over test imports.
+- `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers. `evaluate_one_import_rule` — one `forbid_import` rule over a list of imports — is public since BDL-074 C3, because `test_import_boundary` runs it over test imports. Since BDL-083 D2 it takes `roots=`, the project's source roots, which decide whether a `to` glob that matched nothing can match anything.
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code. Since BDL-070 A5 it reads a node's layer through `layers.own_layer_of` and its tags through `node_tags`, so the answer it decides a `layers` rule's liveness on is the answer the evaluator decides its verdict on.
 - `rules/layers.py` — what layer a node is in: its own declared layer, else its nearest `part_of` ancestor's, and which node's tag decided (`layer_membership`). Pure, and it reads the rule's own `layers` list, so no layer tag is written down in it (BDL-070 A1). Since BDL-070 B2 it also answers what containment makes of an edge INSIDE one layer: `shares_tagged_ancestor` and `same_layer_crossings`. Since BDL-080 S1b it holds the one narrowing a scoped rule goes through, `within_scope` over `subtree_of`. Since BDL-082 S1a `same_layer_crossings` takes `via_x`, the edges every import of which goes through `@x`, and `CROSS_IMPORT_LAYER` (`"entities"`) names the one layer, by its declared NAME, where such an edge is no crossing.
 - `rules/layer_reach.py` — how much of its edge set a layer rule judged, counted against the layer each end is IN, and the finding that states the fraction (BDL-070 A2, recounted in B3). Since BDL-080 S1f `scoped_reach` counts a population already narrowed to the rule's scope, and `reach_of` is `within_scope` followed by `scoped_reach`.
 - `rules/layer_declaration.py` — which declared layers no node is in. A layer rule names TAGS rather than ref_ids, so it fell outside `validate_rules`' `isinstance` chain and a rule could declare a layer nothing carries without anything saying so. One predicate answers both surfaces — the `validate_rules` warning and the evaluator's `warn` finding — and the finding stands down when fewer than two layers are populated AND the rule is inert, because `liveness` names them for exactly that graph (BDL-070 A6). Both halves are needed since BDL-070 B5-fix: a rule whose one inhabited layer holds two peers that cross is live, so liveness says nothing about it, and standing down on the layer count alone would drop the report entirely (BDL-UX #296).
-- `rules/advisories.py` — the rule types whose findings report a rule's REACH rather than a defect (`layer_population`, `layer_declaration`, and since BDL-074 C3 `suite_population`), and the one thing that follows: `lint --fail-on-warn` does not exit 1 on them (BDL-070 A8).
+- `rules/advisories.py` — the rule types whose findings report a rule's REACH rather than a defect (`layer_population`, `layer_declaration`, since BDL-074 C3 `suite_population`, and since BDL-083 D2 `nothing_to_ban`), and the one thing that follows: `lint --fail-on-warn` does not exit 1 on them (BDL-070 A8).
 - `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2), and of the sixth cache `liveness._GraphFacts` kept beside them (BDL-070 A5).
+- `rules/import_glob.py` — whether a `to:` glob of `forbid_import` or `test_import_boundary` can match an import path at all, decided by `matches_import_target` on paths built from the glob (`to_glob_reach` → `GlobReach`), the source roots read off the index (`source_roots`), and the `info` statement of a live rule with nothing to ban (`nothing_to_ban_finding`) (BDL-083 D2; see *Can match none, or nothing to ban* below).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/layer_crossings.py` — what the rule SAYS about a dependency that stays inside one layer: the un-excused crossings as findings, at the rule's declared severity, and the exemption entries that have stopped earning their place (BDL-070 B3). `layers` decides what crosses and `layer_exemptions` decides what an entry does about it; this turns the pair into findings. Since BDL-082 S1a it is handed the `@x` facts of the edges and words a crossing by them: through `@x` off the entities layer, or a mixed edge located at the import that does not go through it.
 - `rules/layer_edges.py` — the set of edges a layer rule finds against, as `(src, dst)` pairs,
@@ -232,7 +233,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 | `deny` | its `from` or `to` matcher selects **0** nodes. An unknown `ref_id` is named as such. Otherwise a `tag`, a `tag_prefix` or a `kind` is named only when **no** node carries it, in that order, and a matcher whose fields are each carried by some node but never together reads "its `<key>` matches none of the N nodes in the graph" (BDL-080 S2d: before it, a matcher setting `tag` and `tag_prefix` that was inert because of the prefix was blamed on a tag a node does carry). The same reason serves every matcher of `require`, `forbid` and `check` | `liveness.py` |
 | `require` | its `for` selects **0** nodes — **or** its `has_edge_to` selects 0, in which case every node it matches would fail, which is equally broken | `liveness.py` |
 | `forbid_cycles` | the graph holds **0** *live* (`active`) edges of the declared `edge_kind`(s), so there is no chain to walk | `liveness.py` |
-| `forbid_import` | its `from` glob matches **0** indexed source files, or its `to` glob matches **0** indexed import paths | `evaluators.py` (a stale `exempt` entry: `exemptions.py`) |
+| `forbid_import` | its `from` glob matches **0** indexed source files, or its `to` glob matches **0** indexed import paths **and can match none** (see *Can match none, or nothing to ban* below) | `evaluators.py` (a stale `exempt` entry: `exemptions.py`) |
 | `forbid` (edge) | its `from`/`to` selects **0** nodes, or the graph holds **0** edges of its `edge_kind` | `liveness.py` |
 | `layers` | no live `edge_kind` edge is one the rule COMPARES — across two layers for direction, or inside one layer against the shared-container predicate. An edge with an unlayered end is passed over and an edge inside one tagged container is legal by construction, so neither is a check the rule performed. A node is in the layer its own tag declares, else its nearest `part_of` container's, which is the reading the rule's own verdict rests on. How many layers hold a node decides only WHICH reason is printed: with fewer than **2** inhabited, the tags nobody carries are named, and otherwise the edge set is (BDL-070 B5-fix, `beadloom-5tcc.6`, closing BDL-UX #296 — before it, one run could report an error from a rule and count that same rule inert). A rule with a `scope:` is read inside that subtree only, and a scope naming no node is the reason given before anything is counted (BDL-080 S1b) | `liveness.py` |
 | `check` (cardinality) | its `for` selects **0** nodes, **or** no threshold is set at all (`max_symbols`, `max_files` and `min_doc_coverage` all unset), so nothing is compared | `liveness.py` |
@@ -242,9 +243,43 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 | `doc_area_coherence` | **no** source area in the graph reaches the majority `threshold` over `min_support` observations, so the convention the rule enforces cannot be read off the graph at all — a flat docs tree, a project mid-migration, a graph too small to hold a convention | reported by `doc_area.py`, counted by `liveness.py` |
 | `summary_facts` | **no** node `summary` in the graph states a number or version the project computes a fact for, so there is no claim to check. A claim naming a fact the project DECLINED to compute is a separate report — that node is unverifiable while the rule as a whole is still live | reported by `summary_facts.py`, counted by `liveness.py` |
 | `test_binding` | the index holds no `test_files` table (it was written before test files were indexed), **or** every declared leg judges nothing: the `files` glob matches no test file the leg judges and the `for` matcher selects no node. One dead leg beside a live one is reported per leg and does not count the rule inert | reported by `test_binding.py`, counted by `liveness.py` |
-| `test_import_boundary` | no test import is recorded, **or** its `from` glob matches **0** test files with imports, its `of` matcher leaves no judged file, or its `to` glob matches **0** recorded test import paths — decided over every recorded test import, before any crossing | reported by `test_import_boundary.py`, counted by `liveness.py` |
+| `test_import_boundary` | no test import is recorded, **or** its `from` glob matches **0** test files with imports, its `of` matcher leaves no judged file, or its `to` glob matches **0** recorded test import paths **and can match none** — decided over every recorded test import, before any crossing | reported by `test_import_boundary.py`, counted by `liveness.py` |
 | `scenario_binding` | its `features` glob matches **0** feature files | reported by `scenario_binding.py`, counted by `liveness.py` when a `project_root` is given |
 | `slice_public_api`, `slice_shape` | **no** node carries any of its `tags`, **or** no node carrying one has a `source` folder on disk, so there is no slice to judge | `liveness.py`, through `slices.slice_rule_inert_reason` |
+
+#### Can match none, or nothing to ban (BDL-083 D2)
+
+A `to` glob of `forbid_import` or `test_import_boundary` that matches no import the index
+holds is one of two facts, and lint reports them differently. Until BDL-083 both read "cannot
+fire": on the first adopter's monorepo `to: os/**` was reported that way on a project
+importing no `os`, while `import os` fired the same rule, and two reviews concluded the
+boundary was unchecked (BDL-UX #328).
+
+| The `to` glob | Finding | Counted in `rules_inert` |
+|---|---|---|
+| can match no import path | `rule_liveness`, `warn`: "cannot fire: its `to` glob '…' matches 0 of N indexed import paths and can match none: <reason>" | `test_import_boundary`: yes. `forbid_import` is not counted (see above) |
+| can match one, and matches none today | `nothing_to_ban`, `info`: "0 imports of `os/**` in the project; the rule is live: … and an import of `os` would fire it" | no |
+
+**The matcher decides, on paths built from the glob.** `import_glob.to_glob_reach` runs
+`matches_import_target`, the function the rule fires with, on the glob's literal prefix
+(`os/**` gives `os`, `bcrypt*` gives `bcrypt`) and then on the glob with every wildcard filled
+in. Reading the glob a second way is what disagreed with the matcher's appended "/" in #328.
+A glob can match none when:
+
+- its first complete segment is a **source root**: a directory holding indexed source files
+  that no indexed import path begins with (`src` in `src/pkg/db/**`, `backend` in
+  `backend/src/digest/**`). `to:` names modules, never files;
+- it holds a literal `.`, which an import path never does once its dots are turned into `/`;
+- the matcher accepts neither path built from it.
+
+The source roots are inferred from the index. For `test_import_boundary` they are read from
+the code's import index, where the source files are, beside the test imports' targets. A flat
+project whose top-level package nothing imports would read that package as a source root.
+
+The `nothing_to_ban` statement is an advisory. `--fail-on-warn` does not exit on it, and it
+counts as neither an error nor a warning. The text rendering marks it `[INFO]`, and
+`--format github` emits it as a `::notice`. An `exempt` entry of a rule in this state excuses
+nothing and is reported as such, because the rule is live.
 
 ### `scenario_coverage` — behaviour bound to an executable claim (BDL-061 S4)
 
@@ -449,8 +484,8 @@ Rule = (DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule
 |--------------------|----------------|-------------------------------------------------|
 | `rule_name`        | `str`          | Name of the violated rule.                      |
 | `rule_description` | `str`          | Description of the violated rule.               |
-| `rule_type`        | `str`          | `"deny"`, `"require"`, `"cycle"`, `"forbid_import"`, `"forbid"`, `"layer"`, `"cardinality"`, `"test_binding"`, `"test_import_boundary"`, `"scenario_binding"`, `"slice_public_api"`, `"slice_shape"`, `"suite_population"` (a suite rule's population statement — see above), `"layer_population"`, `"layer_declaration"`, or `"rule_liveness"` (a rule that cannot fire — see above). |
-| `severity`         | `str`          | `"error"` or `"warn"`.                          |
+| `rule_type`        | `str`          | `"deny"`, `"require"`, `"cycle"`, `"forbid_import"`, `"forbid"`, `"layer"`, `"cardinality"`, `"test_binding"`, `"test_import_boundary"`, `"scenario_binding"`, `"slice_public_api"`, `"slice_shape"`, `"suite_population"` (a suite rule's population statement — see above), `"layer_population"`, `"layer_declaration"`, `"nothing_to_ban"` (an import rule live with nothing to ban — see above), or `"rule_liveness"` (a rule that cannot fire — see above). |
+| `severity`         | `str`          | `"error"` or `"warn"`; `"info"` on a `nothing_to_ban` statement only. |
 | `file_path`        | `str \| None`  | Source file path (for deny/import violations).   |
 | `line_number`      | `int \| None`  | Line number (for deny/import violations).        |
 | `from_ref_id`      | `str \| None`  | Source node ref_id; on a per-node `rule_liveness` finding it is the node the finding is about. |
@@ -705,7 +740,9 @@ not judged and it is counted. The `from` glob is matched against a test file's p
   get `forbid_import`'s remediation.
 - Liveness is decided first, over EVERY recorded test import. When no judged file imports the
   target, only the stale-exemption findings are computed, because the evaluator handed only
-  the judged imports would report a clean boundary as a dead `to` glob.
+  the judged imports would report a clean boundary as a dead `to` glob. When no recorded test
+  import reaches the target at all and the glob can match one, the rule is live with nothing
+  to ban, stated at `info` beside those findings.
 - The imports come from `test_imports`, whose reader keeps an aliased `import a as b` that the
   code-import extractor drops. The population statement says so.
 - The population statement counts the crossings an exemption excused, because `lint`'s

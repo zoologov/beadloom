@@ -3,6 +3,9 @@
 ``evaluate_import_boundary_rules`` reads every import row of the index once and hands each
 rule two population sizes: the distinct source files and the distinct import paths. The
 dead-glob finding quotes them, so "matches 0 of 2" can be told from "matches 0 of 0".
+
+A ``to`` glob that CAN match an import path and matches none of them is not dead (BDL-083
+D2): the statement that it is live quotes the same count, at ``info``.
 """
 
 from __future__ import annotations
@@ -46,7 +49,7 @@ def conn() -> Iterator[sqlite3.Connection]:
             "src/app/cli/*", "app/store/*", "matches 0 of 2 indexed source files", id="from"
         ),
         pytest.param(
-            "src/app/ui/*", "app/nowhere/*", "matches 0 of 3 indexed import paths", id="to"
+            "src/app/ui/*", "src/app/nowhere/*", "matches 0 of 3 indexed import paths", id="to"
         ),
     ],
 )
@@ -60,3 +63,19 @@ def test_the_dead_glob_finding_counts_the_distinct_rows_of_the_index(
     (dead,) = evaluate_import_boundary_rules(conn, [rule])
 
     assert stated in dead.message
+
+
+def test_a_to_glob_that_can_match_quotes_the_count_in_its_live_statement(
+    conn: sqlite3.Connection,
+) -> None:
+    rule = ImportBoundaryRule(
+        name="ui-reads-no-store",
+        description="d",
+        from_glob="src/app/ui/*",
+        to_glob="app/nowhere/*",
+    )
+
+    (live,) = evaluate_import_boundary_rules(conn, [rule])
+
+    assert (live.rule_type, live.severity) == ("nothing_to_ban", "info")
+    assert "matches 0 of 3 indexed import paths" in live.message

@@ -48,7 +48,7 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.layer_declaration import LAYER_DECLARATION_RULE_TYPE
 from beadloom.graph.rules.layer_reach import LAYER_POPULATION_RULE_TYPE
-from beadloom.graph.rules.types import SUITE_POPULATION_RULE_TYPE
+from beadloom.graph.rules.types import NOTHING_TO_BAN_RULE_TYPE, SUITE_POPULATION_RULE_TYPE
 
 if TYPE_CHECKING:
     from beadloom.graph.rules.types import Violation
@@ -64,8 +64,19 @@ if TYPE_CHECKING:
 #: ``scenario_binding``, clean or not, and says only how much of the suite each
 #: judged. Without this entry a project declaring any of them could never pass
 #: ``--fail-on-warn`` again.
+#:
+#: The statement that an import rule is live with nothing to ban (BDL-083 D2) is the
+#: fourth: it decides nothing about the code, since no import crosses the boundary, and it
+#: appears on a project nobody changed whenever the banned module is simply not imported.
+#: It is stated at ``info`` rather than ``warn``, and the 9.0.0 reading of the same fact, a
+#: ``warn`` that the rule "cannot fire", was the false signal of BDL-UX #328.
 ADVISORY_RULE_TYPES = frozenset(
-    {LAYER_POPULATION_RULE_TYPE, LAYER_DECLARATION_RULE_TYPE, SUITE_POPULATION_RULE_TYPE}
+    {
+        LAYER_POPULATION_RULE_TYPE,
+        LAYER_DECLARATION_RULE_TYPE,
+        SUITE_POPULATION_RULE_TYPE,
+        NOTHING_TO_BAN_RULE_TYPE,
+    }
 )
 
 

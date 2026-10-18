@@ -95,10 +95,30 @@ class TestACrossing:
 
 class TestAGlobThatMatchesNothing:
     def test_a_dead_to_glob_is_the_only_side_named(self) -> None:
-        (dead,) = _evaluate(_rule(to_glob="app/nowhere/*"))
+        (dead,) = _evaluate(_rule(to_glob="app.nowhere.*"))
 
-        assert "`to` glob 'app/nowhere/*'" in dead.message
+        assert dead.severity == "warn"
+        assert "`to` glob 'app.nowhere.*'" in dead.message
         assert "`from` glob" not in dead.message
+
+    def test_a_to_glob_that_can_match_is_live_with_nothing_to_ban(self) -> None:
+        """BDL-083 D2: matchable and unmatched is a live rule, at info — never dead."""
+        (live,) = _evaluate(_rule(to_glob="app/nowhere/*"))
+
+        assert (live.rule_type, live.severity) == ("nothing_to_ban", "info")
+        assert "`to` glob 'app/nowhere/*' matches 0 of 3 indexed import paths" in live.message
+
+    def test_a_to_glob_naming_a_source_root_is_dead(self) -> None:
+        (dead,) = evaluate_one_import_rule(
+            _rule(to_glob="src/app/store/*"),
+            IMPORTS[2:],
+            file_count=1,
+            target_count=1,
+            roots=frozenset({"src"}),
+        )
+
+        assert dead.severity == "warn"
+        assert "can match none: it begins with 'src'" in dead.message
 
     def test_a_dead_from_glob_is_the_only_side_named(self) -> None:
         (dead,) = _evaluate(_rule(from_glob="src/app/cli/*"))

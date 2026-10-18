@@ -16,7 +16,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.graph.rules import (
+    INFO_SEVERITY,
     LIVENESS_RULE_TYPE,
+    NOTHING_TO_BAN_RULE_TYPE,
     SUITE_POPULATION_RULE_TYPE,
     TEST_IMPORT_BOUNDARY_RULE_TYPE,
     ImportExemption,
@@ -197,7 +199,7 @@ class TestPopulationAndLiveness:
         ("changes", "phrase"),
         [
             ({"from_glob": "tests/nowhere/**"}, "`from` glob"),
-            ({"to_glob": "elsewhere/**"}, "`to` glob"),
+            ({"to_glob": "vaultpkg.infrastructure.*"}, "`to` glob"),
             ({"of_matcher": NodeMatcher(tag="layer-ghost")}, "`of` matcher"),
         ],
     )
@@ -216,6 +218,45 @@ class TestPopulationAndLiveness:
         assert phrase in liveness.message
         assert "test file" in liveness.message
         assert inert == {rule.name}
+
+    def test_a_to_glob_with_nothing_to_ban_is_live_at_info_and_not_inert(
+        self, tmp_path: Path
+    ) -> None:
+        """BDL-083 D2, BDL-UX #328: the glob can match, no test imports it today."""
+        rule = _rule(to_glob="elsewhere/**")
+        conn = _index().build(tmp_path)
+        try:
+            violations = evaluate_all(conn, [rule], project_root=tmp_path)
+            inert = inert_rule_names(conn, [rule], project_root=tmp_path)
+        finally:
+            conn.close()
+
+        assert _of_type(violations, LIVENESS_RULE_TYPE) == []
+        (live,) = _of_type(violations, NOTHING_TO_BAN_RULE_TYPE)
+        assert live.severity == INFO_SEVERITY
+        assert live.message.startswith("0 imports of `elsewhere/**` in the project")
+        assert "import path(s) recorded for test files" in live.message
+        assert "an import of `elsewhere` would fire it" in live.message
+        assert inert == set()
+
+    def test_a_to_glob_naming_a_source_root_of_the_code_cannot_fire(
+        self, tmp_path: Path
+    ) -> None:
+        """The source roots are read from the code's index, where `src` holds the files."""
+        conn = _index().build(tmp_path)
+        try:
+            conn.execute(
+                "INSERT INTO code_imports (file_path, line_number, import_path, file_hash) "
+                "VALUES ('src/vaultpkg/ledger/billing.py', 1, 'vaultpkg.infrastructure.db', 'h')"
+            )
+            violations = evaluate_test_import_boundary_rules(
+                conn, [_rule(to_glob="src/vaultpkg/infrastructure/**")]
+            )
+        finally:
+            conn.close()
+
+        (dead,) = _of_type(violations, LIVENESS_RULE_TYPE)
+        assert "begins with 'src'" in dead.message
 
     def test_a_live_rule_is_not_counted_inert(self, tmp_path: Path) -> None:
         conn = _index().build(tmp_path)
