@@ -66,17 +66,78 @@ def test_a_blocking_descriptor_stays_blocking() -> None:
         os.close(write_end)
 
 
+def _refuse_blocking_mode(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Make every request to set a descriptor blocking a no-op; count ``select`` waits.
+
+    Only the request for blocking mode is refused: the late reader's own request for
+    non-blocking mode still lands, so the write end stays non-blocking for the whole
+    write, as it does when another holder of the description flips it back. Refusing
+    both requests leaves the pipe blocking, and the retry is then never reached.
+    """
+    real_set_blocking = os.set_blocking
+    real_select = console_streams.select.select
+    waits: list[int] = []
+
+    def _set_blocking(fd: int, blocking: bool) -> None:
+        if not blocking:
+            real_set_blocking(fd, blocking)
+
+    def _select(
+        rlist: list[int], wlist: list[int], xlist: list[int]
+    ) -> tuple[list[int], list[int], list[int]]:
+        waits.append(1)
+        return real_select(rlist, wlist, xlist)
+
+    monkeypatch.setattr(console_streams.os, "set_blocking", _set_blocking)
+    monkeypatch.setattr(console_streams.select, "select", _select)
+    return waits
+
+
 def test_an_eagain_that_arrives_anyway_is_retried_and_nothing_is_written_twice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Another holder of the description can set it non-blocking again mid-write."""
-    monkeypatch.setattr(console_streams.os, "set_blocking", lambda _fd, _flag: None)
+    _refuse_blocking_mode(monkeypatch)
 
     def _write(write_end: int) -> None:
         with _text_stream(write_end) as stream:
             write_whole(_REPORT, stream)
 
     assert read_late(_write).text == _REPORT + "\n"
+
+
+def test_an_eagain_that_arrives_anyway_waits_for_room_before_the_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The retry above is reached: the writer waited on the descriptor at least once."""
+    waits = _refuse_blocking_mode(monkeypatch)
+
+    def _write(write_end: int) -> None:
+        with _text_stream(write_end) as stream:
+            write_whole(_REPORT, stream)
+
+    read_late(_write)
+
+    assert waits, "the write end never refused a write, so no retry was exercised"
+
+
+def test_a_descriptor_whose_mode_cannot_be_read_is_written_as_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A descriptor ``os.get_blocking`` cannot answer for is still written whole."""
+
+    def _unreadable_mode(_fd: int) -> bool:
+        raise OSError("mode unavailable")
+
+    monkeypatch.setattr(console_streams.os, "get_blocking", _unreadable_mode)
+    read_end, write_end = os.pipe()
+    try:
+        with _text_stream(write_end) as stream:
+            write_whole("one line", stream)
+        assert os.read(read_end, 64) == b"one line\n"
+    finally:
+        os.close(read_end)
+        os.close(write_end)
 
 
 def test_text_the_stream_had_buffered_goes_first() -> None:

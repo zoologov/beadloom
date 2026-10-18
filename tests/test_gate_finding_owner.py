@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
 from click.testing import CliRunner
 
 from beadloom.application.gate import run_ci_gate
@@ -40,8 +41,6 @@ from tests.support.committed_project import commit_project, git
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
     from beadloom.application.gate import Finding
 
@@ -272,6 +271,37 @@ class TestWhoOwnsAFinding:
             root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
         )
         assert ownership.owners[0].verdict == UNATTRIBUTED
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "FINDING BDL-083 S1c (beadloom-b23f), for the S1 review: RFC D3 attributes "
+            "by the paths a bead's commits changed AND the paths its refs: name as "
+            "files, and the declaration parser reads node ids only, so a file named in "
+            "refs: attributes nothing. Measured 2026-10-18 on 8ff8154a: unattributed"
+        ),
+    )
+    def test_a_file_the_bead_s_refs_name_is_owned_by_that_bead(self, tmp_path: Path) -> None:
+        root = _project(tmp_path)
+        ownership = derive_gate_ownership(
+            root,
+            findings=[_on("src/beta/beta.py")],
+            tracker=_Tracker(_bead("bd-1", "src/beta/beta.py")),
+        )
+        assert [owner.verdict for owner in ownership.owners] == [OWNED]
+
+    def test_a_file_the_bead_s_refs_name_is_unattributed_without_a_commit(
+        self, tmp_path: Path
+    ) -> None:
+        """The red above is red for the reason it states: the refs: path is not read."""
+        root = _project(tmp_path)
+        ownership = derive_gate_ownership(
+            root,
+            findings=[_on("src/beta/beta.py")],
+            tracker=_Tracker(_bead("bd-1", "src/beta/beta.py")),
+        )
+        assert [owner.verdict for owner in ownership.owners] == [UNATTRIBUTED]
+        assert ownership.claims[0].commits == 0
 
     def test_a_commit_already_on_the_trunk_is_nobody_s_work_in_flight(
         self, tmp_path: Path

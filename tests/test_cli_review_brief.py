@@ -746,3 +746,66 @@ class TestTheBaseTheChangeIsMeasuredAgainst:
             "src/billing/own.py",
             "src/shipping/parent.py",
         ]
+
+
+class TestAReviewBeadThatDeclaresNoScope:
+    """BDL-UX #344, the half BDL-083 S1d left open: the brief does not fall back to the work item.
+
+    An epic's review bead carries no ``refs:`` of its own; the work item's declared axes
+    are in its folder's RFC. The entry's Expected is that the brief falls back to them.
+    Measured 2026-10-18 at ``8ff8154a`` with ``beadloom review-brief beadloom-pohj`` on
+    this repository, and on 9.0.0 the same: ``DECLARED SCOPE: none declared``.
+    """
+
+    _RFC = """# RFC: x
+
+## Axes
+
+> **Derived by:** `beadloom impact` over `src/billing/core.py`
+> **Seed:** `billing`
+> **Unresolved:** none
+
+| Axis | Node | Sites | In scope | Why |
+|---|---|---|---|---|
+| callers | `billing` | 1 — `core.py:1` | yes | the billing total is this work |
+"""
+
+    def _work_item_with_axes(self, tmp_path: Path) -> Path:
+        project = _repo_with_change(tmp_path)
+        rfc = project / ".claude" / "development" / "docs" / "features" / "x" / "RFC.md"
+        rfc.parent.mkdir(parents=True)
+        rfc.write_text(self._RFC, encoding="utf-8")
+        _git(project, "add", str(rfc))
+        _git(project, "commit", "-m", "the work item's axes", "--no-verify")
+        return project
+
+    def _brief(self, project: Path, bd: Any) -> str:
+        bd(_record(refs="", description="Review the work item on its branch."), [])
+        result = CliRunner().invoke(
+            main, ["review-brief", "a", "--since", "main", "--project", str(project)]
+        )
+        return result.output
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "FINDING BDL-UX #344 (the fallback half), for the S1 review and S3: the "
+            "brief resolves scope from the bead alone, so a review bead that declares "
+            "none reads 'DECLARED SCOPE: none declared' beside a work item that declares "
+            "its axes. Measured 2026-10-18 on 8ff8154a"
+        ),
+    )
+    def test_the_work_item_s_axes_are_the_scope_of_a_bead_that_declares_none(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        output = self._brief(self._work_item_with_axes(tmp_path), bd)
+
+        assert "DECLARED SCOPE: none declared" not in output
+
+    def test_a_bead_that_declares_no_scope_is_briefed_as_declaring_none(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """The red above is red for the reason it states."""
+        output = self._brief(self._work_item_with_axes(tmp_path), bd)
+
+        assert "DECLARED SCOPE: none declared" in output
