@@ -24,20 +24,20 @@
 
 ## Results
 
-| Bead | Status | Details |
-|------|--------|---------|
-| S1g (`beadloom-483w`) | Open | not started |
-| S1a (`beadloom-7i09`) | Open | blocked by S1g |
-| S1b (`beadloom-q8x6`) | Open | blocked by S1g |
-| S1c (`beadloom-b23f`) | Open | blocked by S1g |
-| S1d (`beadloom-fgu8`) | Open | blocked by S1g |
-| S1e (`beadloom-ba9w.13`) | Open | blocked by S1g |
-| S1e2 (`beadloom-jwfc`) | Open | blocked by S1g |
-| S1f (`beadloom-6xdt`) | Open | blocked by S1g |
-| S1T (`beadloom-rupp`) | Open | blocked by S1a–S1f, S1e, S1e2 |
-| S1R (`beadloom-pohj`) | Open | blocked by S1T |
-| S1W (`beadloom-hfxv`) | Open | blocked by S1R |
-| S1P (`beadloom-c5m5`) | Open | blocked by S1W |
+| Bead | Role | Status | Note |
+|---|---|---|---|
+| `beadloom-483w` | S1g | ready | not started |
+| `beadloom-7i09` | S1a | blocked | blocked by S1g |
+| `beadloom-q8x6` | S1b | blocked | blocked by S1g |
+| `beadloom-b23f` | S1c | blocked | blocked by S1g |
+| `beadloom-fgu8` | S1d | blocked | blocked by S1g |
+| `beadloom-ba9w.13` | S1e | blocked | blocked by S1g |
+| `beadloom-jwfc` | S1e2 | blocked | blocked by S1g |
+| `beadloom-6xdt` | S1f | blocked | blocked by S1g |
+| `beadloom-rupp` | S1T | blocked | blocked by S1a–S1f, S1e, S1e2 |
+| `beadloom-pohj` | S1R | blocked | blocked by S1T |
+| `beadloom-hfxv` | S1W | blocked | blocked by S1R |
+| `beadloom-c5m5` | S1P | blocked | blocked by S1W |
 
 ## Notes
 
