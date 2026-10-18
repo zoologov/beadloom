@@ -31,11 +31,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from beadloom.application.gate_coverage import GateCoverage, derive_gate_coverage
-from beadloom.application.gate_declarations import (
-    undetermined_declaration_step,
-    unusable_declaration_step,
-)
 from beadloom.application.gate_document_pairs import step_readme_pair
+from beadloom.application.gate_issue_log import step_issue_log
 from beadloom.application.gate_ownership import GateOwnership, derive_gate_ownership
 from beadloom.application.gate_step import Finding, GateStep, gate_step_line
 from beadloom.application.rooms import RoomCensus, take_census
@@ -72,7 +69,6 @@ if TYPE_CHECKING:
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
     from beadloom.doc_sync.declarations import Refusal
     from beadloom.doc_sync.doc_quality import QualityFinding
-    from beadloom.doc_sync.issue_numbers import IssueNumberReport, NumberFinding
 
 
 #: Re-exported so the move that lifted the step shape into
@@ -658,118 +654,16 @@ def _convention_finding(convention: SectionConvention) -> Finding:
     }
 
 
-
 def _step_issue_numbers(project_root: Path) -> GateStep:
-    """``issue-number check`` — the issue log's numbers; BLOCKS on a finding.
+    """``issue-number check`` — the leg is :mod:`beadloom.application.gate_issue_log`.
 
-    Unlike its ``docs-quality`` neighbour this step blocks, and the difference is
-    the kind of claim each makes. A writing-standard finding is an opinion about
-    prose that a project may reasonably carry for a release. A duplicate number
-    is a reference that resolves to two entries and to neither, and this
-    repository shipped one for fifteen days across a CHANGELOG, a ROADMAP, eight
-    test files and thirty-six tracker records before anyone noticed (BDL-UX
-    #187). Its three legs each have a repair the author can perform in the same
-    commit, which is what makes blocking fair.
-
-    **It cannot redden a project that has not opted in.** The log is DECLARED in
-    ``.beadloom/config.yml``; an adopter who declares none gets a named skip, so
-    the upgrade that ships this step turns nobody's green tree red.
-
-    **A project that opted in BADLY is a different project.** Writing
-    ``issue_log:`` and misspelling ``ledger:`` is opting in, and the verdict it
-    gets says how many entries were declared and how many could not be used —
-    not the sentence a project that wrote nothing gets (BDL-UX #270, closed
-    HERE by ``beadloom-rqma.7`` together with its twin in ``readme-pair``, and on
-    the two ``issue-number`` commands by ``beadloom-rqma.8``). Only the third
-    case skips: a config file that will not parse says nothing about whether the
-    key is there at all.
-
-    ``not_verified`` carries the honest half: before a project's first
-    allocation the ledger has no floor, so ``unwritten-claim`` and
-    ``unclaimed-number`` enter no number at all and a clean result would
-    describe their ignorance rather than the log (BDL-UX #173).
+    The step reads the report here and hands it to the function the
+    ``issue-number check`` command also takes its exit code from, so the two
+    surfaces give one verdict about one log (BDL-UX #331).
     """
     from beadloom.doc_sync.issue_numbers import check_issue_numbers
 
-    report = check_issue_numbers(project_root)
-    if report.undetermined:
-        return undetermined_declaration_step("issue-log", "an issue log", report.refusals)
-    if not report.declared:
-        return GateStep(
-            "issue-log",
-            skipped=True,
-            summary=(
-                "skipped — no issue log is declared; add an `issue_log:` block with "
-                "`path:` and `ledger:` to .beadloom/config.yml"
-            ),
-        )
-    if report.refusals:
-        return unusable_declaration_step(
-            "issue-log", report.entries_declared, report.refusals
-        )
-    if report.log_missing:
-        return GateStep(
-            "issue-log",
-            passed=False,
-            findings=[
-                _simple_finding(
-                    "issue-log",
-                    "error",
-                    "the declared issue log is missing or could not be decoded",
-                    "point `issue_log.path` at the log, or remove the declaration",
-                )
-            ],
-            summary="declared issue log missing",
-        )
-    findings = [_issue_number_finding(f) for f in report.findings]
-    return GateStep(
-        "issue-log",
-        passed=not report.findings,
-        not_verified=report.not_verified,
-        findings=findings,
-        summary=_issue_number_summary(report),
-    )
-
-
-def _issue_number_summary(report: IssueNumberReport) -> str:
-    """The issue-log line, which states what it COVERED and not only what it found."""
-    floor = report.floor if report.floor is not None else "none"
-    head = (
-        f"{len(report.findings)} finding(s)"
-        if report.findings
-        else f"{report.entries} entr(ies) uniquely numbered"
-    )
-    line = f"{head}; {report.claims} claim(s), floor {floor}"
-    if report.floor is None:
-        line += (
-            "; NOT CHECKED: unwritten-claim, unclaimed-number "
-            "(the ledger holds no claim, so neither entered a number)"
-        )
-    elif report.entries_below_floor:
-        line += (
-            f"; PARTLY CHECKED: {report.entries_below_floor} of {report.entries} "
-            f"entr(ies) are below floor {report.floor}, where unclaimed-number "
-            "did not enter"
-        )
-    if report.unaccounted:
-        line += (
-            f"; {len(report.unaccounted)} number(s) below the highest are stated "
-            "nowhere and are unaccounted for, not free"
-        )
-    return line
-
-
-def _issue_number_finding(finding: NumberFinding) -> Finding:
-    """Project one issue-number finding onto the shared finding shape."""
-    return {
-        "kind": "issue-log",
-        "rule": finding.check,
-        "severity": "error",
-        "locations": [{"file": finding.where}],
-        "why": finding.why,
-        "remediation": finding.remediation,
-    }
-
+    return step_issue_log(check_issue_numbers(project_root))
 
 
 def _step_doc_spaces(project_root: Path, *, pairs_excused: int | None = None) -> GateStep:

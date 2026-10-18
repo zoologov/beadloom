@@ -18,6 +18,7 @@ from click.testing import CliRunner
 from beadloom.services.cli import main
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 
@@ -313,3 +314,74 @@ def test_check_json_tells_an_opt_out_from_an_unread_config(tmp_path: Path) -> No
     assert payload["undetermined"] is False
     assert payload["declared"] is False
     assert payload["refusals"] == []
+
+
+# ---------------------------------------------------------------------------
+# BDL-083 S1f, `beadloom-6xdt` (BDL-UX #331) — one verdict, two surfaces
+# ---------------------------------------------------------------------------
+
+
+def _declared_and_absent(root: Path) -> Path:
+    """A project that declares an issue log the tree does not hold."""
+    _declared(root, "")
+    (root / "log.md").unlink()
+    return root
+
+
+def test_check_exits_1_on_a_declared_log_the_tree_does_not_hold(tmp_path: Path) -> None:
+    """The MAJOR move of #331: this state was exit 0 on 9.0.0, and the Gate's step was red.
+
+    The command printed "no leg ran" and exited 0, so an agent reading the exit
+    code got a green from a check that did not run, beside a Gate that blocked
+    on the same tree. The project opted in; the log it asked to have checked is
+    not there; that is the state the Gate already treats as a failure.
+    """
+    root = _declared_and_absent(tmp_path)
+    runner = CliRunner()
+    text = runner.invoke(main, ["issue-number", "check", "--project", str(root)])
+    as_json = runner.invoke(main, ["issue-number", "check", "--project", str(root), "--json"])
+    assert text.exit_code == 1, text.output
+    assert as_json.exit_code == 1, as_json.output
+    assert json.loads(as_json.stdout)["log_missing"] is True
+    assert "no leg ran" in text.output
+
+
+def _gate_issue_log_step(root: Path):  # type: ignore[no-untyped-def]
+    from beadloom.application.gate import run_ci_gate
+
+    result = run_ci_gate(root, fail_on=None, hub_exports=[], no_reindex=False)
+    return next(step for step in result.steps if step.name == "issue-log")
+
+
+#: Every state the issue-log reader can return over a config the Gate can read,
+#: each built on disk. The parity test runs the real Gate over each one, so a
+#: state added to the reader and to one surface only is a red row here rather
+#: than a second #331. The undetermined state is not a row: `run_ci_gate` raises
+#: in `infrastructure/scan_paths.py` on a config it cannot read before it reaches
+#: this step (BDL-UX #287; re-measured 2026-10-18 for both shapes, a
+#: `ParserError` and an `AttributeError`), so there is no Gate verdict to hold
+#: the command against. Its exit 0 is pinned by the `rqma.9` tests above.
+_EVERY_STATE = [
+    pytest.param(lambda root: _declared(root, "7. an entry\n"), id="clean"),
+    pytest.param(lambda root: _declared(root, "187. one\n\n187. two\n"), id="finding"),
+    pytest.param(_opted_out, id="opted-out"),
+    pytest.param(_misdeclared, id="misdeclared"),
+    pytest.param(_declared_and_absent, id="log-absent"),
+]
+
+
+@pytest.mark.parametrize("build", _EVERY_STATE)
+def test_check_exits_1_exactly_when_the_gate_step_blocks(
+    tmp_path: Path, build: Callable[[Path], Path]
+) -> None:
+    """The two surfaces read one report and must give one answer about it.
+
+    Held against `run_ci_gate`'s own step rather than against a table of
+    expected codes, so a later change to what the Gate blocks on moves the
+    command with it or turns this red.
+    """
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    root = build(tmp_path)
+    result = CliRunner().invoke(main, ["issue-number", "check", "--project", str(root)])
+    step = _gate_issue_log_step(root)
+    assert result.exit_code == (0 if step.passed else 1), (result.output, step)

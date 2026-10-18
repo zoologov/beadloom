@@ -2909,9 +2909,23 @@ No duplicate, unwritten or unclaimed number.
 
 Exit codes are the contract a caller may rely on: `0` the number was allocated, or the check found
 nothing, or the check could not establish whether a log is declared at all; `1` the check found at
-least one finding, or the project declared an `issue_log:` block this reader could not use; `2`
-nothing was allocated, because the project declares no block or wrote a config that could not be
-read.
+least one finding, or the project declared an `issue_log:` block this reader could not use, or the
+log it declared is not on the tree; `2` nothing was allocated, because the project declares no
+block or wrote a config that could not be read.
+
+**`check` exits 1 exactly when the Gate's `issue-log` step blocks** (BDL-083, `beadloom-6xdt`).
+The code is that step's verdict, taken from the one function both surfaces call, not a second
+reading of the report. On 9.0.0 the two disagreed on one state: over a declared log the tree
+does not hold, `check` printed "no leg ran" and exited `0` while `beadloom ci` failed the step —
+measured with this repository's own declaration and the log absent (BDL-UX #331).
+It now prints the Gate's own finding and exits `1`:
+
+```
+$ beadloom issue-number check
+The declared issue log could not be read — no leg ran.
+  the declared issue log is missing or could not be decoded
+  -> point `issue_log.path` at the log, or remove the declaration
+```
 
 **Three states about the declaration, and the check tells them apart** (BDL-069,
 `beadloom-rqma.9`). A project that declared no log is told so. A project that declared one and

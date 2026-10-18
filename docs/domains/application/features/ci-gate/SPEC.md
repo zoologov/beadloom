@@ -104,7 +104,10 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    `readme-pair` below and through the same reader. That fix covered THIS leg
    and not the two `issue-number` commands, which kept the old answer until
    `beadloom-rqma.8` — so the entry was closed on the Gate and live on the
-   command a person types, for one bead.
+   command a person types, for one bead. A declared log the tree does not hold
+   fails the step, and since `beadloom-6xdt` `issue-number check` exits 1 on it
+   too: the command's exit code is this step's `passed`, taken from the one
+   function both call (BDL-UX #331 — on 9.0.0 the command exited 0 there).
    `not_verified` carries the honest half — before a project's first allocation
    the ledger has no floor, so `unwritten-claim` and `unclaimed-number` enter no
    number at all and the summary says `NOT CHECKED:` rather than reporting them
@@ -188,7 +191,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    One case does not redden: a `.beadloom/config.yml` that could not be read at
    all says nothing about whether the key is there, so the STEP skips, WARNs and
    names the file rather than reddening a project that may never have written
-   it. That is a statement about `step_readme_pair` and `_step_issue_numbers`,
+   it. That is a statement about `step_readme_pair` and `step_issue_log`,
    which is where it is tested, and not about `beadloom ci`: a config file with
    a YAML syntax error ends the run in `infrastructure/scan_paths.py` during the
    reindex step, with a traceback and no gate line at all, before either leg is
@@ -551,6 +554,13 @@ Module `src/beadloom/application/gate_document_pairs.py` — the `readme-pair` l
 - `step_readme_pair(project_root) -> GateStep` — the step, its line and the
   projection of what it found. The orchestrator composes it and renders none of
   it, which is the first slice of the per-leg extraction (`beadloom-oew7`).
+
+Module `src/beadloom/application/gate_issue_log.py` — the `issue-log` leg:
+
+- `step_issue_log(report) -> GateStep` — the verdict over one `IssueNumberReport`.
+  The Gate composes it and `beadloom issue-number check` takes its exit code from
+  the same step's `passed`, so the two surfaces cannot disagree about which states
+  of the report block (`beadloom-6xdt`, BDL-UX #331).
 
 Module `src/beadloom/application/gate.py`:
 

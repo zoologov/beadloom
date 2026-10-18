@@ -111,3 +111,18 @@ Feature: an issue number is allocated from the log, never read off the end of it
     Then the check says whether an issue log is declared is unknown
     And the check does not print the sentence a project declaring no log gets
     And the machine-readable verdict states that the declaration is undetermined
+
+  # BDL-083 S1f, beadloom-6xdt (BDL-UX #331). On a project that declares an
+  # issue log the tree does not hold, `issue-number check` printed "The declared
+  # issue log is missing or unreadable — no leg ran." and exited 0, while the
+  # Gate's `issue-log` step on the same tree failed and `beadloom ci` exited 1.
+  # An agent that reads the command's exit code got green from a check that did
+  # not run. Measured on 9.0.0 with this repository's own declaration and the log
+  # absent: the command 0, the Gate step FAIL.
+  @bead:beadloom-6xdt
+  Scenario: A declared log the tree does not hold fails the check as it fails the Gate
+    Given a project that declares an issue log the tree does not hold
+    When the issue numbers are checked at the command line
+    Then the check exits with code 1
+    And the Gate's issue-log step on the same project fails
+    And the check prints the reason the Gate's issue-log step gives
