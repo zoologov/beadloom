@@ -13,6 +13,8 @@ import click
 if TYPE_CHECKING:
     from beadloom.application.gate import GateResult
     from beadloom.graph.federation import GateFailure
+    from beadloom.graph.lint_scope import CommitLintScope
+    from beadloom.graph.linter import LintResult
 
 from beadloom import __version__
 from beadloom.services.commands._root import main
@@ -270,6 +272,16 @@ _FORMATS_SILENT_WHEN_CLEAN = frozenset({"porcelain", "github"})
     ),
 )
 @click.option(
+    "--staged",
+    is_flag=True,
+    default=False,
+    help=(
+        "Judge only the nodes that own a path this commit stages, and the findings "
+        "located in a staged file; say how many findings were left to the push gate. "
+        "For a pre-commit hook in a shared working tree (#118, #326)."
+    ),
+)
+@click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
@@ -281,6 +293,7 @@ def lint(
     strict: bool,
     fail_on_warn: bool,
     no_reindex: bool,
+    staged: bool,
     project: Path | None,
 ) -> None:
     """Run architecture lint rules against the project.
@@ -327,6 +340,10 @@ def lint(
         click.echo(f"Error: {exc}", err=True)
         sys.exit(2)
 
+    commit_scope = _lint_commit_scope(project_root, result) if staged else None
+    if commit_scope is not None:
+        result = commit_scope.result
+
     formatters = {
         "rich": _format_rich,
         "json": _format_json,
@@ -334,6 +351,8 @@ def lint(
         "github": _format_github,
     }
     output = formatters[fmt](result)
+    if commit_scope is not None:
+        output = _with_commit_scope(output, commit_scope, fmt)
     if output:
         click.echo(output)
     if not result.violations and fmt in _FORMATS_SILENT_WHEN_CLEAN:
@@ -373,6 +392,51 @@ def lint(
             "but the exit code stays 0 without --strict.",
             err=True,
         )
+
+
+def _lint_commit_scope(project_root: Path, result: LintResult) -> CommitLintScope:
+    """*result* narrowed to the nodes that own a staged path, by the index's ownership rule.
+
+    Composed here because the two inputs live in two domains the graph layer must not
+    reach: the staged paths are git's answer (``doc_sync``), the owner is the index's
+    most-specific-source rule (``infrastructure``).
+    """
+    from beadloom.doc_sync.git_baseline import staged_paths
+    from beadloom.graph.lint_scope import scope_lint_to_commit
+    from beadloom.infrastructure.db import readonly_connection
+    from beadloom.infrastructure.repository import get_owning_ref_id
+
+    staged = staged_paths(project_root)
+    db_path = project_root / ".beadloom" / "beadloom.db"
+    if staged is None or not db_path.is_file():
+        # A git that did not answer narrows nothing, and no index means no node owns a
+        # path: `lint` returns before it opens one when the project declares no rules.
+        return scope_lint_to_commit(result, staged, lambda _path: None)
+    with readonly_connection(db_path) as conn:
+        return scope_lint_to_commit(
+            result, staged, lambda path: get_owning_ref_id(conn, path)
+        )
+
+
+def _with_commit_scope(output: str, scope: CommitLintScope, fmt: str) -> str:
+    """*output* led by the commit-scope sentence, in the idiom of each format.
+
+    Porcelain marks it as a statement rather than a violation record, github as a
+    notice, and json carries it as an object beside the findings.
+    """
+    from beadloom.graph.linter import POPULATION_MARKER
+
+    if fmt == "json":
+        payload = json.loads(output)
+        payload["commit_scope"] = {
+            "staged": scope.staged,
+            "owned": scope.owned,
+            "nodes": list(scope.nodes),
+            "left_out": scope.left_out,
+        }
+        return json.dumps(payload, indent=2)
+    lead = {"porcelain": POPULATION_MARKER, "github": "::notice::"}.get(fmt, "")
+    return "\n".join(line for line in (f"{lead}{scope.sentence}", output) if line)
 
 
 # beadloom:domain=application

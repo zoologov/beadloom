@@ -43,6 +43,7 @@ is what holds that line.
 | `index_ops.py` | `reindex`, `doctor`, `diff`, `link` |
 | `status.py` | `status` |
 | `docsync.py` | `sync-check`, `sync-update`, `install-hooks`, `active-sync` |
+| `hook_templates.py` | no command: the text of the git hooks `install-hooks` writes |
 | `federation.py` | `export`, `federate`, `lint`, `ci` |
 | `docs.py` | `docs generate`, `docs polish`, `docs site`, `docs audit`, `docs quality`, `docs spaces` |
 | `setup.py` | `setup-mcp`, `setup-rules`, `setup-ai-techwriter`, `setup-agentic-flow`, `setup-branch-protection`, `config-check`, `mcp-serve`, `init` |
@@ -259,14 +260,48 @@ Places nothing checks do not make the exit code non-zero: the gap is what the re
 state. Exit `2` is for a version that could not be derived at all, and carries the reason on
 standard output.
 
-`docsync.py` also holds the two hook TEMPLATES, and since BDL-068 S5 the coherence block in
-them takes no staging decision for the committer. `active-sync --stage` re-stages the corrected
+`hook_templates.py` holds the hook TEMPLATES, lifted out of `docsync.py` in BDL-083 S1a
+(`beadloom-7i09`), where they were about 400 of its 2020 lines; `docsync.py` keeps the command
+that writes them and re-exports the template names its callers import from it. Since BDL-068
+S5 the coherence block in them takes no staging decision for the committer. `active-sync --stage` re-stages the corrected
 content of the paths a commit already carries and prints the ones it withheld; the block runs no
 `git add` of its own and selects those lines with `grep`, deliberately not with the
 `sed -n 's/^# //p'` shape the verdict legs beside it use — that shape is the verdict/payload
 split and giving it a second meaning is how two protocols stop being checkable together. The
 hook body is reachable as `pre_commit_hook_body(blocking=...)` so a test asserts the promise over
 the text that is actually installed rather than over a copy of it (BDL-UX #207).
+
+Since BDL-083 S1a no leg of the composed hooks passes without running (BDL-UX #326, #327).
+The pre-push hook without `beadloom` on the PATH git runs it with prints three sentences on
+standard error — the Gate did not run and the push is refused, how to put `beadloom` on that
+PATH or remove the hook, and `git push --no-verify` — and exits `1`; it exited `0` in silence
+before, and the move is one of BDL-083's three MAJOR ones. With `beadloom` present it runs
+`beadloom ci --format rich` into a command substitution, because the rich format is the one
+that prints a verdict line whatever git's standard output is, and reprints the output. The
+verdict is found by `GATE_VERDICT_PATTERN`, which a test holds against `_format_gate_rich`; an
+exit code with no verdict line is reported as "the Gate did not run" and refused whatever the
+code was, never as stale documentation.
+
+The pre-commit hook gained an architecture-lint leg, `_hook_architecture_lint`, that runs
+`beadloom lint --staged --strict --format rich` and finds its verdict by
+`graph.lint_scope.COMMIT_SCOPE_LEAD`. An error on a node the commit touches warns in the warn
+mode and blocks in the blocking one; no verdict line is `NOT CHECKED` and never blocks.
+Measured on this repository: 1.2 s with a warm index, 4.5 s when the incremental reindex
+first has the bead's changed files to read. The ruff leg, `_hook_ruff_check`, hands the staged
+files to ruff as arguments rather than through `xargs`, which folds ruff's exit code to `1`
+(BSD) or `123` (GNU); `0` is clean, `1` is violations, and any other code is "ruff did not
+run" with ruff's or uv's own standard error shown. It runs `uv run ruff check` from the
+outermost directory holding a `pyproject.toml` between the repository root and each staged
+file, so `uv` finds the environment of the project that holds the file, and ruff reads the
+nearest configuration above each file by itself. Outermost rather than nearest, because this
+repository holds whole projects as test data under `tests/fixtures/`, where `uv run` would
+build an environment inside the fixture.
+
+`lint --staged`, in `federation.py`, composes git's staged paths (`doc_sync.git_baseline`)
+with the index's ownership rule (`infrastructure.repository.get_owning_ref_id`) and hands
+both to `graph.lint_scope.scope_lint_to_commit`. Its sentence leads the output in every
+format: as is in `rich`, marked `# ` in `porcelain`, as a `::notice::` in `github`, and as a
+`commit_scope` object in `json`.
 
 The instructions `docsync.py` prints come from the doc-sync engine's vocabulary, not from a
 list kept here (BDL-069, BDL-UX #282). `_REATTEST_INSTRUCTION` names the reasons in

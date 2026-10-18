@@ -541,7 +541,10 @@ beadloom install-hooks --remove [--pre-commit|--pre-push] [--project DIR]
 (selected by suffix, so a package at the repository root is judged like one under `src/`),
 mypy over those staged files **inside the surface the project declares typed** (derived per run by
 [`typed-surface`](#beadloom-typed-surface); a surface that could not be derived reads
-`NOT CHECKED` with its reason and never blocks), `beadloom sync-check`
+`NOT CHECKED` with its reason and never blocks), the **architecture lint** over the nodes that
+own a staged path ([`lint --staged --strict`](#beadloom-lint); an error warns in `--mode warn`
+and blocks in `--mode block`, and a lint that printed no verdict reads `NOT CHECKED` and never
+blocks), `beadloom sync-check`
 (`--mode warn` reports stale docs; `--mode block` fails the commit on stale docs;
 either way it closes with an instruction scoped to the reasons re-attesting
 clears, because the hook prints porcelain rows and cannot choose per row),
@@ -555,16 +558,30 @@ in `block` mode without affecting the exit code), and in any repo without `bd` �
 or without ACTIVE tables — the block is a complete no-op (see
 [`active-sync`](#beadloom-active-sync)).
 
+The ruff leg runs `uv run ruff check` from the outermost directory holding a `pyproject.toml`
+between the repository root and each staged file, so a Python project under `backend/` in a
+repository with nothing Python at its root is checked in its own environment, and ruff reads
+the nearest configuration above each file by itself. It shows ruff's and uv's standard error
+and reads the exit code: `0` is clean, `1` is violations, and any other code — uv's `2` for a
+ruff it could not spawn, the shell's `127` for one that is not installed — is "ruff did not
+run" and never blocks (BDL-UX #327). Outermost rather than nearest, because a repository can
+hold whole projects as test data, where `uv run` would build an environment inside one.
+
 **Pre-push hook (Beadloom Gate)** is the authoritative blocking enforcement of
 the hard invariant *"no code in `main` without current docs."* On every push it
 runs the full Gate (`beadloom ci` — incremental reindex → `lint --strict`
 (module-coverage included) → sync-check → docs-audit → docs-quality → config-check →
 doctor) and **exits
-non-zero to block the push** on red, printing an
-actionable message ("Beadloom Gate failed … run the tech-writer (or
-`/coordinator`) then re-push; `git push --no-verify` to override"). It is
-**fail-safe**: in any repo without `beadloom` on `PATH` the hook is a safe no-op
-and never blocks. The full Gate lives in pre-push (not duplicated on every commit)
+non-zero to block the push** on red. It runs `beadloom ci --format rich`, the format that
+prints a verdict line whatever git's standard output is, prints the Gate's output, and closes
+with that verdict line and `git push --no-verify` as the override. An exit code with no
+verdict line is reported as "the Gate did not run" and refused, never as stale documentation.
+**Without `beadloom` on the `PATH` git runs the hook with, the push is refused** with three
+sentences on standard error: the Gate did not run, how to put `beadloom` on that `PATH` or
+remove the hook (`beadloom install-hooks --remove --pre-push`), and the `--no-verify`
+override. The hook is installed per clone, so a missing binary is a setup error the person
+pushing must see. Before BDL-083 S1a this branch exited `0` in silence (BDL-UX #326), and the
+move to `1` is a change of exit code on an input the earlier release accepted. The full Gate lives in pre-push (not duplicated on every commit)
 because pushes are less frequent than commits; the pre-commit hook stays the
 lighter warn/block check. `--no-verify` is the documented (discouraged) escape
 hatch.
@@ -772,7 +789,7 @@ beadloom why REF_ID [--depth N] [--json] [--reverse] [--format {panel,tree}] [--
 Run architecture lint rules against the project.
 
 ```bash
-beadloom lint [--format {rich,json,porcelain,github}] [--strict] [--fail-on-warn] [--no-reindex] [--project DIR]
+beadloom lint [--format {rich,json,porcelain,github}] [--strict] [--fail-on-warn] [--no-reindex] [--staged] [--project DIR]
 ```
 
 Checks cross-boundary imports against rules defined in `rules.yml`. Format auto-detects: `rich` if TTY, `porcelain` if piped.
@@ -786,6 +803,8 @@ Checks cross-boundary imports against rules defined in `rules.yml`. Format auto-
 Each violation carries an agent-actionable `remediation` hint derived per rule kind (deny/forbid → remove/reroute the import or edge; cycle → break the cycle at a named edge; layer → invert the dependency or extract a shared abstraction; cardinality → split the node; require → add the required edge).
 
 Exit codes: 0 = clean (or violations without `--strict`/`--fail-on-warn`), 1 = violations with `--strict` (errors only) or `--fail-on-warn` (any finding a rule decided), 2 = configuration error or missing index.
+
+**`--staged` judges the commit, not the tree (BDL-083 S1a, BDL-UX #326).** It keeps the findings of the nodes that own a path the commit stages — by the most-specific `source`, the index's own ownership rule — and the findings located in a staged file, and leaves the rest to the pre-push Gate. A finding about a rule rather than a node, such as a liveness or population statement, is among the rest. The output leads with one sentence that names the nodes and counts what was left out, for example `Lint over this commit: 1 node(s) own 1 of 1 staged path(s) (widgets-kpi-panel); 1 error(s), 0 warning(s) on them; 3 finding(s) elsewhere left to the pre-push Gate`. `porcelain` marks that sentence with `# `, `github` prints it as a `::notice::`, and `json` carries it as a `commit_scope` object (`staged`, `owned`, `nodes`, `left_out`). When git cannot name the staged paths, nothing is narrowed and the sentence says the whole tree was judged. The exit code under `--strict` is decided by the narrowed findings. This is the form the composed pre-commit hook runs; measured on this repository, 1.2 s with a warm index.
 
 **A layer rule states how much of its edge set it judged.** `architecture-layers` resolves each end of an edge to the layer it is IN — the node's own declared layer tag, else the nearest `part_of` container that declares one (BDL-070 B3) — and passes over an edge with an end in no declared layer at all. The green line `0 violations, N rules evaluated` used to say the same words for a rule that had looked at a fraction of the graph as for one that had looked at all of it, so every run now states that fraction — on the rich summary line, GREEN and RED alike, and in each of the other three formats' own idiom (BDL-070 A3). The summary line in full, as `beadloom lint --no-reindex --format rich` printed it on this repository on 2026-09-13 over the carried-forward index:
 
@@ -3312,7 +3331,7 @@ Commands (re-exported from the package via the registration shell):
 - `status` -- show index statistics with health trends and context metrics (data gathered by `application/status.py:gather_status`); `--debt-report` mode with `--fail-if`, `--category` flags
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`); `--since GIT_REF` measures drift against a git ref instead of the stored baseline (fresh-checkout / per-push drift detection)
 - `sync_update` -- review and update stale docs interactively; `--check` for status-only; `--yes`/`-y` for a non-interactive re-baseline; `--all` (with `--yes`) re-baselines every stale ref
-- `install_hooks` -- install/remove the pre-commit hook (lint -> mypy over the declared typed surface -> sync-check -> declared-axes verdict -> guarded ACTIVE/tracker-coherence auto-fix step) AND/OR the pre-push Beadloom Gate hook (`beadloom ci`, blocks the push on red; `command -v beadloom` guard -> safe no-op outside a flow repo); `--pre-commit`/`--pre-push` selectors (default both), `--remove`, idempotent
+- `install_hooks` -- install/remove the pre-commit hook (ruff -> mypy over the declared typed surface -> `lint --staged --strict` -> sync-check -> declared-axes verdict -> guarded ACTIVE/tracker-coherence auto-fix step) AND/OR the pre-push Beadloom Gate hook (`beadloom ci --format rich`, blocks the push on red and on a Gate with no verdict; without `beadloom` on `PATH` it refuses the push with a sentence); `--pre-commit`/`--pre-push` selectors (default both), `--remove`, idempotent. The hook text is in `hook_templates.py`
 - `active_sync` -- reconcile each epic's ACTIVE.md bead-status table from `bd` (`--epic`/`--check`/`--json`/`--no-export`); fix mode also `bd export`s the tracked `.beads/issues.jsonl`; safe no-op when no ACTIVE table or no `bd`; delegates to `application/active_table/reconcile.py:reconcile_active_tables()`
 - `link` -- manage external tracker links
 - `search` -- FTS5 search with LIKE fallback

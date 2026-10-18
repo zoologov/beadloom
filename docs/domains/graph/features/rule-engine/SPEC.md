@@ -1922,7 +1922,7 @@ class Violation:
 ### CLI
 
 ```
-beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
+beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex] [--staged]
 ```
 
 | Flag           | Default | Description                                                        |
@@ -1930,6 +1930,7 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 | `--format`     | `rich`  | Output format: `rich` (colored tables), `json`, or `porcelain`.    |
 | `--strict`     | `False` | Exit with code `1` if any violations are found.                    |
 | `--no-reindex` | `False` | Read the index as-is. This is the READ-ONLY form: the default reindexes first and therefore WRITES `beadloom.db`. |
+| `--staged`     | `False` | Judge only the nodes that own a path this commit stages, and the findings located in a staged file (`graph/lint_scope.py`). The output leads with one sentence naming the nodes and counting the findings left to the pre-push Gate; git with no answer narrows nothing. The pre-commit hook runs it (BDL-083 S1a, BDL-UX #326). |
 
 **Exit codes:**
 

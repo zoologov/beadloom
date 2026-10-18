@@ -187,6 +187,15 @@ _PAYLOAD_FILTER = re.compile(r"grep -v '\^(.+?)'")
 #: The branch a leg takes when its command produced no verdict at all.
 _NO_VERDICT_BRANCH = re.compile(r'if \[ -z "\$(\w+)_verdict" \]')
 
+#: A leg that reads a command's output for a PERSON and greps its verdict line out of
+#: it, rather than splitting a porcelain verdict off by the marker: the pre-commit
+#: architecture lint and the pre-push Gate (BDL-083 S1a). What each greps for is held
+#: against the command that prints it in `tests/test_cli_hooks.py`; here they are held
+#: to the rule every leg is held to, a word for having compared nothing.
+_GREPPED_VERDICT = re.compile(
+    r"(\w+)_verdict=\$\(printf '%s\\n' \"\$\1_out\" \| grep "
+)
+
 _TEMPLATES = {
     "warn": _HOOK_TEMPLATE_WARN,
     "block": _HOOK_TEMPLATE_BLOCK,
@@ -220,6 +229,15 @@ class TestTheTwoGateLegsShareOnePorcelainProtocol:
         """The population these assertions run over, stated before they run."""
         found = list(_producers())
         assert len(found) >= 2, found
+
+    def test_both_grepped_legs_are_found(self) -> None:
+        """The second population, stated for the same reason: a regex matching nothing."""
+        found = {
+            (name, variable)
+            for name, body in _TEMPLATES.items()
+            for variable in _GREPPED_VERDICT.findall(body)
+        }
+        assert found == {("warn", "lint"), ("block", "lint"), ("pre-push", "gate")}, found
 
     def test_every_verdict_parse_strips_the_declared_marker(self) -> None:
         """No leg spells the marker for itself.
@@ -257,6 +275,7 @@ class TestTheTwoGateLegsShareOnePorcelainProtocol:
         """
         for name, body in _TEMPLATES.items():
             producers = {variable for variable, _ in _PRODUCER.findall(body)}
+            producers |= set(_GREPPED_VERDICT.findall(body))
             fallbacks = set(_NO_VERDICT_BRANCH.findall(body))
             assert producers == fallbacks, (name, producers, fallbacks)
             for variable in producers:

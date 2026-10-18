@@ -315,6 +315,17 @@ Reads the acceptance suite and the documents that reference it; evaluates nothin
 - `format_json(result: LintResult) -> str` -- Format a `LintResult` as structured JSON with violations array and summary.
 - `format_porcelain(result: LintResult) -> str` -- Format a `LintResult` as machine-readable one-line-per-violation output.
 
+### Module `src/beadloom/graph/lint_scope.py`
+
+A lint result narrowed to the nodes a commit touches, and the sentence that says so (BDL-083
+S1a, BDL-UX #326). `beadloom lint --staged` is the caller, and the pre-commit hook's
+architecture-lint leg is the caller of that. Pure: the staged paths and the ownership lookup
+are handed in, so this module reads neither git nor the index.
+
+- `scope_lint_to_commit(result: LintResult, staged: frozenset[str] | None, owner_of: Callable[[str], str | None]) -> CommitLintScope` -- Keep the findings whose `from_ref_id` is a node that owns a staged path, and the findings located in a staged file whatever their node; count the rest as left to the pre-push Gate. A finding about a rule rather than a node, such as a liveness or population advisory, names no node and is among the rest. `staged=None` means git did not answer, and the whole result is kept, as `doc_sync.commit_scope` keeps every sync pair.
+- `CommitLintScope` -- The narrowed `result`, `staged` (the number of staged paths, or `None`), `owned` (how many of them a node owns), `nodes` (sorted), `left_out`, and `sentence`, the one line that leads `lint --staged`'s output.
+- `COMMIT_SCOPE_LEAD` -- `"Lint over this commit: "`, the lead the hook finds the verdict by.
+
 ### Module `src/beadloom/graph/snapshot.py`
 
 - `save_snapshot(conn: sqlite3.Connection, label: str | None = None) -> int` -- Save current graph state (nodes, edges, symbol counts) as a snapshot in the `graph_snapshots` table. Returns the new snapshot ID.
