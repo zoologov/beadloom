@@ -86,7 +86,7 @@ Raw counts aggregated from all data sources.
 | Field | Type | Description |
 |-------|------|-------------|
 | `error_count` | `int` | Lint rule errors |
-| `warning_count` | `int` | Lint rule warnings |
+| `warning_count` | `int` | Lint rule warnings; a finding at `info` is not one (below) |
 | `undocumented_count` | `int` | Nodes without docs |
 | `stale_count` | `int` | Stale sync pairs |
 | `untracked_count` | `int` | Untracked source files |
@@ -179,6 +179,21 @@ They are carried UNWEIGHTED. A statement of how much of the graph a count covers
 debt, and scoring it would put a number in the score that measures the check rather than the code.
 Nothing else about the count changed: the population advisory is still counted among the warnings,
 exactly as BDL-070 A2 left it.
+
+#### A finding at `info` is no debt (BDL-083 S1 fix 2)
+
+The rule engine states some findings at the severity `info` (`INFO_SEVERITY`): they inform and
+decide nothing. Today there is one, the statement that an import rule whose `to:` glob can match
+an import and matches none today is live with nothing to ban (BDL-083 RFC D2). `lint` counts a
+finding at `info` as neither an error nor a warning, and `_count_violations` now counts it the
+same way: it adds to neither `error_count` nor `warning_count`, and it is charged to no node.
+
+Until this fix the collector counted every finding that was not an error as a warning, so that
+statement was a false warning in an adopter's score: measured 1 warning on 2026-10-18 on the
+monorepo fixture, where `lint` counts 0. The fixture shows it only with its rule written at
+`.beadloom/rules.yml`, because the collector reads no rule at `.beadloom/_graph/rules.yml`
+(BDL-UX #291). `info` has no weight in `DebtWeights`, because a statement that decides nothing
+is not debt.
 
 ### Data Collection Sources
 
@@ -479,8 +494,11 @@ untested count read from the binding, withheld while files are unplaced, and the
 keeping its population clauses),
 `tests/integration/application/debt_report/test_an_adopter_scores_what_it_scored_before.py` (the
 count on a Go module, three Python layouts and the Maven, Gradle-Kotlin and SwiftPM layouts, and the
-population of a project with no test file), and
-`tests/acceptance/features/ctx_and_debt_report_read_the_test_binding.feature`.
+population of a project with no test file),
+`tests/integration/application/debt_report/test_an_info_statement_is_counted_as_neither.py` (a
+finding at `info` counted as neither an error nor a warning),
+`tests/acceptance/features/ctx_and_debt_report_read_the_test_binding.feature`, and
+`tests/acceptance/application/debt-report/an_info_statement_is_no_debt.feature`.
 
 Tests should cover the following scenarios:
 

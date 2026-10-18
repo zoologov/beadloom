@@ -303,9 +303,16 @@ def _count_violations(
 
     Nothing here re-counts: the population advisory is counted exactly as A2
     left it counted, among the warnings.
+
+    A finding at ``info`` is counted as neither, as lint counts it: it informs and
+    decides nothing, and today it is the statement that an import rule is live with
+    nothing to ban (BDL-083 D2). Until BDL-083 S1R Major 2 every finding that was not
+    an error fell into the warnings here, so that statement was a false warning in
+    the score.
     """
     try:
         from beadloom.graph.rule_engine import (
+            INFO_SEVERITY,
             LayerRule,
             evaluate_all,
             layer_rule_reaches,
@@ -338,6 +345,8 @@ def _count_violations(
     node_violations: dict[str, list[str]] = {}
 
     for v in violations:
+        if v.severity == INFO_SEVERITY:
+            continue
         if v.severity == "error":
             errors += 1
         else:
