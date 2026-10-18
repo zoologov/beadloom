@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** S1a — `beadloom-7i09`, dev (wave 2 of 6 over the S1 dev beads)
-**Goal:** the composed hooks — pre-push exits non-zero with a sentence without `beadloom` on PATH and prints the verdict line or "the Gate did not run"; pre-commit runs `lint --strict` over the nodes of staged paths; the ruff leg shows stderr, tells exit 127 from 1, reads the owning project's configuration (D1; #326, #327)
-**Done when:** the entries' own `Command` red first then green on the fixture and this repository, the MAJOR move (the hook's exit code) as a test, two-level verification, committed by path under the landing lock
+**Bead:** S1c — `beadloom-b23f`, dev (wave 3 of 6 over the S1 dev beads)
+**Goal:** `derive_gate_ownership` attributes by the files a bead's commits changed; `unattributed` otherwise; the surfaces print the rule (D3; #329)
+**Done when:** the entry's own `Command` red first then green on the fixture or this repository, two-level verification, committed by path under the landing lock
 
 ## Progress
 
@@ -27,9 +27,9 @@
 | Bead | Role | Status | Note |
 |---|---|---|---|
 | `beadloom-483w` | S1g | done | `14d89ecb`; 48 files under `tests/`, 9 tests; green on the tree; the room had one failure of #311's class |
-| `beadloom-7i09` | S1a | ready | wave 2 |
+| `beadloom-7i09` | S1a | done | `32197286`; MAJOR move 2 measured (pre-push without `beadloom` on PATH rc 0 → 1 with a sentence); new `graph/lint_scope.py`, `services/commands/hook_templates.py`; room 14432 passed + 1 of #311's class, tree 14479 passed, `ci` rc 0 |
 | `beadloom-q8x6` | S1b | ready | blocked by S1g |
-| `beadloom-b23f` | S1c | ready | blocked by S1g |
+| `beadloom-b23f` | S1c | ready | wave 3 |
 | `beadloom-fgu8` | S1d | ready | blocked by S1g |
 | `beadloom-ba9w.13` | S1e | ready | blocked by S1g |
 | `beadloom-jwfc` | S1e2 | ready | blocked by S1g |
