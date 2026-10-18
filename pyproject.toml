@@ -482,6 +482,8 @@ pytest_add_cli_args_test_selection = [
     "tests/unit/graph/rules/test_a_to_glob_is_told_unmatchable_from_live.py",
     "tests/unit/graph/test_an_info_finding_is_rendered_as_info.py",
     "tests/acceptance/steps/graph/rule-engine/test_an_import_rule_with_nothing_to_ban_is_live_steps.py",
+    "tests/acceptance/steps/application/ci-gate/test_the_lint_line_counts_statements_at_info_steps.py",
+    "tests/integration/application/gate/test_the_gate_lint_line_counts_statements_at_info.py",
     "tests/self_check/architecture/test_import_boundary_liveness.py",
     "tests/integration/graph/rules/test_import_boundary_rule.py",
     "tests/test_init_agrees_across_its_modes.py",

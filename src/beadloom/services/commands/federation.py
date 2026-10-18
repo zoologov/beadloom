@@ -629,7 +629,7 @@ def _gate_room_lines(result: GateResult) -> list[str]:
 
     census = result.room
     if census is None:
-        return []
+        return _absent_report_lines("Room: not stated", result.room_reason)
     lines = [f"Room: {room_line(census.current)}"]
     if not census.comparisons:
         lines.append(
@@ -661,8 +661,19 @@ def _gate_coverage_lines(result: GateResult) -> list[str]:
     from beadloom.application.gate_coverage import gate_coverage_lines
 
     if result.coverage is None:
-        return []
+        return _absent_report_lines("Not run by this gate:", result.coverage_reason)
     return gate_coverage_lines(result.coverage)
+
+
+def _absent_report_lines(heading: str, reason: str | None) -> list[str]:
+    """A report that raised, under its own heading, saying why it makes no claim.
+
+    Nothing at all when there is no reason, because then nothing was asked and a
+    surface that was not told makes no claim (BDL-083 S1 fix 1).
+    """
+    if reason is None:
+        return []
+    return [heading, f"  {reason}, so this run makes no claim here"]
 
 
 def _gate_ownership_lines(result: GateResult) -> list[str]:
@@ -712,6 +723,8 @@ def _format_gate_json(result: GateResult) -> str:
             ],
             "inspected": coverage.inspected,
         }
+    elif result.coverage_reason is not None:
+        payload["not_run"] = {"reason": result.coverage_reason}
     ownership = result.ownership
     if ownership is not None:
         from beadloom.application.gate_ownership import ownership_payload
@@ -730,6 +743,8 @@ def _format_gate_json(result: GateResult) -> str:
                 {"source": u.source, "why": u.why} for u in census.unresolved
             ],
         }
+    elif result.room_reason is not None:
+        payload["room"] = {"reason": result.room_reason}
     return json.dumps(payload, indent=2)
 
 
@@ -752,6 +767,8 @@ def _format_gate_github(result: GateResult) -> str:
             f"::notice::room {room_line(result.room.current)} — "
             f"{entered} of {declared} declared room(s) entered by this run"
         )
+    elif result.room_reason is not None:
+        lines.append(f"::notice::room not stated: {result.room_reason}")
     for step in result.steps:
         lines.append(f"::notice::{step.name} {step.status}: {step.summary}")
     clause = crashed_clause(result.steps)
@@ -762,6 +779,8 @@ def _format_gate_github(result: GateResult) -> str:
             f"{v.duty} (`{v.command}`)" for v in result.coverage.not_performed
         )
         lines.append(f"::notice::not run by this gate: {named}")
+    elif result.coverage_reason is not None:
+        lines.append(f"::notice::not run by this gate: no claim — {result.coverage_reason}")
     lines.extend(_gate_ownership_notices(result))
     for f in result.findings:
         level = "error" if f.get("severity") == "error" else "warning"

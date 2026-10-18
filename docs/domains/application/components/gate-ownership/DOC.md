@@ -88,7 +88,9 @@ findings are about.
 
 A tracker that cannot answer, a project with no index, and a git that cannot list the branch's
 commits against the base are a `reason` on the whole report rather than a page of
-`unattributed`. Telling every gate owner "not yours" when nobody was asked would be the false
+`unattributed`. So is a derivation that raised: the Gate derives this report under its
+boundary, and an exception becomes the reason `the ownership report raised <class>: <message>`
+while the steps' verdict stands (BDL-083 S1 fix 1). Telling every gate owner "not yours" when nobody was asked would be the false
 green this report exists to remove.
 
 ## Where it surfaces

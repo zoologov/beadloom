@@ -27,7 +27,7 @@ and a step that raises reads `ERROR` while the steps after it still run.
    `git_activity.activity_history_note` gives (BDL-078 `beadloom-btkd.9`), and when the clone
    does not reach back over the 90-day window, so no activity was measured, the step reports
    `WARN` (`not_verified`) rather than `PASS`.
-2. **lint** — `lint --strict`, architecture boundaries. Its summary carries what a `forbid_import` exemption excused — the `10 crossings suppressed by an exemption` clause of the verbatim line quoted below — taken from the linter's own formatter so the Gate line cannot drift from the command it summarises (BDL-061.49). The clause is absent when nothing was suppressed. A SECOND clause names the population — `lint PASS: 0 error(s), 55 warning(s), 10 crossings suppressed by an exemption, architecture-layers judged 357 of 365 live depends_on edge(s)`, the Gate's lint line verbatim as `beadloom ci` printed it on this repository on 2026-09-13 — taken from the same formatter (`_population_note`) for the same reason, and present at FULL reach as well as partial: a suppressed crossing is an anomaly, so its absence means there is nothing to qualify, while a population is the denominator of the counts beside it and `357 of 365` reads exactly like `365 of 365` when neither is printed (BDL-070 A4). A project that declares no layer rule gets no clause. There is deliberately no matching clause for `rules_inert`: an inert rule always emits a finding, so a non-zero count already flips this summary to the `0 error(s), N warning(s)` branch. This step is also the only one exported under a public name (`lint_step`): `beadloom init` runs it over the graph it has just written and exits 1 when it does not pass, so a divergence between what `init` writes and what `init` requires surfaces at init time rather than at the adopter's first `ci` run (BDL-067, closing BDL-UX #192). Its `LintError` branch — `rules.yml` present and unloadable — is the one place a finding's `rule` is this step's own name rather than a rule's, with the loader's complaint in `why`, so the summary it carries is exported too, as `RULES_CONFIG_ERROR`: a caller that renders findings has to branch on it, and `init` did not, telling an adopter with a hand-edited rules file that a rule called `lint` had failed (BDL-067 `.6`).
+2. **lint** — `lint --strict`, architecture boundaries. Its summary carries what a `forbid_import` exemption excused — the `10 crossings suppressed by an exemption` clause of the verbatim line quoted below — taken from the linter's own formatter so the Gate line cannot drift from the command it summarises (BDL-061.49). The clause is absent when nothing was suppressed. A SECOND clause names the population — `lint PASS: 0 error(s), 55 warning(s), 10 crossings suppressed by an exemption, architecture-layers judged 357 of 365 live depends_on edge(s)`, the Gate's lint line verbatim as `beadloom ci` printed it on this repository on 2026-09-13 — taken from the same formatter (`_population_note`) for the same reason, and present at FULL reach as well as partial: a suppressed crossing is an anomaly, so its absence means there is nothing to qualify, while a population is the denominator of the counts beside it and `357 of 365` reads exactly like `365 of 365` when neither is printed (BDL-070 A4). A project that declares no layer rule gets no clause. There is deliberately no matching clause for `rules_inert`: an inert rule always emits a finding, so a non-zero count already flips this summary to the `0 error(s), N warning(s)` branch. A statement at `info` — a live rule with nothing to ban (BDL-083 S1b) — is neither an error nor a warning and is still a finding, so the line counts it when there is one: `0 error(s), 2 warning(s), 1 statement(s) at info`, as `beadloom ci` printed it over the monorepo fixture. Without the clause a lint of statements alone read `0 error(s), 0 warning(s)` above the findings it printed (S1R Minor 5). This step is also the only one exported under a public name (`lint_step`): `beadloom init` runs it over the graph it has just written and exits 1 when it does not pass, so a divergence between what `init` writes and what `init` requires surfaces at init time rather than at the adopter's first `ci` run (BDL-067, closing BDL-UX #192). Its `LintError` branch — `rules.yml` present and unloadable — is the one place a finding's `rule` is this step's own name rather than a rule's, with the loader's complaint in `why`, so the summary it carries is exported too, as `RULES_CONFIG_ERROR`: a caller that renders findings has to branch on it, and `init` did not, telling an adopter with a hand-edited rules file that a rule called `lint` had failed (BDL-067 `.6`).
 3. **sync-check** — symbol-pair doc freshness; fails on stale **and missing**
    pairs, reports `unverified` ones as `WARN` rather than fresh, and states how
    many pairs a WORKING declaration EXCUSED, with the reason it was declared
@@ -539,6 +539,31 @@ report carries `error` on every step (`null` when the step returned) and a top-l
 list of step names. The GitHub format adds one `::notice::` with the same clause. The MCP
 `complete_bead` tool returns `FAIL` with the crashed step's finding among its findings.
 
+### A report derived after the steps that raises states its reason
+
+The room census, the coverage statement and the ownership report are derived after the steps,
+from the finished result. Until BDL-083 S1 fix 1 (`beadloom-4m0w`, S1R Major 1) they ran outside
+the boundary, so an exception in one of them left `run_ci_gate` as a traceback and the verdict
+of steps that had all run was lost with it. The pre-push hook refused the push as a Gate that
+did not run, so the push was not waved through; what was lost was the verdict.
+
+Each report is now derived through `gate_boundary.derive_bounded`. A report that raises is not
+an `ERROR` step, because it is not a step and has no status: the report is absent and the run
+carries a sentence `the <report> raised <class>: <message>`, where `<report>` is `room census`,
+`coverage report` or `ownership report`. The steps, their verdict and the exit code are the ones
+the steps produced. The census and the coverage report are carried as `None` with the sentence
+beside them, in `GateResult.room_reason` and `GateResult.coverage_reason`: `RoomCensus` is the
+answer `beadloom rooms` and the MCP verdict print too, and it has no shape for a census that was
+not taken. The ownership report is a `GateOwnership` whose `reason` is the sentence, because that
+type already has a reason every surface prints.
+
+The rich format prints the sentence under the report's own heading (`Room: not stated`, `Not run
+by this gate:`, `Findings by owner:`), followed by `so this run makes no claim here` for the first
+two. `--format json` carries it as `reason` on the report's own key (`room`, `not_run`,
+`ownership`), and `--format github` as that report's `::notice::`. A report that was not asked for
+— no tracker given, so no ownership — states nothing, which is a different answer from a report
+that raised.
+
 ## Invariants
 
 - Every step runs; the gate never short-circuits on the first failure, and never on a step
@@ -561,6 +586,10 @@ list of step names. The GitHub format adds one `::notice::` with the same clause
 - The coverage block never changes the verdict either, and
   `tests/test_gate_not_run.py` fails if it starts to. It names a verification
   only when the project's own pipeline declares one this report can read.
+- A room census, coverage report or ownership report that raises never changes the verdict:
+  it states its reason and the steps' verdict and exit code stand, and
+  `tests/integration/application/gate/test_a_report_after_the_steps_that_raises_states_a_reason.py`
+  fails if one of them takes the run with it.
 - The ownership block never changes the verdict either, and
   `tests/test_gate_finding_owner.py` fails if it starts to. A finding nobody
   claims is still a finding; a gate that went green because no bead owned a red
@@ -591,6 +620,10 @@ Module `src/beadloom/application/gate_boundary.py` — the per-step exception bo
   finding naming where the exception was raised, and the summary `crashed — <error>`.
 - `crashed_clause(steps) -> str` — `N step(s) crashed: a, b` over the steps that raised, or
   an empty string; re-exported from `gate.py`, and the clause every surface prints.
+- `derive_bounded(report, derive) -> tuple[report | None, str | None]` — derive one of the
+  reports made after the steps; an `Exception` it raises becomes `(None, reason)` instead of
+  ending the run. Exactly one of the two is set.
+- `report_raised(report, exc) -> str` — that reason, `the <report> raised <class>: <message>`.
 
 Module `src/beadloom/application/gate_declarations.py` — what an unusable opt-in
 declaration costs a leg, for the two legs that are opt-in:
@@ -621,7 +654,10 @@ Module `src/beadloom/application/gate.py`:
   `GateCoverage | None`), the ownership report (`ownership`, a
   `GateOwnership | None`), plus the `ok`, `findings` and `crashed` properties (the last
   is the steps whose `error` is set, in step order). `None` means nothing derived it, and
-  a surface that was not told makes no claim.
+  a surface that was not told makes no claim. `room_reason` and `coverage_reason` are the
+  sentence a census or a coverage report that raised left in its place, and `None` otherwise.
+- `ROOM_REPORT`, `COVERAGE_REPORT`, `OWNERSHIP_REPORT` — the names those three reports are
+  stated under in that sentence: `room census`, `coverage report`, `ownership report`.
 - `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex,
   performed_elsewhere=(), tracker=None) -> GateResult` — run every gate step and
   aggregate the result. `performed_elsewhere` names verifications the CALLER runs

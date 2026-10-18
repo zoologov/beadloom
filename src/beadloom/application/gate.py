@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from beadloom.application.gate_boundary import crashed_clause, run_bounded
+from beadloom.application.gate_boundary import crashed_clause, derive_bounded, run_bounded
 from beadloom.application.gate_coverage import GateCoverage, derive_gate_coverage
 from beadloom.application.gate_document_pairs import step_readme_pair
 from beadloom.application.gate_issue_log import step_issue_log
@@ -97,6 +97,12 @@ __all__ = [
 #: string in two modules is exactly how the two would drift apart.
 RULES_CONFIG_ERROR = "rules configuration error"
 
+#: The names the three reports derived after the steps are stated under when one of
+#: them raises: ``the <name> raised <class>: <message>`` (BDL-083 S1 fix 1).
+ROOM_REPORT = "room census"
+COVERAGE_REPORT = "coverage report"
+OWNERSHIP_REPORT = "ownership report"
+
 
 def _run_doctor_checks(
     conn: sqlite3.Connection, *, project_root: Path | None = None
@@ -154,6 +160,23 @@ class GateResult:
     not told makes no claim about the suite (BDL-UX #247).
     """
 
+    room_reason: str | None = None
+    """Why ``room`` is absent when the census raised, naming the exception.
+
+    Carried beside the census rather than on it: :class:`RoomCensus` is the answer
+    ``beadloom rooms`` and the MCP verdict print as well, and a census has no shape for
+    "not taken" — its current room is the one field it cannot do without. ``None``
+    whenever ``room`` is set, and whenever nothing was asked.
+    """
+
+    coverage_reason: str | None = None
+    """Why ``coverage`` is absent when its derivation raised, naming the exception.
+
+    Beside the report for the reason ``room_reason`` is: an absent report and a
+    present one with nothing in it must not read alike, and "no claim because the
+    report raised" is a third answer to "what did this run not do".
+    """
+
     ownership: GateOwnership | None = None
     """Who owns each finding of this run, held against the beads claimed now.
 
@@ -165,7 +188,9 @@ class GateResult:
     ``None`` means no work tracker was supplied to the run, so nothing was
     asked — the same convention ``room`` and ``coverage`` follow, and distinct
     from a report whose ``reason`` says the tracker was asked and did not
-    answer.
+    answer. A report that raised is a report with ``reason`` set to the sentence
+    naming the exception, because its type already has a reason every surface
+    prints.
     """
 
     @property
@@ -255,19 +280,30 @@ def run_ci_gate(
             )
         )
     performed = tuple(step.name for step in steps) + performed_elsewhere
+    # The three reports below describe the finished run and are derived under the
+    # boundary too: one that raises is absent with a reason, and the steps' verdict
+    # stands (BDL-083 S1 fix 1).
+    room, room_reason = derive_bounded(ROOM_REPORT, lambda: take_census(project_root))
+    coverage, coverage_reason = derive_bounded(
+        COVERAGE_REPORT, lambda: derive_gate_coverage(project_root, performed=performed)
+    )
     result = GateResult(
         steps=steps,
-        room=take_census(project_root),
-        coverage=derive_gate_coverage(project_root, performed=performed),
+        room=room,
+        room_reason=room_reason,
+        coverage=coverage,
+        coverage_reason=coverage_reason,
     )
     if tracker is None:
         return result
     # Built from the finished result rather than beside the steps: the report is
     # about the findings the run produced, and reading them back off the result
     # is what makes it impossible for it to describe a different set.
-    result.ownership = derive_gate_ownership(
-        project_root, findings=result.findings, tracker=tracker
+    ownership, ownership_reason = derive_bounded(
+        OWNERSHIP_REPORT,
+        lambda: derive_gate_ownership(project_root, findings=result.findings, tracker=tracker),
     )
+    result.ownership = GateOwnership(reason=ownership_reason) if ownership is None else ownership
     return result
 
 
@@ -328,8 +364,11 @@ def lint_step(project_root: Path) -> GateStep:
             findings=[_simple_finding("lint", "error", str(exc), None)],
             summary=RULES_CONFIG_ERROR,
         )
+    from beadloom.graph.rules import INFO_SEVERITY
+
     findings = [_finding(v) for v in result.violations]
     passed = not result.has_errors
+    statements = sum(1 for v in result.violations if v.severity == INFO_SEVERITY)
     # The suppressed-crossing and population clauses come from the linter's own
     # formatter rather than being restated here, so the Gate line cannot drift
     # from the command it summarises. The first is absent when nothing was
@@ -338,10 +377,14 @@ def lint_step(project_root: Path) -> GateStep:
     # counts beside it and `16 of 362` and `362 of 362` read alike when neither
     # is printed (BDL-070 A4). The OTHER counter needs no clause: an inert rule
     # always emits a finding, so `rules_inert > 0` already flips this summary to
-    # the "0 error(s), N warning(s)" branch (BDL-061.48/.49).
+    # the "0 error(s), N warning(s)" branch (BDL-061.48/.49). A statement at info
+    # is neither an error nor a warning and is still a finding, so it is counted
+    # when there is one; otherwise a lint of statements alone read
+    # "0 error(s), 0 warning(s)" above the findings it printed (S1R Minor 5).
+    info_note = f", {statements} statement(s) at info" if statements else ""
     summary = (
         (
-            f"{result.error_count} error(s), {result.warning_count} warning(s)"
+            f"{result.error_count} error(s), {result.warning_count} warning(s){info_note}"
             if result.violations
             else f"{result.rules_evaluated} rules, 0 violations"
         )
