@@ -49,8 +49,10 @@ now** whose **commits on the branch changed a file the finding is about**:
   itself reads between a commit and an issue (`bd orphans`). `bd-1` is not read inside `bd-10`
   or `bd-1.2`.
 - The commits are those `HEAD` holds against the base `scope-check` compares against
-  (`declared_scope.trunk_ref`), listed by `doc_sync.git_baseline.commits_since`. A commit
-  already on the trunk is nobody's work in flight.
+  (`scope_base.scope_base`, since BDL-083 S1d: the merge-base with the branch this one was
+  cut from, else the trunk), listed by `doc_sync.git_baseline.commits_since`. A commit
+  already on the trunk, or on a parent branch not yet merged, is nobody's work in flight, and
+  the report's `over <base>..HEAD` names the same base as the `scope-check` line.
 - A bead's `refs:` attribute nothing. The declaration grammar reads node ids and no file path,
   and a node is the directory-sized claim the defect was made of.
 

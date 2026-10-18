@@ -213,6 +213,33 @@ def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
+def _the_suite_runs_outside_the_pull_request_it_is_tested_in() -> Iterator[None]:
+    """No pull or merge request variable of the job running the suite reaches a test.
+
+    BDL-083 S1d: the scope check reads the branch and its parent from
+    ``GITHUB_HEAD_REF`` and its GitLab peers before the checkout, so in this
+    project's own pull-request CI every repository a test builds would otherwise be
+    judged as this project's branch. A test that wants a pull request sets the
+    variable itself. Removed from ``os.environ`` so a subprocess a test starts
+    inherits the same absence.
+    """
+    from beadloom.application.scope_base import (
+        HEAD_BRANCH_VARIABLES,
+        TARGET_BRANCH_VARIABLES,
+    )
+
+    removed = {
+        name: os.environ.pop(name)
+        for name in (*HEAD_BRANCH_VARIABLES, *TARGET_BRANCH_VARIABLES)
+        if name in os.environ
+    }
+    try:
+        yield
+    finally:
+        os.environ.update(removed)
+
+
+@pytest.fixture(scope="session", autouse=True)
 def _the_session_starts_in_an_empty_directory(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Iterator[None]:

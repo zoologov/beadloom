@@ -563,7 +563,7 @@ Where it runs, and what it does there:
 | Where | Scope | On a finding |
 |---|---|---|
 | the pre-commit hook | the staged paths | warns, in both hook modes, and never blocks |
-| `beadloom ci` (`scope-check` step) | `<trunk>...HEAD`, what the pull request contains | reports; the step passes |
+| `beadloom ci` (`scope-check` step) | `<base>...HEAD`, what the pull request contains; the base is the merge-base with the branch this one was cut from, else the trunk | reports; the step passes |
 
 Both are `warn`, and the reason was measured twice. When the check shipped, one work item in 64
 on this repository carried an `## Axes` section (12 of 75 on 2026-10-08), so a check that

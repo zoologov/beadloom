@@ -598,6 +598,16 @@ that.
   (`--no-renames`, so a rename changes both of its paths). Added by BDL-083 S1c for the
   Gate's ownership report, which attributes a finding to the bead whose commits changed its
   files. `None` means git could not answer, never *no commits*.
+- `merge_base(project_root, first, second) -> str | None`, `is_ancestor(project_root,
+  ancestor, descendant) -> bool`, `short_commit(project_root, ref) -> str | None`,
+  `commit_distance(project_root, ancestor, descendant) -> int | None`,
+  `branch_names(project_root) -> tuple[str, ...] | None` (local and remote-tracking, symbolic
+  refs such as `origin/HEAD` left out) and `branch_start_point(project_root, branch) -> str |
+  None` (the start point the reflog recorded when *branch* was created; for `Created from
+  HEAD`, the branch the HEAD reflog says was checked out when *branch* was first entered).
+  Added by BDL-083 S1d for `application.scope_base`, which judges a branch against the
+  merge-base with the branch it was cut from. Each answers `None` or `False` when git cannot
+  answer, never a guess.
 
 Module `src/beadloom/doc_sync/surface_ledger.py` — the committed surface record:
 

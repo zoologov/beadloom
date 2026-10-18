@@ -20,7 +20,10 @@ readers of one tool are two things that can disagree about what a path is
 relative to, and ``_project_relative`` is the answer to that. BDL-083 S1c added
 a fifth for the same reason: which commits a branch holds against a ref, with the
 message and the paths of each, so the Gate can attribute a finding to the bead
-whose commits changed its files.
+whose commits changed its files. BDL-083 S1d added the sixth, for the scope
+check's base: where this branch left the branch it was cut from — the merge-base
+of two refs, whether one commit is an ancestor of another, the branches the
+working copy knows, and what the reflog recorded when a branch was created.
 
 What it deliberately does NOT do: judge freshness. That is
 :func:`~beadloom.doc_sync.engine.check_sync`'s job, which pairs this answer with
@@ -224,6 +227,112 @@ def _parse_commits(raw: str, prefix: str) -> list[BranchCommit]:
 def ref_exists(project_root: Path, ref: str) -> bool:
     """Whether git resolves *ref* in this working copy."""
     return _run_git(project_root, ["rev-parse", "--verify", "--quiet", ref]) is not None
+
+
+def merge_base(project_root: Path, first: str, second: str) -> str | None:
+    """The best common ancestor of *first* and *second* as a full hash, or ``None``.
+
+    ``None`` when git cannot answer or the two share no history; never a guess.
+    """
+    found = _run_git(project_root, ["merge-base", first, second])
+    if found is None:
+        return None
+    return found.strip() or None
+
+
+def is_ancestor(project_root: Path, ancestor: str, descendant: str) -> bool:
+    """Whether *ancestor* is reachable from *descendant* (a commit is its own ancestor)."""
+    answer = _run_git(project_root, ["merge-base", "--is-ancestor", ancestor, descendant])
+    return answer is not None
+
+
+def short_commit(project_root: Path, ref: str) -> str | None:
+    """The shortest hash that names *ref* unambiguously in this repository, or ``None``."""
+    found = _run_git(project_root, ["rev-parse", "--short", "--verify", "--quiet", ref])
+    if found is None:
+        return None
+    return found.strip() or None
+
+
+def commit_distance(project_root: Path, ancestor: str, descendant: str) -> int | None:
+    """How many commits *descendant* holds that *ancestor* does not, or ``None``."""
+    found = _run_git(project_root, ["rev-list", "--count", f"{ancestor}..{descendant}"])
+    if found is None:
+        return None
+    try:
+        return int(found.strip())
+    except ValueError:
+        return None
+
+
+def branch_names(project_root: Path) -> tuple[str, ...] | None:
+    """Every local and remote-tracking branch, by short name; symbolic refs left out.
+
+    ``origin/HEAD`` is a pointer to another branch, not a branch, so it is skipped
+    rather than read as a second name for the trunk.
+    """
+    raw = _run_git(
+        project_root,
+        ["for-each-ref", "--format=%(refname:short)%00%(symref)", "refs/heads", "refs/remotes"],
+    )
+    if raw is None:
+        return None
+    names: list[str] = []
+    for line in raw.splitlines():
+        name, _, symref = line.partition("\0")
+        if name and not symref:
+            names.append(name)
+    return tuple(sorted(names))
+
+
+#: The reflog subject git writes when a branch is created, before its start point.
+_CREATED_FROM = "branch: Created from "
+
+#: The HEAD reflog subject of a checkout, as ``checkout: moving from <a> to <b>``.
+_MOVING_FROM = "checkout: moving from "
+
+
+def branch_start_point(project_root: Path, branch: str) -> str | None:
+    """The start point *branch* was created from, as this machine's reflog recorded it.
+
+    ``git switch -c <branch>`` records ``Created from HEAD``, which names no branch;
+    the HEAD reflog then says which branch was checked out when *branch* was first
+    entered, and that is the one it was cut from. ``None`` when the reflog holds no
+    answer: a fresh clone, a CI checkout, or a reflog that has expired.
+    """
+    created = _oldest_subject(project_root, f"refs/heads/{branch}")
+    if created is None or not created.startswith(_CREATED_FROM):
+        return None
+    start = created.removeprefix(_CREATED_FROM).strip()
+    if start != "HEAD":
+        return start or None
+    return _entered_from(project_root, branch)
+
+
+def _entered_from(project_root: Path, branch: str) -> str | None:
+    """The branch HEAD left the first time it moved to *branch*, from the HEAD reflog."""
+    raw = _run_git(project_root, ["reflog", "show", "--format=%gs", "HEAD", "--"])
+    if raw is None:
+        return None
+    suffix = f" to {branch}"
+    entered = [
+        line.removeprefix(_MOVING_FROM).removesuffix(suffix)
+        for line in raw.splitlines()
+        if line.startswith(_MOVING_FROM) and line.endswith(suffix)
+    ]
+    if not entered:
+        return None
+    # Newest first, so the oldest entry — the first time HEAD entered it — is last.
+    return entered[-1].strip() or None
+
+
+def _oldest_subject(project_root: Path, ref: str) -> str | None:
+    """The subject of the oldest reflog entry of *ref*, or ``None`` when it has none."""
+    raw = _run_git(project_root, ["reflog", "show", "--format=%gs", ref, "--"])
+    if raw is None:
+        return None
+    lines = [line for line in raw.splitlines() if line.strip()]
+    return lines[-1] if lines else None
 
 
 def current_branch(project_root: Path) -> str | None:

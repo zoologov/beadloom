@@ -166,6 +166,10 @@ def axes(*, document: Path, as_refs: bool, as_json: bool) -> None:
     click.echo(refs_line(section))
 
 
+#: What a bare ``--base`` stands for: the base derived by the rule, not one named.
+_DERIVED_BASE = ""
+
+
 @main.command(name="scope-check")
 @click.option(
     "--project",
@@ -180,6 +184,17 @@ def axes(*, document: Path, as_refs: bool, as_json: bool) -> None:
     help="Judge every path this branch changes against REF, not only the staged ones.",
 )
 @click.option(
+    "--base",
+    is_flag=False,
+    flag_value=_DERIVED_BASE,
+    default=None,
+    metavar="[REF]",
+    help=(
+        "Judge the branch, not the staged paths: against REF, or without one against "
+        "the merge-base with the branch it was cut from, else the trunk."
+    ),
+)
+@click.option(
     "--branch",
     default=None,
     help="Name the work item's branch instead of reading the checked-out one.",
@@ -192,6 +207,7 @@ def scope_check(
     *,
     project: Path | None,
     since: str | None,
+    base: str | None,
     branch: str | None,
     porcelain: bool,
     as_json: bool,
@@ -204,11 +220,25 @@ def scope_check(
     is the re-plan trigger. Exit code 2 when a path falls outside, 0 otherwise —
     and a run that could not find a branch, a work item, an index or a section
     says so rather than reporting a clean sheet.
+
+    `--base` judges the branch instead of the staged paths, against the
+    merge-base with the branch it was cut from (the trunk when there is none), or
+    against the REF it names; the header prints the base and how many files it
+    attributed to the parent branch. In CI the branch comes from the pull or merge
+    request (`GITHUB_HEAD_REF`, `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`).
     """
     from beadloom.application.declared_scope import VERDICT_MARKER
     from beadloom.application.declared_scope import scope_check as run_scope_check
+    from beadloom.application.scope_base import scope_base
 
-    run = run_scope_check(project or Path.cwd(), branch=branch, since=since)
+    root = project or Path.cwd()
+    # `--since REF` is `--base REF` under its older name; neither judges the staged index.
+    judged_against = (
+        None
+        if since is None and base is None
+        else scope_base(root, explicit=since or base or None, branch=branch)
+    )
+    run = run_scope_check(root, branch=branch, base=judged_against)
 
     if as_json:
         click.echo(json.dumps(_scope_payload(run), ensure_ascii=False, indent=2))
@@ -243,6 +273,7 @@ def _scope_payload(run: ScopeRun) -> dict[str, object]:
         "work_item": run.work_item,
         "document": run.document,
         "scope": run.scope,
+        "base": run.base.payload() if run.base is not None else None,
         "judged": run.verdict.judged,
         "unowned": run.verdict.unowned,
         "undecided": run.verdict.undecided,

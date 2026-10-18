@@ -289,9 +289,9 @@ and a step that raises reads `ERROR` while the steps after it still run.
    when BDL-062 `.4` gave that node an AS-IS document
    (`docs/services/components/cli-commands/DOC.md`).
 9. **scope-check** — did this branch leave the axes its work item declared?
-   (BDL-068 S1.6). BRANCH-scoped, `<trunk>...HEAD`, and that is the whole point:
+   (BDL-068 S1.6). BRANCH-scoped, `<base>...HEAD`, and that is the whole point:
    the tree is shared by several agents, so judging it would fail one agent's
-   push on a neighbour's edit, while `<trunk>...HEAD` is exactly what the pull
+   push on a neighbour's edit, while `<base>...HEAD` is exactly what the pull
    request contains and what the approval was spent on. The trunk is the
    `options.trunk` the `working-branch` guard already reads, preferring
    `origin/<trunk>` when that remote-tracking ref exists — measured on this
@@ -304,6 +304,17 @@ and a step that raises reads `ERROR` while the steps after it still run.
    with its reason — never a PASS, because a comparison over an empty
    population has verified nothing. The summary states the findings, the paths
    judged, the paths no node owns and the declared rows nobody decided.
+   Since BDL-083 S1d (RFC D4, BDL-UX #330) the base is not always the trunk: it
+   is `scope_base()`'s — the merge-base with the branch this one was cut from,
+   else the trunk — and the summary ends with the base, the rule that chose it
+   and how many files it attributed to the parent branch, so a work item cut
+   from an unmerged branch is judged over its own files and says so. Measured on the monorepo fixture:
+   the parent's two frontend files were both outside the axes before, and 0
+   were after. In CI the branch comes from `GITHUB_HEAD_REF` or
+   `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME` before the checkout's own name, because
+   a pull request is checked out on a detached HEAD and the step used to skip on
+   every one (BDL-UX #300). The ownership report lists commits against the same
+   base.
 10. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —

@@ -56,18 +56,13 @@ if TYPE_CHECKING:
         ReleaseOutcome,
         ReviewBrief,
     )
+    from beadloom.application.scope_base import ScopeBase
 
 #: Exit codes, named so the renderer and the docstring cannot drift apart.
 _EXIT_CLEAN = 0
 _EXIT_FINDINGS = 1
 _EXIT_UNASSEMBLABLE = 2
 _EXIT_WITHHELD = 3
-
-#: The trunk assumed when ``flow.yml`` declares none. Read from the
-#: ``working-branch`` guard's ``options.trunk`` first, because the trunk's name is
-#: already configuration in this project and a second default for the same fact is
-#: the two-sources-of-truth defect this epic has met three times.
-_FALLBACK_TRUNK = "main"
 
 #: How long git is given to answer before the change is reported as unmeasured.
 _GIT_TIMEOUT_S = 30
@@ -86,19 +81,6 @@ _GIT_ENCODING = "utf-8"
 #: comparison can be given a wrong answer; the cost is that such a path reaches
 #: the reader with ``\udcff``-style escapes in it, which is ugly and true.
 _GIT_DECODE_ERRORS = "surrogateescape"
-
-
-def _base_ref(project_root: Path) -> str:
-    """The ref a change is measured against, from the declared trunk."""
-    from beadloom.application.guards.config import GuardConfigError, load_guards_config
-
-    try:
-        config = load_guards_config(project_root)
-    except GuardConfigError:
-        # A flow.yml that will not parse is reported, loudly, by `beadloom ci`.
-        # Here it means only that the trunk was not declared.
-        return _FALLBACK_TRUNK
-    return config.spec_for("working-branch").options.get("trunk", _FALLBACK_TRUNK)
 
 
 def _changed_since(project_root: Path, ref: str) -> frozenset[str] | None:
@@ -307,7 +289,7 @@ def _suite_scenarios(project_root: Path) -> tuple[Any, ...]:
     return load_suite(project_root, glob).scenarios
 
 
-def _brief_as_dict(brief: ReviewBrief) -> dict[str, Any]:
+def _brief_as_dict(brief: ReviewBrief, *, base: ScopeBase) -> dict[str, Any]:
     """The whole brief as data — the same facts the human shape prints."""
     return {
         "bead": brief.bead_id,
@@ -317,6 +299,7 @@ def _brief_as_dict(brief: ReviewBrief) -> dict[str, Any]:
         "unknown_refs": list(brief.unknown_refs),
         "docs": [{"ref": d.ref, "path": d.path, "kind": d.kind} for d in brief.docs],
         "base_ref": brief.measured_since,
+        "base": base.payload(),
         "change_measured": brief.change_measured,
         "changed": [
             {"path": c.path, "owner": c.owner, "in_scope": c.in_scope}
@@ -400,13 +383,14 @@ def _render_reachability(brief: ReviewBrief) -> None:
         _render_channel(channel)
 
 
-def _render_brief(brief: ReviewBrief) -> None:
+def _render_brief(brief: ReviewBrief, *, base: ScopeBase) -> None:
     """Print the change, the specification, and what was held back."""
     click.echo(f"Review brief for {brief.bead_id} — {brief.title}")
     click.echo(
         f"{len(brief.changed)} changed file(s), {len(brief.docs)} document(s), "
         f"{len(brief.scenarios)} bound scenario(s), {len(brief.findings)} finding(s)."
     )
+    click.echo(f"Base: {base.describe()}")
     _render_specification(brief)
     _render_change(brief)
     _render_reachability(brief)
@@ -493,7 +477,7 @@ def _run_brief(
 ) -> int:
     """The BEFORE half: the change and the specification, and a count."""
     from beadloom.application.review_brief import assemble_brief
-    from beadloom.doc_sync.git_baseline import current_branch
+    from beadloom.application.scope_base import scope_base, working_branch
     from beadloom.infrastructure.db import open_db
 
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -503,7 +487,8 @@ def _run_brief(
 
     record, assignment = _bead_record(bead, _bead_fields(bead, project_root))
     notes = _author_notes(bead, project_root)
-    base_ref = since or _base_ref(project_root)
+    base = scope_base(project_root, explicit=since)
+    base_ref = base.ref
     conn = open_db(db_path)
     try:
         brief = assemble_brief(
@@ -515,23 +500,30 @@ def _run_brief(
             notes=notes,
             scenarios=_suite_scenarios(project_root),
             project_root=project_root,
-            branch=current_branch(project_root),
+            branch=working_branch(project_root),
             commits=_commits_since(project_root, base_ref),
         )
     finally:
         conn.close()
 
     if output_json:
-        click.echo(json.dumps(_brief_as_dict(brief), indent=2))
+        click.echo(json.dumps(_brief_as_dict(brief, base=base), indent=2))
     else:
-        _render_brief(brief)
+        _render_brief(brief, base=base)
     return _EXIT_FINDINGS if brief.findings else _EXIT_CLEAN
 
 
 # beadloom:domain=application
 @main.command("review-brief")
 @click.argument("bead")
-@click.option("--since", default=None, help="Base ref the change is measured against.")
+@click.option(
+    "--since",
+    default=None,
+    help=(
+        "Base ref the change is measured against (default: the merge-base with the "
+        "branch this one was cut from, else the trunk)."
+    ),
+)
 @click.option(
     "--release",
     "release",

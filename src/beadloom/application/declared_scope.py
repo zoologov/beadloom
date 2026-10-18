@@ -31,9 +31,9 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from beadloom.application.doc_shape import planning_documents
-from beadloom.application.guards.config import GuardConfigError
 from beadloom.application.impact.answer import source_root_of
 from beadloom.application.impact.boundary import open_boundary
+from beadloom.application.scope_base import working_branch
 from beadloom.application.waves.models import WorkItemAxes
 from beadloom.doc_sync.axes_section import (
     AXES_HEADING,
@@ -41,12 +41,7 @@ from beadloom.doc_sync.axes_section import (
     derived_targets,
     read_axes_section,
 )
-from beadloom.doc_sync.git_baseline import (
-    current_branch,
-    paths_changed_since,
-    ref_exists,
-    staged_paths,
-)
+from beadloom.doc_sync.git_baseline import paths_changed_since, staged_paths
 from beadloom.doc_sync.scope_check import (
     DeclaredScope,
     ScopeVerdict,
@@ -58,6 +53,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from beadloom.application.impact.boundary import GraphBoundary
+    from beadloom.application.scope_base import ScopeBase
 
 #: No branch is checked out, so nothing names the work item to judge against.
 NO_BRANCH = "no branch is checked out, so no work item names the scope to judge against"
@@ -80,17 +76,6 @@ GIT_SILENT = "git could not say which paths this commit changes, so nothing was 
 #: themselves is two things that can disagree.
 VERDICT_MARKER = "# "
 
-#: The guard whose ``options.trunk`` names this project's trunk branch. Read
-#: from there rather than declared again: ``working-branch`` already asks the
-#: project for the name, and two declarations of one branch are two things that
-#: can disagree about which ref an approval was given against.
-_TRUNK_OPTION_OWNER = "working-branch"
-_TRUNK_OPTION = "trunk"
-
-#: Trunk assumed when the project declares none — the same default
-#: ``working-branch`` carries, imported rather than repeated.
-
-
 @dataclass(frozen=True)
 class ScopeRun:
     """One run of the commit-scope check, and what it was able to judge.
@@ -108,6 +93,8 @@ class ScopeRun:
     #: What was compared: the staged index, or the branch against a ref.
     scope: str = ""
     reason: str | None = None
+    #: The base the branch was judged against; ``None`` when the staged index was.
+    base: ScopeBase | None = None
 
     @property
     def checked(self) -> bool:
@@ -122,31 +109,6 @@ class ScopeRun:
             f"Declared axes ({self.work_item}, {self.scope}): "
             f"{self.verdict.population()}"
         )
-
-
-def trunk_ref(project_root: Path) -> str:
-    """The ref a branch's whole work is compared against for the push gate.
-
-    ``origin/<trunk>`` when that remote-tracking ref exists, and the local
-    ``<trunk>`` otherwise. Not a preference: measured on this repository with a
-    local ``main`` two commits behind the remote, ``--since main`` reported
-    another work item's LANDED change as this branch's, and ``--since
-    origin/main`` did not. The remote branch is also what the pull request is
-    compared against, which is where the approval is actually spent.
-    """
-    from beadloom.application.guards.checks.working_branch import DEFAULT_TRUNK
-    from beadloom.application.guards.config import load_guards_config
-
-    try:
-        options = load_guards_config(project_root).spec_for(_TRUNK_OPTION_OWNER).options
-        trunk = options.get(_TRUNK_OPTION, DEFAULT_TRUNK)
-    except GuardConfigError:
-        # A malformed flow.yml is `config-check`'s finding, not this one's. The
-        # shipped default keeps the comparison running rather than adding a
-        # second reporter of one fault.
-        trunk = DEFAULT_TRUNK
-    remote = f"origin/{trunk}"
-    return remote if ref_exists(project_root, remote) else trunk
 
 
 def work_item_of_branch(project_root: Path, branch: str) -> Path | None:
@@ -211,26 +173,30 @@ def scope_of_branch(
 
 
 def scope_check(
-    project_root: Path, *, branch: str | None = None, since: str | None = None
+    project_root: Path, *, branch: str | None = None, base: ScopeBase | None = None
 ) -> ScopeRun:
     """Judge this commit — or this branch — against its work item's declared axes.
 
-    *since* names a ref to compare the branch against, for the push gate; its
+    *base* names the ref the branch is compared against, for the push gate; its
     absence judges the staged index, for the commit gate. One comparison, two
     scopes, because a commit gate and a push gate disagreeing about what left
-    the approval would be the second home this epic removes.
+    the approval would be the second home this epic removes. The branch is the
+    pull or merge request's in CI and the checkout's otherwise
+    (:func:`~beadloom.application.scope_base.working_branch`).
     """
-    name = branch if branch is not None else current_branch(project_root)
+    name = branch if branch is not None else working_branch(project_root)
     scope, reason = scope_of_branch(project_root, branch=name)
     if scope is None:
-        return ScopeRun(reason=reason)
+        return ScopeRun(reason=reason, base=base)
     paths = (
-        paths_changed_since(project_root, since)
-        if since is not None
+        paths_changed_since(project_root, base.ref)
+        if base is not None
         else staged_paths(project_root)
     )
     if paths is None:
-        return ScopeRun(work_item=_key(scope), document=scope.document, reason=GIT_SILENT)
+        return ScopeRun(
+            work_item=_key(scope), document=scope.document, reason=GIT_SILENT, base=base
+        )
     boundary = open_boundary(project_root)
     ownership = {
         path: (owner.node, owner.domain)
@@ -241,7 +207,8 @@ def scope_check(
         verdict=check_commit_scope(sorted(paths), scope, ownership=ownership),
         work_item=_key(scope),
         document=scope.document,
-        scope=f"against {since}" if since is not None else "staged",
+        scope=f"against {base.describe()}" if base is not None else "staged",
+        base=base,
     )
 
 
@@ -304,7 +271,7 @@ def work_item_axes(project_root: Path, *, branch: str | None = None) -> WorkItem
     rather than as ``None``: every caller then has one shape to render, and the
     reason travels with the plan instead of being dropped at the edge.
     """
-    name = branch if branch is not None else current_branch(project_root)
+    name = branch if branch is not None else working_branch(project_root)
     scope, reason = scope_of_branch(project_root, branch=name)
     if scope is None:
         return WorkItemAxes(reason=reason)

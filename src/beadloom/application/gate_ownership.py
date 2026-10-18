@@ -195,9 +195,10 @@ def derive_gate_ownership(
     """Attribute every finding of a run to the claimed beads whose commits explain it.
 
     *base* is the ref the branch's commits are listed against; ``None`` takes the
-    one the scope check compares against. The tracker is asked only when there is
-    something to attribute: a report that shells out to ``bd`` on every push to
-    say nothing is a cost with no reader.
+    one the scope check compares against (``scope_base``), so the older commits
+    of a parent branch not yet merged are nobody's work in flight. The tracker is
+    asked only when there is something to attribute: a report that shells out to
+    ``bd`` on every push to say nothing is a cost with no reader.
     """
     if not findings:
         return GateOwnership()
@@ -206,9 +207,9 @@ def derive_gate_ownership(
         return GateOwnership(reason=NO_TRACKER)
     claimed = tuple(sorted(bead.id for bead in beads))
     if base is None:
-        from beadloom.application.declared_scope import trunk_ref
+        from beadloom.application.scope_base import scope_base
 
-        base = trunk_ref(project_root)
+        base = scope_base(project_root).ref
     database = project_root / ".beadloom" / "beadloom.db"
     try:
         connection = open_db_readonly(database)

@@ -858,10 +858,13 @@ def _step_scope_check(project_root: Path) -> GateStep:
 
     Branch-scoped rather than tree-scoped, and that is the whole point: the tree
     is shared by several agents, so judging it would fail one agent's push on a
-    neighbour's edit, while ``<trunk>...HEAD`` is exactly what the pull request
+    neighbour's edit, while ``<base>...HEAD`` is exactly what the pull request
     contains and what the approval was spent on. The pre-commit hook asks the
     same question of one commit; this asks it of the branch, so a commit made
-    through a hook nobody re-installed is still caught before the push.
+    through a hook nobody re-installed is still caught before the push. The base
+    is :func:`~beadloom.application.scope_base.scope_base`'s — the merge-base with
+    the branch this one was cut from, else the trunk — and the summary names it
+    with the count of files it attributed to the parent branch (BDL-UX #330).
 
     ``passed=True`` unconditionally, like its two siblings above: the check ships
     as ``warn`` so a project whose work items predate ``## Axes`` does not go red
@@ -873,9 +876,10 @@ def _step_scope_check(project_root: Path) -> GateStep:
     ``a4738b7c`` — another work item's landed commit — for
     ``src/beadloom/graph/linter.py``.
     """
-    from beadloom.application.declared_scope import scope_check, trunk_ref
+    from beadloom.application.declared_scope import scope_check
+    from beadloom.application.scope_base import scope_base
 
-    run = scope_check(project_root, since=trunk_ref(project_root))
+    run = scope_check(project_root, base=scope_base(project_root))
     if not run.checked:
         return GateStep("scope-check", skipped=True, summary=f"skipped — {run.reason}")
     findings = [_scope_finding(finding) for finding in run.verdict.findings]
@@ -886,6 +890,8 @@ def _step_scope_check(project_root: Path) -> GateStep:
     )
     if run.verdict.undecided:
         summary += f", {run.verdict.undecided} declared row(s) nobody decided"
+    if run.base is not None:
+        summary += f"; against {run.base.describe()}"
     if not run.verdict.judged:
         # Nothing this branch changed belongs to a node, so the comparison ran
         # over an empty population. PASS would claim it checked something.

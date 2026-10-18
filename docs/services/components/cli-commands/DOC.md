@@ -342,7 +342,12 @@ of its slices' and a bead's scope is a SUBSET chosen for that bead, so this line
 a bead's own scope sits inside and never that scope itself. Handing it to every bead would make
 every pair share a node and collapse every wave to a wave of one. `scope-check` exits 2 when a path
 falls outside and 0 otherwise, and a run that could not find a branch, a work item, an index
-or a section prints its reason rather than a clean sheet. `--porcelain` LEADS with that line,
+or a section prints its reason rather than a clean sheet. `--base [REF]` (BDL-083 S1d) judges
+the branch instead of the staged paths: against REF, or without one against the merge-base
+with the branch it was cut from, else the trunk (`application.scope_base`); `--since REF` is
+the same as `--base REF`. The header and the JSON `base` object name the base, the rule that
+chose it and the files it attributed to the parent branch. `review-brief` takes the same base
+unless `--since` names one, prints it as its `Base:` line and carries it as `base` in JSON. `--porcelain` LEADS with that line,
 marked `# ` and on standard output, whether the run compared anything or not: the reason used
 to go to standard error alone, and the pre-commit hook reads the command as `2>/dev/null`, so
 a clean run and an unattributable one were the same empty string there and the gate printed

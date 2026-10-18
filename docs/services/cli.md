@@ -1242,7 +1242,7 @@ Judge the paths a commit stages against the axes its work item declared
 (BDL-068 S1.6).
 
 ```bash
-beadloom scope-check [--project DIR] [--since REF] [--branch NAME] [--porcelain] [--json]
+beadloom scope-check [--project DIR] [--base [REF]] [--since REF] [--branch NAME] [--porcelain] [--json]
 ```
 
 The work item is the one the checked-out branch names, and its `## Axes` section
@@ -1255,15 +1255,25 @@ the file system allows. What the check raises is detectability — the crossing 
 named, with the axis it fell outside, at the moment it is made rather than at
 review.
 
-- `--since REF` — judge every path the branch changes against REF (`REF...HEAD`),
-  which is what a pull request contains, instead of only the staged ones.
+- `--base [REF]` — judge every path the branch changes (`<base>...HEAD`), which is
+  what a pull request contains, instead of only the staged ones. Without REF the
+  base is the merge-base with the branch this one was cut from, else the trunk —
+  the base the Gate's `scope-check` step uses. The header names the base, the rule
+  that chose it and how many files of the trunk's diff it attributed to the parent
+  branch (BDL-UX #330).
+- `--since REF` — the same as `--base REF`.
 - `--branch NAME` — name the work item's branch instead of reading the
   checked-out one.
 - `--porcelain` — the verdict first as a `# `-marked line, then one finding per
   line (`path:line`, check, excerpt). A hook splits the two on the marker: a
   finding line opens with a project-relative path and no path opens with `# `.
 - `--json` — the verdict plus `checked`, `reason`, `work_item`, `document`,
-  `scope`, `judged`, `unowned` and `undecided`.
+  `scope`, `base` (`ref`, `kind`, `parent`, `parent_files`, `trunk`; `null` for the
+  staged paths), `judged`, `unowned` and `undecided`.
+
+The work item is the one the branch names, and in CI the branch is read from the
+pull or merge request first (`GITHUB_HEAD_REF`, `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`),
+because a CI job checks it out on a detached HEAD (BDL-UX #300).
 
 **The verdict is printed whatever it says, on standard output, in both forms.**
 Until BDL-068 S4 (`beadloom-0mdo.32`) the reason for having compared nothing
@@ -2001,6 +2011,11 @@ The brief carries the **assignment** (the bead's title and description), the
 and every scenario whose `@bead:` tag names the bead) and the **change**
 (`git diff <base>...HEAD`, the working tree, and the untracked files, each path
 carrying the node that owns it). It does not carry the bead's comments.
+
+The base is `--since REF` when given, and otherwise the base `scope-check` uses:
+the merge-base with the branch this one was cut from, else the trunk. The brief
+prints it as its `Base:` line, with how many files of the trunk's diff it
+attributed to the parent branch, and carries it as `base` in `--json` (BDL-UX #344).
 
 The measurement behind that ordering: in hidden-profile tasks a group that hears
 one member's conclusion first scores 17-36% where a single holder of all the
