@@ -1,5 +1,8 @@
 # beadloom:component=console-streams
-"""The process's own stdout/stderr survive a terminal that cannot spell a glyph.
+"""The process's own stdout/stderr survive the room they are written into.
+
+Two rooms, one responsibility: a terminal that cannot spell a glyph (the error handler,
+below) and a pipe that will not wait (:func:`write_whole`, at the end of this module).
 
 Found by the ``tests-locale`` 8-bit leg (BDL-061.42), and it is the one place in
 that sweep where UTF-8 is the **wrong** answer. Every other byte stream Beadloom
@@ -64,13 +67,15 @@ write states ``encoding="utf-8"`` at its own call site.
 
 from __future__ import annotations
 
+import contextlib
 import os
+import select
 import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
-    from typing import IO
+    from collections.abc import Iterable, Iterator
+    from typing import IO, TextIO
 
 #: What CPython already applies to ``sys.stderr``, MEASURED in every room this
 #: module names. Not ``replace``: U+FFFD tells a reader a character was there
@@ -139,3 +144,82 @@ def tolerate_unencodable_output(streams: Iterable[IO[str]] | None = None) -> tup
             continue
         relaxed.append(getattr(stream, "name", repr(stream)))
     return tuple(relaxed)
+
+
+# --- A pipe that will not wait (BDL-UX #226) -------------------------------------------
+#
+# MEASURED at 12c35cf3 (Darwin arm64, CPython 3.13.7): `beadloom ci --format rich` wrote
+# its whole report with one `click.echo`, and on a pipe whose write end was set
+# non-blocking and whose reader started late it raised `BlockingIOError: [Errno 35] write
+# could not complete without blocking` after 83518 of 229492 bytes. An agent's shell hands
+# `git push` exactly such a pipe, so the bigger the honest report, the likelier the Gate
+# died on its output rather than on a check.
+#
+# The flag lives on the open file description, which every holder of that end of the pipe
+# shares, so it is set blocking for the write and put back as it was found: a parent that
+# chose non-blocking writes keeps its choice. Another holder can flip it back mid-write,
+# which is why an `EAGAIN` is still expected and retried. The retry is on raw `os.write`,
+# which reports how many bytes it took, so nothing is dropped and nothing is written twice;
+# a text stream that raises half-way through a write cannot say how much of it went out.
+
+
+def _descriptor(stream: TextIO) -> int | None:
+    """The file descriptor under *stream*, or ``None`` for a stream that has none."""
+    try:
+        return stream.fileno()
+    except (AttributeError, OSError, ValueError):
+        # A test runner's buffer, a `StringIO`: `io.UnsupportedOperation` is both an
+        # OSError and a ValueError, and a closed stream raises ValueError.
+        return None
+
+
+@contextlib.contextmanager
+def _blocking(fd: int) -> Iterator[None]:
+    """*fd* in blocking mode for the duration, then in the mode it was found in."""
+    try:
+        was_blocking = os.get_blocking(fd)
+    except OSError:
+        yield
+        return
+    if not was_blocking:
+        with contextlib.suppress(OSError):
+            os.set_blocking(fd, True)
+    try:
+        yield
+    finally:
+        if not was_blocking:
+            with contextlib.suppress(OSError):
+                os.set_blocking(fd, False)
+
+
+def _write_all(fd: int, payload: bytes) -> None:
+    """Every byte of *payload* to *fd*, waiting for room whenever the pipe has none."""
+    pending = memoryview(payload)
+    while pending:
+        try:
+            written = os.write(fd, pending)
+        except BlockingIOError:
+            select.select([], [fd], [])
+            continue
+        pending = pending[written:]
+
+
+def write_whole(text: str, stream: TextIO) -> None:
+    """Write *text* and a newline to *stream* whole, whatever its descriptor's mode.
+
+    The bytes are the stream's own codec and error handler applied to the text, so a
+    terminal gets what ``stream.write`` would have given it. A stream with no descriptor
+    is written through its own ``write``. Text the stream had buffered goes out first.
+    The call waits for as long as the reader takes, as a blocking write does: a report
+    is never dropped or cut short because its reader was slow.
+    """
+    line = text + "\n"
+    fd = _descriptor(stream)
+    if fd is None:
+        stream.write(line)
+        stream.flush()
+        return
+    payload = line.encode(stream.encoding, stream.errors or "strict")
+    with _blocking(fd):
+        stream.flush()
+        _write_all(fd, payload)

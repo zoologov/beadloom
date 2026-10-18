@@ -572,10 +572,16 @@ the hard invariant *"no code in `main` without current docs."* On every push it
 runs the full Gate (`beadloom ci` — incremental reindex → `lint --strict`
 (module-coverage included) → sync-check → docs-audit → docs-quality → config-check →
 doctor) and **exits
-non-zero to block the push** on red. It runs `beadloom ci --format rich`, the format that
-prints a verdict line whatever git's standard output is, prints the Gate's output, and closes
-with that verdict line and `git push --no-verify` as the override. An exit code with no
-verdict line is reported as "the Gate did not run" and refused, never as stale documentation.
+non-zero to block the push** on red. It runs `beadloom ci --format rich --tee <temporary file>`: the rich format
+prints a verdict line whatever git's standard output is, the Gate writes its report to the
+hook's output itself, and the hook reads the verdict from the copy. It closes with that verdict
+line and `git push --no-verify` as the override; when a step crashed, it says that the step
+checked nothing instead of saying the findings name their fixes. An exit code with no verdict
+line is reported as "the Gate did not run" and refused, never as stale documentation. The
+hook does not print the report a second time through the shell, because `printf` gives up on
+a non-blocking pipe: measured at `12c35cf3` under `dash`, the reader got 65575 bytes, no
+verdict line and no sentence from the hook (BDL-UX #226). Its own sentences are retried while
+the pipe is full, and each is shorter than `PIPE_BUF`, so a retry repeats nothing.
 **Without `beadloom` on the `PATH` git runs the hook with, the push is refused** with three
 sentences on standard error: the Gate did not run, how to put `beadloom` on that `PATH` or
 remove the hook (`beadloom install-hooks --remove --pre-push`), and the `--no-verify`
@@ -2991,7 +2997,7 @@ in the [Issue Numbers SPEC](../domains/doc-sync/features/issue-numbers/SPEC.md).
 The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).
 
 ```bash
-beadloom ci [--hub EXPORT.json ...] [--fail-on CSV] [--format {rich,json,github}] [--no-reindex] [--project DIR]
+beadloom ci [--hub EXPORT.json ...] [--fail-on CSV] [--format {rich,json,github}] [--no-reindex] [--tee FILE] [--project DIR]
 ```
 
 Composes the existing checkers, in order, into ONE verdict with a single exit code (0 = all steps passed, 1 = any step failed):
@@ -3008,6 +3014,8 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 10. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`. The SCORE half is not a gate step: it needs counters a runner wrote, and [`beadloom mutation`](#beadloom-mutation) is where they are read.
 11. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
 12. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
+
+**The report survives a pipe that will not wait (BDL-083 S1e2, BDL-UX #226).** An agent's shell hands a command a pipe it reads when it gets to it and sets the write end non-blocking, so a write that does not fit fails with `EAGAIN` at once. `ci` used to write its whole report with one `click.echo`, and measured at `12c35cf3` on Darwin arm64, with the reader starting two seconds late, it exited `1` with `BlockingIOError: [Errno 35] write could not complete without blocking` after 83518 of the 229492 bytes the same run writes to a file. The report is now written through `console_streams.write_whole`: the descriptor is set blocking for the write and put back as it was found, and an `EAGAIN` that arrives anyway is retried once the pipe has room, on raw writes that report how many bytes they took, so nothing is dropped and nothing is written twice. Measured after, same room: the reader received every byte the same run writes to a file. `--tee FILE` writes the same report to `FILE` as well, before the terminal; the pre-push hook reads its verdict from that copy.
 
 **What `--no-reindex` changes about the verdict.** It skips step 1, so every later step describes the INDEX rather than the working tree. With an index older than the tree, the `lint` step reports `PASS` over a live error-severity violation that the same gate catches after a reindex (measured), and the `sync-check` step compares against whatever baseline the index holds. Use it only where something else has just reindexed.
 

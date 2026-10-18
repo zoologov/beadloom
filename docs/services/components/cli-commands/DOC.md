@@ -276,11 +276,22 @@ The pre-push hook without `beadloom` on the PATH git runs it with prints three s
 standard error — the Gate did not run and the push is refused, how to put `beadloom` on that
 PATH or remove the hook, and `git push --no-verify` — and exits `1`; it exited `0` in silence
 before, and the move is one of BDL-083's three MAJOR ones. With `beadloom` present it runs
-`beadloom ci --format rich` into a command substitution, because the rich format is the one
-that prints a verdict line whatever git's standard output is, and reprints the output. The
-verdict is found by `GATE_VERDICT_PATTERN`, which a test holds against `_format_gate_rich`; an
-exit code with no verdict line is reported as "the Gate did not run" and refused whatever the
-code was, never as stale documentation.
+`beadloom ci --format rich --tee <temporary file>`, because the rich format is the one that
+prints a verdict line whatever git's standard output is. The verdict is found in the copy by
+`GATE_VERDICT_PATTERN`, which a test holds against `_format_gate_rich`; an exit code with no
+verdict line is reported as "the Gate did not run" and refused whatever the code was, never as
+stale documentation.
+
+Since BDL-083 S1e2 the report reaches the terminal once, written by `ci` itself (BDL-UX #226).
+Until then the hook captured it in a command substitution and reprinted it with `printf`, which
+gives up on a non-blocking pipe: measured at `12c35cf3` under `dash`, with the reader starting
+late, the reader got 65575 bytes, no verdict line and no sentence from the hook, and the hook
+exited `0`. `ci` writes through `console_streams.write_whole`, which waits for the reader. The
+hook's own sentences go through a `say` function that retries while the pipe is full; each is
+shorter than `PIPE_BUF` (512 bytes on Darwin), so a retry repeats nothing, and a test holds
+that bound over the template. A verdict that names crashed steps is answered with "a step that
+crashed checked nothing" rather than "the findings above name their fixes", by the
+`step(s) crashed` clause a test holds against `crashed_clause`.
 
 Since BDL-083 S1e a step that raises no longer ends `ci` (BDL-UX #318): the application layer
 reports it as an `ERROR` step and the command renders it. `_gate_verdict_line` puts the

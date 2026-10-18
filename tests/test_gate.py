@@ -464,6 +464,18 @@ class TestCiCommand:
         assert result.exit_code == 1
         assert "::error" in result.output
 
+    def test_tee_writes_the_report_it_prints(self, tmp_path: Path) -> None:
+        """The copy the pre-push hook reads its verdict from is the report (BDL-UX #226)."""
+        _write_rules_yml(tmp_path, domains=["nonexistent-domain"])
+        generate_agents_md(tmp_path)
+        copy = tmp_path / "gate-copy.txt"
+        result = CliRunner().invoke(
+            main, ["ci", "--format", "rich", "--tee", str(copy), "--project", str(tmp_path)]
+        )
+        assert result.exit_code == 1
+        assert copy.read_text(encoding="utf-8") == result.stdout
+        assert "FAIL \u2014 gate blocked" in result.stdout
+
 
 # ---------------------------------------------------------------------------
 # GitHub annotation format — valid workflow-command shape

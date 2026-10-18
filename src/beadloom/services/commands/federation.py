@@ -479,6 +479,16 @@ def _with_commit_scope(output: str, scope: CommitLintScope, fmt: str) -> str:
     default=None,
     help="Project root (default: current directory).",
 )
+@click.option(
+    "--tee",
+    "tee",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Also write the report to FILE. The pre-push hook reads the verdict from it, "
+        "so the report reaches the terminal once, written by the Gate itself."
+    ),
+)
 def ci(
     *,
     hub: tuple[Path, ...],
@@ -486,6 +496,7 @@ def ci(
     fmt: str | None,
     no_reindex: bool,
     project: Path | None,
+    tee: Path | None,
 ) -> None:
     """Run the unified CI gate (reindex -> lint -> sync-check -> config-check -> federate).
 
@@ -521,11 +532,27 @@ def ci(
     )
 
     output = _format_gate(result, fmt)
+    if tee is not None:
+        # Before the terminal, so a reader that closed early cannot take the copy the
+        # hook decides on with it.
+        tee.write_text(f"{output}\n" if output else "", encoding="utf-8")
     if output:
-        click.echo(output)
+        _write_report(output)
 
     if not result.ok:
         sys.exit(1)
+
+
+def _write_report(output: str) -> None:
+    """*output* on stdout whole, on a pipe that will not wait as well (BDL-UX #226).
+
+    Through click's stdout, so the codec is the one ``click.echo`` would have used, and
+    through :func:`write_whole`, so a non-blocking pipe whose reader is slow is waited
+    for instead of raising ``BlockingIOError`` part-way through the report.
+    """
+    from beadloom.infrastructure.console_streams import write_whole
+
+    write_whole(output, click.get_text_stream("stdout"))
 
 
 def _format_gate(result: GateResult, fmt: str) -> str:

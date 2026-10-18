@@ -125,9 +125,21 @@ class TestInstallHooksCommand:
 
 
 def _write_gate_shim(shim: Path, exit_code: int) -> None:
-    """A fake `beadloom` whose Gate prints the verdict line `ci` prints, then exits."""
+    """A fake `beadloom` whose Gate prints the verdict line `ci` prints, then exits.
+
+    It writes the copy `--tee` names as well, because that copy is what the pre-push hook
+    reads the verdict from (BDL-UX #226).
+    """
     verdict = "PASS \u2014 gate clean" if exit_code == 0 else "FAIL \u2014 gate blocked"
-    shim.write_text(f"#!/bin/sh\necho '{verdict}'\nexit {exit_code}\n", encoding="utf-8")
+    shim.write_text(
+        "#!/bin/sh\n"
+        "while [ $# -gt 0 ]; do\n"
+        f"  if [ \"$1\" = --tee ]; then echo '{verdict}' > \"$2\"; fi\n"
+        "  shift\n"
+        "done\n"
+        f"echo '{verdict}'\nexit {exit_code}\n",
+        encoding="utf-8",
+    )
     shim.chmod(0o755)
 
 
@@ -524,7 +536,7 @@ class TestIdempotentNoDuplication:
         # Clean overwrite, not append: re-install leaves identical content with no
         # extra Gate invocation lines.
         assert first == second
-        assert second.count("$(beadloom ci ") == 1
+        assert second.count("\nbeadloom ci --format rich --tee ") == 1
 
     def test_block_mode_with_both_hooks(self, tmp_path: Path) -> None:
         project = _setup_git_project(tmp_path)
@@ -570,6 +582,47 @@ class TestThePrePushVerdictIsReadFromTheGatesOwnLine:
 
         assert f"grep -E '{GATE_VERDICT_PATTERN}'" in _HOOK_TEMPLATE_PRE_PUSH
         assert "beadloom ci --format rich" in _HOOK_TEMPLATE_PRE_PUSH
+
+
+class TestThePrePushHookWritesNothingTheShellCouldDrop:
+    """BDL-UX #226: the report reaches the terminal once, written by the Gate itself.
+
+    Measured at 12c35cf3: the hook captured the report and printed it with printf, and
+    under dash on a non-blocking pipe whose reader was slow the reader got 65575 bytes,
+    no verdict line and no sentence from the hook. printf gives up on EAGAIN.
+    """
+
+    def test_the_report_is_not_captured_for_the_shell_to_print(self) -> None:
+        from beadloom.services.commands.hook_templates import _HOOK_TEMPLATE_PRE_PUSH
+
+        assert "$(beadloom ci" not in _HOOK_TEMPLATE_PRE_PUSH
+        assert '\nbeadloom ci --format rich --tee "$gate_copy"\n' in _HOOK_TEMPLATE_PRE_PUSH
+        assert "\"$gate_copy\" | tail -n 1" in _HOOK_TEMPLATE_PRE_PUSH
+
+    def test_the_hook_s_sentences_fit_a_write_that_lands_whole(self) -> None:
+        """A pipe write of PIPE_BUF bytes or fewer lands whole or not at all.
+
+        512 bytes is Darwin's PIPE_BUF, the smallest of the supported platforms, so a
+        sentence `say` retries is never repeated in part. The verdict line the Gate
+        prints is the one value spliced in, and it is bounded by the step names.
+        """
+        import re
+
+        from beadloom.services.commands.hook_templates import _HOOK_TEMPLATE_PRE_PUSH
+
+        sentences = re.findall(r'^\s*say ((?:"[^"]*"\s*\\?\s*)+)$', _HOOK_TEMPLATE_PRE_PUSH, re.M)
+        assert len(sentences) >= 8, sentences
+        for sentence in sentences:
+            assert len(sentence.encode("utf-8")) < 512 - 200, sentence
+
+    def test_the_crash_the_hook_names_is_the_clause_the_gate_prints(self) -> None:
+        from beadloom.application.gate_boundary import crashed_clause
+        from beadloom.application.gate_step import GateStep
+        from beadloom.services.commands.hook_templates import _HOOK_TEMPLATE_PRE_PUSH
+
+        clause = crashed_clause([GateStep(name="docs-audit", passed=False, error="E")])
+        assert '*"step(s) crashed"*)' in _HOOK_TEMPLATE_PRE_PUSH
+        assert "step(s) crashed" in clause
 
 
 class TestThePreCommitLegsSayWhenTheyDidNotRun:

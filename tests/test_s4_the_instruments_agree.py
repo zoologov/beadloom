@@ -189,11 +189,13 @@ _NO_VERDICT_BRANCH = re.compile(r'if \[ -z "\$(\w+)_verdict" \]')
 
 #: A leg that reads a command's output for a PERSON and greps its verdict line out of
 #: it, rather than splitting a porcelain verdict off by the marker: the pre-commit
-#: architecture lint and the pre-push Gate (BDL-083 S1a). What each greps for is held
+#: architecture lint, which greps the output it captured, and the pre-push Gate, which
+#: greps the copy `ci --tee` wrote (BDL-083 S1a, S1e2). What each greps for is held
 #: against the command that prints it in `tests/test_cli_hooks.py`; here they are held
 #: to the rule every leg is held to, a word for having compared nothing.
 _GREPPED_VERDICT = re.compile(
-    r"(\w+)_verdict=\$\(printf '%s\\n' \"\$\1_out\" \| grep "
+    r"(?P<leg>\w+)_verdict=\$\("
+    r"(?:printf '%s\\n' \"\$(?P=leg)_out\" \| grep |grep -E '[^']*' \"\$(?P=leg)_copy\")"
 )
 
 _TEMPLATES = {

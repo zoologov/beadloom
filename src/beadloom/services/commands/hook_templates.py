@@ -507,27 +507,60 @@ fi
 
 # The Gate's own verdict line decides what this hook says. `--format rich` because it
 # is the format that prints one: the default follows git's stdout, and the github
-# format prints none. The output is read through a command substitution, a blocking
-# pipe whatever git hands this hook (BDL-UX #226). An exit code with no verdict line is
-# a Gate that did not run -- a crash, a missing index -- and is said in those words,
-# never as stale documentation.
-echo "Running Beadloom Gate (beadloom ci)..."
-gate_out=$(beadloom ci --format rich 2>&1)
+# format prints none. The Gate writes its report to this hook's output itself and a copy
+# to a temporary file, and the verdict is read from the copy (BDL-UX #226). Measured at
+# 12c35cf3: a hook that captured the report and printed it with the shell's printf lost
+# it on a non-blocking pipe whose reader was slow -- under dash the reader got 65575 bytes,
+# no verdict line and no sentence from this hook. printf gives up on EAGAIN; the Gate's
+# writer waits for the reader. An exit code with no verdict line in the copy is a Gate
+# that did not run -- a crash, a missing index -- and is said in those words, never as
+# stale documentation.
+#
+# `say` is this hook's own sentence, retried while the pipe is full. Each sentence is
+# shorter than PIPE_BUF (512 bytes on Darwin, the smallest of the supported platforms),
+# and a pipe write that short lands whole or not at all, so a retry repeats nothing.
+say() {
+  say_tries=0
+  until printf '%s\n' "$*" 2>/dev/null; do
+    say_tries=$((say_tries + 1))
+    if [ "$say_tries" -ge 30 ]; then
+      return 1
+    fi
+    sleep 1
+  done
+}
+
+gate_copy=$(mktemp "${TMPDIR:-/tmp}/beadloom-gate.XXXXXX") || {
+  say "Beadloom Gate did not run: no temporary file for its verdict, so this push was" \
+    "not judged and is refused."
+  exit 1
+}
+trap 'rm -f "$gate_copy"' EXIT
+say "Running Beadloom Gate (beadloom ci)..."
+beadloom ci --format rich --tee "$gate_copy"
 gate_rc=$?
-printf '%s\n' "$gate_out"
-gate_verdict=$(printf '%s\n' "$gate_out" | grep -E '__VERDICT__' | tail -n 1)
+gate_verdict=$(grep -E '__VERDICT__' "$gate_copy" | tail -n 1)
 if [ -z "$gate_verdict" ]; then
   gate_verdict="NOT CHECKED -- the Gate did not run: beadloom ci exited $gate_rc without a verdict"
-  echo ""
-  echo "Beadloom Gate: $gate_verdict; its own words are above."
-  echo "To push without the Gate (discouraged): git push --no-verify"
+  say ""
+  say "Beadloom Gate: $gate_verdict; its own words are above."
+  say "To push without the Gate (discouraged): git push --no-verify"
   exit 1
 fi
 if [ $gate_rc -ne 0 ]; then
-  echo ""
-  echo "Beadloom Gate blocked this push: $gate_verdict"
-  echo "The findings above name their fixes; fix them and push again."
-  echo "To override (discouraged): git push --no-verify"
+  say ""
+  say "Beadloom Gate blocked this push: $gate_verdict"
+  case "$gate_verdict" in
+    *"step(s) crashed"*)
+      say "A step that crashed checked nothing: what it checks was not checked in this" \
+        "run. Its exception is listed above under Crashed; any finding above names its" \
+        "own fix."
+      ;;
+    *)
+      say "The findings above name their fixes; fix them and push again."
+      ;;
+  esac
+  say "To override (discouraged): git push --no-verify"
   exit 1
 fi
 """.replace("__VERDICT__", GATE_VERDICT_PATTERN)
