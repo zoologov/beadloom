@@ -7,15 +7,15 @@
 
 ## Current Bead
 
-**Bead:** S1e2 — `beadloom-jwfc`, dev (wave 6 of 6 over the S1 dev beads)
-**Goal:** `ci` writes through a writer that survives `EAGAIN` on a non-blocking pipe; the hook tells a Gate that crashed from one that failed; a test that hands it a non-blocking pipe (D1; #226)
-**Done when:** the entry's own `Command` red first then green, two-level verification, committed by path under the landing lock
+**Bead:** S1T — `beadloom-rupp`, test
+**Goal:** each S1 entry's own `Command` re-run on the fixture or this repository, red first then green; the three MAJOR moves as tests; the full tree once
+**Done when:** every S1 entry (#226, #300, #318, #326, #327, #328, #329, #330, #331, #344 base half) has its measurement recorded with the date and the command; the full tree green once on the combined tree; committed by path under the landing lock
 
 ## Progress
 
 - [x] Step 1: `/task-init` — axes derived (eight targets, 406 rows ruled in the RFC), PRD, RFC, CONTEXT and PLAN approved by the owner on 2026-10-18
 - [x] Step 2: S1 beads created as one plan; `beadloom-ba9w.13` and `beadloom-jwfc` wired in as S1e and S1e2
-- [ ] Step 3: S1 — the fixture landed (`14d89ecb`, 2026-10-18); the seven dev beads in the six waves `beadloom waves` derived: S1f → S1a → S1c → S1e + S1b → S1d → S1e2
+- [x] Step 3: S1 — the fixture landed (`14d89ecb`, 2026-10-18); the seven dev beads in the six waves `beadloom waves` derived: S1f → S1a → S1c → S1e + S1b → S1d → S1e2, all landed 2026-10-18 (`ba8ce1f4`, `32197286`, `9780e302`, `c275db19`, `fedf52e9`, `dea426eb`, `d1b7e520`)
 - [ ] Step 4: S1 test, review, tech-writer, PR, merge on green
 - [ ] Step 5: S2 beads created; S2 — the monorepo on GitLab
 - [ ] Step 6: S3 beads created; S3 — the re-measurement; the S4–S7 sections put to the owner
@@ -32,9 +32,9 @@
 | `beadloom-b23f` | S1c | done | `9780e302`; ownership by the files a claimed bead's commits changed, `unattributed` otherwise, the rule and base printed; `ci` JSON `ownership` and MCP `owners` one shape (`unowned` gone); room 14444 passed + 1 of #311's class, tree 14491 passed, `ci` rc 0 |
 | `beadloom-fgu8` | S1d | done | `dea426eb`; new `application/scope_base.py`; the finding-set move measured on the fixture (2 parent-attributed files → 0, the base printed); CI branch from the pull or merge request (scope-check SKIP → PASS; `beadloom-tsqz` closed); ownership on the same base; room 14554 passed + 1 of #311's class, tree 14600 passed, `ci` rc 0 |
 | `beadloom-ba9w.13` | S1e | done | `c275db19`; a step that raises reads `ERROR`, the rest run, the verdict counts crashed steps; new `application/gate_boundary.py`; room 14474 passed + 1 of #311's class; the room, coverage and ownership reports after the steps are NOT bounded (for S1R) |
-| `beadloom-jwfc` | S1e2 | ready | wave 6 |
+| `beadloom-jwfc` | S1e2 | done | `d1b7e520`; `ci` writes through `infrastructure/console_streams.write_whole`, new `--tee FILE`; the hook reads the verdict from the tee copy (wave 2's `printf` dropped the report on the same pipe: a second defect); before 83518 of 229492 bytes + `BlockingIOError`, after the whole report; room 14569 passed + 1 of #311's class, tree 14615 passed, `ci` rc 0; adopters re-run `install-hooks` |
 | `beadloom-6xdt` | S1f | done | `ba8ce1f4`; MAJOR move 1 measured (rc 0 → 1 on a declared log the tree does not hold); new `application/gate_issue_log.py`; room 14412 passed + 1 of #311's class, tree 14459 passed, `ci` rc 0 |
-| `beadloom-rupp` | S1T | blocked | blocked by S1a–S1f, S1e, S1e2 |
+| `beadloom-rupp` | S1T | ready | after the seven dev beads |
 | `beadloom-pohj` | S1R | blocked | blocked by S1T |
 | `beadloom-hfxv` | S1W | blocked | blocked by S1R |
 | `beadloom-c5m5` | S1P | blocked | blocked by S1W |
@@ -50,4 +50,5 @@
 - Wave 3 note (2026-10-18): a bead's `refs:` attribute nothing now — the declaration parser reads no file paths, so D3's clause about paths named in `refs:` has nothing to read; for S1R to rule on. `derive_gate_ownership` takes its base from `trunk_ref`; S1d moves it to `scope_base` (note on `beadloom-fgu8`).
 - Wave 4 combined tree (coordinator, 2026-10-18, HEAD `fedf52e9`): `beadloom ci` rc 0 with seven advisory `outside-the-declared-axes` warnings — the #316 shape: the RFC's `## Axes` holds eight `###` targets and the reader cuts at the first one, so it reads zero rows (`beadloom axes RFC.md` prints `Seed: NOT STATED`, `refs:` empty). Not an S1 bead; #316 is already addressed to this epic and S3 places it. S1R does not count these as scope findings.
 - Wave 5 note (2026-10-18): #344 is half closed — the base half by S1d; the other half (the brief falls back to the work item's declared axes and documents when the review bead declares none) was not in S1d's scope and stays open for S3 to place.
+- Wave 6 note (2026-10-18): the commit message of `d1b7e520` quotes "229899 of 229899" from an earlier run; the committed tree's number is 230075 (bead comment). Ten docs watching the CLI surface show surface-drift warnings; the ci-gate SPEC, `docs/guides/ci-setup.md` and CHANGELOG need the hook's new behaviour (S1W).
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.
