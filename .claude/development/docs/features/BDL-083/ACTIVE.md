@@ -1,15 +1,15 @@
 # ACTIVE: BDL-083 — Debt to zero
 
-> **Last updated:** 2026-10-18
+> **Last updated:** 2026-10-19
 > **Phase:** Development — S1 the gates that lie
 
 ---
 
 ## Current Bead
 
-**Bead:** S1T — `beadloom-rupp`, test
-**Goal:** each S1 entry's own `Command` re-run on the fixture or this repository, red first then green; the three MAJOR moves as tests; the full tree once
-**Done when:** every S1 entry (#226, #300, #318, #326, #327, #328, #329, #330, #331, #344 base half) has its measurement recorded with the date and the command; the full tree green once on the combined tree; committed by path under the landing lock
+**Bead:** S1R — `beadloom-pohj`, review
+**Goal:** S1 reviewed from `beadloom review-brief beadloom-pohj`, bead id only
+**Done when:** the verdict and findings are on the bead; OK opens S1W, ISSUES opens fix beads
 
 ## Progress
 
@@ -34,8 +34,8 @@
 | `beadloom-ba9w.13` | S1e | done | `c275db19`; a step that raises reads `ERROR`, the rest run, the verdict counts crashed steps; new `application/gate_boundary.py`; room 14474 passed + 1 of #311's class; the room, coverage and ownership reports after the steps are NOT bounded (for S1R) |
 | `beadloom-jwfc` | S1e2 | done | `d1b7e520`; `ci` writes through `infrastructure/console_streams.write_whole`, new `--tee FILE`; the hook reads the verdict from the tee copy (wave 2's `printf` dropped the report on the same pipe: a second defect); before 83518 of 229492 bytes + `BlockingIOError`, after the whole report; room 14569 passed + 1 of #311's class, tree 14615 passed, `ci` rc 0; adopters re-run `install-hooks` |
 | `beadloom-6xdt` | S1f | done | `ba8ce1f4`; MAJOR move 1 measured (rc 0 → 1 on a declared log the tree does not hold); new `application/gate_issue_log.py`; room 14412 passed + 1 of #311's class, tree 14459 passed, `ci` rc 0 |
-| `beadloom-rupp` | S1T | ready | after the seven dev beads |
-| `beadloom-pohj` | S1R | blocked | blocked by S1T |
+| `beadloom-rupp` | S1T | done | `546a1c70`; 9 of 10 entries re-run green before (9.0.0) and after; #344's fallback half still broken; the three MAJOR moves + the `scope_base` move red on 9.0.0 by assertion; an end-to-end test for move 3 added; a hollow EAGAIN test fixed; full tree 14627 passed / 0 failed (four parts, foreground), ruff, mypy, `ci` rc 0 |
+| `beadloom-pohj` | S1R | ready | after S1T |
 | `beadloom-hfxv` | S1W | blocked | blocked by S1R |
 | `beadloom-c5m5` | S1P | blocked | blocked by S1W |
 
