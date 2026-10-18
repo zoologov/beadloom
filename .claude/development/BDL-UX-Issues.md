@@ -46,6 +46,7 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 352 | 2026-10-19 | medium | the TUI lint panel counts warnings by the severity `warning` while the engine emits `warn`, so every warn finding shows as info and the panel's warning count reads 0 |
 | 351 | 2026-10-18 | medium | `init --yes` on a monorepo with `backend/` and `frontend/` under `scan_paths` writes nodes for the frontend only; the Python backend under its own `pyproject.toml` gets no node and no preset |
 | 350 | 2026-10-18 | low | `ctx --json` reports `framework: "jest"` for vitest spec files; the count is right and the name is wrong |
 | 349 | 2026-10-18 | low | a one-line edit in a spec file beside the code marks the node's document stale (`hash_changed`), and `sync-update --pair` re-attests 26 pairs to clear one test |
@@ -170,6 +171,14 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+352. [2026-10-19] [MEDIUM] the TUI lint panel counts warnings by the severity `warning` while the engine emits `warn`, so every warn finding shows as info and the panel's warning count reads 0
+
+    **Severity:** medium (a panel whose warning count is always 0 is a second instrument that disagrees with `lint` on the same findings; the misread is silent)
+    **Command:** `beadloom tui` → the lint panel, on any project whose `lint` reports at least one warning
+    **Context:** read on 2026-10-19 at `8f8ce7f3` by the S1 fix bead `beadloom-ilrn` while confirming which severity consumers treat `info` as neither an error nor a warning (S1R Major 2 on `beadloom-pohj`). `tui/widgets/lint_panel.py` compares the finding's severity with the literal `warning`; `graph/rules/types.py` and the evaluators emit `warn` (and, since S1b, `info`). The debt collector and the MCP server compare with `warn`. Not measured on a running TUI; derived from the two literals.
+    **Issue:** two spellings of one severity in two modules, and nothing that checks a consumer's vocabulary against the engine's. A warn finding falls through to the panel's else-branch and is counted as info.
+    **Expected:** one severity vocabulary, declared once (the engine's constants) and imported by every consumer — the TUI panel, the debt collector, the MCP server, the Gate's lint line — with a test that walks the consumers over every severity the engine can emit. Candidate for S4 or S7 of BDL-083 (`beadloom-ba9w`); the fix is small, the test is the point.
 
 351. [2026-10-18] [MEDIUM] `init --yes` on a monorepo with `backend/` and `frontend/` under `scan_paths` writes nodes for the frontend only; the Python backend under its own `pyproject.toml` gets no node and no preset
 
