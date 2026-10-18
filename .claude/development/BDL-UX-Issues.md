@@ -37,6 +37,7 @@
 
 ## Open Issues
 
+> 326–350 filed 2026-10-18 from the first outside adopter's two-day log (an anonymised monorepo: Python backend under `backend/` with uv, FSD frontend, self-hosted GitLab CE), measured there on 2026-10-16/17 and the quoted source lines re-read here; intake bead `beadloom-71k0`.
 > Last checked against the tracker on 2026-10-10. 305, 306, 307 and 313 closed by BDL-080 (PR #98 merged 2026-10-10). Two entries are about to close: 290 is fixed
 > on `features/BDL-078` (`beadloom-nh7h`) and closes when it merges; the cause of 293 was removed
 > by BDL-074, and the entry holds itself open until about 2026-10-29.
@@ -45,6 +46,31 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 350 | 2026-10-18 | low | `ctx --json` reports `framework: "jest"` for vitest spec files; the count is right and the name is wrong |
+| 349 | 2026-10-18 | low | a one-line edit in a spec file beside the code marks the node's document stale (`hash_changed`), and `sync-update --pair` re-attests 26 pairs to clear one test |
+| 348 | 2026-10-18 | medium | incremental `reindex` creates no pair for a new spec file in a node's directory: `sync-check` says `untracked_files`, the hint sends the author to annotations, and only `reindex --full` clears it |
+| 347 | 2026-10-18 | medium | `untracked_files` is reported for a file that has its own node: a nested node's `source:` inside the parent's directory marks all the parent's pairs stale |
+| 346 | 2026-10-18 | medium | `symbols_changed` and `sibling_symbols_changed` survive the document edit they ask for: 62 pairs stay stale after the docs were updated, and the output does not say that only re-attestation clears them or which symbols changed |
+| 345 | 2026-10-18 | low | docs-quality `section-not-in-use` reports an `Acceptance Criteria (overall)` section present in 0 of 1 PRD while the PRD holds it |
+| 344 | 2026-10-18 | medium | `review-brief` for an epic's review bead prints `DECLARED SCOPE: none`, every file `OUTSIDE` and `0 document(s)` while the epic holds PRD, RFC and PLAN, over a base of 596 files against trunk |
+| 343 | 2026-10-18 | low | `snapshot compare` takes integers only, while `snapshot list` prints labels (`stage-1`, `wave-12`) |
+| 342 | 2026-10-18 | medium | an annotated module pairs with the documents of two nodes: the annotation decides the pair, the enclosing `source:` directory keeps the ownership and the edges |
+| 341 | 2026-10-18 | low | `forbid_import.from` is one fnmatch glob with no tag matcher: a layer-wide ban needs one rule per domain per library, and the inert copies are indistinguishable from a glob typo |
+| 340 | 2026-10-18 | medium | the node matcher in `require` reads one `kind`; a list is not parsed, so `has_edge_to: {{ kind: [domain, feature, service] }}` cannot be written and the rule degrades to `has_edge_to: {{}}` |
+| 339 | 2026-10-18 | high | test-mirror resolution lets a deeper root with the same subpackage win: `backend/tests/unit/digest/test_sections.py` binds to `application/digest/sections.py`, not `digest/sections.py`, and nothing says two roots resolved |
+| 338 | 2026-10-18 | medium | a spec file beside the code is indexed as code: its import becomes a `depends_on` edge, `fsd-layers` judges a test's import as the module's, and the graph cannot tell a test edge from a code edge |
+| 337 | 2026-10-18 | medium | a `@node:` tag in a `.feature` file outside the scenario rules' glob is read by nobody: `ctx` shows no scenario, and one steps file for all scenarios binds to one node |
+| 336 | 2026-10-18 | low | `scope-check` reads only the table under `## Axes` with known axis names, so nodes the epic itself creates have no row form until the first wave lands and `impact` can see them |
+| 335 | 2026-10-18 | medium | `clean-room --carry` refuses the whole room for a path the tree no longer holds, carries no deletions or renames, and copies a shared file whole with a neighbour bead's edits in it |
+| 334 | 2026-10-18 | high | `config-check` is red in a clean room and in a `git worktree` (`.claude/CLAUDE.md stale`, `config-drift`) and green in the main checkout of the same files, and the verdict does not say what it compared |
+| 333 | 2026-10-18 | medium | `clean-room` builds no environment for a Python project under `backend/` and its "Measure in the room" hint prints Beadloom's own layout (`PYTHONPATH=<room>/src ... -m pytest <room>/tests`, `import beadloom`) |
+| 332 | 2026-10-18 | high | `rooms` reads the root `pyproject.toml` and `.github/workflows` only: a monorepo with `backend/pyproject.toml` and `.gitlab-ci.yml` declares 0 rooms, and `ci` prints `0 of 0 declared room(s)` naming no leg |
+| 331 | 2026-10-18 | medium | `issue-number check` exits 0 on a declared but missing log (`no leg ran`) while the Gate's `issue-log` step on the same tree is red |
+| 330 | 2026-10-18 | high | `scope-check` judges against trunk, so a branch cut from an unmerged feature branch gets the parent's whole diff: 304 `outside-the-declared-axes` warnings about files the work item never touched |
+| 329 | 2026-10-18 | high | `ci` "owned by" attributes a neighbour bead's findings: 36 findings owned by a bead that touched none of the files, twice in one week |
+| 328 | 2026-10-18 | high | `rule_liveness` calls a live `forbid_import` rule dead: `to: os/**` "matches 0 of 274 import paths, cannot fire" while `import os` fires it — and two reviews concluded the boundary was unchecked |
+| 327 | 2026-10-18 | medium | the pre-commit ruff leg hides stderr and prints "ruff lint violations" when ruff is not installed, and runs from the root ignoring a `pyproject.toml` in a subfolder |
+| 326 | 2026-10-18 | high | the pre-push Gate hook exits 0 silently when `beadloom` is not on PATH, and pre-commit never runs `beadloom lint`: an FSD layer violation (widgets → app) reached the remote with both hooks installed |
 | 325 | 2026-10-14 | high | a project root below the git root is not refused: `install-hooks` fails on a path, the hook bodies run without the project, and `sync-check --since` passes over two empty sides |
 | 324 | 2026-10-13 | low | the `init` wizard cancelled at the graph review re-indexes and takes the verdict, and does not print the line naming the code no installed parser read |
 | 323 | 2026-10-13 | medium | an `@x` API inside a slice group has no form both linters accept: Beadloom reads `invoice/@x/receipt`, Steiger reads `invoice/@x/payment/receipt/index` |
@@ -143,6 +169,199 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+350. [2026-10-18] [LOW] `ctx --json` reports `framework: "jest"` for vitest spec files; the count is right and the name is wrong
+
+    **Severity:** low (a wrong framework name in the context an agent reads; nothing else follows from it)
+    **Command:** `beadloom ctx <frontend node> --json`
+    **Context:** measured 2026-10-17 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. Three new frontend nodes whose `*.spec.ts` files import `vitest`; `package.json` names no jest. `ctx --json` prints `"framework": "jest"` for all three with the right `test_count`.
+    **Issue:** `context_oracle/test_layout.py:113` binds the `*.spec.*` / `*.test.*` patterns to the name `jest`, and nothing reads the imports or `package.json` to tell vitest from jest.
+    **Expected:** the name comes from the test file's imports or the project's dependencies, or the field is omitted when only the pattern matched and the verdict says so.
+
+349. [2026-10-18] [LOW] a one-line edit in a spec file beside the code marks the node's document stale (`hash_changed`), and `sync-update --pair` re-attests 26 pairs to clear one test
+
+    **Severity:** low (no wrong verdict about the code; a document is asked to attest a test it does not describe)
+    **Command:** `beadloom sync-check`, `beadloom sync-update --pair`
+    **Context:** measured 2026-10-17 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64, `tests.beside_code: true`. One expectation changed in `frontend/src/entities/<slice>/api/<name>.spec.ts`; the pair `<node>.md ↔ <name>.spec.ts` went `stale (hash_changed)`; `sync-update --pair` re-attested all 26 pairs of the node at once.
+    **Issue:** a spec file inside a node's `source:` is paired with the node's document as if it were code, so every test edit demands a document attestation the document has nothing to say about. Sibling of #338 (the same indexing makes a test import a graph edge).
+    **Expected:** test files pair under their own reason (or not at all) and `sync-update --pair` names the one pair it clears.
+
+348. [2026-10-18] [MEDIUM] incremental `reindex` creates no pair for a new spec file in a node's directory: `sync-check` says `untracked_files`, the hint sends the author to annotations, and only `reindex --full` clears it
+
+    **Severity:** medium (a false stale with a hint that leads to source and document edits nobody needs)
+    **Command:** `beadloom reindex && beadloom sync-check`, `beadloom sync-update --yes --pair`, `beadloom reindex --full`
+    **Context:** measured 2026-10-17 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. Two new spec files beside code under two frontend nodes, both nodes' documents already edited. `sync-check` rc 2, 16 pairs `stale`, reason `untracked_files: <new spec>`; the hint proposes a `# beadloom:<kind>=` annotation or a `beadloom:track` marker; `sync-update --yes --pair <doc>` answers that re-attestation does not clear `untracked_files`. `reindex --full` alone cleared it: 347 pairs fresh, rc 0, no annotation written.
+    **Issue:** the file belongs to the node by `source:`; the incremental index did not open the pair, and the remedy the output names is the wrong one.
+    **Expected:** incremental `reindex` opens pairs for new files under a node's directory; where it cannot, the `untracked_files` hint names `reindex --full` as the first outcome.
+    **Workaround:** `beadloom reindex --full`.
+
+347. [2026-10-18] [MEDIUM] `untracked_files` is reported for a file that has its own node: a nested node's `source:` inside the parent's directory marks all the parent's pairs stale
+
+    **Severity:** medium (a false stale on a document that did not change, about a file that has an owner)
+    **Command:** `beadloom sync-check`
+    **Context:** measured 2026-10-17 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. New node `http-auth` with `source: backend/src/interface/http/routes/auth.py` and the annotation `component=http-auth` in the file; the directory `routes/` is the `source:` of the node `http-routes`. All six pairs of `http-routes` went `stale`, `reason: untracked_files`, `details: auth.py`. Naming `auth.py` in the parent's document does nothing: `doc_sync/engine.py` (`check_source_coverage`) credits only the parent's own pairs, the pairs of its `part_of` children, and a `<!-- beadloom:track=... -->` marker, and the output names neither.
+    **Issue:** ownership by another node's `source:` or annotation does not count as coverage; the cause was found by reading the engine, not the output.
+    **Expected:** a file owned by another node (by `source:` or by annotation) is not an untracked file of the directory's node; `details` names the owner and the two outcomes (`part_of` or `track`).
+    **Workaround:** the `beadloom:track=<path>` marker in the parent's document.
+
+346. [2026-10-18] [MEDIUM] `symbols_changed` and `sibling_symbols_changed` survive the document edit they ask for: 62 pairs stay stale after the docs were updated, and the output does not say that only re-attestation clears them or which symbols changed
+
+    **Severity:** medium (the shape of #182, closed 2026-08: the cause was narrowed, the remedy is still invisible from the output)
+    **Command:** `beadloom reindex && beadloom sync-check`, `beadloom sync-update <ref> --yes`
+    **Context:** measured 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. Code of six frontend nodes edited, their documents' Specification sections edited after that, then `reindex && sync-check`. Pairs with `hash_changed` became `ok`; 62 pairs with `symbols_changed` stayed `stale`, among them files that did not change (`sibling_symbols_changed` by node). Naming the new symbol in the document changed nothing. `sync-update <ref> --yes` per node cleared them.
+    **Issue:** the output does not say that this reason is cleared only by attestation, nor which symbols changed, so the document's author cannot know what to describe or that describing it is not enough.
+    **Expected:** for `symbols_changed` print the clearing action (`sync-update --yes` or `--pair`) and the symbols that changed.
+
+345. [2026-10-18] [LOW] docs-quality `section-not-in-use` reports an `Acceptance Criteria (overall)` section present in 0 of 1 PRD while the PRD holds it
+
+    **Severity:** low (a wrong count in an advisory finding)
+    **Command:** `beadloom docs quality` (through `beadloom ci`)
+    **Context:** read by the adopter's reviewer on 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64: the finding says the section is used by 0 of 1 PRD; the project's PRD carries the heading at line 113. Not re-measured here.
+    **Issue:** either the heading match is stricter than the template's own text or the population counted is not the PRD that was read.
+    **Expected:** the finding names the heading it looked for and the file it read, so a wrong count can be checked in seconds.
+
+344. [2026-10-18] [MEDIUM] `review-brief` for an epic's review bead prints `DECLARED SCOPE: none`, every file `OUTSIDE` and `0 document(s)` while the epic holds PRD, RFC and PLAN, over a base of 596 files against trunk
+
+    **Severity:** medium (a review brief that declares nothing is a brief the reviewer has to rebuild by hand)
+    **Command:** `beadloom review-brief <review bead of an epic>`
+    **Context:** read by the adopter's reviewer on 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. The review bead carries no `refs:` of its own, the epic's documents are in the work item's folder, and the default base is the trunk branch, so the diff carries the previous stage's files too (see #330 for the same base in `scope-check`).
+    **Issue:** the brief resolves scope from the bead alone and the base from trunk alone; a review bead of an epic has neither, and the brief does not say which of the two it lacked.
+    **Expected:** the brief falls back to the work item's declared axes and documents when the bead declares none, takes the base from the branch's merge-base, and names both in its header.
+
+343. [2026-10-18] [LOW] `snapshot compare` takes integers only, while `snapshot list` prints labels (`stage-1`, `wave-12`)
+
+    **Severity:** low
+    **Command:** `beadloom snapshot compare stage-1 wave-12`
+    **Context:** read by the adopter's reviewer on 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64: `'stage-1' is not a valid integer`. `services/commands/snapshot.py:100-101` declares both arguments `type=int`.
+    **Issue:** the list surfaces a name the compare command refuses.
+    **Expected:** `compare` accepts a label or a number, as `list` prints both.
+
+342. [2026-10-18] [MEDIUM] an annotated module pairs with the documents of two nodes: the annotation decides the pair, the enclosing `source:` directory keeps the ownership and the edges
+
+    **Severity:** medium (two documents attest one module and the graph's edges go to the one the author did not name)
+    **Command:** `beadloom sync-check`, `beadloom reindex`
+    **Context:** measured 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. `# beadloom:component=http-app` on `interface/http/services.py` and `__main__.py`; the node `http-app` has `source: app.py`; the directory is the `source:` of `backend-interface`. Both modules pair with `http-app.md` and with the documents of `backend-interface`; `depends_on` edges to them land on `backend-interface`.
+    **Issue:** the annotation resolves the document pair and not the owner, so the graph and the documents disagree about who the module belongs to.
+    **Expected:** one owner per file, the annotation winning over the directory for pairs and edges alike, and `doctor` naming a file two nodes claim.
+
+341. [2026-10-18] [LOW] `forbid_import.from` is one fnmatch glob with no tag matcher: a layer-wide ban needs one rule per domain per library, and the inert copies are indistinguishable from a glob typo
+
+    **Severity:** low (expressiveness; the adopter wrote ten rules where one would do)
+    **Command:** `beadloom lint --strict` with `forbid_import` rules
+    **Context:** measured 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. Moving `domain-no-io-imports-*` from one domain to two turned five rules into ten (`-<domain>-<library>`). `test_import_boundary` has `of: { tag: ... }`; `forbid_import` has no `from: { tag: ... }`, so "the `layer-domain` layer imports no httpx" cannot be one rule. The `*-os` copies are inert by `rule_liveness`, and that warning reads the same as a mistyped glob (see #328).
+    **Expected:** `forbid_import.from` accepts the same matcher forms as `test_import_boundary.of`, a tag among them.
+
+340. [2026-10-18] [MEDIUM] the node matcher in `require` reads one `kind`; a list is not parsed, so `has_edge_to: {{ kind: [domain, feature, service] }}` cannot be written and the rule degrades to `has_edge_to: {{}}`
+
+    **Severity:** medium (a rule the author meant as "a component is `part_of` a domain, a feature or a service" is in force as "a component has some edge")
+    **Command:** `beadloom lint --strict` with a `require` rule (`component-needs-parent`)
+    **Context:** measured 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. `NodeMatcher` takes a single `kind`; the list form is not accepted, and the adopter wrote the weaker rule to keep the file loading.
+    **Issue:** the rule language has no "one of these kinds", and the weaker rule it forces is silent about being weaker.
+    **Expected:** `kind` accepts a list (any-of), or the loader refuses the list with a sentence instead of the author rewriting the rule.
+
+339. [2026-10-18] [HIGH] test-mirror resolution lets a deeper root with the same subpackage win: `backend/tests/unit/digest/test_sections.py` binds to `application/digest/sections.py`, not `digest/sections.py`, and nothing says two roots resolved
+
+    **Severity:** high (a test bound to the wrong node without a warning; coverage, `ctx` and scenario verdicts all follow the binding)
+    **Command:** `beadloom reindex`, `beadloom ctx <node> --json`
+    **Context:** measured 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64: a domain at `backend/src/digest/` and a feature at `backend/src/application/digest/`. Mirror roots are both `backend/src/` and every package under it; under the deeper root the directory `digest/` also holds code, `_resolve_in_root` returns `application/digest/sections.py`, and the deeper root wins. The same for `file_history/`.
+    **Issue:** a directory with code satisfies the deeper root; the resolution that should need the module file to exist does not, and the two candidates are never reported.
+    **Expected:** under a deeper root require the module file itself, not a directory that holds code; or report two resolutions of different depth and bind to none.
+    **Workaround:** the folder form `tests/unit/digest/sections/test_*.py`: the directory `application/digest/sections/` does not exist and does not resolve.
+
+338. [2026-10-18] [MEDIUM] a spec file beside the code is indexed as code: its import becomes a `depends_on` edge, `fsd-layers` judges a test's import as the module's, and the graph cannot tell a test edge from a code edge
+
+    **Severity:** medium (a false edge at best; at worst a true layer violation in a test is fixed by hiding the import from the graph, and the graph then sees no edge at all)
+    **Command:** `beadloom reindex`, `beadloom lint --strict`
+    **Context:** measured 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64, `tests.beside_code: true`. (1) `frontend/src/app/styles/base.spec.ts` imports an entity: the edge `app-styles → entities-<slice>` appeared and `fsd-layers` judged 58 edges instead of 57; the node document's "Depends on" describes a test. (2) In the second work item `KpiPanel.spec.ts` imported `@/app/styles` for a computed color: the edge `widgets-kpi-panel → app-styles` violated `fsd-layers` (error), `ci` rc 1 — a true finding Steiger reported as well. Fixed by loading the styles in `vitest.setup.ts` outside `scan_paths`, after which the graph sees no dependency of the test on `app-styles` at all.
+    **Issue:** a test import and a code import are one kind of edge.
+    **Expected:** edges carry whether their source is a test file; layer rules can exclude or include them explicitly; the node document lists test dependencies under their own heading.
+
+337. [2026-10-18] [MEDIUM] a `@node:` tag in a `.feature` file outside the scenario rules' glob is read by nobody: `ctx` shows no scenario, and one steps file for all scenarios binds to one node
+
+    **Severity:** medium (the tag looks like a binding and nothing checks it)
+    **Command:** `beadloom ctx <node> --json` after `@node:<node>` tags in `frontend/e2e/features/*.feature`
+    **Context:** measured 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. `ctx` counts test files by `tests.patterns` under roots and beside code; the `@node:` tag is read only by `scenario-binding` and `scenario-coverage`, whose default glob is `tests/acceptance/features/**/*.feature`, and the project's features live elsewhere. To get the frontend e2e into `ctx` the adopter added the root `frontend/e2e`, a pattern `playwright: ["*.steps.ts"]` and `tests:` on the node; the steps file is one for all scenarios and binds to exactly one node, so the slice's `ctx` shows no e2e.
+    **Issue:** the formula "tests bind three ways" promises the tag; outside the glob it is inert and unreported.
+    **Expected:** `ctx` lists the scenarios tagged with the node on their own line, or `doctor` reports a `.feature` with `@node:` tags that no rule's glob reaches.
+
+336. [2026-10-18] [LOW] `scope-check` reads only the table under `## Axes` with known axis names, so nodes the epic itself creates have no row form until the first wave lands and `impact` can see them
+
+    **Severity:** low (the path to a green verdict exists and is not written anywhere)
+    **Command:** `beadloom scope-check` in pre-commit after the first dev bead
+    **Context:** measured 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. Rows kept in a separate table under their own heading were not read; only the `## Axes` table with the known axis names is. The adopter extended the main table with `branches` rows from `beadloom impact` over the new code after the first wave.
+    **Expected:** the templates and `docs quality` say how a node the work item creates is declared in scope before it exists, or `scope-check` names the heading it read and the headings it ignored.
+
+335. [2026-10-18] [MEDIUM] `clean-room --carry` refuses the whole room for a path the tree no longer holds, carries no deletions or renames, and copies a shared file whole with a neighbour bead's edits in it
+
+    **Severity:** medium (a room for a 51-file `git mv` change had to be finished by hand, twice)
+    **Command:** `beadloom clean-room <bead> --carry ...`
+    **Context:** measured 2026-10-16 and 2026-10-17 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. (1) The room is built from HEAD, so the old paths of a rename stay in it: the old package is still importable and the old tests collect as a second set; the adopter deleted them by hand. (2) Files shared with a neighbour bead (`services.yml`, `config.yml`, `vite.config.ts`, `architecture.md`) are copied whole, the neighbour's edits included; the adopter rebuilt "HEAD + own edits" with a script. (3) A deleted path in `--carry` refuses the room: rc 2, `file_missing: <path> is not a path this project holds` (`application/waves/clean_room.py:492`).
+    **Expected:** a carried path absent from the tree means a deletion in the room; the room reports the files where the tree differs from HEAD by more than this bead's edits.
+
+334. [2026-10-18] [HIGH] `config-check` is red in a clean room and in a `git worktree` (`.claude/CLAUDE.md stale`, `config-drift`) and green in the main checkout of the same files, and the verdict does not say what it compared
+
+    **Severity:** high (the room's `ci` rc 1 for a reason that is not the bead's files, so "green in a clean room" cannot be claimed; the room cannot be renamed to the project's name by construction)
+    **Command:** `beadloom ci` in a room `room-<bead>` and in a worktree of a clean HEAD
+    **Context:** measured 2026-10-16 and 2026-10-17 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. The same room copied into a directory named like the project gave `config-check PASS` and `ci` rc 0. A worktree of a clean HEAD gave `config-drift` on `.claude/CLAUDE.md` (rc 1); the main working copy with the same `CLAUDE.md` did not. Related: without `.git` in the room `sync-check` writes `not verified` on all 298 pairs (#273), and the adopter ran `git init` and a commit inside the room.
+    **Issue:** the composed file's expected content depends on the directory name or on something the checkout holds, and the verdict names neither the input nor the comparison.
+    **Expected:** `config-check` prints what it composed from and what it compared against; the composition does not take the project's name from the directory; a room is judged as the project it was built from.
+
+333. [2026-10-18] [MEDIUM] `clean-room` builds no environment for a Python project under `backend/` and its "Measure in the room" hint prints Beadloom's own layout (`PYTHONPATH=<room>/src ... -m pytest <room>/tests`, `import beadloom`)
+
+    **Severity:** medium (rc 0 with no environment, and a hint that cannot be run in this repository)
+    **Command:** `beadloom clean-room <bead> --at <scratchpad> --carry ...`
+    **Context:** measured 2026-10-16 and 2026-10-17 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. Output: "no leg of this project's workflows installs it" (see #332: no leg is read), environment not built, the hint names `<room>/src` and `<room>/tests` and a `beadloom` import; the project's Python lies in `backend/` with its own `uv.lock`. The adopter ran `uv sync --frozen` in `<room>/backend`. In a room without `.git` the project's `test_build_version` (sha from git) fails, a limit of the room the output does not name.
+    **Expected:** find Python projects by `**/pyproject.toml` under `scan_paths`, build the environment from `uv.lock` where it exists (#311 for the same resolution at the root), derive the hint from the project found, and name the no-`.git` limit in the verdict. The adopter's layout is the inverse of #325 (`.beadloom` at the root, the code below it).
+
+332. [2026-10-18] [HIGH] `rooms` reads the root `pyproject.toml` and `.github/workflows` only: a monorepo with `backend/pyproject.toml` and `.gitlab-ci.yml` declares 0 rooms, and `ci` prints `0 of 0 declared room(s)` naming no leg
+
+    **Severity:** high (the Gate's verdict on a GitLab monorepo names no CI leg at all, and the pilot planned for 2026 Q4 is a GitLab monorepo)
+    **Command:** `beadloom rooms`, `beadloom ci`
+    **Context:** measured 2026-10-16 and 2026-10-17 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64: `.gitlab-ci.yml` (`python:3.12-slim`) and `backend/pyproject.toml` are not read; `application/rooms.py` opens `<root>/pyproject.toml` (lines 443, 515, 900) and the GitHub workflows directory and nothing else.
+    **Expected:** `.gitlab-ci.yml` is a source of legs; Python projects are found under `scan_paths`; a project with CI the census cannot read gets a named skip, not `0 of 0`.
+
+331. [2026-10-18] [MEDIUM] `issue-number check` exits 0 on a declared but missing log (`no leg ran`) while the Gate's `issue-log` step on the same tree is red
+
+    **Severity:** medium (an agent that reads the command's exit code gets green from a check that did not run; the two surfaces disagree on one state)
+    **Command:** `beadloom issue-number check`, `beadloom ci`
+    **Context:** measured 2026-10-17 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64: `issue_log:` declared in `.beadloom/config.yml`, the file not yet created. `issue-number check` prints "The declared issue log is missing or unreadable — no leg ran." (`services/commands/issue_number.py:235`) and exits 0; `beadloom ci` on the same tree prints `issue-log FAIL`, rc 1.
+    **Expected:** the standalone command exits non-zero for a declared log it cannot read, as the Gate step does.
+
+330. [2026-10-18] [HIGH] `scope-check` judges against trunk, so a branch cut from an unmerged feature branch gets the parent's whole diff: 304 `outside-the-declared-axes` warnings about files the work item never touched
+
+    **Severity:** high (the one true finding about this work item would be invisible among 304 lines about another's files; the base is not printed)
+    **Command:** `beadloom ci` on a branch cut from a feature branch not yet merged to trunk
+    **Context:** measured 2026-10-17 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64: the work item edited `deploy/`, `.gitlab-ci.yml`, one guide and acceptance tests; rc 0 with 304 warnings about `frontend/src/widgets/*` from the parent branch's commits. `application/declared_scope.py:127` (`trunk_ref`) takes `origin/<trunk>` or `<trunk>`; no merge-base with the branch point and no `--base`.
+    **Expected:** the base is the merge-base with the branch the working branch was cut from (or an explicit `--base`), and the header prints the base and how many files were attributed to the parent branch. Sibling of #300 (the same step skipping in CI).
+
+329. [2026-10-18] [HIGH] `ci` "owned by" attributes a neighbour bead's findings: 36 findings owned by a bead that touched none of the files, twice in one week
+
+    **Severity:** high (a bead is told it owns stale documents and axis violations it did not cause, and the fix-cycle goes to the wrong agent)
+    **Command:** `beadloom ci` on a tree with two beads in flight, and on a single-bead tree with the branch's older commits
+    **Context:** measured 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. (1) Wave of two parallel beads: `owned by <A>: 9 finding(s)` and `owned by <B>: 9 finding(s)`; all nine are eight doc-stale pairs and one doc-missing of A's work; B's files are not among them. (2) The second work item's bead: `owned by <F2>: 36 finding(s)`, equal to the `outside-the-declared-axes` warnings over `frontend/src/shared` (19) and `frontend/src/widgets` (17), files of the first work item in the branch's diff against trunk, which F2 never touched. The adopter's reading: the bead's `refs:` names `frontend`, which covers `frontend/src/` whole; the attribution mechanism was not read.
+    **Expected:** ownership is by the files the bead changed (its commits or its declared paths), never by a node that covers a directory; the summary prints the rule it attributed by.
+
+328. [2026-10-18] [HIGH] `rule_liveness` calls a live `forbid_import` rule dead: `to: os/**` "matches 0 of 274 import paths, cannot fire" while `import os` fires it — and two reviews concluded the boundary was unchecked
+
+    **Severity:** high (a false "cannot fire" on a security-shaped boundary; two independent reviews on the adopter's project drew the wrong conclusion from it, one of them reproducing `fnmatch('os', 'os/**') == False` without the matcher's "/")
+    **Command:** `beadloom lint --strict`, `beadloom ci` in a clean room, with and without sabotage
+    **Context:** measured 2026-10-17 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64, `--no-environment`. Clean tree: three `domain-no-io-imports-*-os` rules get the liveness warning. Sabotage `import os`, `from os import path`, `import os.path` in three domain modules: three errors each, `lint --strict` rc 1, `ci` prints `lint FAIL: 3 error(s)` and the three liveness warnings vanish. Cause read in the sources: `matches_import_target` (`graph/rules/types.py`) compares the glob against the path and against the path plus "/", so `os/**` catches bare `os`; liveness counts matches among the imports the index holds now, and no module imports `os`. A banned import absent from the project and a mistyped glob produce the same sentence. The same measurement: `bcrypt*` and `bcrypt/**` both catch `import bcrypt`. `os*` instead of `os/**` is not needed and is wider (`ossaudiodev`).
+    **Expected:** for `forbid_import`, tell a glob that can match no path at all (syntax, a source root in `to:`) from a glob with nothing to ban right now; print "0 imports of `os/**` in the project; the rule is live" for the second. Or test the liveness of `to:` against a synthetic path built from the glob's literal prefix (`os/**` → `os`). Extends #195's family: a liveness verdict that is wrong is worse than one that is missing.
+
+327. [2026-10-18] [MEDIUM] the pre-commit ruff leg hides stderr and prints "ruff lint violations" when ruff is not installed, and runs from the root ignoring a `pyproject.toml` in a subfolder
+
+    **Severity:** medium (a red sentence about violations from a check that did not run; the composed hook is what every adopter installs)
+    **Command:** `.git/hooks/pre-commit` → `echo "$staged_py" | xargs uv run ruff check 2>/dev/null` (`services/commands/docsync.py:793-795`)
+    **Context:** measured 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64: no ruff at the root, `uv run ruff` failed with `No such file or directory`, stderr hidden, the hook printed `Warning: ruff lint violations in this commit`; ruff from `backend/.venv` over the same files is clean, under `backend/pyproject.toml`.
+    **Expected:** stderr shown; "not found" told apart from "violations" by the exit code; the configuration read from the Python project that owns the staged file when `pyproject.toml` is not at the root (#332, #333 for the same discovery).
+    **Workaround:** `uv tool install ruff==0.17.1` on the machine and a root `ruff.toml` with `extend = "backend/pyproject.toml"`.
+
+326. [2026-10-18] [HIGH] the pre-push Gate hook exits 0 silently when `beadloom` is not on PATH, and pre-commit never runs `beadloom lint`: an FSD layer violation (widgets → app) reached the remote with both hooks installed
+
+    **Severity:** high (a gate that passes without running is the class this project's own vocabulary names the worst; the first outside adopter met it in its first week)
+    **Command:** `git push` with the composed pre-push hook; `git commit` with the composed pre-commit hook
+    **Context:** measured 2026-10-16 on an outside monorepo — the first adopter outside this repository: a Python backend under `backend/` (own `pyproject.toml` and `uv.lock`, run with uv), an FSD frontend under `frontend/`, a self-hosted GitLab CE pipeline, bd 1.0.4, Beadloom 9.0.0, Darwin arm64. A spec file imported `@/app/styles` from a widget; `beadloom lint --strict` and Steiger both see it, `beadloom ci` rc 1; the commit was made and pushed. The adopter's walk through the barriers: (1) pre-commit runs ruff over staged Python, `typed-surface`, `sync-check --staged` (warn), `scope-check` and `active-sync`, and not `beadloom lint`: the word "lint" in the hook's description means ruff, and a graph-boundary violation is not judged at commit time. (2) The pre-push hook is fail-safe: `if ! command -v beadloom >/dev/null 2>&1; then exit 0` (`services/commands/docsync.py:877-878`); in the adopter's clone either the hooks were not installed or `beadloom` was not on git's PATH, and nothing said so. (3) The agent guards judge `bead-claimed` and `working-branch` only. (4) The dev and review roles are told to run `beadloom lint --strict` on the tree and did not (an unrelated TS2304 in e2e sat there too). (5) CI would have caught it on the MR; the pipeline runs on MR and trunk only.
+    **Expected:** pre-push without `beadloom` on PATH fails, or at the least prints that the Gate did not run and returns non-zero under a flag the adopter chooses; pre-commit runs `beadloom lint --strict` when a staged path belongs to a node (seconds with an incremental reindex); a `guard architecture` on `PostToolUse` for `Edit`/`Write` under `scan_paths` lints the touched node's edges and blocks on a violation; `review-brief` requires a recorded "lint/ci run on the tree" before a verdict. The team operating model's `setup-clone` step must verify the hook can find `beadloom` (2026-10-15 draft, decision 6).
 
 325. [2026-10-14] [HIGH] a project root below the git root is not refused: `install-hooks` fails on a path, the hook bodies run without the project, and `sync-check --since` passes over two empty sides
 
