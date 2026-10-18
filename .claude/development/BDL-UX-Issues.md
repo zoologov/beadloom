@@ -46,6 +46,7 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 351 | 2026-10-18 | medium | `init --yes` on a monorepo with `backend/` and `frontend/` under `scan_paths` writes nodes for the frontend only; the Python backend under its own `pyproject.toml` gets no node and no preset |
 | 350 | 2026-10-18 | low | `ctx --json` reports `framework: "jest"` for vitest spec files; the count is right and the name is wrong |
 | 349 | 2026-10-18 | low | a one-line edit in a spec file beside the code marks the node's document stale (`hash_changed`), and `sync-update --pair` re-attests 26 pairs to clear one test |
 | 348 | 2026-10-18 | medium | incremental `reindex` creates no pair for a new spec file in a node's directory: `sync-check` says `untracked_files`, the hint sends the author to annotations, and only `reindex --full` clears it |
@@ -169,6 +170,14 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+351. [2026-10-18] [MEDIUM] `init --yes` on a monorepo with `backend/` and `frontend/` under `scan_paths` writes nodes for the frontend only; the Python backend under its own `pyproject.toml` gets no node and no preset
+
+    **Severity:** medium (a first graph that omits one of the two projects is read as "the backend has no architecture", and every later `lint`, `ctx` and `sync-check` verdict on it is a verdict over nothing)
+    **Command:** `beadloom init --yes` on `tests/fixtures/monorepo` (the monorepo fixture: `backend/pyproject.toml` + `uv.lock`, `frontend/` FSD, `.gitlab-ci.yml`)
+    **Context:** measured 2026-10-18 on `14d89ecb` while building the fixture of BDL-083 S1g (`beadloom-483w`), Darwin arm64, Beadloom 9.0.0. `init --yes` wrote 7 nodes — `src`, `src-app`, `src-entities` and the rest, all under `frontend/src` — none under `backend/`, preset `monolith`, `scan_paths: [backend, frontend]`, no FSD rules. The fixture's `.beadloom/` was written by hand because of it. The same assumption as #332–#335: one project at the git root.
+    **Issue:** the scanner finds the frontend's `src/` by its directory shape and finds no Python package because it looks for one at the root; a `pyproject.toml` below the root is not read as a distribution, so the preset and the rules are chosen from the frontend alone.
+    **Expected:** `init` finds every `pyproject.toml` under `scan_paths` (the D6 rule of BDL-083), writes a node per found distribution's packages, and chooses the preset per project or names the mix; when it writes nodes for one of two found projects, its summary says which project got none.
 
 350. [2026-10-18] [LOW] `ctx --json` reports `framework: "jest"` for vitest spec files; the count is right and the name is wrong
 
