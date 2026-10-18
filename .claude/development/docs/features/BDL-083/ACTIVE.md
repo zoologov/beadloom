@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** S1f — `beadloom-6xdt`, dev (wave 1 of 6 over the S1 dev beads)
-**Goal:** `issue-number check` and the Gate step share one function and one exit code (D5; #331)
-**Done when:** the entry's own `Command` red first then green on this repository, the MAJOR move as a test, two-level verification, committed by path under the landing lock
+**Bead:** S1a — `beadloom-7i09`, dev (wave 2 of 6 over the S1 dev beads)
+**Goal:** the composed hooks — pre-push exits non-zero with a sentence without `beadloom` on PATH and prints the verdict line or "the Gate did not run"; pre-commit runs `lint --strict` over the nodes of staged paths; the ruff leg shows stderr, tells exit 127 from 1, reads the owning project's configuration (D1; #326, #327)
+**Done when:** the entries' own `Command` red first then green on the fixture and this repository, the MAJOR move (the hook's exit code) as a test, two-level verification, committed by path under the landing lock
 
 ## Progress
 
@@ -27,13 +27,13 @@
 | Bead | Role | Status | Note |
 |---|---|---|---|
 | `beadloom-483w` | S1g | done | `14d89ecb`; 48 files under `tests/`, 9 tests; green on the tree; the room had one failure of #311's class |
-| `beadloom-7i09` | S1a | ready | blocked by S1g |
+| `beadloom-7i09` | S1a | ready | wave 2 |
 | `beadloom-q8x6` | S1b | ready | blocked by S1g |
 | `beadloom-b23f` | S1c | ready | blocked by S1g |
 | `beadloom-fgu8` | S1d | ready | blocked by S1g |
 | `beadloom-ba9w.13` | S1e | ready | blocked by S1g |
 | `beadloom-jwfc` | S1e2 | ready | blocked by S1g |
-| `beadloom-6xdt` | S1f | ready | wave 1 |
+| `beadloom-6xdt` | S1f | done | `ba8ce1f4`; MAJOR move 1 measured (rc 0 → 1 on a declared log the tree does not hold); new `application/gate_issue_log.py`; room 14412 passed + 1 of #311's class, tree 14459 passed, `ci` rc 0 |
 | `beadloom-rupp` | S1T | blocked | blocked by S1a–S1f, S1e, S1e2 |
 | `beadloom-pohj` | S1R | blocked | blocked by S1T |
 | `beadloom-hfxv` | S1W | blocked | blocked by S1R |
@@ -46,4 +46,5 @@
 - The adopter's project is never named; the fixture is "the monorepo fixture".
 - The wave shape of 2026-10-18 over the seven S1 dev beads: six waves, twenty serialisations by `cli-commands` and `ci-gate`; only S1e and S1b share a wave. The plan run as `--parent beadloom-ba9w` also lists the sixteen older children (slices A–I), which are not S1; the plan is read over the seven ids.
 - The fixture's `.beadloom/` is hand-written: `init --yes` wrote no node for `backend/` — filed as BDL-UX #351 (`beadloom-483w`), to be placed by S3d.
+- Wave 1 notes (2026-10-18): the pre-commit scope check warns that `gate.py`, `gate_issue_log.py` and `issue_number.py` are outside BDL-083's declared axes — the RFC's eight `###` targets are not read as rows (the #316 shape); surface-drift warnings stand on `docs/guides/{testing,bdd-scenarios,parallel-waves}.md` (S1W); the declared surface grew 815 → 817 pairs.
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.
