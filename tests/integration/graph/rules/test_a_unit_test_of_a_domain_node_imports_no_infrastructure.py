@@ -257,6 +257,11 @@ class TestPopulationAndLiveness:
 
         (dead,) = _of_type(violations, LIVENESS_RULE_TYPE)
         assert "begins with 'src'" in dead.message
+        # The source root is inferred, so the headline hedges as the reason does
+        # (S1R second pass Minor 2, `beadloom-ba9w.18`).
+        assert dead.message.startswith(f"Rule '{dead.rule_name}' looks unable to fire: ")
+        assert "and looks unmatchable: it begins with 'src'" in dead.message
+        assert "cannot fire" not in dead.message
 
     def test_a_live_rule_is_not_counted_inert(self, tmp_path: Path) -> None:
         conn = _index().build(tmp_path)

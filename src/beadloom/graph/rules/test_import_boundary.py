@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING
 from beadloom.graph.rules.evaluators import evaluate_one_import_rule
 from beadloom.graph.rules.exemptions import exemption_index_for, stale_exemption_findings
 from beadloom.graph.rules.import_glob import (
+    fire_headline,
     nothing_to_ban_finding,
     source_roots,
     to_glob_reach,
@@ -88,6 +89,8 @@ class _Selection:
     unbound: int
     outside_of: int
     dead_reason: str | None
+    #: The dead reason rests on a source root inferred from the index, so it is hedged.
+    dead_inferred: bool
     #: An import path the ``to`` glob would fire on, when it is live with nothing to ban.
     nothing_to_ban: str | None
     #: How many distinct import paths are recorded for test files.
@@ -118,7 +121,7 @@ def _select(conn: sqlite3.Connection, rule: TestImportBoundaryRule) -> _Selectio
 
     imports = [(i.file_path, i.line_number, i.import_path) for p in judged for i in by_file[p]]
     targets = {import_path_as_path(i.import_path) for i in recorded}
-    dead_reason, nothing_to_ban = _liveness(
+    dead_reason, nothing_to_ban, dead_inferred = _liveness(
         conn, rule, recorded, len(by_file) - outside_from, judged, targets
     )
     return _Selection(
@@ -129,6 +132,7 @@ def _select(conn: sqlite3.Connection, rule: TestImportBoundaryRule) -> _Selectio
         unbound=unbound,
         outside_of=outside_of,
         dead_reason=dead_reason,
+        dead_inferred=dead_inferred,
         nothing_to_ban=nothing_to_ban,
         recorded_targets=len(targets),
     )
@@ -150,34 +154,46 @@ def _liveness(
     from_matches: int,
     judged: list[str],
     targets: set[str],
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, str | None, bool]:
     """Why the rule can judge nothing, or the import it would fire on with nothing to ban.
 
-    At most one of the two is set; both are ``None`` for a rule some recorded test
-    import's target already matches.
+    At most one of the first two is set; both are ``None`` for a rule some recorded test
+    import's target already matches. The third says the reason rests on an inferred
+    source root, which the finding then states as an inference.
     """
     files = len({i.file_path for i in recorded})
     if not recorded:
-        return "the index records no test import — no test file was read, or none imports", None
+        return (
+            "the index records no test import — no test file was read, or none imports",
+            None,
+            False,
+        )
     if from_matches == 0:
         return (
             f"its `from` glob '{rule.from_glob}' matches 0 of {files} test file(s) with imports",
             None,
+            False,
         )
     if not judged and rule.of_matcher is not None:
         return (
-            f"its `of` matcher ({rule.of_matcher.describe()}) selects no node that one of "
-            f"the {from_matches} test file(s) matching `from` is bound to"
-        ), None
+            (
+                f"its `of` matcher ({rule.of_matcher.describe()}) selects no node that one of "
+                f"the {from_matches} test file(s) matching `from` is bound to"
+            ),
+            None,
+            False,
+        )
     if any(matches_import_target(target, rule.to_glob) for target in targets):
-        return None, None
+        return None, None, False
     reach = to_glob_reach(rule.to_glob, source_roots=_code_source_roots(conn, targets))
     if reach.unmatchable is None:
-        return None, reach.example
+        return None, reach.example, False
     return (
         f"its `to` glob '{rule.to_glob}' matches 0 of {len(targets)} import path(s) "
-        f"recorded for test files and can match none: {reach.unmatchable}"
-    ), None
+        f"recorded for test files and {reach.claim}: {reach.unmatchable}",
+        None,
+        reach.inferred,
+    )
 
 
 def test_import_boundary_inert_reason(
@@ -227,7 +243,8 @@ def _evaluate_one(conn: sqlite3.Connection, rule: TestImportBoundaryRule) -> lis
                 rule_name=rule.name,
                 rule_description=rule.description,
                 message=(
-                    f"Rule '{rule.name}' cannot fire: {chosen.dead_reason}. It is counted "
+                    f"{fire_headline(rule.name, inferred=chosen.dead_inferred)}: "
+                    f"{chosen.dead_reason}. It is counted "
                     f"as evaluated but checks nothing"
                 ),
                 remediation=_MATCHING_FORM,

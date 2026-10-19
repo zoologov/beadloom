@@ -12,6 +12,8 @@ own account and dropped the reason both times:
 
 Both now go through the one boundary fix 1 added. ``not_run`` keeps its type, a list of
 names, and a sibling ``not_run_reason`` says why it is empty when the report raised.
+Since S1 fix 5 (``beadloom-ba9w.18``) the room is the gate's own census, read off the
+result with its reason, so the boundary is crossed once per call rather than twice.
 """
 
 from __future__ import annotations
@@ -30,6 +32,8 @@ from beadloom.services.mcp_server import handle_complete_bead
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from beadloom.application.rooms import RoomCensus
 
 _REASON = "the coverage report raised LookupError: injected fault"
 
@@ -59,15 +63,25 @@ def _complete(project: Path, gate: GateResult) -> dict[str, object]:
 
 
 def _green(
-    *, coverage: GateCoverage | None = None, coverage_reason: str | None = None
+    *,
+    coverage: GateCoverage | None = None,
+    coverage_reason: str | None = None,
+    room: RoomCensus | None = None,
+    room_reason: str | None = None,
 ) -> GateResult:
     step = GateStep("lint", passed=True, summary="clean")
-    return GateResult(steps=[step], coverage=coverage, coverage_reason=coverage_reason)
+    return GateResult(
+        steps=[step],
+        coverage=coverage,
+        coverage_reason=coverage_reason,
+        room=room,
+        room_reason=room_reason,
+    )
 
 
-def _red(*, coverage_reason: str | None = None) -> GateResult:
+def _red(*, coverage_reason: str | None = None, room_reason: str | None = None) -> GateResult:
     step = GateStep("lint", passed=False, findings=[{"why": "boom"}])
-    return GateResult(steps=[step], coverage_reason=coverage_reason)
+    return GateResult(steps=[step], coverage_reason=coverage_reason, room_reason=room_reason)
 
 
 class TestNotRunNamesTheCoverageReportThatRaised:
@@ -92,36 +106,53 @@ class TestNotRunNamesTheCoverageReportThatRaised:
         assert verdict["not_run_reason"] is None
 
 
-class TestTheRoomCensusIsTakenInsideTheBoundary:
-    def test_a_census_that_raises_is_a_reason_and_the_pass_stands(
+class TestTheRoomIsTheOneTheGateTook:
+    """S1R second pass Minor 1 (``beadloom-ba9w.18``): one census per call, the gate's.
+
+    Fix 4 put the tool's own census under the boundary, beside the census the gate had
+    just taken, so one call derived the room twice and the MCP room could differ from
+    the room the gate's JSON reported for the same run. The verdict now reads
+    ``gate.room`` and ``gate.room_reason``, and no second census is taken.
+    """
+
+    _RAISED = "the room census raised _InjectedFaultError: injected fault"
+
+    def test_the_verdict_states_the_gate_s_census_and_takes_none_of_its_own(
         self, project: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        census = rooms.take_census(project)
         monkeypatch.setattr(rooms, "take_census", _raises)
 
-        verdict = _complete(project, _green())
+        verdict = _complete(project, _green(room=census))
 
         assert verdict["status"] == "PASS"
         assert verdict["room"] == {
-            "reason": "the room census raised _InjectedFaultError: injected fault"
+            "current": rooms.room_line(census.current),
+            "declared": len(census.comparisons),
+            "entered": len(census.entered),
+            "not_entered": [c.room.label for c in census.not_entered],
         }
 
-    def test_a_census_that_raises_leaves_the_refusal_and_its_findings(
-        self, project: Path, monkeypatch: pytest.MonkeyPatch
+    def test_a_census_that_raised_in_the_gate_is_its_reason_and_the_pass_stands(
+        self, project: Path
     ) -> None:
-        monkeypatch.setattr(rooms, "take_census", _raises)
+        verdict = _complete(project, _green(room_reason=self._RAISED))
 
-        verdict = _complete(project, _red())
+        assert verdict["status"] == "PASS"
+        assert verdict["room"] == {"reason": self._RAISED}
+
+    def test_a_census_that_raised_leaves_the_refusal_and_its_findings(
+        self, project: Path
+    ) -> None:
+        verdict = _complete(project, _red(room_reason=self._RAISED))
 
         assert verdict["status"] == "FAIL"
         assert verdict["findings"] == [{"why": "boom"}]
-        assert verdict["room"] == {
-            "reason": "the room census raised _InjectedFaultError: injected fault"
-        }
+        assert verdict["room"] == {"reason": self._RAISED}
 
-    def test_a_census_that_answers_is_stated_without_a_reason(self, project: Path) -> None:
+    def test_a_gate_that_took_no_census_is_said_to_have_taken_none(
+        self, project: Path
+    ) -> None:
         verdict = _complete(project, _green())
 
-        room = verdict["room"]
-        assert isinstance(room, dict)
-        assert room["current"]
-        assert "reason" not in room
+        assert verdict["room"] == {"reason": "the gate took no room census"}

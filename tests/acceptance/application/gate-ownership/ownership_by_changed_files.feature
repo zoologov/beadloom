@@ -53,3 +53,12 @@ Feature: a gate finding is owned by the bead whose commits changed its files
     When the gate reports on the checkout
     Then the layer finding is unattributed
     And it says M owns no finding because no commit carries its trailer
+
+  @bead:beadloom-ba9w.18
+  Scenario: a Bead line git reads no trailer from is named where it stands, not denied
+    Given the monorepo fixture on a working branch cut from the trunk
+    And a commit that makes a widget import the app layer carries bead P's trailer line above a separate attribution paragraph
+    And bead P is claimed alone
+    When the gate reports on the checkout
+    Then the layer finding is unattributed
+    And it says P's commit carries the line outside the message's final paragraph, where git reads no trailer

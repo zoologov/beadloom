@@ -53,6 +53,16 @@ now** whose **commits on the branch changed a file the finding is about**:
   own branch at `996781dd` that bound 17 (bead, commit) pairs over 14 beads where the
   trailers declare 4 over 3: a landing-lock note and a test bead naming what it measured each
   made their files another bead's. A commit with no trailer is nobody's.
+- The reading needs **git 2.22 or later**, the first release with
+  `%(trailers:key=...,valueonly)`. An older git prints the placeholder literally, and every
+  commit then reads as unbound.
+- The trailer sits in the message's **last paragraph**, beside any other trailer
+  (`Co-Authored-By`, ...), with no blank line between them and nothing after them (D10 as
+  clarified on 2026-10-19, S1R second pass). Git reads no trailer from anywhere else, and it
+  reads a final paragraph as trailers only when that paragraph reads as a trailer block.
+  Measured on git 2.49: `-m subj -m body -m "Bead: bd-1" -m "Co-Authored-By: X"` binds
+  nothing, and `-m subj -m "Bead: bd-2\nCo-Authored-By: X"` binds `bd-2`. The composed commit
+  format, both landing fragments and the coordinator's checklist say so.
 - The commits are those `HEAD` holds against the base `scope-check` compares against
   (`scope_base.scope_base`, since BDL-083 S1d: the merge-base with the branch this one was
   cut from, else the trunk), listed by `doc_sync.git_baseline.commits_since`. A commit
@@ -90,6 +100,16 @@ of those findings sit on files the working tree changes and no commit holds yet,
 are about no file a commit could have changed. A claimed bead that owns nothing is named with
 its reason: no commit on the branch carries `Bead: <its id>`, or its commits changed none of
 the files the findings are about.
+
+A bead with no bound commit whose id stands on a whole `Bead: <its id>` line that git read no
+trailer from is not told "no commit carries" it: the report counts those commits by where the
+line stands, because the reader then needs one fix rather than a denial (S1 fix 5,
+`beadloom-ba9w.18`). `N commit(s) on <base>..HEAD carry `Bead: <id>` outside the message's
+final paragraph, where git reads no trailer` is the common case, a harness that appended its
+attribution as a paragraph of its own. `… in a final paragraph git does not read as a trailer
+block` is the other, a final paragraph that also holds a line that is not a trailer. When both
+occur the sentence counts each. Those commits still bind nothing, and the JSON `claims` entry
+still counts only the bound commits.
 
 A tracker that cannot answer, a project with no index, and a git that cannot list the branch's
 commits against the base are a `reason` on the whole report rather than a page of

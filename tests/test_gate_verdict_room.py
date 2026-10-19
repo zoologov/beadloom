@@ -166,11 +166,17 @@ class TestTheRefusingGateAlsoNamesItsRoom:
         from unittest.mock import patch
 
         from beadloom.application.gate import GateResult, GateStep
+        from beadloom.application.rooms import take_census
         from beadloom.services.bd_seam import BdResult
         from beadloom.services.mcp_server import handle_complete_bead
 
         _clean_project(tmp_path)
-        green = GateResult(steps=[GateStep("lint", passed=True, summary="clean")])
+        # The tool reads the gate's own census (S1 fix 5, `beadloom-ba9w.18`), so the
+        # gate this test stands in for carries one.
+        green = GateResult(
+            steps=[GateStep("lint", passed=True, summary="clean")],
+            room=take_census(tmp_path),
+        )
         with patch(
             "beadloom.services.mcp_server.run_ci_gate", return_value=green
         ), patch("beadloom.services.mcp_server.run_bd") as run_bd:
@@ -184,12 +190,14 @@ class TestTheRefusingGateAlsoNamesItsRoom:
         from unittest.mock import patch
 
         from beadloom.application.gate import GateResult, GateStep
+        from beadloom.application.rooms import take_census
         from beadloom.services.mcp_server import handle_complete_bead
 
         _clean_project(tmp_path)
         _declare_a_leg(tmp_path)
         red = GateResult(
-            steps=[GateStep("lint", passed=False, findings=[{"why": "boom"}])]
+            steps=[GateStep("lint", passed=False, findings=[{"why": "boom"}])],
+            room=take_census(tmp_path),
         )
         with patch("beadloom.services.mcp_server.run_ci_gate", return_value=red), patch(
             "beadloom.services.mcp_server.run_bd"

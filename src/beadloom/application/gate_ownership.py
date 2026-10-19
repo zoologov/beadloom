@@ -27,6 +27,18 @@ landing-lock note ("released from beadloom-7pd6") and a test bead naming what it
 measured each made their files another bead's. A commit with no trailer is
 nobody's, which is the honest reading of a branch written before the rule.
 
+**A `Bead:` line git reads no trailer from is named, never denied (D10 as clarified on
+2026-10-19).** A harness that appends its attribution as a paragraph of its own, after
+the documented format, leaves ``Bead: <id>`` one paragraph short of the end, and git
+then reads no trailer from it (measured on git 2.49: ``-m subj -m body -m "Bead: bd-1"
+-m "Co-Authored-By: X"`` binds nothing). The report used to answer "no commit carries
+`Bead: bd-1`" about a commit that visibly carries the line. When a claimed bead has no
+bound commit, the commits holding a whole ``Bead: <id>`` line are counted by where the
+line stands — outside the final paragraph, or inside a final paragraph git does not
+read as a trailer block — so the reader gets the one fix rather than a denial. They
+still bind nothing: the binding stays git's reading. That reading needs git 2.22 or
+later (``%(trailers:key=...,valueonly)``).
+
 **The files a finding is about.** The files its locations name, with a document
 named in the documentation root's frame re-rooted onto the project's; a stale or
 missing pair locates its code file as well as its document. A finding that locates
@@ -49,6 +61,7 @@ It is not a step: it has no status, and the exit code is the one the steps produ
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -105,6 +118,15 @@ NO_HISTORY = (
 #: Why a finding that locates no file and names no node cannot be attributed.
 _NO_FILE = "it locates no file and names no node"
 
+#: A ``Bead:`` line that stands outside the message's final paragraph.
+_OUTSIDE_FINAL = "outside the message's final paragraph"
+
+#: A ``Bead:`` line inside a final paragraph that git does not read as a trailer block.
+_UNREAD_FINAL = "in a final paragraph git does not read as a trailer block"
+
+#: One or more blank lines: what separates two paragraphs of a commit message for git.
+_PARAGRAPH_BREAK = re.compile(r"\n(?:[ \t]*\n)+")
+
 #: How many beads a line spells out before it counts the rest.
 _NAMED_LIMIT = 5
 
@@ -134,6 +156,11 @@ class BeadCommits:
     bead_id: str
     commits: int
     paths: frozenset[str]
+    outside_final: int = 0
+    """Unbound commits holding a ``Bead: <id>`` line outside the message's final paragraph."""
+
+    unread_final: int = 0
+    """Unbound commits holding it in a final paragraph git does not read as trailers."""
 
 
 @dataclass(frozen=True)
@@ -236,10 +263,36 @@ def _id(bead: ClaimedBead) -> str:
 
 
 def _commits_of(bead: ClaimedBead, commits: Sequence[BranchCommit]) -> BeadCommits:
-    """The commits whose ``Bead:`` trailer names *bead*, and the paths they changed."""
+    """The commits whose ``Bead:`` trailer names *bead*, the paths they changed, and the strays.
+
+    A stray is an unbound commit whose message holds a whole ``Bead: <id>`` line git read
+    no trailer from, counted by where the line stands.
+    """
     own = [commit for commit in commits if bead.id in commit.trailer_values]
     paths = frozenset(path for commit in own for path in commit.paths)
-    return BeadCommits(bead_id=bead.id, commits=len(own), paths=paths)
+    line = re.compile(rf"^(?i:{BEAD_TRAILER}):[ \t]*{re.escape(bead.id)}[ \t]*$", re.MULTILINE)
+    placements = [
+        _placement(commit.message, line)
+        for commit in commits
+        if bead.id not in commit.trailer_values
+    ]
+    return BeadCommits(
+        bead_id=bead.id,
+        commits=len(own),
+        paths=paths,
+        outside_final=placements.count(_OUTSIDE_FINAL),
+        unread_final=placements.count(_UNREAD_FINAL),
+    )
+
+
+def _placement(message: str, line: re.Pattern[str]) -> str | None:
+    """Where *line* stands in *message*, by git's paragraphs, or ``None`` when it does not."""
+    paragraphs = _PARAGRAPH_BREAK.split(message.strip())
+    if line.search(paragraphs[-1]):
+        return _UNREAD_FINAL
+    if any(line.search(paragraph) for paragraph in paragraphs[:-1]):
+        return _OUTSIDE_FINAL
+    return None
 
 
 class _FindingFiles:
@@ -396,6 +449,8 @@ def ownership_payload(ownership: GateOwnership) -> dict[str, object]:
 
 def _owning_nothing(claim: BeadCommits, ownership: GateOwnership) -> str:
     """Why a claimed bead owns nothing: no commit carries it, or its commits explain none."""
+    if claim.commits == 0 and (claim.outside_final or claim.unread_final):
+        return f"{claim.bead_id} owns no finding: {_stray_clause(claim, ownership)}"
     if claim.commits == 0:
         return (
             f"{claim.bead_id} owns no finding: no commit on {ownership.base}..HEAD carries "
@@ -404,6 +459,20 @@ def _owning_nothing(claim: BeadCommits, ownership: GateOwnership) -> str:
     return (
         f"{claim.bead_id} owns no finding: its {claim.commits} commit(s) changed none "
         "of the files these findings are about"
+    )
+
+
+def _stray_clause(claim: BeadCommits, ownership: GateOwnership) -> str:
+    """The commits holding a ``Bead:`` line git read no trailer from, by where it stands."""
+    total = claim.outside_final + claim.unread_final
+    carry = f"{total} commit(s) on {ownership.base}..HEAD carry `{BEAD_TRAILER}: {claim.bead_id}`"
+    if not claim.unread_final:
+        return f"{carry} {_OUTSIDE_FINAL}, where git reads no trailer"
+    if not claim.outside_final:
+        return f"{carry} {_UNREAD_FINAL}"
+    return (
+        f"{carry} where git reads no trailer: {claim.outside_final} {_OUTSIDE_FINAL}, "
+        f"{claim.unread_final} {_UNREAD_FINAL}"
     )
 
 

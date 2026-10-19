@@ -26,8 +26,7 @@ from beadloom.application.active_table import (
 from beadloom.application.active_table import (
     split_table_row as _split_table_row,
 )
-from beadloom.application.gate import ROOM_REPORT, GateResult, run_ci_gate
-from beadloom.application.gate_boundary import derive_bounded
+from beadloom.application.gate import GateResult, run_ci_gate
 from beadloom.application.reindex import incremental_reindex
 from beadloom.application.waves import compose_declaration, declared_refs
 from beadloom.context_oracle.builder import bfs_subgraph, build_context
@@ -834,24 +833,29 @@ def _run_test_suite(project_root: Path) -> tuple[bool, str]:
     return passed, summary[0]
 
 
-def _verdict_room(project_root: Path) -> dict[str, object]:
+#: The room payload of a gate result that carries neither a census nor its reason.
+_NO_CENSUS = "the gate took no room census"
+
+
+def _verdict_room(gate: GateResult) -> dict[str, object]:
     """The room this verdict was taken in, and how much of the declaration it covers.
 
     Carried on the verdict an agent closes a bead on, because that is the
     strongest claim this tool makes and it is true of one room. It changes no
     status and adds no finding — the same verdict, answerable.
 
-    The census is taken through the Gate's report boundary: one that raises is
-    ``{"reason": "the room census raised <class>: <message>"}``, the shape the JSON
-    report gives the same case, and the verdict is the one the gate produced. Until
-    BDL-083 S1 fix 4 it was taken with no boundary, and an exception here ended the
-    tool call with a traceback after the gate had run (BDL-UX #318's class).
+    Read off the gate's own census (``gate.room``) and its reason
+    (``gate.room_reason``), the shape the JSON report gives the same run: a census
+    that raised is ``{"reason": "the room census raised <class>: <message>"}``. Until
+    BDL-083 S1 fix 5 the tool took a second census of its own beside the gate's, so
+    one call derived the room twice and the two answers could differ (S1R second
+    pass Minor 1); before fix 4 that second census had no boundary at all.
     """
     from beadloom.application import rooms
 
-    census, reason = derive_bounded(ROOM_REPORT, lambda: rooms.take_census(project_root))
+    census = gate.room
     if census is None:
-        return {"reason": reason}
+        return {"reason": gate.room_reason or _NO_CENSUS}
     return {
         "current": rooms.room_line(census.current),
         "declared": len(census.comparisons),
@@ -911,10 +915,11 @@ def handle_complete_bead(
 ) -> dict[str, Any]:
     """The refusing gate: run ``beadloom ci`` (+ tests) before closing a bead.
 
-    Reuses :func:`application.gate.run_ci_gate` (reindex → lint → sync-check →
-    config-check → doctor) and, when *run_tests* is True (the default), the test
-    suite. On FAIL the bead is NOT closed — the findings are returned so the
-    agent must fix them first.
+    Reuses :func:`application.gate.run_ci_gate` — every step ``beadloom ci`` runs,
+    listed there and not repeated here, because a copy of the list is the one that
+    goes stale — and, when *run_tests* is True (the default), the test suite. On
+    FAIL the bead is NOT closed: the findings are returned so the agent must fix
+    them first.
 
     **On PASS the bead is closed and the suggestion is CONFIRMED before it is
     returned** (BDL-UX #97). ``bd close --suggest-next`` names beads for which
@@ -964,7 +969,7 @@ def handle_complete_bead(
                 }
             )
 
-    room = _verdict_room(project_root)
+    room = _verdict_room(gate)
     not_run = _not_run(gate)
     not_run_reason = _not_run_reason(gate)
     if not (gate_ok and tests_ok):

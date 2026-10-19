@@ -147,13 +147,30 @@ def _reports(world: dict[str, Any], rule: str, path: str) -> None:
     assert crossing.file_path == path
 
 
-@then(parsers.parse('"{rule}" cannot fire, at warn, because its glob begins with "{segment}"'))
-def _dead(world: dict[str, Any], rule: str, segment: str) -> None:
+@then(
+    parsers.parse(
+        '"{rule}" looks unable to fire, at warn, because its glob begins with "{segment}"'
+    )
+)
+def _looks_dead(world: dict[str, Any], rule: str, segment: str) -> None:
     (dead,) = _findings(world, rule, LIVENESS_RULE_TYPE)
     assert dead.severity == "warn"
-    assert "cannot fire" in dead.message
-    assert f"begins with '{segment}'" in dead.message
+    assert dead.message.startswith(f"Rule '{rule}' looks unable to fire: "), dead.message
+    assert f"and looks unmatchable: it begins with '{segment}'" in dead.message
     assert _findings(world, rule, NOTHING_TO_BAN_RULE_TYPE) == []
+
+
+@then(
+    parsers.parse(
+        'the finding about "{rule}" says its source root is inferred from the index and '
+        "never that the rule cannot fire"
+    )
+)
+def _says_it_is_an_inference(world: dict[str, Any], rule: str) -> None:
+    (dead,) = _findings(world, rule, LIVENESS_RULE_TYPE)
+    assert "inferred from the index" in dead.message
+    assert "cannot fire" not in dead.message
+    assert "can match none" not in dead.message
 
 
 @then("the strict lint passes")

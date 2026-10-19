@@ -6,9 +6,10 @@ every gate step passes and whose pipeline declares a test suite, so the list of
 verifications not run has something to name. The fault is injected by replacing the
 derivation that produces the report, which is the one place an unexpected exception
 can be put without inventing a broken project for each report: the room census is
-replaced where the gate calls it and where the tool calls it, so both take a census
-that raises. The ``bd`` seam is doubled to close the bead and to report no claimed
-bead, so a scenario neither needs a beads database nor reads the author's tracker.
+replaced where the gate calls it, which since S1 fix 5 (``beadloom-ba9w.18``) is the
+only census a call takes — the tool reads the gate's. The ``bd`` seam is doubled to
+close the bead and to report no claimed bead, so a scenario neither needs a beads
+database nor reads the author's tracker.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from unittest.mock import patch
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from beadloom.application import gate, rooms
+from beadloom.application import gate
 from beadloom.onboarding.scanner import generate_agents_md
 from beadloom.services.bd_seam import BdResult
 
@@ -34,7 +35,7 @@ _SUITE = "uv run pytest"
 #: The report a scenario names, and the modules whose derivation produces it.
 _DERIVATIONS: dict[str, tuple[tuple[object, str], ...]] = {
     "coverage report": ((gate, "derive_gate_coverage"),),
-    "room census": ((gate, "take_census"), (rooms, "take_census")),
+    "room census": ((gate, "take_census"),),
 }
 
 

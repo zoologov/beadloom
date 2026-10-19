@@ -370,6 +370,78 @@ class TestACommitIsABeadsByItsTrailer:
         assert ATTRIBUTION_RULE == "by the files the commits carrying `Bead: <id>` changed"
 
 
+class TestABeadLineGitReadsNoTrailerFromIsNamedNotDenied:
+    """RFC D10 as clarified on 2026-10-19 (S1R second pass, Major 1; ``beadloom-ba9w.18``).
+
+    Git reads a trailer from the message's final paragraph only, and only when that
+    paragraph reads as a trailer block. A ``Bead:`` line anywhere else binds nothing,
+    and the report used to say "no commit carries `Bead: <id>`" about a commit that
+    visibly carries it. It now names those commits and where the line stands.
+    """
+
+    def _owning_nothing(self, tmp_path: Path, *messages: str) -> str:
+        root = _project(tmp_path)
+        for message in messages:
+            _commit(root, "src/beta/beta.py", message)
+        ownership = derive_gate_ownership(
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
+        )
+        assert ownership.claims[0].commits == 0
+        lines = [line for line in gate_ownership_lines(ownership) if "bd-1 owns" in line]
+        assert len(lines) == 1, lines
+        return lines[0].strip()
+
+    def test_a_line_above_a_separate_attribution_paragraph_is_named(self, tmp_path: Path) -> None:
+        line = self._owning_nothing(
+            tmp_path, "beta moves\n\nbody\n\nBead: bd-1\n\nCo-Authored-By: X <x@example.invalid>"
+        )
+        assert line == (
+            "bd-1 owns no finding: 1 commit(s) on main..HEAD carry `Bead: bd-1` outside the "
+            "message's final paragraph, where git reads no trailer"
+        )
+
+    def test_a_line_in_a_final_paragraph_git_does_not_read_is_named(self, tmp_path: Path) -> None:
+        line = self._owning_nothing(tmp_path, "beta moves\n\nsome prose\nBead: bd-1")
+        assert line == (
+            "bd-1 owns no finding: 1 commit(s) on main..HEAD carry `Bead: bd-1` in a final "
+            "paragraph git does not read as a trailer block"
+        )
+
+    def test_both_placements_are_counted_apart(self, tmp_path: Path) -> None:
+        line = self._owning_nothing(
+            tmp_path,
+            "beta moves\n\nBead: bd-1\n\nCo-Authored-By: X <x@example.invalid>",
+            "beta moves again\n\nBead: bd-1\n\nCo-Authored-By: X <x@example.invalid>",
+            "beta moves once more\n\nsome prose\nBead: bd-1",
+        )
+        assert line == (
+            "bd-1 owns no finding: 3 commit(s) on main..HEAD carry `Bead: bd-1` where git "
+            "reads no trailer: 2 outside the message's final paragraph, 1 in a final "
+            "paragraph git does not read as a trailer block"
+        )
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "beta moves\n\nBead: bd-1.2\n\nCo-Authored-By: X <x@example.invalid>",
+            "beta moves\n\nSee Bead: bd-1 above\n\nCo-Authored-By: X <x@example.invalid>",
+            "beta moves (bd-1)",
+        ],
+        ids=["another-id", "not-a-whole-line", "a-mention"],
+    )
+    def test_only_a_whole_bead_line_naming_the_whole_id_is_named(
+        self, tmp_path: Path, message: str
+    ) -> None:
+        line = self._owning_nothing(tmp_path, message)
+        assert line == "bd-1 owns no finding: no commit on main..HEAD carries `Bead: bd-1`"
+
+    def test_the_key_is_read_in_any_case_as_git_reads_it(self, tmp_path: Path) -> None:
+        line = self._owning_nothing(
+            tmp_path, "beta moves\n\nbead: bd-1\n\nCo-Authored-By: X <x@example.invalid>"
+        )
+        assert "1 commit(s) on main..HEAD carry `Bead: bd-1` outside the message's" in line
+
+
 class TestTheLinesNameTheRule:
     def test_the_block_names_the_rule_the_base_and_each_owner_s_clause(
         self, tmp_path: Path

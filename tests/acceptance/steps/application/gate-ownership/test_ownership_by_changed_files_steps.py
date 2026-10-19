@@ -127,6 +127,31 @@ def _a_mention(world: dict[str, Any]) -> None:
     _commit(world["root"], _WIDGET, _APP_IMPORT, "the widget, landed after bd-m released the slot")
 
 
+@given(
+    "a commit that makes a widget import the app layer carries bead P's trailer line above "
+    "a separate attribution paragraph"
+)
+def _a_separated_trailer(world: dict[str, Any]) -> None:
+    # The shape a harness produces when it appends its attribution after the documented
+    # format: git reads trailers from the final paragraph only (measured on git 2.49).
+    _commit(
+        world["root"],
+        _WIDGET,
+        _APP_IMPORT,
+        "the widget reads the app styles\n\nBead: bd-p\n\n"
+        "Co-Authored-By: An Agent <agent@example.invalid>",
+    )
+
+
+@given("bead P is claimed alone")
+def _bead_p_alone(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    _claim(
+        monkeypatch,
+        world,
+        ClaimedBead(id="bd-p", title="bd-p", declaration="refs: widgets-kpi-panel"),
+    )
+
+
 @given("bead M is claimed alone")
 def _bead_m_alone(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
     _claim(
@@ -189,6 +214,20 @@ def _m_owns_nothing(world: dict[str, Any]) -> None:
     assert "bd-m owns no finding: no commit on main..HEAD carries `Bead: bd-m`" in (
         world["outputs"]["rich"]
     )
+
+
+@then(
+    "it says P's commit carries the line outside the message's final paragraph, "
+    "where git reads no trailer"
+)
+def _p_is_named_not_denied(world: dict[str, Any]) -> None:
+    rich = world["outputs"]["rich"]
+    assert _ownership(world)["claims"] == [{"bead": "bd-p", "commits": 0}]
+    assert (
+        "bd-p owns no finding: 1 commit(s) on main..HEAD carry `Bead: bd-p` outside the "
+        "message's final paragraph, where git reads no trailer"
+    ) in " ".join(rich.split()), rich
+    assert "no commit on main..HEAD carries `Bead: bd-p`" not in rich
 
 
 @then("no finding about the widget is owned by F2")

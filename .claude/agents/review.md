@@ -209,8 +209,18 @@ the way this flow asked for it.
 
 ```bash
 bd merge-slot acquire --holder <bead-id>   # exit 0 means you hold it; anything else means you do not
-# ... stage your own files by path, then commit with `Bead: <bead-id>` in the trailer block ...
+# ... stage your own files by path; commit with `Bead: <bead-id>` in the last paragraph ...
 bd merge-slot release --holder <bead-id>   # the only release form bd verifies
+```
+
+**The trailer goes in the message's last paragraph.** Git reads trailers from the message's
+final paragraph only, so `Bead: <bead-id>` stands beside any other trailer (`Co-Authored-By`,
+...), with no blank line between them and nothing after them. A `Bead:` line followed by a
+paragraph of its own binds the commit to no bead. This command prints the bead id when the
+commit is bound, and nothing when it is not:
+
+```bash
+git log -1 --format='%(trailers:key=Bead,valueonly)'
 ```
 
 **And say which guarantee you are leaning on.** If you land while a neighbour is editing, the

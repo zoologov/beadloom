@@ -20,6 +20,8 @@ from beadloom.graph.rules.attribution import FileAttribution
 from beadloom.graph.rules.cross_imports import read_cross_import_facts
 from beadloom.graph.rules.exemptions import exemption_index_for, stale_exemption_findings
 from beadloom.graph.rules.import_glob import (
+    GlobReach,
+    fire_headline,
     nothing_to_ban_finding,
     source_roots,
     to_glob_reach,
@@ -335,31 +337,35 @@ def _dead_glob_finding(
     *,
     from_matched: bool,
     to_matched: bool,
-    to_unmatchable: str | None,
+    to_reach: GlobReach | None,
     file_count: int,
     target_count: int,
 ) -> Violation:
     """Report a rule whose glob matches nothing that exists — one finding per rule.
 
-    *to_unmatchable* is why the ``to`` glob can match no import path at all, when that is
-    the case (:func:`~beadloom.graph.rules.import_glob.to_glob_reach`); a ``to`` glob that
-    can match is named here only beside a dead ``from`` glob, by its count alone.
+    *to_reach* says whether the ``to`` glob can match an import path at all
+    (:func:`~beadloom.graph.rules.import_glob.to_glob_reach`); a ``to`` glob that can match
+    is named here only beside a dead ``from`` glob, by its count alone. A reason that rests
+    on an inferred source root is stated as one, and so is the headline when it is the
+    only reason (S1R second pass Minor 2).
     """
+    unmatchable = None if to_reach is None else to_reach.unmatchable
     parts: list[str] = []
     if not from_matched:
         parts.append(
             f"its `from` glob '{rule.from_glob}' matches 0 of {file_count} indexed source files"
         )
     if not to_matched:
-        unmatchable = f" and can match none: {to_unmatchable}" if to_unmatchable else ""
+        lead_in = f" and {to_reach.claim}: {unmatchable}" if to_reach and unmatchable else ""
         parts.append(
             f"its `to` glob '{rule.to_glob}' matches 0 of {target_count} indexed import "
-            f"paths{unmatchable}"
+            f"paths{lead_in}"
         )
+    inferred = from_matched and to_reach is not None and to_reach.inferred
     return _liveness_finding(
         rule,
-        f"Rule '{rule.name}' cannot fire: " + "; ".join(parts) + ". It is counted as "
-        "evaluated but checks nothing",
+        f"{fire_headline(rule.name, inferred=inferred)}: " + "; ".join(parts) + ". It is "
+        "counted as evaluated but checks nothing",
     )
 
 
@@ -442,7 +448,7 @@ def evaluate_one_import_rule(
                 rule,
                 from_matched=from_matched,
                 to_matched=to_matched,
-                to_unmatchable=None if reach is None else reach.unmatchable,
+                to_reach=reach,
                 file_count=file_count,
                 target_count=target_count,
             )

@@ -16,7 +16,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/layer_declaration.py` — which declared layers no node is in. A layer rule names TAGS rather than ref_ids, so it fell outside `validate_rules`' `isinstance` chain and a rule could declare a layer nothing carries without anything saying so. One predicate answers both surfaces — the `validate_rules` warning and the evaluator's `warn` finding — and the finding stands down when fewer than two layers are populated AND the rule is inert, because `liveness` names them for exactly that graph (BDL-070 A6). Both halves are needed since BDL-070 B5-fix: a rule whose one inhabited layer holds two peers that cross is live, so liveness says nothing about it, and standing down on the layer count alone would drop the report entirely (BDL-UX #296).
 - `rules/advisories.py` — the rule types whose findings report a rule's REACH rather than a defect (`layer_population`, `layer_declaration`, since BDL-074 C3 `suite_population`, and since BDL-083 D2 `nothing_to_ban`), and the one thing that follows: `lint --fail-on-warn` does not exit 1 on them (BDL-070 A8).
 - `rules/node_tags.py` — the tags each node carries, read once per evaluation run. One object in place of the five identical closures deny / require / forbid-edge / layer / cardinality each kept (BDL-070 A2), and of the sixth cache `liveness._GraphFacts` kept beside them (BDL-070 A5).
-- `rules/import_glob.py` — whether a `to:` glob of `forbid_import` or `test_import_boundary` can match an import path at all, decided by `matches_import_target` on paths built from the glob (`to_glob_reach` → `GlobReach`), the source roots read off the index (`source_roots`), and the `info` statement of a live rule with nothing to ban (`nothing_to_ban_finding`) (BDL-083 D2; see *Can match none, or nothing to ban* below).
+- `rules/import_glob.py` — whether a `to:` glob of `forbid_import` or `test_import_boundary` can match an import path at all, decided by `matches_import_target` on paths built from the glob (`to_glob_reach` → `GlobReach`, whose `inferred` and `claim` say when the reason rests on an inferred source root), the headline of a rule that cannot fire, hedged for that case (`fire_headline`), the source roots read off the index (`source_roots`), and the `info` statement of a live rule with nothing to ban (`nothing_to_ban_finding`) (BDL-083 D2; see *Can match none, or nothing to ban* below).
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/layer_crossings.py` — what the rule SAYS about a dependency that stays inside one layer: the un-excused crossings as findings, at the rule's declared severity, and the exemption entries that have stopped earning their place (BDL-070 B3). `layers` decides what crosses and `layer_exemptions` decides what an entry does about it; this turns the pair into findings. Since BDL-082 S1a it is handed the `@x` facts of the edges and words a crossing by them: through `@x` off the entities layer, or a mixed edge located at the import that does not go through it.
 - `rules/layer_edges.py` — the set of edges a layer rule finds against, as `(src, dst)` pairs,
@@ -258,6 +258,7 @@ boundary was unchecked (BDL-UX #328).
 | The `to` glob | Finding | Counted in `rules_inert` |
 |---|---|---|
 | can match no import path | `rule_liveness`, `warn`: "cannot fire: its `to` glob '…' matches 0 of N indexed import paths and can match none: <reason>" | `test_import_boundary`: yes. `forbid_import` is not counted (see above) |
+| looks unmatchable, by an inferred source root | `rule_liveness`, `warn`: "looks unable to fire: its `to` glob '…' matches 0 of N indexed import paths and looks unmatchable: <reason>" | as the row above |
 | can match one, and matches none today | `nothing_to_ban`, `info`: "0 imports of `os/**` in the project; the rule is live: … and an import of `os` would fire it" | no |
 
 **The matcher decides, on paths built from the glob.** `import_glob.to_glob_reach` runs
@@ -278,6 +279,13 @@ project whose top-level package nothing imports would read that package as a sou
 so would a scanned `tests` directory nothing imports. So the finding says so in its own
 words: the reason reads "… that no indexed import begins with — inferred from the index, so an
 importable package named 'tests' would still fire it" (BDL-083 S1R Minor 4, `beadloom-7kas`).
+Its headline makes the same claim (S1R second pass Minor 2, `beadloom-ba9w.18`): the lead-in
+reads "looks unmatchable", and the headline reads "looks unable to fire" when that reason is
+the only one, never "cannot fire" beside "would still fire it". A dead `from` glob beside it
+keeps "cannot fire", because that reason is measured. The level stays `warn`: where the
+inference holds, the glob is a file path written for a module and the rule checks nothing,
+which is the defect `--fail-on-warn` exists to stop. `GlobReach.claim` and
+`import_glob.fire_headline` hold both wordings for both rule types.
 
 The `nothing_to_ban` statement is an advisory. `--fail-on-warn` does not exit on it, and it
 counts as neither an error nor a warning. The text rendering marks it `[INFO]`, and

@@ -285,7 +285,7 @@ class TestNothingToBanIsToldFromCannotFire:
         assert [v.line_number for v in forbidden_of(violations)] == [line]
         assert [v.rule_type for v in violations] == ["forbid_import"]
 
-    def test_a_glob_naming_the_source_root_cannot_fire_and_says_so(
+    def test_a_glob_naming_the_source_root_looks_unable_to_fire_and_says_so(
         self, indexed: sqlite3.Connection
     ) -> None:
         rule = self._os_rule(to_glob="src/pkg/infrastructure/**")
@@ -294,7 +294,7 @@ class TestNothingToBanIsToldFromCannotFire:
 
         assert dead.rule_type == "rule_liveness"
         assert dead.severity == "warn"
-        assert "cannot fire" in dead.message
+        assert "looks unable to fire" in dead.message
         assert "begins with 'src'" in dead.message
         assert "0 of 3 indexed import paths" in dead.message
 

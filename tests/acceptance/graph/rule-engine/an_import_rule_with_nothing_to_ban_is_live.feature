@@ -26,10 +26,16 @@ Feature: an import rule with nothing to ban is told from a rule that cannot fire
     And "domain-no-io-imports-digest-os" is not stated live with nothing to ban
     And the strict lint fails
 
-  Scenario: a glob that names a source root cannot fire
+  # The source root is inferred from the index, so since S1 fix 5 (`beadloom-ba9w.18`,
+  # S1R second pass Minor 2) the headline makes the claim the reason makes: "looks
+  # unable to fire" and "looks unmatchable", never "cannot fire" beside "would still
+  # fire it".
+  @bead:beadloom-ba9w.18
+  Scenario: a glob that names a source root looks unable to fire, and says it is an inference
     Given the monorepo fixture, whose digest domain's rule "digest-no-backend-src-file-history" bans every import of "backend/src/file_history/**"
     When the project is linted
-    Then "digest-no-backend-src-file-history" cannot fire, at warn, because its glob begins with "backend"
+    Then "digest-no-backend-src-file-history" looks unable to fire, at warn, because its glob begins with "backend"
+    And the finding about "digest-no-backend-src-file-history" says its source root is inferred from the index and never that the rule cannot fire
 
   Scenario: a test boundary with nothing to ban is live too
     Given the monorepo fixture, whose backend unit tests ban every import of "os/**"

@@ -34,7 +34,11 @@ package nothing imports would read that package as a source root, and so would a
 A package any module imports is not one, which is the case for every multi-module project
 this was measured on. The sentence a reader sees says it is an inference and names the one
 import that would prove it wrong (S1R Minor 4), because the docstring is not where a user
-reads the limit.
+reads the limit. Its headline makes the same claim (S1R second pass Minor 2): a reason
+resting on that inference reads "looks unmatchable" under "looks unable to fire", where a
+certain one reads "can match none" under "cannot fire" (:attr:`GlobReach.claim`,
+:func:`fire_headline`). It stays ``warn``: where the inference holds the glob is a file
+path written for a module, and the rule checks nothing.
 """
 
 from __future__ import annotations
@@ -73,6 +77,18 @@ class GlobReach:
     example: str | None
     #: Why no import path can match the glob — ``None`` when it can.
     unmatchable: str | None
+    #: The reason rests on a source root inferred from the index, not on the matcher alone.
+    inferred: bool = False
+
+    @property
+    def claim(self) -> str:
+        """The lead-in an unmatchable reason is stated under: hedged exactly when it is."""
+        return "looks unmatchable" if self.inferred else "can match none"
+
+
+def fire_headline(rule_name: str, *, inferred: bool) -> str:
+    """The headline of a rule that cannot fire, hedged when its only reason is an inference."""
+    return f"Rule '{rule_name}' {'looks unable to fire' if inferred else 'cannot fire'}"
 
 
 def _class_end(glob: str, start: int) -> int | None:
@@ -147,6 +163,7 @@ def to_glob_reach(glob: str, *, source_roots: frozenset[str]) -> GlobReach:
                 f"importable package named '{segment}' would still fire it; `to:` names "
                 "modules, never files"
             ),
+            inferred=True,
         )
     if any(kind == _LITERAL and text == "." for kind, text in tokens):
         return GlobReach(
