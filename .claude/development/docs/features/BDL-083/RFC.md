@@ -673,6 +673,11 @@ Windows CI leg stays withdrawn (owner's decision of BDL-074); the two tests are 
 - `GateStep` gains the status `ERROR` (additive; consumers that switch on `passed`/`skipped`
   read it as not passed).
 - `rooms` JSON gains `source` per room and a `not_derived` reason (additive).
+- The MCP tool `complete_bead` no longer returns the verdict `unowned`; the ownership shape is the
+  `ci` JSON's (`owned` / `unattributed`, S1c) — a vocabulary move (added 2026-10-19 from S1W).
+- `config-check` exits 1 instead of 0 on role files composed before this release, because the
+  flow template's commit format changed (D10): adopters re-run `setup-agentic-flow` — an
+  exit-code move measured on the `0f1cb9a3` tree (added 2026-10-19 from S1W).
 - `sync-surface.json` gains the pair list beside `declared_pairs` (additive); indexed paths are
   POSIX on every platform (a finding-set move on Windows only, D11).
 - `rules.yml`: no vocabulary change in S1–S2; liveness findings for `forbid_import` change

@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** S1W — `beadloom-hfxv` (tech-writer), then the Gate loop, push, PR (`beadloom-c5m5`)
-**Goal:** every document the S1 changes touched current; the CHANGELOG names the MAJOR with its measured moves
-**Done when:** `beadloom ci` rc 0 on the tree with the docs attested by ref; the PR open; merge on green
+**Bead:** S1P — `beadloom-c5m5`: the combined tree measured, push, PR, merge on green
+**Goal:** S1 on `main`
+**Done when:** the PR merged with CI green; S1 beads closed; the documents' S1 state recorded
 
 ## Progress
 
@@ -45,8 +45,8 @@
 | `beadloom-sywb` | S1R6 | done | OK 2026-10-19 at `b70f900c`: 0 critical, 0 major, 2 minor (`placement` is a sentence, not a token; the `complete_bead` tool description's stale step list) → fix 7; 2 nitpicks; 1334 targeted tests on the tree, 12 red on the pre-fix source |
 | `beadloom-kdx7` | S1 fix 7 | done | `5ed74aac` + `dca00751`; `placement` takes `outside_final` / `unread_final`, the sentence beside it as `stated`, the vocabulary in `mcp.md` and the ci-gate docs; the `complete_bead` tool description points at the verdict; 8 tests red first; the DOC example fenced after `test_site_markdown_compiles` went red; room 14669 passed + 1 of #311's class over 2950 files; tree 14716 passed / 0 failed, ruff, mypy, `ci` rc 0 |
 | `beadloom-mnln` | S1R7 | done | OK 2026-10-19 at `6a6c7fc4`: 0 critical, 0 major, 2 minor (both docs → S1W: `mcp.md:362` mangled sentence; the Gate step-list copies incl. `mcp.md:351`), 3 nitpicks; 138 touched tests on the tree, 8 red on the pre-fix source |
-| `beadloom-hfxv` | S1W | ready | launched 2026-10-19 at `6a6c7fc4` with the doc list of the Notes |
-| `beadloom-c5m5` | S1P | blocked | blocked by S1W |
+| `beadloom-hfxv` | S1W | done | `a883cccb`; CHANGELOG (MAJOR, Breaking with measurements), 12 docs, the surface 815 → 826; sync-check 0 stale / 0 surface-drift; `ci` rc 0 on the tree; doc-shape tests 2836 passed; two Breaking moves added to the RFC's Public API list (MCP `unowned` gone; `config-check` 0 → 1 on pre-release role files); left for code: `ci --help`, the `ai_techwriter` templates and the two workflow step-list comments, `ruff format` on two MCP files |
+| `beadloom-c5m5` | S1P | in progress | the combined tree measured by the coordinator at `a883cccb`; then push, PR, merge on green |
 
 ## Notes
 
