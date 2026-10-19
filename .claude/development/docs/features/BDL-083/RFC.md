@@ -635,6 +635,14 @@ trailer — `[{ISSUE-KEY}] <type>: <description>` with `Bead: <bead-id>` in the 
 in the flow template, so every adopter's `CLAUDE.md` and role files carry it after
 `setup-agentic-flow`; this repository recomposes its own. Commits without the trailer are
 `unattributed` under D3, which is the honest reading of a branch written before the rule.
+Clarified 2026-10-19 (S1R second pass): git reads trailers from the message's final paragraph
+only, so the trailer sits in the last paragraph beside any other trailer (`Co-Authored-By`, ...),
+with no blank line between them and nothing after them; the composed format, both landing
+fragments and the coordinator checklist say so and the example shows the two together. When a
+claimed bead has no bound commit and a `Bead: <id>` line stands outside the final paragraph, the
+ownership report names those commits and where the line sits instead of denying the line
+("N commit(s) carry `Bead: <id>` outside the message's final paragraph, where git reads no
+trailer"). The reading needs git 2.22 or later; the gate-ownership DOC names it.
 
 ## Public API (MAJOR)
 

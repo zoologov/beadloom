@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** S1R re-review — `beadloom-pohj` over the four fix commits (`d8b26490`, `d0b193a7`, `2a4de894`, `5e278da3`)
-**Goal:** the review's findings confirmed closed or a second fix cycle opened
-**Done when:** `beadloom-pohj` closes OK; then S1W `beadloom-hfxv`
+**Bead:** S1 fix cycle 4 — `beadloom-ba9w.18` (fix 5: the S1R second-pass findings), then S1R third pass on `beadloom-pohj`
+**Goal:** the second pass's Major closed with the D10 clarification; the review re-run on the bead id
+**Done when:** the fix bead's tests green, two-level verification, committed by path under the landing lock with the `Bead:` trailer in the final paragraph; `beadloom-pohj` re-reviewed to OK
 
 ## Progress
 
@@ -35,11 +35,12 @@
 | `beadloom-jwfc` | S1e2 | done | `d1b7e520`; `ci` writes through `infrastructure/console_streams.write_whole`, new `--tee FILE`; the hook reads the verdict from the tee copy (wave 2's `printf` dropped the report on the same pipe: a second defect); before 83518 of 229492 bytes + `BlockingIOError`, after the whole report; room 14569 passed + 1 of #311's class, tree 14615 passed, `ci` rc 0; adopters re-run `install-hooks` |
 | `beadloom-6xdt` | S1f | done | `ba8ce1f4`; MAJOR move 1 measured (rc 0 → 1 on a declared log the tree does not hold); new `application/gate_issue_log.py`; room 14412 passed + 1 of #311's class, tree 14459 passed, `ci` rc 0 |
 | `beadloom-rupp` | S1T | done | `546a1c70`; 9 of 10 entries re-run green before (9.0.0) and after; #344's fallback half still broken; the three MAJOR moves + the `scope_base` move red on 9.0.0 by assertion; an end-to-end test for move 3 added; a hollow EAGAIN test fixed; full tree 14627 passed / 0 failed (four parts, foreground), ruff, mypy, `ci` rc 0 |
-| `beadloom-pohj` | S1R | in progress | ISSUES 2026-10-18: 0 critical, 2 major, 7 minor, 1 nitpick; fix cycle landed (`d8b26490`, `d0b193a7`, `2a4de894`, `5e278da3`); re-review launched 2026-10-19 |
+| `beadloom-pohj` | S1R | in progress | pass 1 ISSUES 2026-10-18 (2 major, 7 minor); fixes 1–4 landed; pass 2 ISSUES 2026-10-19: 0 critical, 1 major (the trailer binds only from the final paragraph; the format does not say so), 2 minor, 2 nitpicks; fix 5 opened; measured on the tree at `8cff7ff4`, 155 test files, 3695 passed |
 | `beadloom-4m0w` | S1 fix 1 | done | `d8b26490`; the three post-step reports under `gate_boundary.derive_bounded`, a reason on the report, the steps' verdict kept; the lint line counts statements at info; room 14597 passed + 1 of #311's class; `ci` rc 0 on the tree |
 | `beadloom-ilrn` | S1 fix 2 | done | `d0b193a7`; `info` in neither count of the debt report; room 14583 passed + 1 of #311's class, tree 14647 passed; found BDL-UX #352 (TUI counts `warning`, the engine emits `warn`) |
 | `beadloom-7kas` | S1 fix 3 | done | `2a4de894`; D10: a commit is a bead's by its `Bead:` trailer only, the composed commit format carries it (flow template, `.claude/CLAUDE.md`, the five role files and `coordinator.md` recomposed); the `refs:` xfail deleted (D3); the source-root sentence hedged; the hook names public; the fixture rule renamed; attribution on this branch: 17 bindings over 14 beads by any mention -> 4 over 3 by the trailer (5 over 4 with this commit); room 14616 passed + 1 of #311's class; tree 14663 passed / 0 failed, `ci` rc 0 |
 | `beadloom-ba9w.17` | S1 fix 4 | done | `5e278da3`; `complete_bead` returns `not_run_reason` (the coverage report's reason when it raised, null otherwise); the room census under `gate_boundary.derive_bounded`, `room` as `{"reason": ...}` when it raised; 3 scenarios + 6 tests, 8 of 9 red first; room 14634 passed + 1 of #311's class over 2948 files; tree 14681 passed / 0 failed, ruff, mypy, `ci` rc 0 (32 advisory axes warnings, #316); CHANGELOG line for S1W; `mcp_server.py` failed `ruff format` before this bead (left) |
+| `beadloom-ba9w.18` | S1 fix 5 | ready | S1R pass 2: Major 1 (the trailer in the final paragraph; the report names a `Bead:` line git reads no trailer from), Minor 1 (the MCP verdict reads `gate.room`), Minor 2 (the lead-in makes the reason's claim), 2 nitpicks; wave 4 of the fix cycle |
 | `beadloom-hfxv` | S1W | blocked | blocked by S1R |
 | `beadloom-c5m5` | S1P | blocked | blocked by S1W |
 
@@ -59,4 +60,5 @@
 - Fix wave 1 combined tree (coordinator, 2026-10-19, HEAD `d8b26490`): `beadloom ci` rc 0 (27 advisory axes warnings, #316); the full suite 14647 passed, 145 skipped, 14 xfailed, 0 failed (25 min, Darwin arm64). Clean-room friction on a rename (the deleted path cannot be carried) is #335, S2d.
 - Fix wave 2 (2026-10-19, HEAD `2a4de894`, gate owner `beadloom-7kas`): the tree 14663 passed, 0 failed, 145 skipped, 13 xfailed; ruff and mypy clean; `ci` rc 0 (27 advisory axes warnings, #316). Two items handed to S1W: the CHANGELOG entry for D10, and the ownership paragraph in `docs/services/cli.md` near line 3040, which still states the rule from before S1c.
 - Fix wave 3 (2026-10-19, HEAD `5e278da3`, gate owner `beadloom-ba9w.17`): the tree 14681 passed, 0 failed, 145 skipped, 13 xfailed (seven foreground parts); ruff and mypy clean; `ci` rc 0 (32 advisory axes warnings, #316). Noticed and left: `complete_bead` still takes a second room census beside the Gate's own; `mcp_server.py` failed `ruff format` before this bead.
+- S1R pass 2 (2026-10-19): the fix for Minor 3 introduced a sentence of the S1 class — git reads a trailer from the final paragraph only, and a `Bead:` line followed by a separate `Co-Authored-By` paragraph binds nothing while the report denies the line. D10 clarified in the RFC (final paragraph beside the other trailers; the report names a misplaced line; git >= 2.22); fix 5 `beadloom-ba9w.18`. Coordinator lesson: the pass-2 launch prompt mapped the fix commits to the findings and pre-classified #316/#311 — the reviewer counted that as the agenda coming from the coordinator; the next pass carries the bead id and the commit hash only.
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.
