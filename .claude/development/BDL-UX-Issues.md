@@ -46,6 +46,7 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 355 | 2026-10-19 | medium | the branch-to-work-item binding reads `features/<KEY>` exactly, so a work item that ships in several pull requests (one branch per slice, `features/BDL-083-S2`) loses its declared axes, its focus document and the scope check on every branch but the first |
 | 354 | 2026-10-19 | medium | a merge-slot `release` made after `git push` lands in no merged commit, so `master` carries the slot held by a closed bead and the next clone's `acquire` is refused |
 | 353 | 2026-10-19 | high | on a Windows checkout the index stores paths with `\` while `source:` is written with `/`, and every `source:` match is a raw string compare: directory nodes read `no_indexed_code`, file nodes read stale, the declared surface reads 167 pairs of 347; `sync-surface.json` holds counts and no pair list, so the drop has no names |
 | 352 | 2026-10-19 | medium | the TUI lint panel counts warnings by the severity `warning` while the engine emits `warn`, so every warn finding shows as info and the panel's warning count reads 0 |
@@ -173,6 +174,14 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+355. [2026-10-19] [MEDIUM] the branch-to-work-item binding reads `features/<KEY>` exactly, so a work item that ships in several pull requests (one branch per slice, `features/BDL-083-S2`) loses its declared axes, its focus document and the scope check on every branch but the first
+
+    **Severity:** medium (the Gate's scope check, the `focus-document` medium of `waves` and the pre-commit axes judgement all read `NOT COMPARED` / `unmeasured` on such a branch, so a slice branch of a long epic runs with less measurement than its first branch, and nothing names the remedy)
+    **Command:** `beadloom waves <six ready S2 bead ids>` on branch `features/BDL-083-S2` after S1 of BDL-083 merged from `features/BDL-083` (PR #106)
+    **Context:** measured 2026-10-19 on `9b956965` by the coordinator of BDL-083 while activating S2. The plan printed `Declared axes: NOT COMPARED — the branch 'features/BDL-083-S2' names no work item among the planning documents` and `focus-document: unmeasured — the flow's routing and its planning documents were not read`; the same six beads on `features/BDL-083` were compared. BDL-083's PRD rules one PR per slice (ruling 1), and the flow's own trunk-based section says one PR per epic "or shippable slice", so a second branch for one work item is the flow's own case; the derivation that binds a branch to its documents reads the branch name as `features/<KEY>` and nothing else.
+    **Issue:** two rules of the composed flow disagree — a work item may ship in several PRs, and a branch is bound to its work item only when it is named exactly `features/<KEY>` — and the second one wins silently: the measurements degrade and the plan says `NOT COMPARED` without saying why the branch did not bind or what name would.
+    **Expected:** the binding reads the work-item key as a prefix of the branch name (`features/<KEY>` and `features/<KEY>-<anything>`), or the work item declares its branches in its ACTIVE/CONTEXT and the binding reads that; the plan's `NOT COMPARED` line names the branch shape it accepts. Workaround applied: the slice branch is named `features/BDL-083` again (the merged branch deleted first).
 
 354. [2026-10-19] [MEDIUM] a merge-slot `release` made after `git push` lands in no merged commit, so `master` carries the slot held by a closed bead and the next clone's `acquire` is refused
 
