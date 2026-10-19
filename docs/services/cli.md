@@ -3082,6 +3082,13 @@ beadloom setup-mcp --remove [--tool {claude-code,cursor,windsurf}] [--project DI
 - `cursor` -- `.cursor/mcp.json` in project root
 - `windsurf` -- `~/.codeium/windsurf/mcp_config.json` (global)
 
+The server's command is written as `beadloom`, the name every clone resolves on its own
+PATH, and never the absolute path of the machine that ran the command: the project files
+are committed, and up to 9.0.0 they held one machine's `shutil.which("beadloom")`, a server
+no other clone could start (BDL-UX #356). When `beadloom` is not on PATH where the command
+runs, it says so on stderr and writes the same file. `init --bootstrap` writes the same
+command into `.mcp.json`.
+
 ### beadloom setup-ai-techwriter
 
 Scaffold the AI tech-writer (BDL-047 / F4.1; harness packaged in BDL-051 / S2)
@@ -3147,11 +3154,15 @@ under `.beadloom/flow/` — for all three kinds:
 | kind | written to | project fragment |
 |------|-----------|------------------|
 | `roles` | `.claude/agents/<role>.md`, `.cursor/agents/<role>.md` | `.beadloom/flow/roles/<role>.md` |
-| `commands` | `.claude/commands/<cmd>.md` | `.beadloom/flow/commands/<cmd>.md` |
+| `commands` | `.claude/commands/<cmd>.md`; `.cursor/rules/beadloom-<cmd>.mdc` for `cursor` | `.beadloom/flow/commands/<cmd>.md` |
 | `claude` | `.claude/CLAUDE.md` | `.beadloom/flow/claude/CLAUDE.md` |
+| `cursor` | `.cursor/rules/beadloom-flow.mdc` | `.beadloom/flow/claude/CLAUDE.md`, then `.beadloom/flow/cursor/CLAUDE.md` |
 
-`cursor` additionally gets a `.cursor/rules/beadloom-flow.md` orchestrator
-pointer. Selection comes from `.beadloom/flow.yml`, overridden by the
+For `cursor` the composed core and the four commands are written as `alwaysApply` rules
+under `.cursor/rules/`, each body byte-identical to the file Claude reads, and the run
+prints `Wrote <rule> (cursor)` for each. Up to 9.0.0 Cursor received a 17-line
+`.cursor/rules/beadloom-flow.md` pointer instead (BDL-UX #356); one left on disk is listed
+under *Left by an older flow layout* and kept. Selection comes from `.beadloom/flow.yml`, overridden by the
 `--tool`/`--architecture`/`--stack` flags (defaults `claude` / `ddd` /
 auto-detected stack — **flag → flow.yml → default** precedence). An invalid
 selection raises a `FlowConfigError` naming the bad value + the allowed set.
@@ -3231,10 +3242,9 @@ that `config-check --fix` reads.
 > be rewritten" over both of the first two, under a remediation that says to
 > re-run this command — so following that remediation literally destroyed one of
 > the two edits it was printed to protect. The `--force` help had promised the
-> new behaviour since the flag shipped. The one artifact still rewritten
-> unconditionally is `.cursor/rules/beadloom-flow.md`, a four-line pointer whose
-> own body says it is generated and which no check compares — stated here rather
-> than left to be discovered.
+> new behaviour since the flag shipped. The one artifact that was still rewritten
+> unconditionally, the Cursor pointer, was retired in BDL-083 S2h; the rules that
+> replaced it go through the same policy.
 
 The same run also stopped printing two false lines about `CLAUDE.md`: a
 preserved body was reported as `Wrote .claude/CLAUDE.md`, and its skip travelled

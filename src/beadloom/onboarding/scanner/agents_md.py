@@ -25,14 +25,20 @@ _MCP_EDITOR_MARKERS: tuple[tuple[str, str], ...] = (
 
 _MCP_DEFAULT_EDITOR = "claude-code"
 
+#: The command an MCP config starts the server with: ``beadloom`` found on PATH,
+#: as every composed instruction already assumes. Never the absolute path the
+#: writing machine resolves -- the file is committed, and one machine's
+#: ``/Users/<somebody>/.local/bin/beadloom`` is a server no other clone can start
+#: (BDL-UX #356 e). One constant, read by both writers: ``init --bootstrap`` here
+#: and ``setup-mcp``.
+MCP_SERVER_COMMAND = "beadloom"
+
 
 def setup_mcp_auto(project_root: Path) -> str | None:
     """Auto-detect editor and create MCP config.
 
     Returns editor name on success, or *None* if config already exists.
     """
-    import shutil
-
     # Detect editor (most specific marker first).
     editor = _MCP_DEFAULT_EDITOR
     for marker, name in _MCP_EDITOR_MARKERS:
@@ -56,7 +62,6 @@ def setup_mcp_auto(project_root: Path) -> str | None:
 
     mcp_path.parent.mkdir(parents=True, exist_ok=True)
 
-    beadloom_cmd = shutil.which("beadloom") or "beadloom"
     args: list[str] = ["mcp-serve"]
     if editor == "windsurf":
         args.extend(["--project", str(project_root.resolve())])
@@ -64,7 +69,7 @@ def setup_mcp_auto(project_root: Path) -> str | None:
     data = {
         "mcpServers": {
             "beadloom": {
-                "command": beadloom_cmd,
+                "command": MCP_SERVER_COMMAND,
                 "args": args,
             }
         }

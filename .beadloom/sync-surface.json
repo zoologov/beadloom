@@ -1,6 +1,6 @@
 {
-  "declared_docs": 139,
-  "declared_pairs": 835,
+  "declared_docs": 140,
+  "declared_pairs": 837,
   "pairs": [
     ["architecture.md", "src/beadloom/__init__.py"],
     ["architecture.md", "src/beadloom/services/__init__.py"],
@@ -531,6 +531,7 @@
     ["domains/onboarding/README.md", "src/beadloom/onboarding/scanner/summary.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/scanner/swift_layout.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/scanner/types.py"],
+    ["domains/onboarding/README.md", "src/beadloom/onboarding/tool_reach.py"],
     ["domains/onboarding/README.md", "src/beadloom/services/commands/docs.py"],
     ["domains/onboarding/README.md", "src/beadloom/services/commands/query.py"],
     ["domains/onboarding/README.md", "src/beadloom/services/commands/setup.py"],
@@ -577,6 +578,7 @@
     ["domains/onboarding/features/role-composer/SPEC.md", "src/beadloom/onboarding/role_composer.py"],
     ["domains/onboarding/features/role-duties/SPEC.md", "src/beadloom/onboarding/role_duties.py"],
     ["domains/onboarding/features/role-map/SPEC.md", "src/beadloom/onboarding/role_map.py"],
+    ["domains/onboarding/features/tool-reach/SPEC.md", "src/beadloom/onboarding/tool_reach.py"],
     ["getting-started.md", "src/beadloom/__init__.py"],
     ["getting-started.md", "src/beadloom/services/__init__.py"],
     ["guides/ci-setup.md", "src/beadloom/__init__.py"],
@@ -838,5 +840,5 @@
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/lib/queryState.js"],
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/model/useUrlState.js"]
   ],
-  "recorded_at": "2026-10-19T17:57:12.260575+00:00"
+  "recorded_at": "2026-10-19T19:16:32.938632+00:00"
 }

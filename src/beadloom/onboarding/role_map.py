@@ -46,12 +46,13 @@ with different intent:
 
 **One map per declared tool, and the tool axis is stated** (BDL-068 `.84`).
 The corpus comes from ``config.tools`` through :data:`_MAP_ARTIFACTS` -- the
-composed ``CLAUDE.md`` for ``claude``, the Cursor orchestrator pointer
-``role_adapters`` writes for ``cursor``. Until `.84` this module composed
+composed ``CLAUDE.md`` for ``claude``, the composed core Cursor reads as a
+rule for ``cursor``. Until `.84` this module composed
 Claude's map unconditionally and never read ``tools:``, so a project declaring
 ``cursor`` alone was judged against a document its flow does not declare, while
-the one its agent does read -- ``.cursor/rules/beadloom-flow.md``, whose brace
-expansion enumerates every composed role -- was asked nothing. That is BDL-UX
+the one its agent does read was asked nothing. Since BDL-083 S2h that document is
+``.cursor/rules/beadloom-flow.mdc``, the composed core itself; before it, a
+pointer whose brace expansion enumerated the roles (BDL-UX #356). That is BDL-UX
 #252's own class, one axis over, inside the check written to close it.
 
 A declared tool :data:`_MAP_ARTIFACTS` has no row for is reported in
@@ -84,8 +85,8 @@ from beadloom.onboarding.composer import (
     templates_dir,
 )
 from beadloom.onboarding.flow_config import resolve_flow_config
-from beadloom.onboarding.role_adapters import cursor_rules_body, cursor_rules_relpath
 from beadloom.onboarding.role_composer import ROLE_NAMES
+from beadloom.onboarding.tool_reach import cursor_core_rule_relpath
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -188,27 +189,26 @@ def _claude_map(config: FlowConfig, project_root: Path) -> MapArtifact:
     )
 
 
-def _cursor_map(_config: FlowConfig, _project_root: Path) -> MapArtifact:
-    """Cursor's map: the orchestrator pointer ``role_adapters`` writes.
+def _cursor_map(config: FlowConfig, project_root: Path) -> MapArtifact:
+    """Cursor's map: the composed core, which Cursor reads as an ``alwaysApply`` rule.
 
-    Four lines, one of which is a brace expansion over every composed role --
-    which is exactly the construct this check reads as a designation, so the map
-    a Cursor adopter holds is judged by the same derivation Claude's is. The
-    pointer takes no overlay and no project layer, so its body does not depend on
-    ``config``; the parameters are the registry's shape rather than this reader's
-    need.
+    Until BDL-083 S2h this was a four-line pointer whose brace expansion named
+    every role and nothing else of the flow (BDL-UX #356). The rule now carries
+    the same composition ``CLAUDE.md`` does, so the map a Cursor adopter holds is
+    the same text Claude's is, read under the name of the file Cursor opens.
     """
-    relpath = cursor_rules_relpath()
+    composition = compose(
+        "cursor", CLAUDE_ARTIFACT_NAME, config=config, project_root=project_root
+    )
     return MapArtifact(
         tool="cursor",
-        name=str(relpath),
+        name=str(cursor_core_rule_relpath()),
         authored_in=(
-            "the Cursor orchestrator pointer in `onboarding/role_adapters.py`, "
-            "whose roster is rendered over the derived role population rather "
-            "than typed into it -- a role missing from it means that rendering "
-            "has stopped covering the population"
+            f"the role map and the Agent Roles table of the shipped "
+            f"`{CLAUDE_ARTIFACT_NAME}.md` core, which Cursor reads as "
+            f"`{cursor_core_rule_relpath()}`"
         ),
-        fragments=(LayerFragment("generated", str(relpath), cursor_rules_body()),),
+        fragments=composition.fragments,
     )
 
 

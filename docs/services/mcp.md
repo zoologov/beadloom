@@ -28,6 +28,12 @@ beadloom setup-mcp --tool windsurf
 beadloom setup-mcp --remove
 ```
 
+Every form writes the server's command as `beadloom`, the name each clone resolves on its
+own PATH, and never the absolute path of the machine that ran it: the project files are
+committed, and a path from one machine is a server no other clone can start (BDL-UX #356).
+When `beadloom` is not on PATH where `setup-mcp` runs, it says so on stderr and writes the
+same file.
+
 Claude Code (`.mcp.json`):
 
 ```json

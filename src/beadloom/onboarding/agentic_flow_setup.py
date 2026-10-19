@@ -79,6 +79,7 @@ from typing import TYPE_CHECKING
 
 from beadloom.onboarding.composer import (
     CLAUDE_ARTIFACT_NAME,
+    COMMAND_NAMES,
     PROJECT_FLOW_DIRNAME,
     compose,
     templates_dir,
@@ -101,6 +102,15 @@ from beadloom.onboarding.scanner import (
     _detect_project_name,
     blank_auto_regions,
     refresh_claude_md,
+    render_auto_regions,
+)
+from beadloom.onboarding.tool_reach import (
+    LEGACY_CURSOR_POINTER,
+    cursor_command_description,
+    cursor_command_rule_relpath,
+    cursor_core_description,
+    cursor_core_rule_relpath,
+    cursor_rule_text,
 )
 
 if TYPE_CHECKING:
@@ -116,8 +126,10 @@ if TYPE_CHECKING:
 #: adding one adds the role here too, by the same act.
 AGENT_FILES: tuple[str, ...] = ROLE_NAMES
 
-#: The slash-skill command files this flow composes.
-COMMAND_FILES: tuple[str, ...] = ("coordinator", "task-init", "checkpoint", "templates")
+#: The slash-skill command files this flow composes -- the composer's
+#: :data:`~beadloom.onboarding.composer.COMMAND_NAMES` itself, for the reason
+#: :data:`AGENT_FILES` is ``ROLE_NAMES``: one population, one declaration.
+COMMAND_FILES: tuple[str, ...] = COMMAND_NAMES
 
 #: Asset name for the vendored base ``CLAUDE.md`` (project name templated out).
 _CLAUDE_MD_ASSET = "CLAUDE.md.txt"
@@ -149,6 +161,11 @@ class ScaffoldResult:
     #: a path that exists in no project — beside a ``Wrote .claude/CLAUDE.md``
     #: line for the same run that had preserved it.
     claude_md_skipped: bool = False
+    #: The ``.cursor/rules/`` files this run wrote, project-relative, and the ones
+    #: it left alone as hand-edited or unverified. Empty for a flow that does not
+    #: declare ``cursor`` (BDL-UX #356, RFC D13).
+    cursor_rules_written: list[str] = field(default_factory=list)
+    cursor_rules_skipped: list[str] = field(default_factory=list)
     #: Files from a PRIOR flow layout that this version no longer owns, with the
     #: exact cleanup command. Reported, never deleted (BDL-UX #137).
     orphans: list[str] = field(default_factory=list)
@@ -178,7 +195,11 @@ def composed_command(name: str, config: FlowConfig, project_root: Path | None) -
 
 
 def composed_claude_md(
-    config: FlowConfig, project_root: Path | None, *, project_name: str
+    config: FlowConfig,
+    project_root: Path | None,
+    *,
+    project_name: str,
+    kind: str = "claude",
 ) -> str:
     """The composed ``CLAUDE.md`` body with the project name substituted in.
 
@@ -187,11 +208,41 @@ def composed_claude_md(
     here so the scaffold never hardcodes Beadloom's own name. Since BDL-061 S3
     the CORE is **authored package data**, not a snapshot of Beadloom's own live
     file — see :func:`sync_agentic_flow`.
+
+    ``kind`` is ``cursor`` for the core a Cursor agent reads: the same core and
+    overlays, and the project layer Claude reads followed by Cursor's own
+    (BDL-UX #356, RFC D13).
     """
     text = compose(
-        "claude", CLAUDE_ARTIFACT_NAME, config=config, project_root=project_root
+        kind, CLAUDE_ARTIFACT_NAME, config=config, project_root=project_root
     ).text
     return text.replace(_PROJECT_NAME_PLACEHOLDER, project_name)
+
+
+def cursor_rules(config: FlowConfig, project_root: Path) -> dict[str, str]:
+    """``{relpath: text}`` of every rule a Cursor agent reads the composed flow from.
+
+    The core rule's body is the text ``.claude/CLAUDE.md`` carries, auto-regions
+    rendered for this project, and each command rule's body is the text of
+    ``.claude/commands/<name>.md``; both under front matter that applies the rule
+    to every request. Replaces the 17-line pointer 9.0.0 wrote, which carried no
+    layer of the flow at all (BDL-UX #356, RFC D13).
+    """
+    core = composed_claude_md(
+        config, project_root, project_name=_detect_project_name(project_root), kind="cursor"
+    )
+    rules = {
+        str(cursor_core_rule_relpath()): cursor_rule_text(
+            render_auto_regions(core, project_root)[0],
+            description=cursor_core_description(),
+        )
+    }
+    for name in COMMAND_FILES:
+        rules[str(cursor_command_rule_relpath(name))] = cursor_rule_text(
+            composed_command(name, config, project_root),
+            description=cursor_command_description(name),
+        )
+    return rules
 
 
 def _claude_md_base(project_name: str, project_root: Path | None = None) -> str:
@@ -236,10 +287,9 @@ def _unverified_note(relpath: str, kind: str, name: str) -> str:
 def _scaffold_composed(
     project_root: Path,
     kind: str,
-    names: tuple[str, ...],
     bodies: dict[str, str],
+    relpaths: dict[str, str],
     *,
-    target_subdir: str,
     force: bool,
 ) -> tuple[list[str], list[str], list[str]]:
     """Write one kind's composed files; return (written, skipped, notes).
@@ -255,10 +305,9 @@ def _scaffold_composed(
     notes: list[str] = []
     manifest = load_manifest(project_root)
     recorded: dict[str, str] = {}
-    for name in names:
-        content = bodies[name]
-        relpath = f".claude/{target_subdir}/{name}.md"
-        dest = project_root / ".claude" / target_subdir / f"{name}.md"
+    for name, content in bodies.items():
+        relpath = relpaths[name]
+        dest = project_root / relpath
         state = state_of(project_root, relpath, expected=content, manifest=manifest)
         if state is ArtifactState.CLEAN:
             written.append(name)
@@ -300,6 +349,13 @@ def orphaned_flow_files(project_root: Path) -> list[str]:
             )
             orphans.append(f"{relpath}: left by an older flow layout{moved} — "
                            f"remove with `rm -f {relpath}`")
+    if (project_root / LEGACY_CURSOR_POINTER).is_file():
+        orphans.append(
+            f"{LEGACY_CURSOR_POINTER}: left by an older flow layout (the pointer "
+            f"9.0.0 wrote for Cursor; the composed core is now "
+            f"{cursor_core_rule_relpath()}) — remove with "
+            f"`rm -f {LEGACY_CURSOR_POINTER}`"
+        )
     return orphans
 
 
@@ -403,9 +459,8 @@ def scaffold(
         ) = _scaffold_composed(
             project_root,
             "roles",
-            AGENT_FILES,
             compose_all_roles(config, project_root),
-            target_subdir="agents",
+            {name: f".claude/agents/{name}.md" for name in AGENT_FILES},
             force=force,
         )
     bodies = {
@@ -418,9 +473,8 @@ def scaffold(
     ) = _scaffold_composed(
         project_root,
         "commands",
-        COMMAND_FILES,
         bodies,
-        target_subdir="commands",
+        {name: f".claude/commands/{name}.md" for name in COMMAND_FILES},
         force=force,
     )
     (
@@ -430,5 +484,36 @@ def scaffold(
         claude_notes,
     ) = _scaffold_claude_md(project_root, config, force=force)
     result.claude_md_skipped = bool(claude_skipped)
-    result.migration_notes = [*agent_notes, *command_notes, *claude_notes]
+    cursor_notes = _scaffold_cursor_rules(project_root, config, result, force=force)
+    result.migration_notes = [*agent_notes, *command_notes, *claude_notes, *cursor_notes]
     return result
+
+
+def _scaffold_cursor_rules(
+    project_root: Path, config: FlowConfig, result: ScaffoldResult, *, force: bool
+) -> list[str]:
+    """Write the Cursor rules for a flow that declares ``cursor``; return the notes.
+
+    The same policy as every other artifact this command writes: a rule nobody
+    touched since Beadloom wrote it is recomposed, a hand-edited one is reported
+    with the project-layer file the edit belongs in and left alone. The core
+    rule's project layer is ``cursor`` -- text for Cursor alone -- and a command
+    rule's is ``commands``, which reaches both tools.
+    """
+    if "cursor" not in config.tools:
+        return []
+    rules = cursor_rules(config, project_root)
+    batches = (
+        ("cursor", {CLAUDE_ARTIFACT_NAME: str(cursor_core_rule_relpath())}),
+        ("commands", {name: str(cursor_command_rule_relpath(name)) for name in COMMAND_FILES}),
+    )
+    notes: list[str] = []
+    for kind, relpaths in batches:
+        bodies = {name: rules[relpath] for name, relpath in relpaths.items()}
+        written, skipped, kind_notes = _scaffold_composed(
+            project_root, kind, bodies, relpaths, force=force
+        )
+        result.cursor_rules_written.extend(relpaths[name] for name in written)
+        result.cursor_rules_skipped.extend(relpaths[name] for name in skipped)
+        notes.extend(kind_notes)
+    return notes

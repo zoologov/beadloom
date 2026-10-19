@@ -85,16 +85,17 @@ Feature: a role this flow composes is named in the map that enumerates roles
   # BDL-068 `.84`, the S6 review's Major 1. Until it, `role_map_report` composed
   # Claude's map for every project and never read `tools:`, so a cursor-only
   # adopter's verdict was about a document their agent does not read while the
-  # one it does read -- `.cursor/rules/beadloom-flow.md`, whose body enumerates
-  # the roles -- was asked nothing. The map artifact is now derived per declared
-  # tool, and a tool this release names no map artifact for is an unreached
-  # population rather than a substitution.
+  # one it does read was asked nothing. The map artifact is now derived per
+  # declared tool, and a tool this release names no map artifact for is an
+  # unreached population rather than a substitution. Since BDL-083 S2h the map a
+  # Cursor adopter reads is the composed core, `.cursor/rules/beadloom-flow.mdc`,
+  # in place of the pointer 9.0.0 wrote (BDL-UX #356).
 
   @bead:beadloom-0mdo.84
   Scenario: a cursor-only project is checked against the map a Cursor adopter reads
     Given a project whose flow declares "cursor" alone
     When the role map is checked
-    Then the map artifact read for "cursor" is ".cursor/rules/beadloom-flow.md"
+    Then the map artifact read for "cursor" is ".cursor/rules/beadloom-flow.mdc"
     And no map artifact is read for "claude"
 
   @bead:beadloom-0mdo.84
@@ -103,7 +104,7 @@ Feature: a role this flow composes is named in the map that enumerates roles
     And the flow composes a role named "scout"
     When the role map is checked
     Then "scout" is reported as a role the map names nowhere
-    And that finding names the tool "cursor" and the artifact ".cursor/rules/beadloom-flow.md"
+    And that finding names the tool "cursor" and the artifact ".cursor/rules/beadloom-flow.mdc"
 
   @bead:beadloom-0mdo.84
   Scenario: a declared tool with no map artifact is an unreached population, not another tool's map

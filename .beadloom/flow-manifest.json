@@ -9,7 +9,7 @@
     ".claude/agents/test.md": "37bf77a47695bde4920a2d9fcfd1d052e4da3a589d530ab835c58f5fd2be77e7",
     ".claude/commands/checkpoint.md": "d6019d0b91d01f6243b749bf9d8beb61426aa8e190d2660110942c6c2468e900",
     ".claude/commands/coordinator.md": "353846ece9c382f088e08976d1cd812530246fb06cbdbccaa3ca1c09c5d296ae",
-    ".claude/commands/task-init.md": "46f693c549923ce12295f4af2ca1c991fbe09908af61d7ff652e697ceb28f628",
+    ".claude/commands/task-init.md": "d3c694f94a8f9d4ce129c6ff364aa0bfe5b3f2f5b73f354d353b7dc7dbbe870f",
     ".claude/commands/templates.md": "e7d0a300bbaee8327bae0bcda9f36707f4a8540f14d49b0939392f38e34540d8"
   }
 }

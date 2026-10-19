@@ -85,12 +85,12 @@ Feature: an adapter set whose tool left flow.yml is still reported
     When the agent-config check runs
     Then no orphan finding is reported
 
-  # The Cursor orchestrator pointer is a stated exclusion, not an oversight:
-  # `role_adapters` publishes that no check compares it in either state, so
-  # calling it orphaned would claim it was guarded before the tool was dropped.
+  # The Cursor rules are a stated exclusion, not an oversight: they sit outside
+  # the agent directory the orphan population is read from. Since BDL-083 S2h
+  # they carry the composed core rather than a pointer (BDL-UX #356).
 
-  Scenario: the Cursor orchestrator pointer is not reported as an orphaned adapter
+  Scenario: the Cursor core rule is not reported as an orphaned adapter
     Given a project whose flow scaffolded claude and cursor
     And cursor is removed from the flow's tools
     When the agent-config check runs
-    Then ".cursor/rules/beadloom-flow.md" is not reported as orphaned
+    Then ".cursor/rules/beadloom-flow.mdc" is not reported as orphaned

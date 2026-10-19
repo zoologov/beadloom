@@ -81,6 +81,8 @@ def setup_mcp(*, remove: bool, tool_name: str, project: Path | None) -> None:
     """
     import shutil
 
+    from beadloom.onboarding.scanner import MCP_SERVER_COMMAND
+
     project_root = project or Path.cwd()
     tool_cfg = _MCP_TOOL_CONFIGS[tool_name]
 
@@ -112,16 +114,17 @@ def setup_mcp(*, remove: bool, tool_name: str, project: Path | None) -> None:
         click.echo(f"Removed beadloom from {mcp_json_path}")
         return
 
-    # Find beadloom command path.
-    beadloom_path = shutil.which("beadloom") or "beadloom"
-
     args: list[str] = ["mcp-serve"]
     # Global configs need explicit --project path.
     if tool_cfg["scope"] == "global":
         args.extend(["--project", str(project_root.resolve())])
 
+    # The command by name, never `shutil.which`'s absolute path: the file is
+    # committed, and one machine's path is a server no other clone can start
+    # (BDL-UX #356 e). Whether THIS machine can start it is a separate fact,
+    # stated rather than written into the file.
     data["mcpServers"]["beadloom"] = {
-        "command": beadloom_path,
+        "command": MCP_SERVER_COMMAND,
         "args": args,
     }
 
@@ -130,6 +133,14 @@ def setup_mcp(*, remove: bool, tool_name: str, project: Path | None) -> None:
         encoding="utf-8",
     )
     click.echo(f"Updated {mcp_json_path}")
+    if shutil.which(MCP_SERVER_COMMAND) is None:
+        click.echo(
+            f"Note: `{MCP_SERVER_COMMAND}` is not on PATH here, so the MCP server "
+            "does not start from this config on this machine until it is. The "
+            "file names the command rather than a path, so every clone resolves "
+            "its own.",
+            err=True,
+        )
 
 
 @main.command("setup-rules")
@@ -321,8 +332,9 @@ def setup_agentic_flow(
     subagents from CORE + the selected architecture overlay (``ddd``/``fsd``) +
     the selected stack overlays, then writes the per-tool adapter set(s) — for
     ``claude`` to ``.claude/agents/*`` (+ ``.claude/commands/*`` + a per-project
-    ``.claude/CLAUDE.md``), for ``cursor`` to ``.cursor/agents/*`` (+ a Cursor
-    orchestrator pointer). Selection comes from ``.beadloom/flow.yml`` (or the
+    ``.claude/CLAUDE.md``), for ``cursor`` to ``.cursor/agents/*`` plus the same
+    core and the four commands as ``alwaysApply`` rules under ``.cursor/rules/``
+    (BDL-UX #356). Selection comes from ``.beadloom/flow.yml`` (or the
     ``--tool``/``--architecture``/``--stack`` flags, which override it; defaults
     are ``claude`` / ``ddd`` / auto-detected stack). A drift-guard test keeps
     every generated adapter byte-identical to its composition.
@@ -397,6 +409,10 @@ def setup_agentic_flow(
         verb = "Skipped" if result.claude_md_skipped else "Wrote"
         suffix = " (hand-edited)" if result.claude_md_skipped else ""
         click.echo(f"{verb} {relpath}{suffix}")
+    for rel in result.cursor_rules_written:
+        click.echo(f"Wrote {rel} (cursor)")
+    for rel in result.cursor_rules_skipped:
+        click.echo(f"Skipped {rel} (hand-edited)")
     _echo_scaffold_findings(result, declined)
 
     # The guard hook adapter: the harness binding for the tool-agnostic

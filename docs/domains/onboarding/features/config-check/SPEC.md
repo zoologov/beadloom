@@ -28,6 +28,11 @@ against disk, returning one `ConfigDrift` per drifted artifact, sorted by path:
 - the **body** of `.claude/CLAUDE.md`, the `.claude/commands/*` files and the
   `.claude/agents/*` adapters — each against its **composition result**, not
   against fixed bytes (BDL-061 S3).
+- for a flow declaring `cursor`, the `.cursor/agents/*` adapters and the
+  `.cursor/rules/beadloom-flow.mdc` and `beadloom-<cmd>.mdc` rules, the same way
+  (BDL-083 S2h).
+- the layers each declared tool reads, against every other declared tool — see
+  *A layer one tool reads and another does not* below.
 - `.beadloom/flow.yml` itself (unknown tool / architecture / stack / language,
   a suppression missing its reason or exit condition).
 - the project's `.gitignore`, against the patterns `ignore_block` emits — see
@@ -300,8 +305,9 @@ derivation is `role_map.role_map_report()`; `_role_map_drifts()` maps its findin
 `ConfigDrift`.
 
 **One map per declared tool** (BDL-068 `.84`). The corpus is `config.tools`: the composed
-`.claude/CLAUDE.md` for `claude`, the `.cursor/rules/beadloom-flow.md` orchestrator pointer
-for `cursor`. Until `.84` the check composed Claude's map unconditionally, so a project
+`.claude/CLAUDE.md` for `claude`, the composed core Cursor reads as
+`.cursor/rules/beadloom-flow.mdc` for `cursor` (the same text since BDL-083 S2h, which
+retired the orchestrator pointer that held only the roster). Until `.84` the check composed Claude's map unconditionally, so a project
 declaring `cursor` alone was judged against a composition its flow does not declare while
 the map its agent reads was asked nothing. A declared tool this release names no map
 artifact for produces **no drift**: it is printed as an unreached population, because the
@@ -407,9 +413,31 @@ Its policy is the ignore block's, applied to a different file rather than invent
 
 What it does not claim is a file the manifest does not record. An adopter who drives Cursor
 by hand owns `.cursor/agents/dev.md` outright, and claiming it would be the false positive
-`_adapter_drifts` avoids by checking only adapters it recognises. `.cursor/rules/beadloom-flow.md`
-is excluded for the reason `role_adapters` publishes: no check compares that pointer in
-either state, so calling it orphaned would imply it was guarded before.
+`_adapter_drifts` avoids by checking only adapters it recognises. `.cursor/rules/` is outside
+the agent directories the population is read from, so the Cursor rules are not reported as
+orphaned when `cursor` leaves `tools:` — a stated limit (BDL-083 S2h).
+
+### A layer one tool reads and another does not
+
+Measured on 9.0.0 (BDL-UX #356): a project composed for Claude and Cursor gave Claude the
+core, the project layer, the STACK overlay and the four commands, gave Cursor the role files
+and a 17-line pointer, and this check compared nothing across the two. On a project composed
+for Cursor alone it warned five times that `.claude/agents/<role>.md` was missing, a file the
+scaffold never writes for Cursor.
+
+Since BDL-083 S2h the canonical file set follows `tools:` (`_canonical_flow_files`): each
+declared tool's role directory, `.claude/commands/*` for every flow because the scaffold
+writes it for every flow, and the Cursor rules when `cursor` is declared. A cursor-only
+project is no longer told about `.claude/agents/`.
+
+`_layer_gap_drifts()` projects `tool_reach.layer_gaps()` (the
+[tool-reach SPEC](../tool-reach/SPEC.md) states the comparison): a declared tool whose files
+on disk carry fewer layers than another declared tool's is an `error` on the tool's
+directory (`.cursor` or `.claude`), naming the tool, the tool it is compared with and the
+layers it lacks — the shipped ones by count, the project layer by path. It is `fixable`:
+`--fix` composes the missing files. A project 9.0.0 composed for both tools exits 1 here
+where 9.0.0 exited 0 — an exit-code move recorded in RFC D13's Public API entry. A project
+declaring one tool has nothing to compare.
 
 ### Ownership boundary
 

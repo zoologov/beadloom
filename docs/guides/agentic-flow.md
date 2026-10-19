@@ -330,10 +330,15 @@ configured tool, with each adapter body **exactly** `compose_role(...)`:
 - **claude** → `.claude/agents/<role>.md` (the slash-command set in
   `.claude/commands/*` composes through the same `compose()` and is written by
   the scaffold, not here).
-- **cursor** → `.cursor/agents/<role>.md` (same composed body) plus a thin
-  `.cursor/rules/beadloom-flow.md` orchestrator pointer — the
-  coordinator-as-Cursor-mode entry point, so Cursor runs the same flow at parity
-  with Claude Code.
+- **cursor** → `.cursor/agents/<role>.md` (same composed body). The scaffold also
+  writes the composed core as `.cursor/rules/beadloom-flow.mdc` and the four commands
+  as `.cursor/rules/beadloom-<cmd>.mdc`, every one an `alwaysApply` rule whose body is
+  byte-identical to `.claude/CLAUDE.md` and `.claude/commands/<cmd>.md`. Up to 9.0.0
+  Cursor received a 17-line pointer here instead, which carried no core, no project
+  layer and no command, and this guide called that parity (BDL-UX #356). A pointer
+  left by 9.0.0 is reported as an older layout's file and kept. Which project
+  fragment reaches which tool is in the
+  [Project Overlays guide](project-overlays.md).
 
 ### `beadloom setup-agentic-flow` (configurator front-end)
 
@@ -365,8 +370,8 @@ recomposed over silently, so the same command answered one hand edit two ways.
 ### Composed artifacts are Beadloom's; the project layer is yours
 
 Once a `flow.yml` exists, the **composer owns** the composed bodies —
-`.claude/agents/*`, `.cursor/agents/*`, `.claude/commands/*` and
-`.claude/CLAUDE.md`. Do not hand-edit them: `config-check` compares each against
+`.claude/agents/*`, `.cursor/agents/*`, `.claude/commands/*`,
+`.claude/CLAUDE.md` and `.cursor/rules/beadloom-*.mdc`. Do not hand-edit them: `config-check` compares each against
 the freshly recomposed body and reports a hand edit, a stale CORE or a stale
 overlay. Put your project's own text in `.beadloom/flow/` instead — the
 [Project Overlays guide](project-overlays.md) covers adding it and migrating an
@@ -563,11 +568,14 @@ Both are described in full, with their measurements and their stated limits, in 
 
 - `<tool>/agents/{dev,explore,review,tech-writer,test}.md` — **composed** from CORE +
   overlays for each configured tool (see [the configurator](#the-role-configurator-bdl-052));
-  `.cursor/agents/*` plus the Cursor orchestrator pointer when `cursor` is
-  configured.
+  `.cursor/agents/*` when `cursor` is configured.
 - `.claude/commands/{coordinator,task-init,checkpoint,templates}.md` — **composed**
   from the same four layers, with the project fragment at
   `.beadloom/flow/commands/<cmd>.md`.
+- `.cursor/rules/beadloom-flow.mdc` and `.cursor/rules/beadloom-<cmd>.mdc` when
+  `cursor` is configured — the composed core and the four commands as `alwaysApply`
+  rules, their bodies byte-identical to `.claude/CLAUDE.md` and
+  `.claude/commands/<cmd>.md`.
 - `.claude/hooks/beadloom-guard.sh` plus one `PreToolUse` entry per guard in
   `.claude/settings.json` — the [flow-guard](#flow-guards-bdl-061-s1) binding.
   Registration is a **merge**: existing hooks survive, re-running adds only what
@@ -693,10 +701,12 @@ to flip a single row — so single-row updates and full reconcile share one form
 Tool-agnosticism has two layers:
 
 - **Native role adapters** for the first-class tools. The
-  [configurator](#the-role-configurator-bdl-052) generates `.claude/agents/*`
-  (Claude Code) and `.cursor/agents/*` + `.cursor/rules/beadloom-flow.md`
-  (Cursor) from the **same** composed bodies, so Cursor runs the same waves at
-  parity with Claude Code.
+  [configurator](#the-role-configurator-bdl-052) generates `.claude/agents/*`,
+  `.claude/commands/*` and `.claude/CLAUDE.md` (Claude Code) and `.cursor/agents/*`
+  plus the `.cursor/rules/beadloom-*.mdc` rules (Cursor) from the **same** composed
+  bodies. What the two tools read is the same text; what differs is the harness:
+  the guard hooks in `.claude/settings.json` are Claude-only, and a Cursor agent reads
+  the commands as rules rather than invoking them as slash skills.
 - **MCP process-tools** for everything else. The process-tools are plain MCP
   tools, so any MCP client — Claude Code, Cursor, Continue, Windsurf — gets the
   same deterministic operations over the Beadloom substrate. This is the
@@ -708,8 +718,11 @@ beadloom setup-mcp --tool {claude-code,cursor,windsurf}
 ```
 
 This is the "one context for everyone" angle: the native scaffolds deliver the
-Claude-Code / Cursor personas + coordinator at parity, while the MCP tools
-deliver the tool-agnostic substrate any client can call.
+Claude-Code / Cursor personas and the coordinator from one composed text, while the
+MCP tools deliver the tool-agnostic substrate any client can call. `setup-mcp` and
+`init --bootstrap` write the server's command as `beadloom`, the name every clone
+resolves on its own PATH, and never the absolute path of the machine that wrote the
+file; `setup-mcp` says so when `beadloom` is not on PATH where it runs.
 
 ## The honest boundary
 

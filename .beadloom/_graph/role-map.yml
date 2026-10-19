@@ -19,5 +19,5 @@ edges:
     dst: flow-config
     kind: depends_on
   - src: role-map
-    dst: role-adapters
+    dst: tool-reach
     kind: depends_on

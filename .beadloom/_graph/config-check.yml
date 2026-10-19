@@ -15,3 +15,6 @@ edges:
   - src: config-check
     dst: role-duties
     kind: depends_on
+  - src: config-check
+    dst: tool-reach
+    kind: depends_on

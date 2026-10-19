@@ -133,8 +133,17 @@ declared tool(s)` is a sentence rather than an empty list, because an empty list
 heading reads as "nothing to say here". Before `.84` the block named the composed
 `CLAUDE.md` for every project, including one whose `flow.yml` declares `cursor` alone.
 Measured on this repository, which declares `claude` alone: 1 of 1 tool, 16 designations, 6
-of them rosters, 5 not-judged lines. On a `cursor`-only project: 1 of 1 tool,
-`.cursor/rules/beadloom-flow.md`, 1 designation, 2 not-judged lines.
+of them rosters, 5 not-judged lines. On a `cursor`-only project, measured before BDL-083
+S2h: 1 of 1 tool, `.cursor/rules/beadloom-flow.md`, 1 designation, 2 not-judged lines. Since
+S2h the `cursor` map is `.cursor/rules/beadloom-flow.mdc`, the composed core, so its counts
+are the `claude` map's for the same declaration (BDL-UX #356).
+
+`setup.py` holds the writers whose output an adopter commits, and since BDL-083 S2h two of
+them changed what they write. `setup-agentic-flow` writes the composed core and the four
+commands as `.cursor/rules/*.mdc` rules for a flow declaring `cursor`, and prints each
+(`Wrote <rule> (cursor)`). `setup-mcp` writes the server command as `beadloom` instead of
+`shutil.which("beadloom")`'s absolute path, and says so on stderr when `beadloom` is not on
+PATH where it runs.
 
 `guard.py` prints one line no other verdict has: for an `unresolved` outcome — the guard could
 not evaluate itself — it states, between the `not checked:` lines and the `fix:` line, that the

@@ -279,6 +279,48 @@ def blank_auto_regions(text: str) -> str:
     return "".join(out)
 
 
+def render_auto_regions(text: str, project_root: Path) -> tuple[str, list[str]]:
+    """Render every auto-managed region of ``text`` for ``project_root``.
+
+    Returns the rendered text and the names of the regions whose content
+    changed. A text with no marker but a ``## 0.1 Project:`` section gains the
+    markers first. One renderer for every file that carries the composed core:
+    ``.claude/CLAUDE.md`` through :func:`refresh_claude_md`, and the Cursor core
+    rule, whose body is that same text (BDL-UX #356, RFC D13).
+    """
+    markers = _parse_markers(text)
+    if not markers and _SECTION_01_RE.search(text):
+        text = _auto_insert_markers(text)
+        markers = _parse_markers(text)
+
+    renderers: dict[str, str] = {}
+    for section_name, _start, _end, _content in markers:
+        if section_name == "project-info":
+            renderers[section_name] = _render_project_info_section(project_root)
+        elif section_name == "doc-language":
+            renderers[section_name] = _render_doc_language_section(project_root)
+
+    changed: list[str] = []
+    # Process markers in reverse order so positions remain valid.
+    for section_name, start, end, current_content in reversed(markers):
+        new_content = renderers.get(section_name)
+        if new_content is None:
+            continue  # Unknown section — leave as is.
+
+        # Normalize for comparison: strip trailing whitespace.
+        if new_content.rstrip() == current_content.rstrip():
+            continue
+
+        changed.append(section_name)
+        replacement = (
+            f"<!-- beadloom:auto-start {section_name} -->\n"
+            f"{new_content}"
+            f"<!-- beadloom:auto-end -->\n"
+        )
+        text = text[:start] + replacement + text[end:]
+    return text, changed
+
+
 def refresh_claude_md(
     project_root: Path,
     *,
@@ -312,44 +354,7 @@ def refresh_claude_md(
     except OSError:
         return []
 
-    # If no markers but section 0.1 is present, auto-insert markers first.
-    markers = _parse_markers(text)
-    if not markers and _SECTION_01_RE.search(text):
-        text = _auto_insert_markers(text)
-        markers = _parse_markers(text)
-
-    if not markers:
-        return []
-
-    # Renderers for each known section.
-    renderers: dict[str, str] = {}
-    for section_name, _start, _end, _content in markers:
-        if section_name == "project-info":
-            renderers[section_name] = _render_project_info_section(project_root)
-        elif section_name == "doc-language":
-            renderers[section_name] = _render_doc_language_section(project_root)
-
-    # Rebuild the text, replacing changed sections.
-    changed: list[str] = []
-    # Process markers in reverse order so positions remain valid.
-    for section_name, start, end, current_content in reversed(markers):
-        new_content = renderers.get(section_name)
-        if new_content is None:
-            continue  # Unknown section — leave as is.
-
-        # Normalize for comparison: strip trailing whitespace.
-        if new_content.rstrip() == current_content.rstrip():
-            continue
-
-        changed.append(section_name)
-        # Build replacement block.
-        replacement = (
-            f"<!-- beadloom:auto-start {section_name} -->\n"
-            f"{new_content}"
-            f"<!-- beadloom:auto-end -->\n"
-        )
-        text = text[:start] + replacement + text[end:]
-
+    text, changed = render_auto_regions(text, project_root)
     if not changed:
         return []
 

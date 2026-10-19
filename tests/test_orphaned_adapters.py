@@ -99,12 +99,18 @@ class TestPopulation:
         found = orphaned_adapters(both_tools, _config("claude"))
         assert ".cursor/agents/legacy.md" in {o.file for o in found}
 
-    def test_the_cursor_orchestrator_pointer_is_not_an_orphaned_adapter(
-        self, both_tools: Path
-    ) -> None:
+    def test_the_cursor_rules_are_not_orphaned_adapters(self, both_tools: Path) -> None:
+        """The rules sit outside the agent directory, so the parent test never reads them.
+
+        Since BDL-083 S2h they are the composed core and commands rather than a
+        pointer (BDL-UX #356); an orphan check over them is a separate question.
+        """
+        from beadloom.onboarding.agentic_flow_setup import scaffold
+
+        scaffold(both_tools, include_agents=False, config=_config("claude", "cursor"))
         found = orphaned_adapters(both_tools, _config("claude"))
-        assert ".cursor/rules/beadloom-flow.md" in _manifest(both_tools)
-        assert ".cursor/rules/beadloom-flow.md" not in {o.file for o in found}
+        assert ".cursor/rules/beadloom-flow.mdc" in _manifest(both_tools)
+        assert not [o.file for o in found if o.file.startswith(".cursor/rules/")]
 
     def test_a_file_outside_every_tool_directory_is_not_an_orphan(self, both_tools: Path) -> None:
         _record(both_tools, "docs/notes.md", "# notes\n")

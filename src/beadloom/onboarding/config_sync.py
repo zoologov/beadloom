@@ -31,6 +31,7 @@ from beadloom.onboarding.agentic_flow_setup import (
     COMMAND_FILES,
     composed_claude_md,
     composed_command,
+    cursor_rules,
 )
 from beadloom.onboarding.composer import (
     CLAUDE_ARTIFACT_NAME,
@@ -63,7 +64,6 @@ from beadloom.onboarding.ignore_block import (
 )
 from beadloom.onboarding.role_adapters import (
     TOOL_AGENT_DIRS,
-    cursor_rules_relpath,
     generate_adapters,
     orphaned_adapters,
 )
@@ -80,6 +80,11 @@ from beadloom.onboarding.scanner import (
     generate_agents_md,
     refresh_claude_md,
     setup_rules_auto,
+)
+from beadloom.onboarding.tool_reach import (
+    cursor_command_rule_relpath,
+    cursor_core_rule_relpath,
+    layer_gaps,
 )
 
 if TYPE_CHECKING:
@@ -488,15 +493,38 @@ def _adapter_drifts(project_root: Path) -> list[ConfigDrift]:
     return drifts
 
 
-#: Kinds of canonical flow file, paired with their name tuple. The scaffold
-#: writes each under ``.claude/<kind>/<name>.md`` as the composition for that
-#: project's own flow, so the comparison is against a composition rather than
-#: against fixed bytes. Mirrors
-#: :data:`agentic_flow_setup.AGENT_FILES`/``COMMAND_FILES``.
-_AGENTIC_FLOW_KINDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("agents", AGENT_FILES),
-    ("commands", COMMAND_FILES),
-)
+def _declared_tools(project_root: Path) -> tuple[str, ...]:
+    """The tools this project's flow declares; ``claude`` when it declares none it can read.
+
+    ``claude`` for an absent or invalid ``flow.yml`` because that is the tool the
+    scaffold composed for before ``tools:`` existed. An invalid one is reported
+    by :func:`_flow_config_drift`, so the fallback names no false file.
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return ("claude",)
+    try:
+        return load_flow_config(project_root).tools
+    except FlowConfigError:
+        return ("claude",)
+
+
+def _canonical_flow_files(tools: tuple[str, ...]) -> tuple[str, ...]:
+    """Every flow file the scaffold writes for ``tools``, project-relative.
+
+    The population follows ``tools:``. Until BDL-083 S2h it was
+    ``.claude/agents/*`` and ``.claude/commands/*`` whatever the flow declared,
+    so a project composed for Cursor alone was warned five times that a
+    ``.claude/agents/<role>.md`` it was never given was missing, and the files a
+    Cursor agent does read were in no population at all (BDL-UX #356). The
+    ``.claude/commands/*`` set stays in for every flow because the scaffold
+    writes it for every flow.
+    """
+    files = [str(TOOL_AGENT_DIRS[tool] / f"{name}.md") for tool in tools for name in AGENT_FILES]
+    files.extend(f".claude/commands/{name}.md" for name in COMMAND_FILES)
+    if "cursor" in tools:
+        files.append(str(cursor_core_rule_relpath()))
+        files.extend(str(cursor_command_rule_relpath(name)) for name in COMMAND_FILES)
+    return tuple(files)
 
 
 @dataclass(frozen=True)
@@ -525,11 +553,9 @@ def _flow_scaffold(project_root: Path, manifest: dict[str, str]) -> _FlowScaffol
     """
     present: list[str] = []
     missing: list[str] = []
-    for kind, names in _AGENTIC_FLOW_KINDS:
-        for name in names:
-            relpath = f".claude/{kind}/{name}.md"
-            target = present if (project_root / relpath).is_file() else missing
-            target.append(relpath)
+    for relpath in _canonical_flow_files(_declared_tools(project_root)):
+        target = present if (project_root / relpath).is_file() else missing
+        target.append(relpath)
     adopted = bool(present) and (
         any(relpath in manifest for relpath in (*present, *missing))
         or (project_root / FLOW_CONFIG_RELPATH).is_file()
@@ -650,6 +676,13 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
         if drift is not None:
             drifts.append(drift)
 
+    if "cursor" in config.tools:
+        drifts.extend(
+            _cursor_rule_drifts(
+                project_root, config, scaffold_state, manifest, manifest_usable=manifest_usable
+            )
+        )
+
     if not flow_yml:
         # Without a flow.yml the role files come from this same function's own
         # scaffold path (`include_agents=True`), which since `beadloom-iur5`
@@ -679,6 +712,73 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
             if drift is not None:
                 drifts.append(drift)
     return drifts
+
+
+def _cursor_rule_drifts(
+    project_root: Path,
+    config: FlowConfig,
+    scaffold_state: _FlowScaffold,
+    manifest: dict[str, str],
+    *,
+    manifest_usable: bool,
+) -> list[ConfigDrift]:
+    """Drift for the ``.cursor/rules/*.mdc`` files a Cursor agent reads the flow from.
+
+    The same projection the commands and ``CLAUDE.md`` go through: a rule
+    Beadloom wrote that the composition has moved past is stale, a rule somebody
+    changed is hand-edited and never rewritten. The core rule's project layer for
+    a Cursor-only addition is ``.beadloom/flow/cursor/``, a command's is
+    ``.beadloom/flow/commands/`` (BDL-UX #356, RFC D13).
+    """
+    expected = cursor_rules(config, project_root)
+    kinds = {str(cursor_core_rule_relpath()): ("cursor", CLAUDE_ARTIFACT_NAME)}
+    kinds.update(
+        {str(cursor_command_rule_relpath(name)): ("commands", name) for name in COMMAND_FILES}
+    )
+    drifts: list[ConfigDrift] = []
+    for relpath, text in expected.items():
+        if relpath in scaffold_state.missing:
+            continue  # already reported as missing; there is nothing to diff
+        state = state_of(
+            project_root, relpath, expected=text, manifest=manifest, accounted=manifest_usable
+        )
+        kind, name = kinds[relpath]
+        drift = _state_drift(relpath, state, kind=kind, name=name)
+        if drift is not None:
+            drifts.append(drift)
+    return drifts
+
+
+def _layer_gap_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Report a declared tool whose files carry fewer layers than another declared tool's.
+
+    Measured on 9.0.0: a project composed for Claude and Cursor gave Claude the
+    core, the project layer, the STACK overlay and the four commands, gave Cursor
+    the role files and a pointer, and ``config-check`` compared nothing across
+    the two (BDL-UX #356). The comparison is
+    :func:`~beadloom.onboarding.tool_reach.layer_gaps`; this projects it.
+
+    ``error`` although it turns a project 9.0.0 composed for both tools red on
+    upgrade, and that is the reason for it rather than against it: the project
+    was missing the rules on one tool before the release, the release only
+    makes it visible, and ``--fix`` composes what is missing. The exit-code move
+    is recorded as one (RFC D13, the Public API section).
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return []
+    try:
+        config = load_flow_config(project_root)
+    except FlowConfigError:
+        return []  # reported by :func:`_flow_config_drift`
+    return [
+        ConfigDrift(
+            file=gap.file,
+            reason=gap.why,
+            severity="error",
+            remediation=gap.remediation,
+        )
+        for gap in layer_gaps(project_root, config)
+    ]
 
 
 def _flow_config_drift(project_root: Path) -> ConfigDrift | None:
@@ -722,6 +822,7 @@ def _project_layer_drift(project_root: Path) -> ConfigDrift | None:
     fragments: list[str] = []
     for kind, names in (
         ("claude", (CLAUDE_ARTIFACT_NAME,)),
+        ("cursor", (CLAUDE_ARTIFACT_NAME,)),
         ("commands", COMMAND_FILES),
         ("roles", ROLE_NAMES),
     ):
@@ -1179,6 +1280,7 @@ def refresh_agentic_flow_files(project_root: Path) -> list[str]:
     written.extend(f"commands/{name}.md" for name in result.commands_written)
     if result.claude_md is not None:
         written.append("CLAUDE.md")
+    written.extend(result.cursor_rules_written)
     return written
 
 
@@ -1196,7 +1298,8 @@ def _fix_surface(project_root: Path) -> tuple[str, ...]:
     paths |= {f".claude/commands/{name}.md" for name in COMMAND_FILES}
     for agent_dir in TOOL_AGENT_DIRS.values():
         paths |= {str(agent_dir / f"{role}.md") for role in ROLE_NAMES}
-    paths.add(str(cursor_rules_relpath()))
+    paths.add(str(cursor_core_rule_relpath()))
+    paths |= {str(cursor_command_rule_relpath(name)) for name in COMMAND_FILES}
     paths |= {config["path"] for config in _RULES_CONFIGS.values()}
     paths |= set(load_manifest(project_root))
     return tuple(sorted(paths))
@@ -1296,5 +1399,6 @@ def check_config_drift(
     drifts.extend(_ignore_block_drifts(project_root))
     drifts.extend(_composed_adapter_drifts(project_root))
     drifts.extend(_orphaned_adapter_drifts(project_root))
+    drifts.extend(_layer_gap_drifts(project_root))
 
     return sorted(drifts, key=lambda d: (d.file, d.reason))

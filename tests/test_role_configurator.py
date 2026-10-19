@@ -26,7 +26,6 @@ from beadloom.onboarding.flow_config import (
 )
 from beadloom.onboarding.role_adapters import (
     TOOL_AGENT_DIRS,
-    cursor_rules_relpath,
     generate_adapters,
 )
 from beadloom.onboarding.role_composer import (
@@ -239,7 +238,7 @@ class TestGenerateAdapters:
             )
         assert "claude" in res.agents
 
-    def test_writes_cursor_set_with_orchestrator_rule(self, tmp_path: Path) -> None:
+    def test_writes_the_cursor_role_set(self, tmp_path: Path) -> None:
         cfg = FlowConfig(
             tools=("cursor",), architecture="fsd", stack=("typescript", "vuejs")
         )
@@ -250,9 +249,8 @@ class TestGenerateAdapters:
             assert path.read_text(encoding="utf-8") == compose_role(
                 role, architecture="fsd", stack=["typescript", "vuejs"]
             )
-        rule = tmp_path / cursor_rules_relpath()
-        assert rule.is_file()
-        assert "cursor" in res.extra[0].lower() or rule.is_file()
+        # The composed core and commands are the scaffold's to write (#356).
+        assert res.extra == []
 
     def test_writes_both_tool_sets(self, tmp_path: Path) -> None:
         cfg = FlowConfig(

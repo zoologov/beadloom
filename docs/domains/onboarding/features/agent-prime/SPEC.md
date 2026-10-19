@@ -611,9 +611,22 @@ composed part of `CLAUDE.md` against `compose("claude", ...)`; the regions are
 generated per project and are supposed to move, so blanking them keeps the two
 checks from reporting each other's drift.
 
+### `render_auto_regions(text, project_root)`
+
+The renderer `refresh_claude_md` runs over the file, exposed over a string: returns the text
+with every auto-region rendered for `project_root` and the names of the regions that changed.
+Since BDL-083 S2h it is also what renders the core rule a Cursor agent reads
+(`.cursor/rules/beadloom-flow.mdc`), which is why that rule's body and `.claude/CLAUDE.md`
+are byte-identical (BDL-UX #356).
+
 ### `setup_mcp_auto(project_root)`
 
 Auto-detects editor (claude-code, cursor, windsurf) by marker files and creates MCP config. Returns editor name on success, or `None` if config already exists.
+
+The server's command is `MCP_SERVER_COMMAND`, `beadloom`, the name every clone resolves on
+its own PATH. Up to 9.0.0 it was `shutil.which("beadloom")`, so `init --bootstrap` wrote one
+machine's absolute path into a committed `.mcp.json` (BDL-UX #356 e). `setup-mcp` reads the
+same constant.
 
 ## Data Types
 

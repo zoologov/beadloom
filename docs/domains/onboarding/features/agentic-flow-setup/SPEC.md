@@ -160,6 +160,30 @@ destructive flag, naming nowhere the edit could safely go. The command prints
 both lists after the write summary; the `--force` line is gone. NO CALLER, NO
 CAPABILITY: a function nothing calls reads as "the feature exists".
 
+### The second tool reads the same flow (BDL-083 S2h, BDL-UX #356)
+
+For a flow declaring `cursor`, `scaffold()` writes the rules a Cursor agent reads the
+composed flow from: `.cursor/rules/beadloom-flow.mdc`, the core, and
+`.cursor/rules/beadloom-<cmd>.mdc` for each of the four commands. Each is an `alwaysApply`
+rule, and its body is byte-identical to `.claude/CLAUDE.md` (auto-regions rendered for the
+project by the same renderer) or to `.claude/commands/<cmd>.md`. `cursor_rules(config,
+project_root)` returns them; the write goes through the same policy as every other
+composed file, so a hand-edited rule is reported with the project-layer file the edit
+belongs in (`.beadloom/flow/cursor/CLAUDE.md` for the core, `.beadloom/flow/commands/` for
+a command) and left alone. `ScaffoldResult.cursor_rules_written` and
+`cursor_rules_skipped` name them.
+
+Up to 9.0.0 a project naming Cursor received the role files and a 17-line pointer, and the
+core and commands were written under `.claude/` only. A pointer left by 9.0.0,
+`.cursor/rules/beadloom-flow.md`, is reported by `orphaned_flow_files()` with its `rm -f`
+command and kept. The `.claude/` files are still written for every flow, Cursor-only
+included.
+
+The composed `task-init` text names the plan file for `bd create --graph` as
+`plan="$(mktemp -d)/plan.json"`, an absolute path outside the project, as the MCP
+`task_init` tool already does. The relative `plan.json` it named three times was written
+into the document folder and left there (BDL-UX #356 g).
+
 ### The configuration is recorded, not just resolved (BDL-UX #187)
 
 A first scaffold writes `.beadloom/flow.yml` — the selection every composed
@@ -189,10 +213,15 @@ Module `src/beadloom/onboarding/agentic_flow_setup.py`:
   — `config` is the caller's already-resolved selection (the CLI's, with its
   flags); omitting it re-resolves from disk
 - `composed_command(name, config, project_root) -> str`
-- `composed_claude_md(config, project_root, *, project_name) -> str`
+- `composed_claude_md(config, project_root, *, project_name, kind="claude") -> str` —
+  `kind="cursor"` composes the core a Cursor agent reads
+- `cursor_rules(config, project_root) -> dict[str, str]` — `{relpath: text}` of the
+  Cursor rules
 - `orphaned_flow_files(project_root) -> list[str]`
 - `ScaffoldResult` — files written/skipped, the CLAUDE.md path and changed
-  sections, plus `orphans`, `migration_notes` and `flow_config_written`
+  sections, `cursor_rules_written`/`cursor_rules_skipped`, plus `orphans`,
+  `migration_notes` and `flow_config_written`
+- `COMMAND_FILES` — the composer's `COMMAND_NAMES`, re-exported
 - `SUPERSEDED_COMMAND_FILES` — what a prior layout left in `.claude/commands/`
 
 ## Testing
