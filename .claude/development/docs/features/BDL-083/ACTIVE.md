@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** S1 fix 8 — `beadloom-tlgk` (the writer's wait primitive), then its review `beadloom-kwc3`, then the PR #106 merge (`beadloom-c5m5`)
-**Goal:** the CI failure on Linux closed by a fix, not a re-run
-**Done when:** fix 8 green on two levels and committed; its review OK; pushed; PR #106 CI green; merged
+**Bead:** S1P — `beadloom-c5m5`: PR #106 CI re-run after fix 8; merge on green
+**Goal:** S1 on `main`
+**Done when:** the PR merged with CI green; the S1 beads closed; the documents' S1 state recorded
 
 ## Progress
 
@@ -47,8 +47,8 @@
 | `beadloom-mnln` | S1R7 | done | OK 2026-10-19 at `6a6c7fc4`: 0 critical, 0 major, 2 minor (both docs → S1W: `mcp.md:362` mangled sentence; the Gate step-list copies incl. `mcp.md:351`), 3 nitpicks; 138 touched tests on the tree, 8 red on the pre-fix source |
 | `beadloom-hfxv` | S1W | done | `a883cccb`; CHANGELOG (MAJOR, Breaking with measurements), 12 docs, the surface 815 → 826; sync-check 0 stale / 0 surface-drift; `ci` rc 0 on the tree; doc-shape tests 2836 passed; two Breaking moves added to the RFC's Public API list (MCP `unowned` gone; `config-check` 0 → 1 on pre-release role files); left for code: `ci --help`, the `ai_techwriter` templates and the two workflow step-list comments, `ruff format` on two MCP files |
 | `beadloom-tlgk` | S1 fix 8 | done | `f205e95b`; the writer waits with `poll`, on a platform without it pauses 10 ms and retries; 2 tests, the descriptor-above-1024 one red first on the `select` version with CI's exact error (Darwin's limit is 1024 too: fd 1023 ok, 1024 raises); room 14671 passed + 1 of #311's class over 2951 files; tree 14718 passed / 0 failed, ruff, mypy, `ci` rc 0; Linux not measured (no docker daemon) |
-| `beadloom-kwc3` | S1R8 | ready | review of fix 8 launched 2026-10-19 on the bead id and `f205e95b` |
-| `beadloom-c5m5` | S1P | in progress | PR #106 open at `daeca647`; CI: gate, site-build, mutation-per-change, both locale legs and the adopter legs green; `tests (3.13)` red on Linux: 2 tests of `console_streams` raise `ValueError: filedescriptor out of range in select()` (fd 4066) → fix 8; merge after the fix lands and CI is green |
+| `beadloom-kwc3` | S1R8 | done | OK 2026-10-19 at `fbad81ed`: 0 critical, 0 major, 3 minor (test strength: the waits list discarded; waiting vs spinning untested; a low hard RLIMIT_NOFILE reads as ERROR), 1 nitpick (the fd leak) → `beadloom-ba9w.19` for S3a; the old wait fails the new test with CI's error word for word; 12 of 12 in a Darwin room |
+| `beadloom-c5m5` | S1P | in progress | PR #106; fix 8 pushed at `fbad81ed`+; CI re-running; merge on green |
 
 ## Notes
 
