@@ -1398,8 +1398,9 @@ _TOOLS = [
     mcp.Tool(
         name="complete_bead",
         description=(
-            "Refusing completion gate: run `beadloom ci` (reindex -> lint -> "
-            "sync-check -> config-check -> doctor) and, by default, the test suite. "
+            "Refusing completion gate: run `beadloom ci` (every step of the Gate; the "
+            "verdict names every step that ran and its result) and, by default, the test "
+            "suite. "
             "On PASS: close the bead (`bd close --suggest-next`) and return next-ready. "
             "On FAIL: do NOT close — return the findings so the agent must fix them. "
             "Advisory-strong only: the true enforcement point remains `beadloom ci` in CI."

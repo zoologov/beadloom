@@ -31,6 +31,8 @@ from beadloom.application.gate_ownership import (
     ATTRIBUTION_RULE,
     NO_TRACKER,
     OWNED,
+    PLACEMENT_OUTSIDE_FINAL,
+    PLACEMENT_UNREAD_FINAL,
     UNATTRIBUTED,
     derive_gate_ownership,
     gate_ownership_lines,
@@ -448,8 +450,13 @@ class TestTheMachineReadableClaimNamesTheCommits:
 
     The text surfaces name the commits whose ``Bead:`` line git reads no trailer from,
     and the JSON report and the MCP ``owners`` payload used to carry ``commits: 0`` and
-    nothing else. The ``claims`` entry now carries the same fact: by placement, in the
-    text surface's wording, a count and the commit hashes.
+    nothing else. The ``claims`` entry now carries the same fact: by placement, a count
+    and the commit hashes.
+
+    The placement is a token since S1 fix 7 (``beadloom-kdx7``; S1R6 Minor 1): a returned
+    value's vocabulary is public (``docs/guides/public-api.md`` items 3 and 4), and the
+    text surface's sentence was reworded twice in one slice, so the sentence travels
+    beside the token as ``stated`` and a script matches the token.
     """
 
     _SEPARATED = "beta moves\n\nBead: bd-1\n\nCo-Authored-By: X <x@example.invalid>"
@@ -479,12 +486,14 @@ class TestTheMachineReadableClaimNamesTheCommits:
                 "commits": 0,
                 "unread_bead_lines": [
                     {
-                        "placement": "outside the message's final paragraph",
+                        "placement": "outside_final",
+                        "stated": "outside the message's final paragraph",
                         "count": 2,
                         "commits": [second, first],
                     },
                     {
-                        "placement": "in a final paragraph git does not read as a trailer block",
+                        "placement": "unread_final",
+                        "stated": "in a final paragraph git does not read as a trailer block",
                         "count": 1,
                         "commits": [third],
                     },
@@ -510,9 +519,11 @@ class TestTheMachineReadableClaimNamesTheCommits:
         result = CliRunner().invoke(main, ["ci", "--project", str(root), "--format", "json"])
         (claim,) = json.loads(result.stdout)["ownership"]["claims"]
         assert claim["commits"] == 0
-        assert [(row["count"], row["commits"]) for row in claim["unread_bead_lines"]] == [
-            (2, [second, first]),
-            (1, [third]),
+        assert [
+            (row["placement"], row["count"], row["commits"]) for row in claim["unread_bead_lines"]
+        ] == [
+            ("outside_final", 2, [second, first]),
+            ("unread_final", 1, [third]),
         ]
 
     def test_the_mcp_owners_payload_carries_the_hashes(self, tmp_path: Path) -> None:
@@ -525,7 +536,45 @@ class TestTheMachineReadableClaimNamesTheCommits:
         claims = _finding_owners(result)["claims"]
         assert isinstance(claims, list)
         (claim,) = claims
-        assert [row["commits"] for row in claim["unread_bead_lines"]] == [[second, first], [third]]
+        assert [(row["placement"], row["commits"]) for row in claim["unread_bead_lines"]] == [
+            ("outside_final", [second, first]),
+            ("unread_final", [third]),
+        ]
+
+    def test_the_placement_vocabulary_is_the_two_tokens(self) -> None:
+        # A script matches these values; changing one is a MAJOR (public-api.md item 3).
+        assert (PLACEMENT_OUTSIDE_FINAL, PLACEMENT_UNREAD_FINAL) == (
+            "outside_final",
+            "unread_final",
+        )
+
+    def test_each_row_states_its_placement_in_the_words_the_text_report_prints(
+        self, tmp_path: Path
+    ) -> None:
+        root, _hashes = self._stray_project(tmp_path)
+        ownership = derive_gate_ownership(
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
+        )
+        (claim,) = ownership_payload(ownership)["claims"]
+        text = " ".join(gate_ownership_lines(ownership))
+        stated = [row["stated"] for row in claim["unread_bead_lines"]]
+        assert len(stated) == 2
+        assert all(sentence in text for sentence in stated), (stated, text)
+
+    def test_the_rows_are_present_whatever_commits_is(self, tmp_path: Path) -> None:
+        # The DOC's decision (S1R6 nitpick 1): a bound commit does not hide a misplaced one.
+        root = _project(tmp_path)
+        _commit(root, "src/beta/beta.py", "beta moves", bead="bd-1")
+        _commit(root, "src/beta/beta.py", self._SEPARATED.replace("moves", "moves again"))
+        misplaced = git(root, "rev-parse", "HEAD")
+        ownership = derive_gate_ownership(
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
+        )
+        (claim,) = ownership_payload(ownership)["claims"]
+        assert claim["commits"] == 1
+        assert [(row["placement"], row["commits"]) for row in claim["unread_bead_lines"]] == [
+            (PLACEMENT_OUTSIDE_FINAL, [misplaced])
+        ]
 
 
 class TestTheLinesNameTheRule:

@@ -1,8 +1,9 @@
 """Step implementations for `application/gate-ownership/ownership_by_changed_files.feature`.
 
 BDL-083 S1c (``beadloom-b23f``); the trailer binding since S1 fix 3 (``beadloom-7kas``,
-RFC D10). Thin: each step commits onto a real checkout of the
-monorepo fixture and runs the real ``beadloom ci`` over it, because the finding is about
+RFC D10); the placement token since S1 fix 7 (``beadloom-kdx7``). Thin: each step commits
+onto a real checkout of the monorepo fixture and runs the real ``beadloom ci`` over it,
+because the finding is about
 what one command's output says. The one double is the tracker adapter
 (``BdWorkTracker``): a scenario must not need a beads database in a temporary
 directory, nor claim a bead in the author's real tracker.
@@ -143,6 +144,20 @@ def _a_separated_trailer(world: dict[str, Any]) -> None:
     )
 
 
+@given(
+    "a later commit carries bead P's line in a final paragraph git does not read as a "
+    "trailer block"
+)
+def _an_unread_final_paragraph(world: dict[str, Any]) -> None:
+    # Half of the final paragraph is prose, so git reads no trailer block from it.
+    _commit(
+        world["root"],
+        _SHARED_FILE,
+        "// rounded down\n",
+        "the shared ratio\n\nsome prose about the ratio\nBead: bd-p",
+    )
+
+
 @given("bead P is claimed alone")
 def _bead_p_alone(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
     _claim(
@@ -240,13 +255,40 @@ def _p_claim_names_the_commit(world: dict[str, Any]) -> None:
             "commits": 0,
             "unread_bead_lines": [
                 {
-                    "placement": "outside the message's final paragraph",
+                    "placement": "outside_final",
+                    "stated": "outside the message's final paragraph",
                     "count": 1,
                     "commits": [head],
                 }
             ],
         }
     ]
+
+
+@then(
+    "the JSON report's claim for P gives each placement as a token, outside_final before "
+    "unread_final"
+)
+def _p_claim_placements_are_tokens(world: dict[str, Any]) -> None:
+    (claim,) = _ownership(world)["claims"]
+    assert claim["commits"] == 0
+    rows = claim["unread_bead_lines"]
+    assert [(row["placement"], row["count"]) for row in rows] == [
+        ("outside_final", 1),
+        ("unread_final", 1),
+    ]
+
+
+@then("each placement is stated in the words the human report prints")
+def _p_placements_are_stated(world: dict[str, Any]) -> None:
+    rich = " ".join(world["outputs"]["rich"].split())
+    (claim,) = _ownership(world)["claims"]
+    stated = [row["stated"] for row in claim["unread_bead_lines"]]
+    assert stated == [
+        "outside the message's final paragraph",
+        "in a final paragraph git does not read as a trailer block",
+    ]
+    assert all(sentence in rich for sentence in stated), rich
 
 
 @then("the MCP verdict's owners carry the same claims as the JSON report")

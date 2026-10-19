@@ -685,8 +685,10 @@ Module `src/beadloom/application/gate_ownership.py`:
   `complete_bead` tool's `owners`. Each `claims` entry is `{bead, commits,
   unread_bead_lines}`: `commits` counts the commits bound by the `Bead:` trailer, and
   `unread_bead_lines` lists the commits whose `Bead: <id>` line git reads no trailer from,
-  one row `{placement, count, commits}` per placement with the commit hashes newest first,
-  `[]` when there are none (BDL-083 S1 fix 6, the owner's ruling of 2026-10-19).
+  one row `{placement, stated, count, commits}` per placement with the commit hashes newest
+  first, `[]` when there are none (BDL-083 S1 fix 6, the owner's ruling of 2026-10-19).
+  `placement` is a token, `outside_final` or `unread_final`, and `stated` is the text
+  surface's sentence for it (S1 fix 7).
 
 ## Testing
 

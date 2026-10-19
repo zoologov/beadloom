@@ -39,9 +39,11 @@ read as a trailer block — so the reader gets the one fix rather than a denial.
 still bind nothing: the binding stays git's reading. That reading needs git 2.22 or
 later (``%(trailers:key=...,valueonly)``). The JSON report and the MCP ``owners`` payload
 carry the same fact on each ``claims`` entry, as ``unread_bead_lines``: one row per
-placement, in the text's wording, with the count and the commit hashes (the owner's
-ruling of 2026-10-19, S1 fix 6), so a machine reader does not get ``commits: 0`` and
-nothing else where the text names the misplaced line.
+placement, with the count and the commit hashes (the owner's ruling of 2026-10-19, S1
+fix 6), so a machine reader does not get ``commits: 0`` and nothing else where the text
+names the misplaced line. The placement is a token, ``outside_final`` or ``unread_final``,
+with the text's sentence beside it as ``stated`` (S1 fix 7): a returned value's vocabulary
+is public, and the sentence was reworded twice in the slice that introduced it.
 
 **The files a finding is about.** The files its locations name, with a document
 named in the documentation root's frame re-rooted onto the project's; a stale or
@@ -122,11 +124,20 @@ NO_HISTORY = (
 #: Why a finding that locates no file and names no node cannot be attributed.
 _NO_FILE = "it locates no file and names no node"
 
+#: The ``placement`` token of a ``Bead:`` line outside the message's final paragraph.
+PLACEMENT_OUTSIDE_FINAL = "outside_final"
+
+#: The ``placement`` token of a ``Bead:`` line in a final paragraph git reads no trailer from.
+PLACEMENT_UNREAD_FINAL = "unread_final"
+
 #: A ``Bead:`` line that stands outside the message's final paragraph.
 _OUTSIDE_FINAL = "outside the message's final paragraph"
 
 #: A ``Bead:`` line inside a final paragraph that git does not read as a trailer block.
 _UNREAD_FINAL = "in a final paragraph git does not read as a trailer block"
+
+#: Each placement token, and the words the text surface states it in.
+_STATED = {PLACEMENT_OUTSIDE_FINAL: _OUTSIDE_FINAL, PLACEMENT_UNREAD_FINAL: _UNREAD_FINAL}
 
 #: One or more blank lines: what separates two paragraphs of a commit message for git.
 _PARAGRAPH_BREAK = re.compile(r"\n(?:[ \t]*\n)+")
@@ -172,9 +183,12 @@ class BeadCommits:
     def unread_lines(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
         """Each placement where a ``Bead: <id>`` line was read as no trailer, with its commits.
 
-        In the wording the text surface uses; a placement no commit has is left out.
+        By its token; a placement no commit has is left out.
         """
-        placed = ((_OUTSIDE_FINAL, self.outside_final), (_UNREAD_FINAL, self.unread_final))
+        placed = (
+            (PLACEMENT_OUTSIDE_FINAL, self.outside_final),
+            (PLACEMENT_UNREAD_FINAL, self.unread_final),
+        )
         return tuple((where, hashes) for where, hashes in placed if hashes)
 
 
@@ -295,18 +309,18 @@ def _commits_of(bead: ClaimedBead, commits: Sequence[BranchCommit]) -> BeadCommi
         bead_id=bead.id,
         commits=len(own),
         paths=paths,
-        outside_final=tuple(sha for sha, where in placements if where == _OUTSIDE_FINAL),
-        unread_final=tuple(sha for sha, where in placements if where == _UNREAD_FINAL),
+        outside_final=tuple(sha for sha, where in placements if where == PLACEMENT_OUTSIDE_FINAL),
+        unread_final=tuple(sha for sha, where in placements if where == PLACEMENT_UNREAD_FINAL),
     )
 
 
 def _placement(message: str, line: re.Pattern[str]) -> str | None:
-    """Where *line* stands in *message*, by git's paragraphs, or ``None`` when it does not."""
+    """Where *line* stands in *message*, as a placement token, or ``None`` when it does not."""
     paragraphs = _PARAGRAPH_BREAK.split(message.strip())
     if line.search(paragraphs[-1]):
-        return _UNREAD_FINAL
+        return PLACEMENT_UNREAD_FINAL
     if any(line.search(paragraph) for paragraph in paragraphs[:-1]):
-        return _OUTSIDE_FINAL
+        return PLACEMENT_OUTSIDE_FINAL
     return None
 
 
@@ -465,13 +479,19 @@ def _claim_payload(claim: BeadCommits) -> dict[str, object]:
 
     ``commits`` stays the bound count. ``unread_bead_lines`` is the fact the text
     names beside it, one row per placement with its count and hashes, and ``[]``
-    when every ``Bead: <id>`` line was read as a trailer.
+    when every ``Bead: <id>`` line was read as a trailer. ``placement`` is the token a
+    script matches; ``stated`` is the text surface's sentence, for a reader.
     """
     return {
         "bead": claim.bead_id,
         "commits": claim.commits,
         "unread_bead_lines": [
-            {"placement": where, "count": len(hashes), "commits": list(hashes)}
+            {
+                "placement": where,
+                "stated": _STATED[where],
+                "count": len(hashes),
+                "commits": list(hashes),
+            }
             for where, hashes in claim.unread_lines()
         ],
     }
