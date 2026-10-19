@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** S1 fix cycle 2 — `beadloom-7kas` (fix 3: D10 the `Bead:` trailer, the flow template, Minors 4, 6, the nitpick), then `beadloom-ba9w.17` (fix 4: the MCP gaps of the #318 class), then S1R re-review
-**Goal:** the review's remaining findings closed, the owner's rulings D3/D10 implemented, the review re-run on the bead id
-**Done when:** each fix bead's tests green, two-level verification, committed by path under the landing lock with the `Bead:` trailer; `beadloom-pohj` re-reviewed to OK
+**Bead:** S1 fix cycle 3 — `beadloom-ba9w.17` (fix 4: the MCP `complete_bead` gaps of the #318 class), then S1R re-review on `beadloom-pohj`
+**Goal:** the review's remaining finding closed; the review re-run on the bead id over the fix commits
+**Done when:** the fix bead's tests green, two-level verification, committed by path under the landing lock with the `Bead:` trailer; `beadloom-pohj` re-reviewed to OK
 
 ## Progress
 
@@ -38,8 +38,8 @@
 | `beadloom-pohj` | S1R | in progress | ISSUES 2026-10-18: 0 critical, 2 major (post-step reports outside the boundary; debt report counts `info` as a warning), 7 minor, 1 nitpick; fix cycle opened; two rulings for the owner (D3 `refs:` paths; the commit-to-bead binding form) |
 | `beadloom-4m0w` | S1 fix 1 | done | `d8b26490`; the three post-step reports under `gate_boundary.derive_bounded`, a reason on the report, the steps' verdict kept; the lint line counts statements at info; room 14597 passed + 1 of #311's class; `ci` rc 0 on the tree |
 | `beadloom-ilrn` | S1 fix 2 | done | `d0b193a7`; `info` in neither count of the debt report; room 14583 passed + 1 of #311's class, tree 14647 passed; found BDL-UX #352 (TUI counts `warning`, the engine emits `warn`) |
-| `beadloom-7kas` | S1 fix 3 | ready | Minors 3, 4, 6 + nitpick; wave 2 of the fix cycle |
-| `beadloom-ba9w.17` | S1 fix 4 | ready | the MCP `complete_bead` gaps of the #318 class (not_run empty when the coverage report raised; the verdict room's census unbounded); after fix 3 (`cli-commands -> bd-seam`) |
+| `beadloom-7kas` | S1 fix 3 | done | `2a4de894`; D10: a commit is a bead's by its `Bead:` trailer only, the composed commit format carries it (flow template, `.claude/CLAUDE.md`, the five role files and `coordinator.md` recomposed); the `refs:` xfail deleted (D3); the source-root sentence hedged; the hook names public; the fixture rule renamed; attribution on this branch: 17 bindings over 14 beads by any mention -> 4 over 3 by the trailer (5 over 4 with this commit); room 14616 passed + 1 of #311's class; tree 14663 passed / 0 failed, `ci` rc 0 |
+| `beadloom-ba9w.17` | S1 fix 4 | ready | the MCP `complete_bead` gaps of the #318 class (not_run empty when the coverage report raised; the verdict room's census unbounded); wave 3 of the fix cycle |
 | `beadloom-hfxv` | S1W | blocked | blocked by S1R |
 | `beadloom-c5m5` | S1P | blocked | blocked by S1W |
 
@@ -56,5 +56,6 @@
 - Wave 5 note (2026-10-18): #344 is half closed — the base half by S1d; the other half (the brief falls back to the work item's declared axes and documents when the review bead declares none) was not in S1d's scope and stays open for S3 to place.
 - Wave 6 note (2026-10-18): the commit message of `d1b7e520` quotes "229899 of 229899" from an earlier run; the committed tree's number is 230075 (bead comment). Ten docs watching the CLI surface show surface-drift warnings; the ci-gate SPEC, `docs/guides/ci-setup.md` and CHANGELOG need the hook's new behaviour (S1W).
 - S1R rulings RULED by the owner on 2026-10-19: D3 amended (`refs:` attributes nothing), D10 added (the `Bead: <id>` trailer binds a commit to its bead; the flow template's commit format carries it). Fix 3 (`beadloom-7kas`) implements both; every commit from here carries the trailer. The questions as they were put: (1) RFC D3 says a bead's `refs:` paths attribute too; the declaration grammar reads node ids and no path, so the code attributes by commits only — amend D3 or implement the clause; a strict xfail pins the gap. (2) A commit is a bead's when its id appears anywhere in the message, while this project's commit format `[ISSUE-KEY] type:` names the work item and no bead — a declared form (a `Bead:` trailer) is the reviewer's recommendation; fix 3 states the limit in the printed rule meanwhile. Minor 2 (#344 fallback) stays for S3; Minor 7 + `public-api.md` item 5 (`info`, `nothing_to_ban`) + `cli.md:3374` go to S1W.
-- Fix wave 1 combined tree (coordinator, 2026-10-19, HEAD `d8b26490`): `beadloom ci` rc 0 (27 advisory axes warnings, #316); the full suite's result recorded below when it lands. Clean-room friction on a rename (the deleted path cannot be carried) is #335, S2d.
+- Fix wave 1 combined tree (coordinator, 2026-10-19, HEAD `d8b26490`): `beadloom ci` rc 0 (27 advisory axes warnings, #316); the full suite 14647 passed, 145 skipped, 14 xfailed, 0 failed (25 min, Darwin arm64). Clean-room friction on a rename (the deleted path cannot be carried) is #335, S2d.
+- Fix wave 2 (2026-10-19, HEAD `2a4de894`, gate owner `beadloom-7kas`): the tree 14663 passed, 0 failed, 145 skipped, 13 xfailed; ruff and mypy clean; `ci` rc 0 (27 advisory axes warnings, #316). Two items handed to S1W: the CHANGELOG entry for D10, and the ownership paragraph in `docs/services/cli.md` near line 3040, which still states the rule from before S1c.
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.

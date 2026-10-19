@@ -73,10 +73,11 @@ Parent: `beadloom-ba9w`.
 | S1e2 | `beadloom-jwfc` | dev: `ci` writes through a writer that survives `EAGAIN` on a non-blocking pipe; the hook tells a Gate that crashed from one that failed; a test that hands it a non-blocking pipe (D1; #226) | P0 | S1g |
 | S1f | `beadloom-6xdt` | dev: `issue-number check` and the Gate step share one function and one exit code (D5; #331) | P0 | S1g |
 | S1T | `beadloom-rupp` | test: each S1 entry's own `Command` re-run on the fixture or this repository, red first then green; the three MAJOR moves as tests; the full tree once | P0 | S1a–S1f |
-| S1R | `beadloom-pohj` | review: S1, bead id only; re-run after the fix beads | P0 | S1T, S1F1–S1F3 |
+| S1R | `beadloom-pohj` | review: S1, bead id only; re-run after the fix beads | P0 | S1T, S1F1–S1F4 |
 | S1F1 | `beadloom-4m0w` | dev: S1R Major 1 + Minor 5 — the post-step reports of the Gate inside the exception boundary; the lint summary counts statements at info | P0 | S1R (first pass) |
 | S1F2 | `beadloom-ilrn` | dev: S1R Major 2 — the debt report counts `info` as neither an error nor a warning | P0 | S1R (first pass) |
 | S1F3 | `beadloom-7kas` | dev: S1R Minors 3, 4, 6 and the nitpick — the printed ownership rule states its binding; the "can match none" sentence hedged; the hook names public; the fixture rule named for its glob | P0 | S1R (first pass) |
+| S1F4 | `beadloom-ba9w.17` | dev: S1R — the MCP `complete_bead` gaps of the #318 class: `not_run` when the coverage report raised, the verdict room's census bounded | P0 | S1F3 |
 | S1W | `beadloom-hfxv` | tech-writer: the ci-gate and rule-engine SPECs, `docs/guides/ci-setup.md` (the hook's new behaviour), `docs/guides/public-api.md` (the MAJOR moves), CHANGELOG | P0 | S1R |
 | S1P | `beadloom-c5m5` | coordinator: S1 PR, merge on green | P0 | S1W |
 | S2a | - | dev: `rooms` reads `.github/workflows/*.yml` and `.gitlab-ci.yml` as sources of legs, each room carrying its source; distributions by `**/pyproject.toml` under `scan_paths`; a CI the census cannot read is a named skip in `ci`; `gate-coverage` reads the same sources (D6; #332) | P0 | S1P |
