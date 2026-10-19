@@ -112,16 +112,22 @@ occur the sentence counts each. Those commits still bind nothing, and the JSON `
 `commits` still counts only the bound ones.
 
 The machine-readable surfaces carry the same fact (S1 fix 6, `beadloom-g64s`, the owner's
-ruling of 2026-10-19). Each `claims` entry holds `unread_bead_lines`, one row per placement:
-`{"placement": "outside_final", "stated": "outside the message's final paragraph", "count": 1,
-"commits": ["<hash>"]}`, with the hashes newest first. `placement` takes one of two tokens:
-`outside_final` (the line stands outside the message's final paragraph) or `unread_final` (it
-stands in a final paragraph git does not read as a trailer block). `stated` is the sentence the
-text surface prints for that placement. A script matches the token: the sentence was reworded
-twice in the slice that introduced it, and S1 fix 7 (`beadloom-kdx7`) took the placement off
-the sentence for that reason. A placement no commit has is left out, and the list is `[]` when
-every `Bead: <id>` line was read as a trailer. The rows are present whatever `commits` is, while the text names them only for a bead
-with no bound commit. Before this, a harness reading the MCP verdict got `commits: 0` and
+ruling of 2026-10-19). Each `claims` entry holds `unread_bead_lines`, one row per placement,
+with the hashes newest first:
+
+```json
+{"placement": "outside_final", "stated": "outside the message's final paragraph",
+ "count": 1, "commits": ["<hash>"]}
+```
+
+`placement` takes one of two tokens: `outside_final` (the line stands outside the message's
+final paragraph) or `unread_final` (it stands in a final paragraph git does not read as a
+trailer block). `stated` is the sentence the text surface prints for that placement. A script
+matches the token: the sentence was reworded twice in the slice that introduced it, and S1 fix
+7 (`beadloom-kdx7`) took the placement off the sentence for that reason. A placement no commit
+has is left out, and the list is `[]` when every `Bead: <id>` line was read as a trailer. The
+rows are present whatever `commits` is, while the text names them only for a bead with no
+bound commit. Before this, a harness reading the MCP verdict got `commits: 0` and
 nothing else where the text named the misplaced line.
 
 A tracker that cannot answer, a project with no index, and a git that cannot list the branch's
