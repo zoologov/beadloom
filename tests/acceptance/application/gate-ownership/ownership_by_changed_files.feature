@@ -1,5 +1,7 @@
 # BDL-083 S1c, beadloom-b23f (BDL-UX #329; RFC D3). The commit-to-bead binding is the
 # `Bead:` trailer since S1 fix 3, beadloom-7kas (RFC D10, the owner's ruling of 2026-10-19).
+# The JSON and MCP `claims` entry names a misplaced line's commits since S1 fix 6,
+# beadloom-g64s (D10's last paragraph, the owner's ruling of 2026-10-19).
 #
 # Measured on 9.0.0 on 2026-10-16 on an outside monorepo. A wave of two beads: each was
 # told it owned 9 findings, and all nine were of the first bead's work. A second work
@@ -62,3 +64,12 @@ Feature: a gate finding is owned by the bead whose commits changed its files
     When the gate reports on the checkout
     Then the layer finding is unattributed
     And it says P's commit carries the line outside the message's final paragraph, where git reads no trailer
+
+  @bead:beadloom-g64s
+  Scenario: a machine reader is told which commits carry a Bead line git reads no trailer from
+    Given the monorepo fixture on a working branch cut from the trunk
+    And a commit that makes a widget import the app layer carries bead P's trailer line above a separate attribution paragraph
+    And bead P is claimed alone
+    When the gate reports on the checkout
+    Then the JSON report's claim for P names that commit and where its line stands
+    And the MCP verdict's owners carry the same claims as the JSON report

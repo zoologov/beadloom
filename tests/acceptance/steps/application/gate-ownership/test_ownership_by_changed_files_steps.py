@@ -210,9 +210,10 @@ def _layer_unattributed(world: dict[str, Any]) -> None:
 @then("it says M owns no finding because no commit carries its trailer")
 def _m_owns_nothing(world: dict[str, Any]) -> None:
     assert all("bd-m" not in row["beads"] for row in _ownership(world)["findings"])
-    assert _ownership(world)["claims"] == [{"bead": "bd-m", "commits": 0}]
-    assert "bd-m owns no finding: no commit on main..HEAD carries `Bead: bd-m`" in (
-        world["outputs"]["rich"]
+    assert _ownership(world)["claims"] == [{"bead": "bd-m", "commits": 0, "unread_bead_lines": []}]
+    assert (
+        "bd-m owns no finding: no commit on main..HEAD carries `Bead: bd-m`"
+        in (world["outputs"]["rich"])
     )
 
 
@@ -222,12 +223,39 @@ def _m_owns_nothing(world: dict[str, Any]) -> None:
 )
 def _p_is_named_not_denied(world: dict[str, Any]) -> None:
     rich = world["outputs"]["rich"]
-    assert _ownership(world)["claims"] == [{"bead": "bd-p", "commits": 0}]
+    assert [claim["commits"] for claim in _ownership(world)["claims"]] == [0]
     assert (
         "bd-p owns no finding: 1 commit(s) on main..HEAD carry `Bead: bd-p` outside the "
         "message's final paragraph, where git reads no trailer"
     ) in " ".join(rich.split()), rich
     assert "no commit on main..HEAD carries `Bead: bd-p`" not in rich
+
+
+@then("the JSON report's claim for P names that commit and where its line stands")
+def _p_claim_names_the_commit(world: dict[str, Any]) -> None:
+    head = git(world["root"], "rev-parse", "HEAD").strip()
+    assert _ownership(world)["claims"] == [
+        {
+            "bead": "bd-p",
+            "commits": 0,
+            "unread_bead_lines": [
+                {
+                    "placement": "outside the message's final paragraph",
+                    "count": 1,
+                    "commits": [head],
+                }
+            ],
+        }
+    ]
+
+
+@then("the MCP verdict's owners carry the same claims as the JSON report")
+def _mcp_claims_are_the_json_s(world: dict[str, Any]) -> None:
+    from beadloom.services.mcp_server import handle_complete_bead
+
+    verdict = handle_complete_bead(world["root"], bead="bd-p", run_tests=False)
+    assert verdict["status"] == "FAIL", verdict
+    assert verdict["owners"]["claims"] == _ownership(world)["claims"]
 
 
 @then("no finding about the widget is owned by F2")

@@ -498,12 +498,13 @@ def ci(
     project: Path | None,
     tee: Path | None,
 ) -> None:
-    """Run the unified CI gate (reindex -> lint -> sync-check -> config-check -> federate).
+    """Run the unified CI gate: every check this project declares, in one verdict.
 
     Composes the existing checkers into one verdict with a single exit code:
-    0 when every step passed, 1 when any step failed or crashed. The output names
-    EVERY step that ran and its honest result (PASS/WARN/FAIL/SKIP/ERROR) — never a
-    green that silently skipped a step, and never a traceback in place of a verdict:
+    0 when every step passed, 1 when any step failed or crashed. The steps are not
+    listed here, because a copy of the list is the one that goes stale: the verdict
+    names every step that ran and its honest result (PASS/WARN/FAIL/SKIP/ERROR) — never
+    a green that silently skipped a step, and never a traceback in place of a verdict:
     a step that raises reads ERROR and the steps after it still run. ``--format``
     applies uniformly across all steps (findings share the agent-actionable {kind,
     rule, severity, locations, why, remediation} shape). With ``--hub`` the

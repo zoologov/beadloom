@@ -682,7 +682,11 @@ Module `src/beadloom/application/gate_ownership.py`:
 - `ownership_sentences(ownership) -> list[str]` — the sentences every surface prints, the
   rule first; `gate_ownership_lines(ownership)` is the rich block built from them.
 - `ownership_payload(ownership) -> dict` — the JSON report's `ownership`, and the MCP
-  `complete_bead` tool's `owners`.
+  `complete_bead` tool's `owners`. Each `claims` entry is `{bead, commits,
+  unread_bead_lines}`: `commits` counts the commits bound by the `Bead:` trailer, and
+  `unread_bead_lines` lists the commits whose `Bead: <id>` line git reads no trailer from,
+  one row `{placement, count, commits}` per placement with the commit hashes newest first,
+  `[]` when there are none (BDL-083 S1 fix 6, the owner's ruling of 2026-10-19).
 
 ## Testing
 

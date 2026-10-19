@@ -34,6 +34,7 @@ from beadloom.application.gate_ownership import (
     UNATTRIBUTED,
     derive_gate_ownership,
     gate_ownership_lines,
+    ownership_payload,
 )
 from beadloom.application.guards.contract import ClaimedBead
 from beadloom.services.cli import main
@@ -442,6 +443,91 @@ class TestABeadLineGitReadsNoTrailerFromIsNamedNotDenied:
         assert "1 commit(s) on main..HEAD carry `Bead: bd-1` outside the message's" in line
 
 
+class TestTheMachineReadableClaimNamesTheCommits:
+    """RFC D10's last paragraph, the owner's ruling of 2026-10-19 (S1 fix 6, ``beadloom-g64s``).
+
+    The text surfaces name the commits whose ``Bead:`` line git reads no trailer from,
+    and the JSON report and the MCP ``owners`` payload used to carry ``commits: 0`` and
+    nothing else. The ``claims`` entry now carries the same fact: by placement, in the
+    text surface's wording, a count and the commit hashes.
+    """
+
+    _SEPARATED = "beta moves\n\nBead: bd-1\n\nCo-Authored-By: X <x@example.invalid>"
+    _UNREAD = "beta moves once more\n\nsome prose\nBead: bd-1"
+
+    def _stray_project(self, tmp_path: Path) -> tuple[Path, list[str]]:
+        """A branch with two separated lines and one unread one; the hashes oldest first."""
+        root = _project(tmp_path)
+        hashes = []
+        for message in (
+            self._SEPARATED,
+            self._SEPARATED.replace("moves", "moves again"),
+            self._UNREAD,
+        ):
+            _commit(root, "src/beta/beta.py", message)
+            hashes.append(git(root, "rev-parse", "HEAD"))
+        return root, hashes
+
+    def test_the_claim_names_each_placement_s_commits_newest_first(self, tmp_path: Path) -> None:
+        root, (first, second, third) = self._stray_project(tmp_path)
+        ownership = derive_gate_ownership(
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
+        )
+        assert ownership_payload(ownership)["claims"] == [
+            {
+                "bead": "bd-1",
+                "commits": 0,
+                "unread_bead_lines": [
+                    {
+                        "placement": "outside the message's final paragraph",
+                        "count": 2,
+                        "commits": [second, first],
+                    },
+                    {
+                        "placement": "in a final paragraph git does not read as a trailer block",
+                        "count": 1,
+                        "commits": [third],
+                    },
+                ],
+            }
+        ]
+
+    def test_a_bound_commit_is_not_named_as_unread(self, tmp_path: Path) -> None:
+        root = _project(tmp_path)
+        _commit(root, "src/beta/beta.py", "beta moves", bead="bd-1")
+        ownership = derive_gate_ownership(
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
+        )
+        assert ownership_payload(ownership)["claims"] == [
+            {"bead": "bd-1", "commits": 1, "unread_bead_lines": []}
+        ]
+
+    def test_ci_format_json_carries_the_hashes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        root, (first, second, third) = self._stray_project(tmp_path)
+        _claim_beads(monkeypatch, _bead("bd-1"))
+        result = CliRunner().invoke(main, ["ci", "--project", str(root), "--format", "json"])
+        (claim,) = json.loads(result.stdout)["ownership"]["claims"]
+        assert claim["commits"] == 0
+        assert [(row["count"], row["commits"]) for row in claim["unread_bead_lines"]] == [
+            (2, [second, first]),
+            (1, [third]),
+        ]
+
+    def test_the_mcp_owners_payload_carries_the_hashes(self, tmp_path: Path) -> None:
+        from beadloom.services.mcp_server import _finding_owners
+
+        root, (first, second, third) = self._stray_project(tmp_path)
+        result = run_ci_gate(
+            root, fail_on=None, hub_exports=[], no_reindex=False, tracker=_Tracker(_bead("bd-1"))
+        )
+        claims = _finding_owners(result)["claims"]
+        assert isinstance(claims, list)
+        (claim,) = claims
+        assert [row["commits"] for row in claim["unread_bead_lines"]] == [[second, first], [third]]
+
+
 class TestTheLinesNameTheRule:
     def test_the_block_names_the_rule_the_base_and_each_owner_s_clause(
         self, tmp_path: Path
@@ -604,7 +690,7 @@ class TestTheSurfacesSayTheSameThing:
         assert ownership["base"] == "main"
         assert {row["verdict"] for row in ownership["findings"]} == {UNATTRIBUTED}
         assert ownership["claimed"] == ["bd-1"]
-        assert ownership["claims"] == [{"bead": "bd-1", "commits": 0}]
+        assert ownership["claims"] == [{"bead": "bd-1", "commits": 0, "unread_bead_lines": []}]
 
     def test_the_human_surface_prints_the_block_under_the_verdict(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

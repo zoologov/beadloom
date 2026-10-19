@@ -108,8 +108,17 @@ line stands, because the reader then needs one fix rather than a denial (S1 fix 
 final paragraph, where git reads no trailer` is the common case, a harness that appended its
 attribution as a paragraph of its own. `… in a final paragraph git does not read as a trailer
 block` is the other, a final paragraph that also holds a line that is not a trailer. When both
-occur the sentence counts each. Those commits still bind nothing, and the JSON `claims` entry
-still counts only the bound commits.
+occur the sentence counts each. Those commits still bind nothing, and the JSON `claims` entry's
+`commits` still counts only the bound ones.
+
+The machine-readable surfaces carry the same fact (S1 fix 6, `beadloom-g64s`, the owner's
+ruling of 2026-10-19). Each `claims` entry holds `unread_bead_lines`, one row per placement:
+`{"placement": "outside the message's final paragraph", "count": 1, "commits": ["<hash>"]}`,
+with the placement in the text surface's wording and the hashes newest first. A placement no
+commit has is left out, and the list is `[]` when every `Bead: <id>` line was read as a
+trailer. The rows are present whatever `commits` is, while the text names them only for a bead
+with no bound commit. Before this, a harness reading the MCP verdict got `commits: 0` and
+nothing else where the text named the misplaced line.
 
 A tracker that cannot answer, a project with no index, and a git that cannot list the branch's
 commits against the base are a `reason` on the whole report rather than a page of
@@ -128,7 +137,8 @@ Every surface prints the rule it attributed by and the base, from one wording
   `owned by <bead>: N finding(s), by the files its commits changed`, the claimed beads that
   own nothing, and the `unattributed` count.
 - `--format json` — `ownership: {reason, rule, base, claimed, none_owned, claims[],
-  findings[]}`, each finding carrying `verdict`, `beads`, `where`, `files` and `uncommitted`.
+  findings[]}`, each claim carrying `bead`, `commits` and `unread_bead_lines`, each finding
+  carrying `verdict`, `beads`, `where`, `files` and `uncommitted`.
 - `--format github` — the same sentences, one `::notice::` each.
 - the MCP `complete_bead` tool — `owners` on the FAIL payload, the JSON report's payload,
   where the agent reading it holds one of the claimed beads and needs to know whether the

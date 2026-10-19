@@ -37,7 +37,11 @@ bound commit, the commits holding a whole ``Bead: <id>`` line are counted by whe
 line stands — outside the final paragraph, or inside a final paragraph git does not
 read as a trailer block — so the reader gets the one fix rather than a denial. They
 still bind nothing: the binding stays git's reading. That reading needs git 2.22 or
-later (``%(trailers:key=...,valueonly)``).
+later (``%(trailers:key=...,valueonly)``). The JSON report and the MCP ``owners`` payload
+carry the same fact on each ``claims`` entry, as ``unread_bead_lines``: one row per
+placement, in the text's wording, with the count and the commit hashes (the owner's
+ruling of 2026-10-19, S1 fix 6), so a machine reader does not get ``commits: 0`` and
+nothing else where the text names the misplaced line.
 
 **The files a finding is about.** The files its locations name, with a document
 named in the documentation root's frame re-rooted onto the project's; a stale or
@@ -156,11 +160,22 @@ class BeadCommits:
     bead_id: str
     commits: int
     paths: frozenset[str]
-    outside_final: int = 0
-    """Unbound commits holding a ``Bead: <id>`` line outside the message's final paragraph."""
+    outside_final: tuple[str, ...] = ()
+    """Hashes of unbound commits holding a ``Bead: <id>`` line outside the final paragraph."""
 
-    unread_final: int = 0
-    """Unbound commits holding it in a final paragraph git does not read as trailers."""
+    unread_final: tuple[str, ...] = ()
+    """Hashes of unbound commits holding it in a final paragraph git does not read as trailers.
+
+    Both are in the branch's commit order, newest first.
+    """
+
+    def unread_lines(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        """Each placement where a ``Bead: <id>`` line was read as no trailer, with its commits.
+
+        In the wording the text surface uses; a placement no commit has is left out.
+        """
+        placed = ((_OUTSIDE_FINAL, self.outside_final), (_UNREAD_FINAL, self.unread_final))
+        return tuple((where, hashes) for where, hashes in placed if hashes)
 
 
 @dataclass(frozen=True)
@@ -272,7 +287,7 @@ def _commits_of(bead: ClaimedBead, commits: Sequence[BranchCommit]) -> BeadCommi
     paths = frozenset(path for commit in own for path in commit.paths)
     line = re.compile(rf"^(?i:{BEAD_TRAILER}):[ \t]*{re.escape(bead.id)}[ \t]*$", re.MULTILINE)
     placements = [
-        _placement(commit.message, line)
+        (commit.sha, _placement(commit.message, line))
         for commit in commits
         if bead.id not in commit.trailer_values
     ]
@@ -280,8 +295,8 @@ def _commits_of(bead: ClaimedBead, commits: Sequence[BranchCommit]) -> BeadCommi
         bead_id=bead.id,
         commits=len(own),
         paths=paths,
-        outside_final=placements.count(_OUTSIDE_FINAL),
-        unread_final=placements.count(_UNREAD_FINAL),
+        outside_final=tuple(sha for sha, where in placements if where == _OUTSIDE_FINAL),
+        unread_final=tuple(sha for sha, where in placements if where == _UNREAD_FINAL),
     )
 
 
@@ -429,9 +444,7 @@ def ownership_payload(ownership: GateOwnership) -> dict[str, object]:
         "base": ownership.base,
         "claimed": list(ownership.claimed),
         "none_owned": ownership.none_owned,
-        "claims": [
-            {"bead": claim.bead_id, "commits": claim.commits} for claim in ownership.claims
-        ],
+        "claims": [_claim_payload(claim) for claim in ownership.claims],
         "findings": [
             {
                 "rule": owner.rule,
@@ -443,6 +456,23 @@ def ownership_payload(ownership: GateOwnership) -> dict[str, object]:
                 "uncommitted": owner.uncommitted,
             }
             for owner in ownership.owners
+        ],
+    }
+
+
+def _claim_payload(claim: BeadCommits) -> dict[str, object]:
+    """One claimed bead: its bound commits, and the commits whose line git read no trailer from.
+
+    ``commits`` stays the bound count. ``unread_bead_lines`` is the fact the text
+    names beside it, one row per placement with its count and hashes, and ``[]``
+    when every ``Bead: <id>`` line was read as a trailer.
+    """
+    return {
+        "bead": claim.bead_id,
+        "commits": claim.commits,
+        "unread_bead_lines": [
+            {"placement": where, "count": len(hashes), "commits": list(hashes)}
+            for where, hashes in claim.unread_lines()
         ],
     }
 
@@ -464,15 +494,17 @@ def _owning_nothing(claim: BeadCommits, ownership: GateOwnership) -> str:
 
 def _stray_clause(claim: BeadCommits, ownership: GateOwnership) -> str:
     """The commits holding a ``Bead:`` line git read no trailer from, by where it stands."""
-    total = claim.outside_final + claim.unread_final
-    carry = f"{total} commit(s) on {ownership.base}..HEAD carry `{BEAD_TRAILER}: {claim.bead_id}`"
-    if not claim.unread_final:
+    outside, unread = len(claim.outside_final), len(claim.unread_final)
+    carry = (
+        f"{outside + unread} commit(s) on {ownership.base}..HEAD carry "
+        f"`{BEAD_TRAILER}: {claim.bead_id}`"
+    )
+    if not unread:
         return f"{carry} {_OUTSIDE_FINAL}, where git reads no trailer"
-    if not claim.outside_final:
+    if not outside:
         return f"{carry} {_UNREAD_FINAL}"
     return (
-        f"{carry} where git reads no trailer: {claim.outside_final} {_OUTSIDE_FINAL}, "
-        f"{claim.unread_final} {_UNREAD_FINAL}"
+        f"{carry} where git reads no trailer: {outside} {_OUTSIDE_FINAL}, {unread} {_UNREAD_FINAL}"
     )
 
 

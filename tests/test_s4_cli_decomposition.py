@@ -178,6 +178,14 @@ class TestGoldenHelp:
         assert "--hub" in out
         assert "--fail-on" in out
 
+    def test_ci_help_points_at_the_verdict_rather_than_copying_the_step_list(self) -> None:
+        # The copy "reindex -> lint -> sync-check -> config-check -> federate" went
+        # stale as steps were added (BDL-083 S1R pass 3); the verdict names every step
+        # that ran, so the help points there instead of keeping a second list.
+        out = self._help("ci")
+        assert " -> " not in out
+        assert "the verdict names every step" in " ".join(out.split())
+
     def test_sync_check_help(self) -> None:
         out = self._help("sync-check")
         assert "Check doc-code synchronization status." in out

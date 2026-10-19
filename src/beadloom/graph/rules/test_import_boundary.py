@@ -97,6 +97,24 @@ class _Selection:
     recorded_targets: int
 
 
+@dataclass(frozen=True)
+class _Liveness:
+    """Why a rule can judge nothing, or the import it would fire on with nothing to ban.
+
+    At most one of the two is set; both are ``None`` for a rule some recorded test
+    import's target already matches.
+    """
+
+    dead_reason: str | None = None
+    nothing_to_ban: str | None = None
+    #: The dead reason rests on an inferred source root, so the finding states an inference.
+    inferred: bool = False
+
+
+#: A rule some recorded test import's target already matches: live, with something to ban.
+_LIVE = _Liveness()
+
+
 def _select(conn: sqlite3.Connection, rule: TestImportBoundaryRule) -> _Selection:
     recorded = read_test_imports(conn) or []
     by_file: dict[str, list[TestImport]] = {}
@@ -121,9 +139,7 @@ def _select(conn: sqlite3.Connection, rule: TestImportBoundaryRule) -> _Selectio
 
     imports = [(i.file_path, i.line_number, i.import_path) for p in judged for i in by_file[p]]
     targets = {import_path_as_path(i.import_path) for i in recorded}
-    dead_reason, nothing_to_ban, dead_inferred = _liveness(
-        conn, rule, recorded, len(by_file) - outside_from, judged, targets
-    )
+    liveness = _liveness(conn, rule, recorded, len(by_file) - outside_from, judged, targets)
     return _Selection(
         imports=imports,
         judged_files=len(judged),
@@ -131,9 +147,9 @@ def _select(conn: sqlite3.Connection, rule: TestImportBoundaryRule) -> _Selectio
         outside_from=outside_from,
         unbound=unbound,
         outside_of=outside_of,
-        dead_reason=dead_reason,
-        dead_inferred=dead_inferred,
-        nothing_to_ban=nothing_to_ban,
+        dead_reason=liveness.dead_reason,
+        dead_inferred=liveness.inferred,
+        nothing_to_ban=liveness.nothing_to_ban,
         recorded_targets=len(targets),
     )
 
@@ -154,45 +170,31 @@ def _liveness(
     from_matches: int,
     judged: list[str],
     targets: set[str],
-) -> tuple[str | None, str | None, bool]:
-    """Why the rule can judge nothing, or the import it would fire on with nothing to ban.
-
-    At most one of the first two is set; both are ``None`` for a rule some recorded test
-    import's target already matches. The third says the reason rests on an inferred
-    source root, which the finding then states as an inference.
-    """
+) -> _Liveness:
+    """Whether the rule can judge anything, decided before its crossings are."""
     files = len({i.file_path for i in recorded})
     if not recorded:
-        return (
-            "the index records no test import — no test file was read, or none imports",
-            None,
-            False,
+        return _Liveness(
+            "the index records no test import — no test file was read, or none imports"
         )
     if from_matches == 0:
-        return (
-            f"its `from` glob '{rule.from_glob}' matches 0 of {files} test file(s) with imports",
-            None,
-            False,
+        return _Liveness(
+            f"its `from` glob '{rule.from_glob}' matches 0 of {files} test file(s) with imports"
         )
     if not judged and rule.of_matcher is not None:
-        return (
-            (
-                f"its `of` matcher ({rule.of_matcher.describe()}) selects no node that one of "
-                f"the {from_matches} test file(s) matching `from` is bound to"
-            ),
-            None,
-            False,
+        return _Liveness(
+            f"its `of` matcher ({rule.of_matcher.describe()}) selects no node that one of "
+            f"the {from_matches} test file(s) matching `from` is bound to"
         )
     if any(matches_import_target(target, rule.to_glob) for target in targets):
-        return None, None, False
+        return _LIVE
     reach = to_glob_reach(rule.to_glob, source_roots=_code_source_roots(conn, targets))
     if reach.unmatchable is None:
-        return None, reach.example, False
-    return (
+        return _Liveness(nothing_to_ban=reach.example)
+    return _Liveness(
         f"its `to` glob '{rule.to_glob}' matches 0 of {len(targets)} import path(s) "
         f"recorded for test files and {reach.claim}: {reach.unmatchable}",
-        None,
-        reach.inferred,
+        inferred=reach.inferred,
     )
 
 
