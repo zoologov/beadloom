@@ -108,6 +108,8 @@ def _payload(
         "invocation": list(build.invocation),
         "extras": build.extras,
         "environment": _environment_payload(build),
+        "distribution": _distribution_payload(build),
+        "limits": list(build.limits),
         "claim": status or None,
         "findings": findings,
         "exit_code": code,
@@ -127,6 +129,22 @@ def _environment_payload(build: RoomBuild) -> dict[str, Any] | None:
         "seconds": environment.seconds,
         "python": str(environment.python) if environment.python else None,
         "detail": environment.detail,
+        "lock": environment.lock,
+        "resolution": environment.resolution,
+    }
+
+
+def _distribution_payload(build: RoomBuild) -> dict[str, Any] | None:
+    """The Python project the room measures as data, or ``None`` on a refused room."""
+    distribution = build.distribution
+    if distribution is None:
+        return None
+    return {
+        "directory": distribution.directory,
+        "packaging": distribution.packaging,
+        "lock": distribution.lock,
+        "why": distribution.why,
+        "notes": list(distribution.notes),
     }
 
 
@@ -150,6 +168,13 @@ def _render(build: RoomBuild, status: str | None, findings: list[str]) -> None:
         "  extras the invocation's interpreter has: "
         + (build.extras or "not resolved — no verdict here can state them")
     )
+    if build.distribution is not None:
+        click.echo(
+            f"  measured project: {build.distribution.packaging} "
+            f"({build.distribution.why})"
+        )
+        for note in build.distribution.notes:
+            click.echo(f"    note: {note}")
     if build.environment is not None:
         click.echo(f"  environment: {build.environment.detail}")
     click.echo(f"  tracker status: {status or 'not answered'}")
@@ -158,13 +183,13 @@ def _render(build: RoomBuild, status: str | None, findings: list[str]) -> None:
     for line in build.invocation:
         click.echo(f"  {line}")
     click.echo("")
+    click.echo("What this room cannot answer:")
+    for limit in build.limits:
+        click.echo(f"  - {limit}")
     click.echo(
-        "What this room cannot answer: it carries no .git, so a freshness check "
-        "inside it has no baseline; and its verdict is a claim about these files "
-        "only, never about the combined tree — that measurement belongs to the "
-        "wave's gate owner. Report it in those words, with the extras above: on "
-        "this project one code base gave 0 mypy errors under `[all,dev]` and 82 "
-        "under `[dev]` (BDL-UX #236)."
+        "Report a verdict taken here in those words, with the extras and the environment "
+        "above: the extras an environment holds decide what a type check and a suite can "
+        "see (BDL-UX #236 measured 0 mypy errors against 82 on one code base)."
     )
     for finding in findings:
         click.echo(f"FINDING: {finding}", err=True)

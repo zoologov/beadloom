@@ -89,4 +89,4 @@ Feature: a clean room is derived from the bead that owns it and is built exactly
     When bead "beadloom-x.1" builds its clean room
     Then the room is built
     And the invocation sets PYTHONPATH to the room's own sources
-    And the invocation prints where beadloom was imported from
+    And the invocation prints where the project's own module "thing" was imported from

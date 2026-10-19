@@ -1059,18 +1059,22 @@ def declared_extra_names(project_root: Path) -> tuple[str, ...]:
 
 
 def leg_installs(project_root: Path) -> tuple[LegInstall, ...]:
-    """Every job of this project's workflows that installs it, and what it names.
+    """Every job of this project's pipeline that installs it, and what it names.
 
     Deliberately NOT the satisfied set :func:`extras_satisfied_by` produces. That
     one needs the analysed project's distribution installed under the running
     interpreter, so it is unresolved for a project this tool is merely pointed
-    at; the typed names are read out of the workflow file and are available
+    at; the typed names are read out of the pipeline file and are available
     whether or not anything is installed. A room is built from these, and
     compared with the other.
+
+    The pipeline is the one :func:`pipeline_sources` chooses for every reader, so a
+    GitLab project's jobs are legs here as they are rooms in the census (BDL-UX #333:
+    a room in a GitLab monorepo found no leg and built no environment).
     """
-    directory = Path(project_root) / WORKFLOW_DIR
+    sources = pipeline_sources(Path(project_root))
     installs: list[LegInstall] = []
-    for path in sorted(p for p in directory.glob("*.y*ml") if p.is_file()):
+    for path in sources.workflows:
         rel = path.relative_to(project_root).as_posix()
         jobs, failure = load_jobs(path)
         if failure is not None:
@@ -1082,7 +1086,24 @@ def leg_installs(project_root: Path) -> tuple[LegInstall, ...]:
             installs.append(
                 LegInstall(source=f"{rel}: {name}", extras=tuple(sorted(typed)))
             )
+    if sources.gitlab is not None:
+        installs.extend(_gitlab_leg_installs(sources.gitlab))
     return tuple(installs)
+
+
+def _gitlab_leg_installs(path: Path) -> list[LegInstall]:
+    """The jobs of a GitLab pipeline that install the project, and the extras they type."""
+    pipeline, _ = load_gitlab_pipeline(path)
+    if pipeline is None:
+        return []
+    installs: list[LegInstall] = []
+    for job in pipeline.jobs:
+        typed = _extras_of_command("\n".join(job.commands))
+        if typed is not None:
+            installs.append(
+                LegInstall(source=f"{GITLAB_CI_FILE}: {job.name}", extras=tuple(sorted(typed)))
+            )
+    return installs
 
 
 def _extras_of_command(run: str) -> set[str] | None:

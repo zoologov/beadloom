@@ -577,10 +577,16 @@ did. With an editable install, running the suite from inside the room under the
 project's environment imports the TREE's source; the first run that did it was
 caught from a warning path rather than from a failure, which is a green that is
 a measurement of the tree wearing a room's name. `PYTHONPATH` pointing at the
-room's own `src` is the fix, and the `import beadloom` line is the check.
+room's own sources is the fix, and the import line is the check. Both are read from
+the project the room measures (below), never from a template: the sources are that
+project's `src` when it keeps one and its directory otherwise, the import names the
+first package found there, and the suite runs over the `testpaths` the project's
+pytest configuration declares, or over its directory. A project with no importable
+package gets the suite line alone.
 
 The interpreter the invocation names is the ROOM's own when it has one, the
-project's `.venv` when it keeps one, and `sys.executable` otherwise. The room's
+measured project's `.venv` in the tree when it keeps one, the root's `.venv` after
+that, and `sys.executable` otherwise. The room's
 comes first because isolating the files and leaving the interpreter to the
 machine is BDL-UX #256, below. The second distinction was found by running the
 command on this bead: `sys.executable` is the CLI PROCESS's interpreter, and
@@ -671,6 +677,53 @@ forty-second step and a one-second step reported as one fact is how a cost that
 decides whether rooms get built at all becomes invisible. A failure is reported
 rather than retried under the other installer: falling back would hide which
 resolver produced the verdict.
+
+### The project the room measures, and the lock it is installed from
+
+BDL-083 S2b, RFC D6, BDL-UX #333 and #311. Measured on the first outside adopter's
+monorepo, anonymised as `tests/fixtures/monorepo`: the Python lives in `backend/` with
+its own `pyproject.toml` and `uv.lock`, the pipeline is `.gitlab-ci.yml`, and
+`clean-room` built no environment — `leg_installs` read `.github/workflows` only — while
+its hint printed `PYTHONPATH=<room>/src`, `-m pytest <room>/tests` and `import beadloom`,
+three things that room does not hold. On this repository the room installed with `uv pip
+install -e`, which resolves afresh: gherkin-official 42 against the lock's 29 failed
+`test_our_own_suite_parses_the_way_the_reference_parser_reads_it` in every room of
+BDL-083 S1 and S2 and in no CI leg, and S2a's room saw mypy 2.4.0 where the lock pins
+2.3.1.
+
+**Which project.** `room_distribution.owning_distribution(project_root, carry)` takes
+the Python projects `infrastructure.python_projects.find_python_projects` finds under
+the scan paths and chooses the DEEPEST one that holds a carried file. When the carried
+files fall into several projects, the one holding the most is chosen and the others are
+named in `notes`, because one room builds one environment. When no carried file falls
+into a project, the room measures the project the room census reads. The choice and its
+reason are printed as `measured project:` and returned as `distribution` in `--json`.
+
+**Which legs.** `leg_installs` reads the pipeline `pipeline_sources` chooses for every
+reader, so a GitLab job whose commands run `uv sync` or `pip install` is a leg as it is a
+room in the census. Where both `.github/workflows` and `.gitlab-ci.yml` exist, the second
+stays set aside, as S2a decided.
+
+**From the lock.** A project that keeps a `uv.lock` beside its packaging is installed
+with `uv sync --frozen`, one `--extra` per chosen extra, in the room's copy of the
+project's directory, with `UV_PROJECT_ENVIRONMENT` pointed at that copy's `.venv` and
+`VIRTUAL_ENV` dropped, so a parent shell cannot redirect the sync into the tree's own
+environment. The interpreter is the measured project's environment in the tree when it
+keeps one, and otherwise `uv` chooses by the project's `requires-python`: a monorepo's
+root keeps no environment, and the CLI process's interpreter may not satisfy the
+project. A project without a lock, or a machine without `uv`, is resolved afresh by the
+installer described above. `environment.lock` is the lock the environment was installed
+from or `null`, and `environment.resolution` says which in words — "installed from
+`backend/uv.lock` with `uv sync --frozen`", or "resolved afresh outside any lock (no
+uv.lock beside …)" — so a room whose versions are not the lock's cannot pass as one
+whose versions are.
+
+**What a room cannot answer** is a list, `RoomBuild.limits` and `limits` in `--json`,
+printed under `What this room cannot answer:`. The first entry names the cost of the
+missing `.git` to a suite, not only to a freshness check: on the adopter's monorepo the
+project's own test that reads a commit hash failed in a room that had named the
+freshness check alone, so the failure read as the bead's. The second is the claim's
+scope — these files, never the combined tree.
 
 ### What each medium is checked against
 
@@ -868,13 +921,17 @@ not tell them apart.
 | `room_owner(path)` | the bead a room records, or `None` when the directory is not a room |
 | `room_request(path)` | what that room was asked for, or `None` when the directory is not a room |
 | `RoomBuild.reused` | the request parts this build took from the record of the room it replaced |
-| `room_invocation(path)` | how to run a suite in the room, and how to check that you did |
+| `room_invocation(path, *, project_root, distribution)` | how to run the measured project's suite in the room, and how to check that you did — read from that project |
+| `owning_distribution(project_root, carry)` | the Python project that owns the carried files, or the one the room census reads |
+| `RoomDistribution` | that project's directory, packaging, lock and the reason it was chosen |
+| `RoomBuild.distribution` | the project the room measures |
+| `RoomBuild.limits` | what a verdict taken in the room cannot answer, beginning with the missing `.git` |
 | `RoomBuild.extras` | the optional extras the room's interpreter has, or `None` when nothing could look |
 | `RoomBuild.environment` | the interpreter the room holds, or the reason it holds none |
-| `extras_a_room_installs(project_root, asked)` | what the caller named, or the union of every extra the legs install |
-| `build_environment(*, room, choice, otherwise)` | create the room's interpreter and install its sources, or say why there is none |
-| `room_python(room)` | the interpreter inside a room, or `None` |
-| `site_packages(room)` | where that interpreter keeps its installed metadata |
+| `extras_a_room_installs(project_root, asked, *, distribution_root)` | what the caller named, or the union of every extra the legs install |
+| `build_environment(*, room, choice, otherwise, distribution, interpreter)` | install the measured project's interpreter from its lock with `uv sync --frozen`, or afresh where there is no lock, or say why there is none |
+| `room_python(room, directory)` | the interpreter of the project at that directory in a room, or `None` |
+| `site_packages(room, directory)` | where that interpreter keeps its installed metadata |
 | `check_media(records, *, owned_paths, environment)` | one verdict per medium |
 | `derive_population(asked, census, *, work_item)` | the work item these beads sit under, and the ready ones the plan was not asked about |
 | `beads_under(work_item, beads)` | every bead a work item holds, by the tracker's own parent and blocker edges |
@@ -907,6 +964,7 @@ every scenario runs without a `bd` binary on the machine.
 | `media.py` | what a wave shares no matter how independent its code is |
 | `clean_room.py` | build the room a bead owns, and refuse a directory this run did not create |
 | `room_env.py` | the interpreter a room's verdict is taken under, and which extras it holds |
+| `room_distribution.py` | the Python project a room measures, and the hint that runs its suite there |
 | `media_checks.py` | whether each medium's plan-time precondition holds |
 | `population.py` | the beads a plan could have been about, and which of them it was not asked about |
 | `running.py` | the work already running under a plan's work item, and which planned beads wait for it |
@@ -938,7 +996,12 @@ verdicts, the per-wave gap and the remedies that read the work item's document;
 once-only build as executable scenarios; `tests/acceptance/features/room_environment.feature` states
 the interpreter it holds, over real environments, and `tests/test_room_environment.py` covers what
 those cannot reach — the second installer, a create step that fails, and the install spellings this
-repository's own workflows do not use. `tests/test_cli_clean_room.py` covers `beadloom clean-room`'s
+repository's own workflows do not use.
+`tests/acceptance/application/wave-plan/clean_room_of_a_monorepo.feature` builds a real room on the
+monorepo fixture from its own `uv.lock` and runs the hint as printed, and
+`tests/unit/application/waves/test_room_distribution.py` covers the project choice, the install
+command each arrangement produces and the hint for layouts no scenario builds.
+`tests/test_cli_clean_room.py` covers `beadloom clean-room`'s
 two output shapes and its three exit codes;
 `tests/acceptance/application/verdict-room/room_extras.feature` states that a room records the
 extras its interpreter has, and `tests/integration/application/rooms/test_room_extras.py` covers the

@@ -208,10 +208,16 @@ interpreter of its own); `2` no room was built. A tracker that answers and has n
 bead is a refusal rather than a finding, because a room named after a bead nobody holds cannot
 say whose it is; a tracker that cannot be reached is a finding, because refusing there would
 make the command unusable wherever `bd` is not installed. The room's own limits are printed
-beside its path — no `.git`, so a freshness check inside has no baseline, a verdict that is a
-claim about its files and never about the combined tree, and the optional extras its
+beside its path, as the list `application.waves.ROOM_LIMITS` holds and `limits` in `--json` —
+no `.git`, so a freshness check inside has no baseline and a test or tool that reads git fails
+or skips there for that reason and not for the bead's (BDL-UX #333), and a verdict that is a
+claim about its files and never about the combined tree — followed by the optional extras its
 invocation's interpreter has, because those and not the files decided 82 mypy errors against 0
-on one code base (BDL-UX #235, #243, #181, #236).
+on one code base (BDL-UX #235, #243, #181, #236). Since BDL-083 S2b the human shape also prints
+the `measured project:` the room was built for, and the `Measure in the room` hint is that
+project's — its sources, its first package and its `testpaths` — rather than this repository's
+layout; `--json` carries it as `distribution`, and `environment.lock` / `environment.resolution`
+say whether the environment came from the project's `uv.lock`.
 
 Since BDL-UX #256 the command also gives the room the interpreter that verdict is taken
 under: `--extras` names the optional extras to install, the default being the union of every

@@ -44,19 +44,37 @@ measurement: ``python -m venv`` plus ``pip install -e`` measured 1.84 s and 39.6
 s against ``uv``'s 0.08 s and 1.1 s over the same tree. The room records which
 installer built it, because a 40-second step and a 1-second step being reported
 as one fact is how a cost that matters becomes invisible.
+
+**From the lock, where the project keeps one** (BDL-083 S2b, BDL-UX #311 and #333).
+``uv pip install -e`` resolves afresh and ignores ``uv.lock``, so a room's
+environment held what the index offered that day rather than what CI installs:
+gherkin-official 42 against the lock's 29 failed one self-check test in every room
+of BDL-083 S1 and S2 and in no CI leg, and mypy 2.4.0 against the lock's 2.3.1
+reported an error the tree did not. A project that keeps a ``uv.lock`` beside its
+packaging is therefore installed with ``uv sync --frozen`` in the room's copy of that
+project's directory, which is what this project's CI legs and the monorepo fixture's
+pipeline run. A project without a lock, or a machine without ``uv``, is resolved
+afresh as before, and the environment's ``resolution`` says so in words, naming the
+packaging it resolved — the room cannot be held to a lock that is not there, and it
+can refuse to let that pass unsaid.
 """
 
 # beadloom:feature=wave-plan
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from beadloom.application.rooms import ALL_EXTRAS, declared_extra_names, leg_installs
+
+if TYPE_CHECKING:
+    from beadloom.application.waves.room_distribution import RoomDistribution
 
 #: The directory a room keeps its interpreter in, beside the sources it holds.
 ENVIRONMENT_DIR = ".venv"
@@ -74,6 +92,13 @@ INSTALLER_UV = "uv"
 INSTALLER_STDLIB = "venv+pip"
 
 _TEXT_CODEC = "utf-8"
+
+#: The directory a room's measured project sits in when it is the room's root.
+_ROOT = "."
+
+#: Variables a parent environment may set that would point ``uv sync`` at an environment
+#: outside the room — the tree's own, in the worst case.
+_FOREIGN_ENVIRONMENT = ("VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT")
 
 #: How much of a failed install's own words the record keeps. Enough to name the
 #: cause, short enough that a room's record stays a record.
@@ -117,6 +142,13 @@ class RoomEnvironment:
     source: str = SOURCE_UNDERIVED
     installer: str | None = None
     seconds: float = 0.0
+    #: The measured project's directory, POSIX and relative to the room.
+    distribution: str = _ROOT
+    #: The lock the environment was installed from, or ``None`` when it was resolved
+    #: afresh (BDL-UX #311): a room whose versions are not the lock's says so here.
+    lock: str | None = None
+    #: How the environment's versions were chosen, in words a report can quote.
+    resolution: str = ""
 
     @property
     def label(self) -> str:
@@ -125,12 +157,18 @@ class RoomEnvironment:
 
 
 def extras_a_room_installs(
-    project_root: Path, asked: tuple[str, ...] | None = None
+    project_root: Path,
+    asked: tuple[str, ...] | None = None,
+    *,
+    distribution_root: Path | None = None,
 ) -> ExtrasChoice:
     """The extras a room installs: what the caller named, or what the legs do.
 
     A caller naming them wins, because reproducing one particular leg is the
-    reason to override a union and the union cannot express it.
+    reason to override a union and the union cannot express it. A leg asking for
+    every extra is expanded from the packaging of *distribution_root*, the measured
+    project's directory, which is the project root unless the room measures a
+    project below it.
     """
     if asked is not None:
         return ExtrasChoice(
@@ -149,7 +187,9 @@ def extras_a_room_installs(
         )
     named = {extra for leg in legs for extra in leg.extras}
     if ALL_EXTRAS in named:
-        named = (named - {ALL_EXTRAS}) | set(declared_extra_names(project_root))
+        named = (named - {ALL_EXTRAS}) | set(
+            declared_extra_names(distribution_root or project_root)
+        )
     return ExtrasChoice(
         extras=tuple(sorted(named)),
         source=SOURCE_LEGS,
@@ -161,17 +201,12 @@ def extras_a_room_installs(
     )
 
 
-def room_python(room: Path) -> Path | None:
-    """The interpreter inside *room*, or ``None`` when the room holds none."""
-    venv = Path(room) / ENVIRONMENT_DIR
-    for relative in (Path("bin") / "python", Path("Scripts") / "python.exe"):
-        candidate = venv / relative
-        if candidate.exists():
-            return candidate
-    return None
+def room_python(room: Path, directory: str = _ROOT) -> Path | None:
+    """The interpreter of the project at *directory* in *room*, or ``None``."""
+    return _python_in(_environment_dir(room, directory))
 
 
-def site_packages(room: Path) -> tuple[str, ...]:
+def site_packages(room: Path, directory: str = _ROOT) -> tuple[str, ...]:
     """Where *room*'s interpreter keeps its installed metadata.
 
     Returned as a search path rather than read here, because the extras a room
@@ -179,7 +214,7 @@ def site_packages(room: Path) -> tuple[str, ...]:
     (:func:`~beadloom.application.rooms.installed_extras`), and this module only
     tells it where to look.
     """
-    venv = Path(room) / ENVIRONMENT_DIR
+    venv = _environment_dir(room, directory)
     found = [p for p in sorted(venv.glob("lib/python*/site-packages")) if p.is_dir()]
     windows = venv / "Lib" / "site-packages"
     if windows.is_dir():
@@ -188,95 +223,196 @@ def site_packages(room: Path) -> tuple[str, ...]:
 
 
 def build_environment(
-    *, room: Path, choice: ExtrasChoice, otherwise: str
+    *,
+    room: Path,
+    choice: ExtrasChoice,
+    otherwise: str,
+    distribution: RoomDistribution | None = None,
+    interpreter: str | None = None,
 ) -> RoomEnvironment:
-    """Build *room*'s own interpreter and install the project into it.
+    """Build the measured project's own interpreter in *room* and install it there.
 
     *otherwise* is the interpreter the room's verdict would be taken under if
-    this fails — the project's own environment. It is both the version the new
-    interpreter is created from, so the room measures on the interpreter it
-    replaces rather than on whichever one is first on the path, and the one
-    named in the sentence a room without an environment reports.
+    this fails — the project's own environment. It is named in the sentence a
+    room without an environment reports, and it is the version a lock-less
+    environment is created from, so the room measures on the interpreter it
+    replaces rather than on whichever one is first on the path.
+
+    *distribution* is the project measured, at the room's root when absent.
+    *interpreter* is the environment that project keeps in the tree: a locked
+    sync is created from it when there is one, and otherwise ``uv`` chooses by the
+    project's ``requires-python``, because a monorepo's root keeps no environment
+    and the process's own interpreter may not satisfy the project at all.
     """
+    directory = distribution.directory if distribution is not None else _ROOT
     if choice.source == SOURCE_UNDERIVED:
         return RoomEnvironment(
-            detail=(
-                f"no environment was built: {choice.why}. This room's verdict is "
-                f"therefore taken under {otherwise}, which is the project's own "
-                "environment and not this room's — name it when reporting"
-            ),
+            detail=_borrowed(choice.why, otherwise),
             source=choice.source,
+            distribution=directory,
         )
     started = time.monotonic()
-    installer = INSTALLER_UV if shutil.which("uv") else INSTALLER_STDLIB
-    failure = _create(room, installer, otherwise) or _install(room, installer, choice)
+    plan = _plan(room, distribution)
+    if plan.locked:
+        failure = _run(plan.sync(choice, interpreter), plan.target, env=plan.env)
+    else:
+        failure = _create(plan, otherwise) or _install(plan, choice)
     seconds = round(time.monotonic() - started, 3)
     if failure is not None:
         # A half-built environment is worse than none: it is an interpreter that
         # exists, answers imports, and holds an unknown subset of what a verdict
         # here needs. The same rule the room itself follows.
-        shutil.rmtree(Path(room) / ENVIRONMENT_DIR, ignore_errors=True)
+        shutil.rmtree(plan.venv, ignore_errors=True)
         return RoomEnvironment(
-            detail=(
-                f"no environment was built: {failure}. This room's verdict is "
-                f"therefore taken under {otherwise}, which is the project's own "
-                "environment and not this room's — name it when reporting"
-            ),
+            detail=_borrowed(failure, otherwise),
             extras=choice.extras,
             source=choice.source,
-            installer=installer,
+            installer=plan.installer,
             seconds=seconds,
+            distribution=directory,
+            lock=plan.lock,
+            resolution=plan.resolution,
         )
     return RoomEnvironment(
         built=True,
         detail=(
-            f"built by {installer} in {seconds}s with extras {choice.label} — "
-            f"{choice.why}"
+            f"built by {plan.installer} in {seconds}s with extras {choice.label}, "
+            f"{plan.resolution} — {choice.why}"
         ),
-        python=room_python(room),
+        python=room_python(room, directory),
         extras=choice.extras,
         source=choice.source,
-        installer=installer,
+        installer=plan.installer,
         seconds=seconds,
+        distribution=directory,
+        lock=plan.lock,
+        resolution=plan.resolution,
     )
 
 
-def _create(room: Path, installer: str, otherwise: str) -> str | None:
-    """Create the room's virtual environment, or say why there is none."""
-    venv = Path(room) / ENVIRONMENT_DIR
-    if installer == INSTALLER_UV:
-        command = ["uv", "venv", "--python", otherwise, str(venv)]
+@dataclass(frozen=True)
+class _InstallPlan:
+    """Where the measured project's environment goes, and how its versions are chosen."""
+
+    target: Path
+    venv: Path
+    installer: str
+    lock: str | None
+    resolution: str
+    env: dict[str, str]
+
+    @property
+    def locked(self) -> bool:
+        return self.lock is not None
+
+    def sync(self, choice: ExtrasChoice, interpreter: str | None) -> list[str]:
+        """``uv sync --frozen`` with the chosen extras, from the tree's interpreter if any."""
+        command = ["uv", "sync", "--frozen"]
+        for extra in choice.extras:
+            command += ["--extra", extra]
+        if interpreter is not None:
+            command += ["--python", interpreter]
+        return command
+
+
+def _plan(room: Path, distribution: RoomDistribution | None) -> _InstallPlan:
+    """Decide where the environment goes and whether its versions come from a lock."""
+    directory = distribution.directory if distribution is not None else _ROOT
+    target = Path(room) if directory == _ROOT else Path(room) / directory
+    venv = target / ENVIRONMENT_DIR
+    env = {k: v for k, v in os.environ.items() if k not in _FOREIGN_ENVIRONMENT}
+    env["UV_PROJECT_ENVIRONMENT"] = str(venv)
+    has_uv = shutil.which("uv") is not None
+    installer = INSTALLER_UV if has_uv else INSTALLER_STDLIB
+    packaging = distribution.packaging if distribution is not None else "pyproject.toml"
+    lock = distribution.lock if distribution is not None else None
+    if lock is not None and has_uv:
+        return _InstallPlan(
+            target=target,
+            venv=venv,
+            installer=installer,
+            lock=lock,
+            resolution=f"installed from {lock} with `uv sync --frozen`",
+            env=env,
+        )
+    why = (
+        f"uv is not on PATH, so {lock} is not read"
+        if lock is not None
+        else f"no uv.lock beside {packaging}"
+    )
+    return _InstallPlan(
+        target=target,
+        venv=venv,
+        installer=installer,
+        lock=None,
+        resolution=(
+            f"resolved afresh outside any lock ({why}), so its versions are the index's "
+            "today and not necessarily what CI installs"
+        ),
+        env=env,
+    )
+
+
+def _borrowed(cause: str, otherwise: str) -> str:
+    """The sentence a room without an environment of its own reports."""
+    return (
+        f"no environment was built: {cause}. This room's verdict is therefore taken "
+        f"under {otherwise}, which is the project's own environment and not this "
+        "room's — name it when reporting"
+    )
+
+
+def _environment_dir(room: Path, directory: str) -> Path:
+    """The environment directory of the project at *directory* in *room*."""
+    base = Path(room) if directory == _ROOT else Path(room) / directory
+    return base / ENVIRONMENT_DIR
+
+
+def _create(plan: _InstallPlan, otherwise: str) -> str | None:
+    """Create the project's virtual environment in the room, or say why there is none."""
+    if plan.installer == INSTALLER_UV:
+        command = ["uv", "venv", "--python", otherwise, str(plan.venv)]
     else:
-        command = [otherwise, "-m", "venv", str(venv)]
-    return _run(command, room)
+        command = [otherwise, "-m", "venv", str(plan.venv)]
+    return _run(command, plan.target)
 
 
-def _install(room: Path, installer: str, choice: ExtrasChoice) -> str | None:
+def _install(plan: _InstallPlan, choice: ExtrasChoice) -> str | None:
     """Install the room's own sources into it, or say why they are not there."""
-    python = room_python(room)
+    python = _python_in(plan.venv)
     if python is None:
         return (
-            f"{installer} reported no failure and the room holds no interpreter "
-            f"under {ENVIRONMENT_DIR}"
+            f"{plan.installer} reported no failure and the room holds no interpreter "
+            f"under {plan.venv}"
         )
     spec = f".[{','.join(choice.extras)}]" if choice.extras else "."
-    if installer == INSTALLER_UV:
+    if plan.installer == INSTALLER_UV:
         command = ["uv", "pip", "install", "--python", str(python), "-e", spec]
     else:
         command = [str(python), "-m", "pip", "install", "-q", "-e", spec]
-    return _run(command, room)
+    return _run(command, plan.target)
 
 
-def _run(command: list[str], room: Path) -> str | None:
+def _python_in(venv: Path) -> Path | None:
+    """The interpreter of the environment at *venv*, or ``None``."""
+    for relative in (Path("bin") / "python", Path("Scripts") / "python.exe"):
+        candidate = venv / relative
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _run(command: list[str], cwd: Path, *, env: dict[str, str] | None = None) -> str | None:
     """Run one install step in the room, and report its failure in its own words."""
     try:
         result = subprocess.run(  # noqa: S603
             command,
-            cwd=room,
+            cwd=cwd,
             capture_output=True,
             encoding=_TEXT_CODEC,
             errors="surrogateescape",
             check=False,
+            env=env,
         )
     except OSError as exc:
         return f"`{' '.join(command[:2])}` could not be run ({exc})"

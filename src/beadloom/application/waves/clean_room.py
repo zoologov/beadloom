@@ -93,11 +93,17 @@ from typing import Any
 
 from beadloom.application.rooms import ExtraSet, installed_extras
 from beadloom.application.waves.media import room_for
+from beadloom.application.waves.room_distribution import (
+    RoomDistribution,
+    interpreter_for,
+    owning_distribution,
+    room_invocation,
+    tree_interpreter,
+)
 from beadloom.application.waves.room_env import (
     RoomEnvironment,
     build_environment,
     extras_a_room_installs,
-    room_python,
     site_packages,
 )
 
@@ -122,10 +128,16 @@ REFUSAL_FILE_MISSING = "file_missing"
 REFUSAL_NOT_A_FILE = "not_a_file"
 REFUSAL_FILE_OUTSIDE = "file_outside_the_project"
 
-#: Where a project keeps the environment its suite runs under, POSIX first.
-_PROJECT_INTERPRETERS = (
-    Path(".venv") / "bin" / "python",
-    Path(".venv") / "Scripts" / "python.exe",
+#: What a verdict taken in any room cannot answer, stated beside every room it is true of.
+#: The first is BDL-UX #333's last clause: a project's own test that reads a commit hash
+#: failed in a room and the room had named only the freshness check, so the failure read
+#: as the bead's.
+ROOM_LIMITS = (
+    "it carries no .git: a freshness check inside it has no baseline, and a test or tool "
+    "that reads git (a commit's hash, the history, a diff) fails or skips here for that "
+    "reason and not for the bead's",
+    "its verdict is a claim about these files only, never about the combined tree: that "
+    "measurement belongs to the wave's gate owner",
 )
 
 _TEXT_CODEC = "utf-8"
@@ -161,6 +173,10 @@ class RoomBuild:
     #: caller who did not type a list has to be able to see that one was used,
     #: or the room's contents become a fact with no stated source.
     reused: tuple[str, ...] = ()
+    #: The Python project the room measures, and how it was chosen (BDL-UX #333).
+    distribution: RoomDistribution | None = None
+    #: What a verdict taken in this room cannot answer, in words a report can quote.
+    limits: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -249,63 +265,6 @@ def _names(value: object) -> tuple[str, ...]:
     return tuple(item for item in value if isinstance(item, str) and item)
 
 
-def room_invocation(path: Path, *, project_root: Path | None = None) -> tuple[str, ...]:
-    """How to run a suite IN the room, and how to check that you did.
-
-    The measured trap this closes (found building the room for ``beadloom-67t1``):
-    with an editable install, running the suite from inside the room under the
-    project's environment imports the TREE's source. The first attempt did
-    exactly that and it showed up in a warning path rather than in a failure — a
-    green that is a measurement of the tree wearing a room's name. ``PYTHONPATH``
-    pointing at the room's own ``src`` fixes it, and the import line is the check:
-    it must print a path under the room.
-
-    The room's OWN interpreter is named when it has one (BDL-UX #256), and the
-    project's otherwise. ``PYTHONPATH`` is kept in both spellings: under the
-    room's own interpreter it is redundant, and it is the line whose output is
-    the check, so removing it would remove the evidence rather than the need.
-    """
-    room = Path(path)
-    sources = room / "src"
-    interpreter = _interpreter(project_root, room=room)
-    return (
-        f"PYTHONPATH={sources} {interpreter} -c "
-        f'"import beadloom; print(beadloom.__file__)"  # must print a path under {room}',
-        f"PYTHONPATH={sources} {interpreter} -m pytest {room / 'tests'}",
-    )
-
-
-def _interpreter(project_root: Path | None, *, room: Path | None = None) -> str:
-    """The interpreter a verdict in the room is taken under.
-
-    The room's own comes first when it has one: isolating the FILES and leaving
-    the interpreter to the machine is BDL-UX #256, where a correctly-named room
-    returned a verdict decided by whatever happened to be installed. The rest of
-    this docstring is about the fallback, which is what a room without an
-    environment of its own still names.
-
-    Found by using this command on its own bead. ``sys.executable`` is the
-    interpreter of the CLI PROCESS, and Beadloom installed as a ``uv`` tool runs
-    under ``~/.local/share/uv/tools/beadloom/bin/python3`` — an interpreter with
-    neither ``pytest`` nor the project's development dependencies, so the
-    invocation handed back could not be run at all. What the suite runs under is
-    the environment the project keeps beside itself, so that is what is named
-    when it exists, and ``sys.executable`` is the fallback for a project that
-    keeps none.
-    """
-    if room is not None:
-        own = room_python(room)
-        if own is not None:
-            return str(own)
-    if project_root is not None:
-        root = Path(project_root)
-        for relative in _PROJECT_INTERPRETERS:
-            candidate = root / relative
-            if candidate.exists():
-                return str(candidate)
-    return sys.executable
-
-
 def build_room(
     *,
     bead_id: str,
@@ -344,6 +303,7 @@ def build_room(
     if refusal is not None:
         return refusal
 
+    distribution = owning_distribution(root, request.carry)
     commit = _head_commit(root)
     if commit is None:
         return _refused(
@@ -361,9 +321,20 @@ def build_room(
     try:
         _archive_head(root, path)
         carried = _carry(root, path, request.carry)
-        built_environment = _environment(root, path, request)
-        held = installed_extras(root, search_path=site_packages(path))
-        _write_marker(bead_id, root, path, commit, request, held, built_environment)
+        built_environment = _environment(root, path, request, distribution)
+        held = installed_extras(
+            distribution.under(root),
+            search_path=site_packages(path, distribution.directory),
+        )
+        _write_marker(
+            bead_id,
+            root,
+            path,
+            commit,
+            request,
+            held,
+            (built_environment, distribution),
+        )
     except (OSError, subprocess.SubprocessError, tarfile.TarError):
         # A half-built room is worse than none: it is a directory the next
         # attempt would refuse, for a reason that has nothing to do with a
@@ -382,10 +353,12 @@ def build_room(
         ),
         commit=commit,
         carried=carried,
-        invocation=room_invocation(path, project_root=root),
+        invocation=room_invocation(path, project_root=root, distribution=distribution),
         extras=held.label if held.resolved else None,
         environment=built_environment,
         reused=reused,
+        distribution=distribution,
+        limits=ROOM_LIMITS,
     )
 
 
@@ -422,9 +395,11 @@ def _remembering(
     )
 
 
-def _environment(root: Path, path: Path, request: RoomRequest) -> RoomEnvironment:
-    """Give the room its own interpreter, or say which one it borrows instead."""
-    otherwise = _interpreter(root)
+def _environment(
+    root: Path, path: Path, request: RoomRequest, distribution: RoomDistribution
+) -> RoomEnvironment:
+    """Give the measured project its own interpreter in the room, or say which it borrows."""
+    otherwise = interpreter_for(root, directory=distribution.directory)
     if not request.environment:
         return RoomEnvironment(
             detail=(
@@ -436,8 +411,12 @@ def _environment(root: Path, path: Path, request: RoomRequest) -> RoomEnvironmen
         )
     return build_environment(
         room=path,
-        choice=extras_a_room_installs(root, request.extras),
+        choice=extras_a_room_installs(
+            root, request.extras, distribution_root=distribution.under(root)
+        ),
         otherwise=otherwise,
+        distribution=distribution,
+        interpreter=tree_interpreter(root, distribution.directory),
     )
 
 
@@ -618,7 +597,7 @@ def _write_marker(
     commit: str,
     request: RoomRequest,
     extras: ExtraSet,
-    environment: RoomEnvironment,
+    measured: tuple[RoomEnvironment, RoomDistribution],
 ) -> None:
     """Record who the room belongs to and what a measurement in it is true of.
 
@@ -644,6 +623,7 @@ def _write_marker(
     """
     from beadloom import __version__
 
+    environment, distribution = measured
     record = {
         "bead": bead_id,
         "room": path.name,
@@ -661,7 +641,7 @@ def _write_marker(
             # prints. Recording the project's here while printing the room's
             # would make the record disagree with the command that wrote it,
             # about the one fact BDL-UX #256 is that a report gets wrong.
-            "invocation": _interpreter(root, room=path),
+            "invocation": interpreter_for(root, room=path, directory=distribution.directory),
             "built_by": {
                 "executable": sys.executable,
                 "version": ".".join(str(part) for part in sys.version_info[:3]),
@@ -684,7 +664,17 @@ def _write_marker(
             "seconds": environment.seconds,
             "python": str(environment.python) if environment.python else None,
             "detail": environment.detail,
+            "lock": environment.lock,
+            "resolution": environment.resolution,
         },
+        "distribution": {
+            "directory": distribution.directory,
+            "packaging": distribution.packaging,
+            "lock": distribution.lock,
+            "why": distribution.why,
+            "notes": list(distribution.notes),
+        },
+        "limits": list(ROOM_LIMITS),
         "beadloom": __version__,
     }
     (path / ROOM_MARKER).write_text(

@@ -42,7 +42,6 @@ from beadloom.application.waves.clean_room import (
     RoomBuild,
     RoomRequest,
     build_room,
-    room_invocation,
     room_owner,
     room_path,
     room_request,
@@ -158,6 +157,11 @@ from beadloom.application.waves.population import (
     population_findings,
     population_lines,
     ready_under,
+)
+from beadloom.application.waves.room_distribution import (
+    RoomDistribution,
+    owning_distribution,
+    room_invocation,
 )
 from beadloom.application.waves.room_env import (
     ENVIRONMENT_DIR,
@@ -283,6 +287,7 @@ __all__ = [
     "OverrideOutcome",
     "Population",
     "RoomBuild",
+    "RoomDistribution",
     "RoomEnvironment",
     "RoomRequest",
     "RunningConflict",
@@ -315,6 +320,7 @@ __all__ = [
     "finding_for",
     "load_overrides",
     "lock_sites",
+    "owning_distribution",
     "parse_declaration",
     "plan_waves",
     "population_findings",

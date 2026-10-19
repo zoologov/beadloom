@@ -136,7 +136,9 @@ record would state the extras of an environment no verdict was taken in.
 
 **And the typed names are a second, different answer.** `typed_extras_of_job(job)` returns what
 a leg's install step NAMES, before the satisfied set is computed from it, and
-`leg_installs(project_root)` is that read over every job of every workflow. The census needs
+`leg_installs(project_root)` is that read over every job of the pipeline `pipeline_sources`
+chooses — the GitHub workflows, or `.gitlab-ci.yml` where they are absent — so a room in a GitLab
+monorepo finds the job that installs its project (BDL-083 S2b, BDL-UX #333). The census needs
 the satisfied set so two identical environments are not reported as two rooms; a room BUILDER
 needs the typed names, because an install command takes names and not a satisfied set — and it
 cannot use the satisfied set at all for a project whose distribution the running interpreter

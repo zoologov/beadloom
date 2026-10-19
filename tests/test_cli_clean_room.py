@@ -122,7 +122,23 @@ class TestBuilding:
 
         room = tmp_path / "rooms" / room_for(BEAD)
         assert f"PYTHONPATH={room / 'src'}" in result.output
-        assert "import beadloom" in result.output
+        # The project's own module, read from its sources, and not this tool's (BDL-UX #333).
+        assert "import thing;" in result.output
+        assert "import beadloom" not in result.output
+
+    def test_the_text_names_what_a_room_without_git_costs_a_suite(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """BDL-UX #333: a project's test that reads a commit hash failed in a room, and the
+        room had named the freshness check only, so the failure read as the bead's."""
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+        result = _run(root, tmp_path / "rooms")
+
+        cannot = result.output.split("What this room cannot answer:", 1)[1]
+        assert "a test or tool that reads git" in cannot
+        assert "for that reason and not for the bead's" in cannot
+        assert "on this project" not in cannot
 
     def test_a_carried_file_is_the_working_trees_copy(
         self, tmp_path: Path, bd: Any
