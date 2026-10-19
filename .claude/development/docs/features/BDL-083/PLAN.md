@@ -81,7 +81,9 @@ Parent: `beadloom-ba9w`.
 | S1F5 | `beadloom-ba9w.18` | dev: S1R pass 2 — the `Bead:` trailer in the message's final paragraph (format, fragments, checklist); the ownership report names a line git reads no trailer from; the MCP verdict reads the gate's room; the source-root lead-in; two nitpicks | P0 | S1R (second pass) |
 | S1F6 | `beadloom-g64s` | dev: the JSON and MCP `claims` entry names the commits whose `Bead:` line git reads no trailer from; the pass-3 nitpicks | P0 | S1R (third pass) |
 | S1R6 | `beadloom-sywb` | review: fix 6, bead id only | P0 | S1F6 |
-| S1W | `beadloom-hfxv` | tech-writer: the ci-gate and rule-engine SPECs, `docs/guides/ci-setup.md` (the hook's new behaviour), `docs/guides/public-api.md` (the MAJOR moves), CHANGELOG | P0 | S1R, S1R6 |
+| S1F7 | `beadloom-kdx7` | dev: `placement` a token with the sentence beside it; the `complete_bead` tool description points at the verdict | P0 | S1R6 |
+| S1R7 | `beadloom-mnln` | review: fix 7, bead id only | P0 | S1F7 |
+| S1W | `beadloom-hfxv` | tech-writer: the ci-gate and rule-engine SPECs, `docs/guides/ci-setup.md` (the hook's new behaviour), `docs/guides/public-api.md` (the MAJOR moves), CHANGELOG | P0 | S1R, S1R6, S1R7 |
 | S1P | `beadloom-c5m5` | coordinator: S1 PR, merge on green | P0 | S1W |
 | S2a | - | dev: `rooms` reads `.github/workflows/*.yml` and `.gitlab-ci.yml` as sources of legs, each room carrying its source; distributions by `**/pyproject.toml` under `scan_paths`; a CI the census cannot read is a named skip in `ci`; `gate-coverage` reads the same sources (D6; #332) | P0 | S1P |
 | S2b | - | dev: `clean-room` builds the environment of the distribution that owns the carried files from its `uv.lock` (`uv sync --frozen`), derives the "Measure in the room" hint from it, names the no-`.git` limit (D6; #333; `beadloom-ba9w.1` #311 closes inside) | P0 | S2a |
