@@ -36,6 +36,7 @@ graph TD
     S1P --> S2d[S2d carry deletions, HEAD-difference report]
     S1P --> S2e[S2e the nested-root refusal]
     S1P --> S2f[S2f POSIX paths in the index, the pair list in the ledger]
+    S1P --> S2g[S2g the lock's release landed before the push]
     S2a --> S2b[S2b the room's environment and hint]
     S2a --> S2T[S2 test]
     S2b --> S2T
@@ -43,6 +44,7 @@ graph TD
     S2d --> S2T
     S2e --> S2T
     S2f --> S2T
+    S2g --> S2T
     S2T --> S2R[S2 review] --> S2W[S2 docs] --> S2P[S2 PR]
     S2P --> S3a[S3a Gate and CI entries]
     S2P --> S3b[S3b doc-sync entries]
@@ -93,7 +95,8 @@ Parent: `beadloom-ba9w`.
 | S2d | - | dev: `--carry` of a path the tree no longer holds is a deletion in the room; the room reports files where the tree differs from HEAD by more than this bead's commits (D6; #335) | P0 | S1P |
 | S2e | `beadloom-7pd6` | dev: a project root below the git root is refused by `init` and `doctor` in words, non-zero (D6; #325) | P0 | S1P |
 | S2f | - | dev: indexed paths written as POSIX at every write site and `source:` normalised at every match site; `doctor` names a backslash index as one to rebuild; `sync-surface.json` carries the pair list; a backslash test over the three match sites and a simulated-separator index of the fixture (D11; #353) | P0 | S1P |
-| S2T | - | test: each S2 entry's own `Command` on the fixture — a named room, a built environment, one `config-check` verdict in a room and the checkout; the full tree once | P0 | S2a–S2f |
+| S2g | - | dev: the composed landing fragments and the coordinator checklist state acquire → commit → release → export landed → push; the pre-push hook refuses a tree whose export holds the slot for the pushed bead; `waves` names the remedy for a slot held by a closed bead; two tests (D12; #354) | P0 | S1P |
+| S2T | - | test: each S2 entry's own `Command` on the fixture — a named room, a built environment, one `config-check` verdict in a room and the checkout; the full tree once | P0 | S2a–S2g |
 | S2R | - | review: S2, bead id only | P0 | S2T |
 | S2W | - | tech-writer: the verdict-room and wave-plan SPECs, `docs/guides/parallel-waves.md` (the room's environment and hint), the monorepo paragraph of `docs/getting-started.md`, CHANGELOG | P0 | S2R |
 | S2P | - | coordinator: S2 PR, merge on green | P0 | S2W |

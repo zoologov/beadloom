@@ -63,6 +63,7 @@ commits `[BDL-083] <type>: <description>`; one PR per slice; merge on green CI.
 | 2026-10-19 | D10 clarified: the trailer sits in the message's final paragraph beside the other trailers; the ownership report names a `Bead:` line outside it instead of denying it; git >= 2.22 | S1R second pass, Major 1 |
 | 2026-10-19 | The JSON and MCP `claims` entry carries the count and hashes of the commits whose `Bead:` line git reads no trailer from, the same fact the text surfaces print (one shape, as S1c ruled for `ownership`/`owners`); done in S1, folded into the next fix bead or as a bead of its own after S1R pass 3 | Owner's ruling on the fix-5 question |
 | 2026-10-19 | #353 taken into this epic as S2f: indexed paths are POSIX on every platform, `source:` normalised before it is matched, the surface ledger names its pairs; the Windows CI leg stays withdrawn, two tests are the measurement | Owner's decision 2026-10-19; D11 |
+| 2026-10-19 | #354 taken into this epic as S2g: the lock's release is exported and landed before the push; the pre-push hook refuses a tree whose export holds the slot for the pushed bead; `waves` names the remedy for a closed holder | Owner's decision 2026-10-19; D12 |
 | 2026-10-18 | Rooms from `.github/workflows` and `.gitlab-ci.yml`; distributions by `**/pyproject.toml` under `scan_paths`; the room's environment and hint from the found distribution; `config-check` by the declared project name | D6, D7 |
 
 ## Related Files

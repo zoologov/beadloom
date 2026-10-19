@@ -664,6 +664,22 @@ commit dropped instead of printing a smaller number. One test feeds backslash pa
 three match sites; one indexes the monorepo fixture under a simulated Windows separator. The
 Windows CI leg stays withdrawn (owner's decision of BDL-074); the two tests are the measurement.
 
+### D12 — The landing lock's release reaches the trunk with the landing (S2; added 2026-10-19 for #354)
+
+The slot is tracker state, exported into `.beads/issues.jsonl`, so its truth on the trunk is
+whatever commit last exported it. The composed landing instruction says acquire before the
+commit and release after, and says nothing about the push; an agent that releases after its push
+leaves the trunk exporting a slot held by a closed bead, and the next clone's `acquire` is refused
+with a holder nobody can wait on (the first outside adopter's second clone, 2026-10-19). The rule:
+the sequence in the composed landing fragments and the coordinator checklist is acquire → commit
+→ release → `bd export` → the export landed in the same landing (the bead's own last commit,
+amended under the lock it still holds, or one more commit by path) → push. The pre-push hook
+refuses to push a tree whose exported `issues.jsonl` holds the slot for the bead being pushed, and
+names the sequence; `beadloom waves`'s `landing-order` medium reports a slot held by a closed bead
+with the one remedy (`release --holder <closed-bead>`), because bd's own refusal offers `--wait`, a
+queue nothing drains. One test pushes a tree whose export holds the slot and reads the refusal;
+one plans a wave over a slot held by a closed bead and reads the remedy.
+
 ## Public API (MAJOR)
 
 - Exit codes: the pre-push hook without `beadloom` (0 → 1), `issue-number check` on a declared
@@ -678,6 +694,8 @@ Windows CI leg stays withdrawn (owner's decision of BDL-074); the two tests are 
 - `config-check` exits 1 instead of 0 on role files composed before this release, because the
   flow template's commit format changed (D10): adopters re-run `setup-agentic-flow` — an
   exit-code move measured on the `0f1cb9a3` tree (added 2026-10-19 from S1W).
+- The pre-push hook exits 1 on a tree whose export holds the slot for the pushed bead (an
+  exit-code move on an input 9.0.0 accepted, D12).
 - `sync-surface.json` gains the pair list beside `declared_pairs` (additive); indexed paths are
   POSIX on every platform (a finding-set move on Windows only, D11).
 - `rules.yml`: no vocabulary change in S1–S2; liveness findings for `forbid_import` change
@@ -696,8 +714,8 @@ Windows CI leg stays withdrawn (owner's decision of BDL-074); the two tests are 
 - **S2 — the monorepo on GitLab** (D6, D7): dev beads: rooms from two sources and nested
   distributions (#332); the room's environment and hint (#333, #311); `config-check` (#334);
   carry deletions and the HEAD-difference report (#335); the nested-root refusal (#325); POSIX
-  paths in the index and the pair list in the surface ledger (#353, D11). Then test, review,
-  tech-writer, PR.
+  paths in the index and the pair list in the surface ledger (#353, D11); the lock's release
+  landed before the push (#354, D12). Then test, review, tech-writer, PR.
 - **S3 — re-measurement** (D9): measurement beads by area — Gate and CI; doc-sync; rules and
   lint; init and scanning; site and viewer; the rest — each closing, filing or ruling its
   entries; one bead writes the archive and the stubs. Review, PR. No dev bead.

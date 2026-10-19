@@ -67,6 +67,8 @@ in one coordinator's memory.
    owning project's configuration (#327); a project root below the git root is refused in
    words (#325); a Windows checkout pairs the same documents with the same files as a POSIX
    checkout of one commit, and the surface ledger names its pairs (#353, added 2026-10-19).
+   The landing lock's release reaches the trunk with the landing, and a push that would leave the
+   trunk's export holding the slot is refused (#354, added 2026-10-19).
    *Done when* a fixture with `backend/pyproject.toml`, `frontend/` and `.gitlab-ci.yml`
    gets a named room, a built environment and the same `config-check` verdict in a room as
    in the checkout, and the matching of `source:` against the index gives one pair set under

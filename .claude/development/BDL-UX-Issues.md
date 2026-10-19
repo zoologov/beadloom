@@ -46,6 +46,7 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 354 | 2026-10-19 | medium | a merge-slot `release` made after `git push` lands in no merged commit, so `master` carries the slot held by a closed bead and the next clone's `acquire` is refused |
 | 353 | 2026-10-19 | high | on a Windows checkout the index stores paths with `\` while `source:` is written with `/`, and every `source:` match is a raw string compare: directory nodes read `no_indexed_code`, file nodes read stale, the declared surface reads 167 pairs of 347; `sync-surface.json` holds counts and no pair list, so the drop has no names |
 | 352 | 2026-10-19 | medium | the TUI lint panel counts warnings by the severity `warning` while the engine emits `warn`, so every warn finding shows as info and the panel's warning count reads 0 |
 | 351 | 2026-10-18 | medium | `init --yes` on a monorepo with `backend/` and `frontend/` under `scan_paths` writes nodes for the frontend only; the Python backend under its own `pyproject.toml` gets no node and no preset |
@@ -172,6 +173,16 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+354. [2026-10-19] [MEDIUM] a merge-slot `release` made after `git push` lands in no merged commit, so `master` carries the slot held by a closed bead and the next clone's `acquire` is refused
+
+    **Severity:** medium (the slot is tracker state exported to `.beads/issues.jsonl`, so its truth is whatever commit last exported it; a release that happens after the landing commit is invisible to every other clone, and the refusal names a bead that is closed — the operator has to know the stale-holder remedy, nothing prints it)
+    **Command:** `bd merge-slot acquire --holder <bead>` in a second clone after `git pull && bd import`; refused with `Slot held by: <bead>`, a bead closed and merged the same day
+    **Context:** reported 2026-10-19 by the adopter's teammate on the first solo bead of a second clone of the first outside adopter's monorepo (one merge request on self-hosted GitLab). The agent followed the composed instruction literally — acquire before the commit, release after — and pushed between the commit and the release; the release's export commit stayed on the feature branch, the MR merged the earlier commit, and `master` now exports the slot as held. The owner's clone showed the same after `bd import`. Remedy applied in both clones: `bd merge-slot release --holder <the closed bead>`, which `landing-order` already documents as the only release form bd verifies, but no instruction says WHEN the release must happen relative to the push.
+    **Issue:** the slot's lifetime is defined against the commit (acquire before, release after) while its persistence is defined by the export inside that commit, so "release after the commit" produces a state that reaches `master` only if a further commit lands — the common case of one commit per bead never does. The composed core says nothing about ordering release against push, `beadloom waves` judges the call form (`--holder`) and not the sequence, and the refusal message offers `--wait` (a queue nothing drains) rather than the stale-holder release.
+    **Expected:** the composed landing instruction states the sequence as acquire → commit → release → (export lands with) the next commit or `bd export` + amend, or better: release is folded into the landing itself — `bd merge-slot release --holder <bead>` before `git push`, with a pre-push check that refuses to push a tree whose export holds the slot for the bead being pushed; and the refusal message names the remedy for a holder whose bead is closed (`release --holder <closed-bead>`), since a closed bead cannot be waited on.
+    **Workaround:** release the stale holder by name before acquiring; release before pushing so the export in the landing commit already shows the slot free.
+    Placed 2026-10-19 by the owner in BDL-083 S2 as bead S2g (RFC D12).
 
 353. [2026-10-19] [HIGH] on a Windows checkout the index stores paths with `\` while `source:` is written with `/`, and every `source:` match is a raw string compare: directory nodes read `no_indexed_code`, file nodes read stale, the declared surface reads 167 pairs of 347; `sync-surface.json` holds counts and no pair list, so the drop has no names
 
