@@ -64,6 +64,7 @@ commits `[BDL-083] <type>: <description>`; one PR per slice; merge on green CI.
 | 2026-10-19 | The JSON and MCP `claims` entry carries the count and hashes of the commits whose `Bead:` line git reads no trailer from, the same fact the text surfaces print (one shape, as S1c ruled for `ownership`/`owners`); done in S1, folded into the next fix bead or as a bead of its own after S1R pass 3 | Owner's ruling on the fix-5 question |
 | 2026-10-19 | #353 taken into this epic as S2f: indexed paths are POSIX on every platform, `source:` normalised before it is matched, the surface ledger names its pairs; the Windows CI leg stays withdrawn, two tests are the measurement | Owner's decision 2026-10-19; D11 |
 | 2026-10-19 | #354 taken into this epic as S2g: the lock's release is exported and landed before the push; the pre-push hook refuses a tree whose export holds the slot for the pushed bead; `waves` names the remedy for a closed holder | Owner's decision 2026-10-19; D12 |
+| 2026-10-19 | The pipeline files the room census reads are declared in `config.yml` under `rooms.pipelines` (`github`, `gitlab`); unset reads every file present; S2a's GitHub-first ordering withdrawn; this repository declares `[github]` | Owner's ruling 2026-10-19 on S2a; D6 amended |
 | 2026-10-18 | Rooms from `.github/workflows` and `.gitlab-ci.yml`; distributions by `**/pyproject.toml` under `scan_paths`; the room's environment and hint from the found distribution; `config-check` by the declared project name | D6, D7 |
 
 ## Related Files
@@ -78,6 +79,6 @@ and `archive/BDL-UX-Issues-closed.md`, `.claude/development/BDL-UX-Issues/` (the
 
 ## Current Phase
 
-- **Phase:** Development — S1 merged into `main` as `ab174d34` on 2026-10-19 (PR #106); S2 next on `features/BDL-083-S2`
+- **Phase:** Development — S1 merged into `main` as `ab174d34` on 2026-10-19 (PR #106); S2 running on `features/BDL-083`
 - **Current bead:** see ACTIVE.md
 - **Blockers:** none

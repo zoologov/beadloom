@@ -597,6 +597,18 @@ cannot read gets "rooms: not derived — no readable pipeline" as a named skip i
 the files where the tree differs from HEAD by more than this bead's commits (#335). A project
 root below the git root is refused by `init` and `doctor` in words (#325, `beadloom-7pd6`).
 
+Amended 2026-10-19 (owner's ruling on S2a's judgement call): which pipeline files the census
+reads is declared, never guessed. `config.yml` carries `rooms.pipelines`, a list of `github`
+and/or `gitlab`. Unset, the census reads every pipeline file the tree holds, each room carrying
+its source; set, it reads the named ones only and lists a present file the key excludes as set
+aside, naming the key; a name the key gives with no file in the tree is a named line in the
+room block, not an error. The ordering S2a shipped (GitHub first, GitLab set aside when both
+exist) is withdrawn. This repository declares `[github]` because its `.gitlab-ci.yml` is a
+BDL-050 mirror no run takes, so its room set stays 33; the fixture declares nothing and keeps its
+2 rooms. Measured by three tests: both files and no key → both sets; `[github]` → the GitLab file
+set aside with the key named; `[gitlab]` with no `.gitlab-ci.yml` → the named line. A project
+with both files and no key gains the GitLab rooms it never had: a finding-set move, additive.
+
 ### D7 — `config-check` names its inputs and gives one verdict wherever it runs (S2)
 
 The composed `CLAUDE.md` is compared against a composition built from `flow.yml` and the
@@ -689,6 +701,7 @@ one plans a wave over a slot held by a closed bead and reads the remedy.
 - `GateStep` gains the status `ERROR` (additive; consumers that switch on `passed`/`skipped`
   read it as not passed).
 - `rooms` JSON gains `source` per room and a `not_derived` reason (additive).
+- `config.yml` gains `rooms.pipelines` (additive); a project holding both pipeline files and declaring no key gains the GitLab rooms (a finding-set move, additive; D6 amended 2026-10-19).
 - The MCP tool `complete_bead` no longer returns the verdict `unowned`; the ownership shape is the
   `ci` JSON's (`owned` / `unattributed`, S1c) — a vocabulary move (added 2026-10-19 from S1W).
 - `config-check` exits 1 instead of 0 on role files composed before this release, because the

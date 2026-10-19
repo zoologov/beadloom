@@ -38,7 +38,9 @@ graph TD
     S1P --> S2f[S2f POSIX paths in the index, the pair list in the ledger]
     S1P --> S2g[S2g the lock's release landed before the push]
     S2a --> S2b[S2b the room's environment and hint]
-    S2a --> S2T[S2 test]
+    S2a --> S2F1[S2F1 pipeline sources declared]
+    S2F1 --> S2T[S2 test]
+    S2a --> S2T
     S2b --> S2T
     S2c --> S2T
     S2d --> S2T
@@ -98,7 +100,8 @@ Parent: `beadloom-ba9w`.
 | S2e | `beadloom-7pd6` | dev: a project root below the git root is refused by `init` and `doctor` in words, non-zero (D6; #325) | P0 | S1P |
 | S2f | `beadloom-27br` | dev: indexed paths written as POSIX at every write site and `source:` normalised at every match site; `doctor` names a backslash index as one to rebuild; `sync-surface.json` carries the pair list; a backslash test over the three match sites and a simulated-separator index of the fixture (D11; #353) | P0 | S1P |
 | S2g | `beadloom-89gm` | dev: the composed landing fragments and the coordinator checklist state acquire → commit → release → export landed → push; the pre-push hook refuses a tree whose export holds the slot for the pushed bead; `waves` names the remedy for a slot held by a closed bead; two tests (D12; #354) | P0 | S1P |
-| S2T | `beadloom-w2v6` | test: each S2 entry's own `Command` on the fixture — a named room, a built environment, one `config-check` verdict in a room and the checkout, one pair set under both separators, the lock's release landed before the push; the full tree once | P0 | S2a–S2g |
+| S2F1 | `beadloom-ba9w.22` | dev: the pipeline files the census reads are declared in `config.yml` under `rooms.pipelines`; unset reads every file present; a present file the key excludes is set aside naming the key; S2a's GitHub-first ordering withdrawn; this repository declares `[github]`; three tests (D6 amended) | P0 | S2a |
+| S2T | `beadloom-w2v6` | test: each S2 entry's own `Command` on the fixture — a named room, a built environment, one `config-check` verdict in a room and the checkout, one pair set under both separators, the lock's release landed before the push; the full tree once | P0 | S2a–S2g, S2F1 |
 | S2R | `beadloom-x94h` | review: S2, bead id only | P0 | S2T |
 | S2W | `beadloom-sc9d` | tech-writer: the verdict-room and wave-plan SPECs, `docs/guides/parallel-waves.md` (the room's environment and hint), the monorepo paragraph of `docs/getting-started.md`, CHANGELOG | P0 | S2R |
 | S2P | `beadloom-6svu` | coordinator: S2 PR, merge on green | P0 | S2W |
