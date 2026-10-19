@@ -1661,6 +1661,22 @@ _UNBOUND_HEADING_INDENT = "  "
 _UNBOUND_FILE_INDENT = "    "
 
 
+def _refuse_a_project_root_below_the_git_root(project_root: Path) -> None:
+    """Exit 1, before any writer runs, when the git root is above *project_root* (#325).
+
+    BDL-083 S2e (``beadloom-7pd6``), the owner's ruling of 2026-10-12: a project root below
+    the git root is refused by name rather than supported, in every mode, so no mode leaves a
+    ``.beadloom/`` behind in a layout the other commands would then read in two path frames.
+    """
+    from beadloom.infrastructure.git_root import nested_root
+
+    found = nested_root(project_root)
+    if found is None:
+        return
+    click.echo(f"Error: init refused — {found.sentence()}", err=True)
+    sys.exit(1)
+
+
 # beadloom:domain=onboarding
 @main.command()
 @click.option("--bootstrap", is_flag=True, help="Bootstrap: generate graph from code.")
@@ -1716,6 +1732,7 @@ def init(
     from beadloom.onboarding import bootstrap_project, import_docs
 
     project_root = project or Path.cwd()
+    _refuse_a_project_root_below_the_git_root(project_root)
     # Sampled before any writer runs, in ONE place, so every branch below is
     # judged by the same instrument: the difference against the same directory
     # at verdict time is what this run wrote. Both grains at once — the files,

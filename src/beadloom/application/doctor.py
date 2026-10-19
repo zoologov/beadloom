@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+from beadloom.infrastructure.git_root import nested_root
 from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
 from beadloom.infrastructure.surface_registry import get_cli_group
 from beadloom.onboarding.scanner.project_facts import (
@@ -306,6 +307,20 @@ def _check_index_separator(conn: sqlite3.Connection) -> list[Check]:
     if not findings:
         return [Check("index_separator", Severity.OK, "Every indexed path is POSIX.")]
     return findings
+
+
+def _check_git_root(project_root: Path) -> list[Check]:
+    """Name a git root above the project root as an error (BDL-083 S2e, BDL-UX #325).
+
+    Git answers in paths relative to its own root and Beadloom asks in the project root's, so
+    below the git root ``sync-check --since`` compares two empty sides and every pair reads
+    fresh. The owner ruled a refusal rather than support (2026-10-12): the row is an ERROR,
+    which fails the Gate's ``doctor`` step and makes ``beadloom doctor`` exit 1.
+    """
+    found = nested_root(project_root)
+    if found is None:
+        return [Check("git_root", Severity.OK, "No git root above the project root.")]
+    return [Check("git_root", Severity.ERROR, f"Project root refused: {found.sentence()}")]
 
 
 def _check_source_coverage(conn: sqlite3.Connection) -> list[Check]:
@@ -719,5 +734,6 @@ def run_checks(
     results.extend(_check_index_separator(conn))
     results.extend(_check_source_coverage(conn))
     if project_root is not None:
+        results.extend(_check_git_root(project_root))
         results.extend(_check_agent_instructions(project_root))
     return results

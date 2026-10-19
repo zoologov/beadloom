@@ -1,6 +1,6 @@
 {
-  "declared_docs": 138,
-  "declared_pairs": 831,
+  "declared_docs": 139,
+  "declared_pairs": 833,
   "pairs": [
     ["architecture.md", "src/beadloom/__init__.py"],
     ["architecture.md", "src/beadloom/services/__init__.py"],
@@ -462,6 +462,7 @@
     ["domains/infrastructure/README.md", "src/beadloom/infrastructure/doc_roots.py"],
     ["domains/infrastructure/README.md", "src/beadloom/infrastructure/exit_condition.py"],
     ["domains/infrastructure/README.md", "src/beadloom/infrastructure/git_activity.py"],
+    ["domains/infrastructure/README.md", "src/beadloom/infrastructure/git_root.py"],
     ["domains/infrastructure/README.md", "src/beadloom/infrastructure/health.py"],
     ["domains/infrastructure/README.md", "src/beadloom/infrastructure/mcp_tools.py"],
     ["domains/infrastructure/README.md", "src/beadloom/infrastructure/node_source.py"],
@@ -475,6 +476,7 @@
     ["domains/infrastructure/components/doc-roots/DOC.md", "src/beadloom/infrastructure/doc_roots.py"],
     ["domains/infrastructure/components/exit-condition/DOC.md", "src/beadloom/infrastructure/exit_condition.py"],
     ["domains/infrastructure/components/git-activity/DOC.md", "src/beadloom/infrastructure/git_activity.py"],
+    ["domains/infrastructure/components/git-root/DOC.md", "src/beadloom/infrastructure/git_root.py"],
     ["domains/infrastructure/components/health/DOC.md", "src/beadloom/infrastructure/health.py"],
     ["domains/infrastructure/components/mcp-tools/DOC.md", "src/beadloom/infrastructure/mcp_tools.py"],
     ["domains/infrastructure/components/node-source/DOC.md", "src/beadloom/infrastructure/node_source.py"],
@@ -834,5 +836,5 @@
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/lib/queryState.js"],
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/model/useUrlState.js"]
   ],
-  "recorded_at": "2026-10-19T14:41:09.085141+00:00"
+  "recorded_at": "2026-10-19T16:07:48.320401+00:00"
 }

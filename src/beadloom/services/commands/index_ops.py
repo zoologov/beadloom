@@ -148,7 +148,10 @@ def _echo_tests_line(project_root: Path) -> None:
     help="Project root (default: current directory).",
 )
 def doctor(*, project: Path | None) -> None:
-    """Run validation checks on the architecture graph."""
+    """Run validation checks on the architecture graph.
+
+    Exit codes: 0 = no check reads ERROR, 1 = a check reads ERROR or the index is missing.
+    """
     from beadloom.application.doctor import Severity, run_checks
     from beadloom.infrastructure.db import open_db
 
@@ -173,6 +176,12 @@ def doctor(*, project: Path | None) -> None:
     for check in checks:
         icon = icons.get(check.severity, "[?]")
         click.echo(f"  {icon} {check.description}")
+
+    # An ERROR row fails the command, the rule the Gate's doctor step applies to the same rows.
+    # No row read ERROR before BDL-083 S2e, so the git root above the project root (#325) is
+    # the first input this exit moves on.
+    if any(check.severity is Severity.ERROR for check in checks):
+        sys.exit(1)
 
 
 # beadloom:domain=graph-diff

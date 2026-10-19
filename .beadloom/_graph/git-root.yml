@@ -1,0 +1,15 @@
+  # Component: where the git root stands against the project root (BDL-083 S2e,
+  # `beadloom-7pd6`, BDL-UX #325). It sits in infrastructure because three layers
+  # ask it -- `doctor` in application, `init` and `sync-check --since` in services
+  # -- and the answer is git's, not any domain's.
+nodes:
+  - ref_id: git-root
+    kind: component
+    summary: "Git root against the project root — the git working tree's root when it lies above the project root, read from git; the refusal init, doctor and sync-check --since print"
+    source: src/beadloom/infrastructure/git_root.py
+    docs:
+      - docs/domains/infrastructure/components/git-root/DOC.md
+edges:
+  - src: git-root
+    dst: infrastructure
+    kind: part_of

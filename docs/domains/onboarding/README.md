@@ -120,6 +120,12 @@ beadloom snapshot list [--json]                  # list all saved snapshots
 beadloom snapshot compare OLD_ID NEW_ID [--json] # compare two snapshots
 ```
 
+`init` refuses a project root below the git root in every mode, before any writer runs: it
+prints `Error: init refused — the git root is above the project root: ...` with both roots and
+exits 1, leaving no `.beadloom/` behind (BDL-083 S2e, BDL-UX #325, the owner's ruling of
+2026-10-12 that a nested root is refused rather than supported). The composed `CLAUDE.md`
+states the same rule in its Setup section.
+
 ### What `docs audit` reports
 
 `services/commands/docs.py` renders the `doc_sync` audit result, and since BDL-061.45 it states

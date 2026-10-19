@@ -53,6 +53,13 @@ beadloom install-hooks             # pre-commit (lint + sync-check + ACTIVE/trac
                                    # It does not run the test suite, and names that under its verdict.
 ```
 
+**The project root is the git root.** `.beadloom/` sits beside `.git`, never in a subfolder
+of a repository. Git answers in paths relative to its own root, so below it the two frames
+disagree, and `beadloom sync-check --since` would compare two empty sides and call every pair
+fresh. `beadloom init`, `beadloom doctor` and `beadloom sync-check --since` therefore refuse a
+project root below the git root, name both roots and exit 1. In a monorepo, put `.beadloom/`
+at the repository's root, or give the subproject a repository of its own.
+
 ### BEFORE any work
 
 ```bash

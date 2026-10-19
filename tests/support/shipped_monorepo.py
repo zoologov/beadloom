@@ -38,3 +38,25 @@ def shipped_monorepo_checkout(workdir: Path) -> Path:
         stored.rename(stored.with_name(stored.name.removesuffix(_STORED_SUFFIX)))
     commit_project(root)
     return root
+
+
+#: The folder of the git repository the fixture is placed in by
+#: :func:`shipped_monorepo_below_its_git_root`: the repository's root, one level above the project.
+_REPOSITORY_NAME = "monorepo"
+
+
+def shipped_monorepo_below_its_git_root(workdir: Path) -> Path:
+    """Copy the monorepo fixture one folder below a git root, commit it there, return the project.
+
+    BDL-083 S2e (``beadloom-7pd6``), BDL-UX #325: the layout Beadloom refuses by name. The
+    project's ``.beadloom/`` sits in ``<workdir>/monorepo/metrics-desk`` and the repository's
+    ``.git`` in ``<workdir>/monorepo``, so git answers in paths relative to a root the project
+    does not stand at.
+    """
+    repository = workdir / _REPOSITORY_NAME
+    root = repository / _CHECKOUT_NAME
+    shutil.copytree(SHIPPED_FROM / "tests" / "fixtures" / "monorepo", root)
+    for stored in sorted(root.rglob(f"*{_STORED_SUFFIX}")):
+        stored.rename(stored.with_name(stored.name.removesuffix(_STORED_SUFFIX)))
+    commit_project(repository)
+    return root

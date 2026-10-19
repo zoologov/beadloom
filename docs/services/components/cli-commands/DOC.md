@@ -84,6 +84,17 @@ and `tests/acceptance/application/reindex/the_index_names_the_code_it_could_not_
 
 `init` prints the same `Tests:` line after its reindex and, below it, every test file bound to no node, by path and placement (`_echo_test_binding`, BDL-078 `beadloom-76mk`), reading the index through `infrastructure.db.readonly_connection` (`beadloom-btkd.18`). The list is indented rather than prefixed, because under `--bootstrap` the prefix is a check mark. A project with no test file, or an index without the test tables, prints neither. `bootstrap_project` writes `tests: {flat_tests: true}` into `.beadloom/config.yml` for a project whose languages include `.py`.
 
+Three commands refuse a project root below the git root, by name and at exit 1 (BDL-083 S2e,
+BDL-UX #325, the owner's ruling of 2026-10-12): `init`, before any writer runs and in every
+mode (`_refuse_a_project_root_below_the_git_root` in `setup.py`); `sync-check --since`, before
+it validates the ref (`_refuse_since_below_the_git_root` in `docsync.py`), because there both
+sides of every pair read empty and every pair read `ok`; and `doctor`, which exits 1 whenever a
+check reads `ERROR`, the rule its Gate step applies to the same rows, and the `git_root` row is
+the only built-in `ERROR`. Each prints `infrastructure.git_root.NestedRoot.sentence()`, which
+names both roots. `sync-check` without `--since` is not refused: it translates its paths
+through `git rev-parse --show-prefix`. Tested in
+`tests/acceptance/infrastructure/git-root/a_project_root_below_the_git_root_is_refused.feature`.
+
 `ctx` states the node's activity in the node card's words (`_describe_activity`, BDL-078 F-activity): `Activity: <mark> <level> (N lines changed in 30 days)`, with `ACTIVITY_MARKS` giving one mark per level (`hot`, `warm`, `cool`, `quiet`, `dormant`), `no change in 30 days` / `no change in 90 days` for `quiet` / `dormant` from `NO_CHANGE_WORDS`, and the count through `count_in_words` (`1 line`, `1 commit`; `beadloom-btkd.18`). An activity recorded before changed lines were counted is said in commits.
 
 `ctx` prints the node's `Tests:` line from the bundle's `tests` key and, when any test file is unplaced, one line under it (BDL-074 C2): `_format_markdown` prints the bundle's `test_unplaced` sentence, which the builder stated against the test layout the index recorded (BDL-074 G2), and appends ", so the count above can be short". A bundle built before that key existed — the context cache keeps bundles — falls back to `context_oracle.test_binding.describe_unplaced` over its `test_placements`, which names the default layout's folders. A bundle with no unplaced file, or with neither key, prints no such line. Since `beadloom-2mj3.15` `_format_markdown` also prints the bundle's `test_recognition` clause under `Tests:`, capitalised, after the unplaced line when there is one, whether or not any file is unplaced: which paths a test file is read under, because a count of bound files is a count of the files those patterns matched. A bundle without that key (built before it, or over an index with no recorded test layout) prints no such line. Tested in `tests/unit/services/commands/test_the_ctx_markdown_states_the_tests_line.py` (moved there by BDL-074 F2), `tests/unit/services/commands/test_the_ctx_markdown_prints_the_bundles_unplaced_sentence.py` and `tests/unit/services/commands/test_the_ctx_markdown_says_which_files_count_as_tests.py`.
