@@ -34,7 +34,7 @@ stops being true.
 | Side | Read from | Goes stale when |
 |------|-----------|-----------------|
 | what this run performed | the run's own `GateStep` names, plus any verification the caller ran beside it | never — a suite step added to the gate removes the line by the same act |
-| what the project verifies | `.github/workflows/*.yml`, through `rooms.load_jobs` | never — a job added to the pipeline is read on the next run |
+| what the project verifies | the files `rooms.pipeline_sources` chooses: `.github/workflows/*.yml` through `rooms.load_jobs`, else `.gitlab-ci.yml` through `gitlab_pipeline.load_gitlab_pipeline` | never — a job added to the pipeline is read on the next run |
 
 A hand-written sentence ("this gate does not run pytest") is the defect one level up:
 `beadloom-0mdo.42` measured that trap when a derivation shipped behind a hand-written
@@ -84,7 +84,12 @@ Four statements, one of which every run makes:
 | every verification read is performed by a step | `every verification this report reads is performed by a step of this run` |
 | workflows exist and declare none it reads | the count of files read, the tools it recognises, and that another name is not claimed about |
 | a workflow could not be parsed | the file and the reason, and no claim about what was not run |
-| no workflow exists | `this project declares no pipeline` |
+| no workflow and no `.gitlab-ci.yml` exists | `this project declares no pipeline` |
+
+A GitLab job's `before_script`, `script` and `after_script` lines are read as one block of shell
+lines, so `cd backend && uv run pytest tests` performs the test suite (BDL-083 S2a, BDL-UX #332).
+On the monorepo fixture the block named nothing on 9.0.0 and names the test suite and the FSD
+linter now.
 
 ## What is deliberately outside it
 

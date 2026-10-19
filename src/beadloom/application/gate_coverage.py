@@ -21,9 +21,12 @@ test legs went red on one assertion that reproduces locally in 0.07 s.
   added to the gate later removes the line by the same act, so this cannot
   become the stale sentence one level up — the trap ``beadloom-0mdo.42``
   measured when a derivation shipped behind a hand-written path filter.
-* *What the project verifies* comes from the project's CI workflows, read
-  through :func:`beadloom.application.rooms.load_jobs` — the same declaration
-  the room census reads for its legs, so one file has one reader.
+* *What the project verifies* comes from the project's CI pipeline, chosen by
+  :func:`beadloom.application.rooms.pipeline_sources` and read through
+  :func:`beadloom.application.rooms.load_jobs` (GitHub) or
+  :func:`beadloom.application.gitlab_pipeline.load_gitlab_pipeline` (GitLab) — the
+  same declaration the room census reads for its legs, so one file has one reader
+  (BDL-UX #332).
 
 **The limit is stated rather than discovered.** :data:`DUTIES` is a vocabulary
 of the verification tools this report can recognise, and a pipeline that
@@ -38,7 +41,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from beadloom.application.rooms import WORKFLOW_DIR, load_jobs
+from beadloom.application.gitlab_pipeline import GITLAB_CI_FILE, load_gitlab_pipeline
+from beadloom.application.rooms import WORKFLOW_DIR, load_jobs, pipeline_sources
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -208,7 +212,8 @@ def _empty_population(coverage: GateCoverage) -> str:
     if coverage.inspected == 0:
         return (
             "this project declares no pipeline, so there is no verification to "
-            f"hold this run against ({WORKFLOW_DIR.as_posix()} has no workflow)"
+            f"hold this run against ({WORKFLOW_DIR.as_posix()} has no workflow and "
+            f"there is no {GITLAB_CI_FILE})"
         )
     return (
         f"{coverage.inspected} workflow file(s) declare no verification this "
@@ -226,12 +231,10 @@ def _read_pipeline(
     project_root: Path,
 ) -> tuple[tuple[Verification, ...], tuple[UnreadPipeline, ...], int]:
     """One verification per duty, from the first command in the pipeline that runs it."""
-    files = sorted(
-        path for path in (project_root / WORKFLOW_DIR).glob("*.y*ml") if path.is_file()
-    )
+    sources = pipeline_sources(project_root)
     found: dict[str, Verification] = {}
     unresolved: list[UnreadPipeline] = []
-    for path in files:
+    for path in sources.workflows:
         rel = path.relative_to(project_root).as_posix()
         jobs, failure = load_jobs(path)
         if failure is not None:
@@ -239,10 +242,27 @@ def _read_pipeline(
             continue
         for job_name, job in jobs.items():
             _collect_job(f"{rel}: {job_name}", job, found)
+    if sources.gitlab is not None:
+        _collect_gitlab(sources.gitlab, found, unresolved)
     ordered = tuple(
         found[duty.name] for duty in DUTIES if duty.name in found
     )
-    return ordered, tuple(unresolved), len(files)
+    inspected = len(sources.workflows) + (sources.gitlab is not None)
+    return ordered, tuple(unresolved), inspected
+
+
+def _collect_gitlab(
+    path: Path, found: dict[str, Verification], unresolved: list[UnreadPipeline]
+) -> None:
+    """Record the verifications a GitLab pipeline's jobs run, or why it was not read."""
+    pipeline, failure = load_gitlab_pipeline(path)
+    if pipeline is None:
+        unresolved.append(UnreadPipeline(source=GITLAB_CI_FILE, why=failure or ""))
+        return
+    for job in pipeline.jobs:
+        _collect_commands(
+            f"{GITLAB_CI_FILE}: {job.name}", "\n".join(job.commands), found
+        )
 
 
 def _collect_job(
@@ -256,14 +276,16 @@ def _collect_job(
         if not isinstance(step, dict):
             continue
         run = step.get("run")
-        if not isinstance(run, str):
-            continue
-        for command in _commands(run):
-            duty = _duty_of(command)
-            if duty is not None and duty.name not in found:
-                found[duty.name] = Verification(
-                    duty=duty.name, command=command, source=source
-                )
+        if isinstance(run, str):
+            _collect_commands(source, run, found)
+
+
+def _collect_commands(source: str, run: str, found: dict[str, Verification]) -> None:
+    """Record each duty one block of shell lines performs that is not yet found."""
+    for command in _commands(run):
+        duty = _duty_of(command)
+        if duty is not None and duty.name not in found:
+            found[duty.name] = Verification(duty=duty.name, command=command, source=source)
 
 
 def _commands(run: str) -> list[str]:

@@ -79,6 +79,15 @@ def rooms(*, project: Path | None, dimension: str | None, as_json: bool) -> None
 
 def _print_dimension(census: RoomCensus, dimension: str) -> None:
     """One axis of the declared rooms, or a refusal naming the axes there are."""
+    from beadloom.application.rooms import NOT_DERIVED_PREFIX
+
+    if census.not_derived is not None:
+        click.echo(
+            f"{NOT_DERIVED_PREFIX}{census.not_derived}, so this project declares no "
+            f"room and carries no `{dimension}` axis",
+            err=True,
+        )
+        sys.exit(_EXIT_UNANSWERABLE)
     if not census.comparisons:
         click.echo(
             "this project declares no room a verdict could be held against, so "
@@ -135,6 +144,10 @@ def _human(census: RoomCensus) -> str:
 
 
 def _declared_lines(census: RoomCensus) -> list[str]:
+    from beadloom.application.rooms import NOT_DERIVED_PREFIX
+
+    if census.not_derived is not None:
+        return [f"  {NOT_DERIVED_PREFIX}{census.not_derived}", ""]
     if not census.comparisons:
         return [
             "  This project declares no room a verdict could be held against: "
@@ -232,4 +245,5 @@ def _payload(census: RoomCensus) -> dict[str, object]:
         "floor": census.floor,
         "supported_without_a_leg": list(census.supported_without_a_leg),
         "unresolved": [{"source": u.source, "why": u.why} for u in census.unresolved],
+        "not_derived": census.not_derived,
     }

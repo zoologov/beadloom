@@ -1,6 +1,6 @@
 {
   "declared_docs": 138,
-  "declared_pairs": 826,
+  "declared_pairs": 830,
   "pairs": [
     ["architecture.md", "src/beadloom/__init__.py"],
     ["architecture.md", "src/beadloom/services/__init__.py"],
@@ -45,6 +45,7 @@
     ["domains/application/README.md", "src/beadloom/application/gate_issue_log.py"],
     ["domains/application/README.md", "src/beadloom/application/gate_ownership.py"],
     ["domains/application/README.md", "src/beadloom/application/gate_step.py"],
+    ["domains/application/README.md", "src/beadloom/application/gitlab_pipeline.py"],
     ["domains/application/README.md", "src/beadloom/application/guards/checks/bead_claimed.py"],
     ["domains/application/README.md", "src/beadloom/application/guards/checks/working_branch.py"],
     ["domains/application/README.md", "src/beadloom/application/guards/config.py"],
@@ -170,6 +171,7 @@
     ["domains/application/components/source-derivation/DOC.md", "src/beadloom/application/source_derivation/source_tree.py"],
     ["domains/application/components/source-derivation/DOC.md", "src/beadloom/application/source_derivation/termination.py"],
     ["domains/application/components/typed-surface/DOC.md", "src/beadloom/application/typed_surface.py"],
+    ["domains/application/components/verdict-room/DOC.md", "src/beadloom/application/gitlab_pipeline.py"],
     ["domains/application/components/verdict-room/DOC.md", "src/beadloom/application/rooms.py"],
     ["domains/application/components/work-item-routing/DOC.md", "src/beadloom/application/work_item_routing.py"],
     ["domains/application/features/ci-gate/SPEC.md", "src/beadloom/application/gate.py"],
@@ -462,6 +464,7 @@
     ["domains/infrastructure/README.md", "src/beadloom/infrastructure/health.py"],
     ["domains/infrastructure/README.md", "src/beadloom/infrastructure/mcp_tools.py"],
     ["domains/infrastructure/README.md", "src/beadloom/infrastructure/node_source.py"],
+    ["domains/infrastructure/README.md", "src/beadloom/infrastructure/python_projects.py"],
     ["domains/infrastructure/README.md", "src/beadloom/infrastructure/repository.py"],
     ["domains/infrastructure/README.md", "src/beadloom/infrastructure/scan_paths.py"],
     ["domains/infrastructure/README.md", "src/beadloom/infrastructure/surface_registry.py"],
@@ -475,6 +478,7 @@
     ["domains/infrastructure/components/mcp-tools/DOC.md", "src/beadloom/infrastructure/mcp_tools.py"],
     ["domains/infrastructure/components/node-source/DOC.md", "src/beadloom/infrastructure/node_source.py"],
     ["domains/infrastructure/components/repository/DOC.md", "src/beadloom/infrastructure/repository.py"],
+    ["domains/infrastructure/components/scan-paths/DOC.md", "src/beadloom/infrastructure/python_projects.py"],
     ["domains/infrastructure/components/scan-paths/DOC.md", "src/beadloom/infrastructure/scan_paths.py"],
     ["domains/infrastructure/components/surface-registry/DOC.md", "src/beadloom/infrastructure/surface_registry.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/agentic_flow_setup.py"],
@@ -829,5 +833,5 @@
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/lib/queryState.js"],
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/model/useUrlState.js"]
   ],
-  "recorded_at": "2026-10-19T11:41:36.336848+00:00"
+  "recorded_at": "2026-10-19T13:38:08.321151+00:00"
 }

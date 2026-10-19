@@ -156,7 +156,9 @@ class TestNamingTheRoomIsNotAStrongerVerdict:
         )
         assert outcome.exit_code == 0
         assert "Room:" in outcome.stdout
-        assert "declares no room" in outcome.stdout
+        # BDL-083 S2a (BDL-UX #332): a census that derived no room is a named skip
+        # with its reason, not a statement that reads like a count of zero.
+        assert "rooms: not derived — no readable pipeline" in outcome.stdout
 
 
 class TestTheRefusingGateAlsoNamesItsRoom:

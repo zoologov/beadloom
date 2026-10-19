@@ -51,8 +51,17 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from beadloom.application.gitlab_pipeline import (
+    GITLAB_CI_FILE,
+    load_gitlab_pipeline,
+    python_of_image,
+)
+from beadloom.infrastructure.python_projects import census_packaging
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
+
+    from beadloom.application.gitlab_pipeline import GitlabJob
 
 #: Runner-label families and the platform each names. A VOCABULARY, not a room
 #: list: it translates the names GitHub gives its images into what
@@ -91,6 +100,28 @@ _ANY_EXPRESSION_RE = re.compile(r"\$\{\{(.+?)\}\}")
 #: one declaration: this module's rooms, and the verifications a gate run did
 #: not perform (:mod:`beadloom.application.gate_coverage`).
 WORKFLOW_DIR = Path(".github") / "workflows"
+
+#: The dimension a GitLab leg's container image is reported under. No run can describe
+#: it, so a leg that carries it is never entered: a run on the host is not a run in the
+#: image, and a match would manufacture coverage nobody has (BDL-UX #332).
+IMAGE_DIMENSION = "image"
+
+#: How every surface introduces a census that derived no room, so ``rooms`` and the three
+#: formats of ``ci`` print one sentence rather than ``0 of 0 declared room(s)`` (#332).
+NOT_DERIVED_PREFIX = "rooms: not derived — "
+
+#: Pipelines this census does not read, named so a project declaring one is told which
+#: file it found rather than that it has no pipeline (BDL-UX #332). A vocabulary, not a
+#: claim to know every CI: a file outside it leaves the reason at "no readable pipeline".
+UNREAD_PIPELINES: tuple[str, ...] = (
+    "Jenkinsfile",
+    ".circleci/config.yml",
+    "azure-pipelines.yml",
+    "bitbucket-pipelines.yml",
+    ".travis.yml",
+    ".drone.yml",
+    ".buildkite/pipeline.yml",
+)
 
 #: The dimension this module gives the optional extras an environment installed.
 EXTRAS_DIMENSION = "extras"
@@ -193,6 +224,27 @@ class UnresolvedRoom:
 
 
 @dataclass(frozen=True)
+class PipelineSources:
+    """The pipeline files a census reads its legs from, and a declared one it set aside.
+
+    One project runs on one forge. A project keeping a mirror pipeline for the other
+    host -- this repository keeps a ``.gitlab-ci.yml`` beside ``.github/workflows`` --
+    would otherwise report legs no run of it ever took, so the GitHub workflows take
+    precedence and the GitLab file is read when they are absent. What was set aside is
+    named, so the choice is visible and not a silence.
+    """
+
+    workflows: tuple[Path, ...] = ()
+    gitlab: Path | None = None
+    set_aside: tuple[UnresolvedRoom, ...] = ()
+
+    @property
+    def declared(self) -> bool:
+        """Whether the project declares a pipeline this census reads, read or set aside."""
+        return bool(self.workflows) or self.gitlab is not None
+
+
+@dataclass(frozen=True)
 class AbsentExtra:
     """An extra a project declares that this environment does not satisfy.
 
@@ -256,6 +308,8 @@ class DeclaredRooms:
     supported: tuple[str, ...] = ()
     floor: str | None = None
     extras: ExtraSet = field(default_factory=ExtraSet)
+    not_derived: str | None = None
+    """Why no room was derived, or ``None`` when one was: the census's named skip."""
 
 
 @dataclass(frozen=True)
@@ -269,6 +323,8 @@ class RoomCensus:
     floor: str | None = None
     supported_without_a_leg: tuple[str, ...] = field(default=())
     extras: ExtraSet = field(default_factory=ExtraSet)
+    not_derived: str | None = None
+    """Why no room was derived, or ``None``. A surface prints it instead of ``0 of 0``."""
 
     @property
     def entered(self) -> tuple[RoomComparison, ...]:
@@ -415,31 +471,104 @@ def _locale_clause(codec: str, asked: str | None) -> str:
 
 
 def derive_declared_rooms(project_root: Path) -> DeclaredRooms:
-    """Read the rooms a project declares out of its packaging and its workflows.
+    """Read the rooms a project declares out of its packaging and its pipelines.
 
     Nothing here is a list this function owns: adding a leg to a workflow, or an
-    interpreter to the classifiers, changes the answer by the same act.
+    interpreter to the classifiers, changes the answer by the same act. The legs come
+    from ``.github/workflows`` and ``.gitlab-ci.yml``, and the packaging from the Python
+    project :func:`~beadloom.infrastructure.python_projects.census_packaging` finds
+    (BDL-UX #332).
     """
-    supported, floor, packaging_unresolved = _read_packaging(project_root)
+    packaging = census_packaging(project_root)
+    supported, floor, packaging_unresolved = _read_packaging(
+        packaging.directory, packaging.source
+    )
     extras = installed_extras(project_root)
-    rooms, workflow_unresolved = _read_workflows(project_root, extras.distribution)
+    sources = pipeline_sources(project_root)
+    github_rooms, github_unresolved = _read_workflows(project_root, extras.distribution)
+    gitlab_rooms, gitlab_unresolved = _read_gitlab(project_root, extras.distribution)
+    rooms = github_rooms + gitlab_rooms
+    pipeline_unresolved = [*github_unresolved, *gitlab_unresolved, *sources.set_aside]
+    if not sources.declared:
+        pipeline_unresolved.append(
+            UnresolvedRoom(
+                source=f"{WORKFLOW_DIR.as_posix()}, {GITLAB_CI_FILE}",
+                why=(
+                    f"no workflow file declares a leg and there is no `{GITLAB_CI_FILE}`, "
+                    "so this project declares no room a verdict could be held against"
+                ),
+            )
+        )
     return DeclaredRooms(
         rooms=rooms,
         unresolved=(
             tuple(packaging_unresolved)
-            + tuple(workflow_unresolved)
+            + tuple(UnresolvedRoom(source=packaging.source, why=n) for n in packaging.notes)
+            + tuple(pipeline_unresolved)
             + (extras.unresolved if not extras.resolved else ())
         ),
         supported=supported,
         floor=floor,
         extras=extras,
+        not_derived=None if rooms else _not_derived(project_root, pipeline_unresolved),
     )
 
 
+def pipeline_sources(project_root: Path) -> PipelineSources:
+    """The pipeline files this project's legs are read from, chosen once for every reader.
+
+    Public because two derivations read one declaration: the rooms here, and the
+    verifications a gate run did not perform (:mod:`beadloom.application.gate_coverage`).
+    """
+    directory = project_root / WORKFLOW_DIR
+    workflows = tuple(sorted(p for p in directory.glob("*.y*ml") if p.is_file()))
+    gitlab = project_root / GITLAB_CI_FILE
+    if not gitlab.is_file():
+        return PipelineSources(workflows=workflows)
+    if not workflows:
+        return PipelineSources(gitlab=gitlab)
+    return PipelineSources(
+        workflows=workflows,
+        set_aside=(
+            UnresolvedRoom(
+                source=GITLAB_CI_FILE,
+                why=(
+                    f"not read: `{WORKFLOW_DIR.as_posix()}` also declares this project's "
+                    "pipeline and takes precedence, so the GitLab jobs are not among the "
+                    "legs reported here"
+                ),
+            ),
+        ),
+    )
+
+
+def _not_derived(project_root: Path, unresolved: list[UnresolvedRoom]) -> str:
+    """Why a census derived no room: the reason a surface prints instead of ``0 of 0``."""
+    if not pipeline_sources(project_root).declared:
+        reason = (
+            f"no readable pipeline: no `{WORKFLOW_DIR.as_posix()}/*.yml` and no "
+            f"`{GITLAB_CI_FILE}`"
+        )
+        unread = [name for name in UNREAD_PIPELINES if (project_root / name).is_file()]
+        if unread:
+            named = ", ".join(f"`{name}`" for name in unread)
+            reason += f"; the pipeline is declared in {named}, which this census does not read"
+        return reason
+    sources = sorted({entry.source for entry in unresolved})
+    if not sources:
+        return "no readable pipeline: the pipeline files declare no job"
+    return f"no readable pipeline: no leg could be read from {', '.join(sources)}"
+
+
 def _read_packaging(
-    project_root: Path,
+    project_root: Path, source: str = "pyproject.toml"
 ) -> tuple[tuple[str, ...], str | None, list[UnresolvedRoom]]:
-    """The interpreters the packaging metadata enumerates, and the floor it sets."""
+    """The interpreters the packaging metadata enumerates, and the floor it sets.
+
+    *source* is the file's name relative to the analysed project's root, so an entry
+    about a nested project names ``backend/pyproject.toml`` rather than a root file
+    that does not exist.
+    """
     path = project_root / "pyproject.toml"
     unresolved: list[UnresolvedRoom] = []
     try:
@@ -450,7 +579,7 @@ def _read_packaging(
             None,
             [
                 UnresolvedRoom(
-                    source="pyproject.toml",
+                    source=source,
                     why=(
                         "no readable packaging metadata, so the interpreters this "
                         "project supports are unknown rather than none"
@@ -464,7 +593,7 @@ def _read_packaging(
     if not supported:
         unresolved.append(
             UnresolvedRoom(
-                source="pyproject.toml",
+                source=source,
                 why=(
                     "no `Programming Language :: Python :: X.Y` classifier, so the "
                     f"supported set is not enumerated{_floor_clause(floor)} — a "
@@ -728,12 +857,13 @@ def installed_extras(
     process's extras onto that room's record would state the extras of an
     environment no verdict was taken in (BDL-UX #256).
     """
-    distribution = project_distribution(project_root)
+    packaging = census_packaging(project_root)
+    distribution = project_distribution(packaging.directory)
     if distribution is None:
         return ExtraSet(
             unresolved=(
                 UnresolvedRoom(
-                    source="pyproject.toml",
+                    source=packaging.source,
                     why=(
                         "the packaging metadata names no distribution, so the "
                         "optional extras an environment installed cannot be "
@@ -747,7 +877,7 @@ def installed_extras(
         return ExtraSet(
             distribution=distribution,
             unresolved=(
-                UnresolvedRoom(source="pyproject.toml", why=declaration.failure),
+                UnresolvedRoom(source=packaging.source, why=declaration.failure),
             ),
         )
     available = _installed_distributions(search_path) | declaration.base
@@ -807,6 +937,21 @@ def _leg_extras(
     environment for one.
     """
     typed, composite = typed_extras_of_job(job)
+    return _typed_leg_extras(distribution, source, typed, composite=composite)
+
+
+def _typed_leg_extras(
+    distribution: str | None,
+    source: str,
+    typed: set[str] | None,
+    *,
+    composite: bool = False,
+) -> tuple[str | None, list[UnresolvedRoom]]:
+    """The satisfied-extras label of a leg whose install step typed *typed*.
+
+    The half of :func:`_leg_extras` that does not depend on the host: a GitHub job's
+    steps and a GitLab job's script lines both come down to the extras somebody typed.
+    """
     if typed is None:
         if composite:
             return None, [
@@ -988,19 +1133,13 @@ def _pip_project_extras(line: str) -> set[str] | None:
 def _read_workflows(
     project_root: Path, distribution: str | None = None
 ) -> tuple[tuple[Room, ...], list[UnresolvedRoom]]:
-    """One room per matrix combination, per job, per workflow file."""
-    directory = project_root / WORKFLOW_DIR
-    files = sorted(p for p in directory.glob("*.y*ml") if p.is_file())
-    if not files:
-        return (), [
-            UnresolvedRoom(
-                source=str(WORKFLOW_DIR),
-                why=(
-                    "no workflow file declares a leg, so this project declares no "
-                    "room a verdict could be held against"
-                ),
-            )
-        ]
+    """One room per matrix combination, per job, per workflow file.
+
+    No workflow file is no rooms and nothing unresolved: whether the project declares
+    no pipeline at all is decided once, over both hosts, by
+    :func:`derive_declared_rooms`.
+    """
+    files = pipeline_sources(project_root).workflows
     rooms: list[Room] = []
     unresolved: list[UnresolvedRoom] = []
     for path in files:
@@ -1016,6 +1155,61 @@ def _read_workflows(
             rooms.extend(job_rooms)
             unresolved.extend(job_unresolved)
     return tuple(rooms), unresolved
+
+
+def _read_gitlab(
+    project_root: Path, distribution: str | None = None
+) -> tuple[tuple[Room, ...], list[UnresolvedRoom]]:
+    """One room per job of ``.gitlab-ci.yml``, each naming the file and the job.
+
+    A job's room carries its image and, for an official ``python`` image, the
+    interpreter the tag names. A job with no image anywhere is unresolved rather than a
+    room with no dimension: a room with nothing to compare would be entered by every run.
+    """
+    path = pipeline_sources(project_root).gitlab
+    if path is None:
+        return (), []
+    pipeline, failure = load_gitlab_pipeline(path)
+    if pipeline is None:
+        return (), [UnresolvedRoom(source=GITLAB_CI_FILE, why=failure or "")]
+    rooms: list[Room] = []
+    unresolved = [UnresolvedRoom(source=GITLAB_CI_FILE, why=note) for note in pipeline.notes]
+    for job in pipeline.jobs:
+        room, job_unresolved = _room_of_gitlab_job(job, distribution)
+        unresolved.extend(job_unresolved)
+        if room is not None:
+            rooms.append(room)
+    return tuple(rooms), unresolved
+
+
+def _room_of_gitlab_job(
+    job: GitlabJob, distribution: str | None
+) -> tuple[Room | None, list[UnresolvedRoom]]:
+    """The room one GitLab job declares, and what about it could not be read."""
+    source = f"{GITLAB_CI_FILE}: {job.name}"
+    unresolved = [UnresolvedRoom(source=source, why=note) for note in job.notes]
+    if job.image is None:
+        unresolved.append(
+            UnresolvedRoom(
+                source=source,
+                why=(
+                    "the job declares no `image:` and the pipeline no default one, so "
+                    "the platform its runner provides is unknown"
+                ),
+            )
+        )
+        return None, unresolved
+    dimensions = {IMAGE_DIMENSION: job.image}
+    python = python_of_image(job.image)
+    if python is not None:
+        dimensions["python"] = python
+    extras, extras_unresolved = _typed_leg_extras(
+        distribution, source, _extras_of_command("\n".join(job.commands))
+    )
+    unresolved.extend(extras_unresolved)
+    if extras is not None:
+        dimensions[EXTRAS_DIMENSION] = extras
+    return Room(dimensions=dimensions, source=source), unresolved
 
 
 def load_jobs(path: Path) -> tuple[dict[str, Any], str | None]:
@@ -1195,10 +1389,12 @@ def take_census(
     """
     extras = installed_extras(project_root)
     current = _room_with_extras(current_room(), extras)
+    not_derived: str | None = None
     if declared is None:
         found = derive_declared_rooms(project_root)
         rooms, unresolved = found.rooms, list(found.unresolved)
         supported, floor = found.supported, found.floor
+        not_derived = found.not_derived
     else:
         rooms, unresolved = declared, []
         supported, floor = (), None
@@ -1218,6 +1414,7 @@ def take_census(
         floor=floor,
         supported_without_a_leg=tuple(v for v in supported if v not in legs),
         extras=extras,
+        not_derived=not_derived,
     )
 
 

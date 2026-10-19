@@ -3,7 +3,8 @@
 The rooms a verdict can be taken in: the one this run is in, the ones the project declares, and
 the ones the run did not enter.
 
-**Source:** `src/beadloom/application/rooms.py`
+**Source:** `src/beadloom/application/rooms.py`, with `src/beadloom/application/gitlab_pipeline.py`
+(the GitLab reader) beside it
 
 ---
 
@@ -31,6 +32,7 @@ are unchanged by the room, and `tests/test_gate_verdict_room.py` fails if that s
 | `pyproject.toml` classifiers | the interpreter versions the project supports |
 | `pyproject.toml` `requires-python` | the floor, kept as a floor |
 | `.github/workflows/*.yml` | one room per matrix combination, per job, per file |
+| `.gitlab-ci.yml` | one room per job: its `image`, and the `python` an official `python:X.Y` image names |
 | a job's install step | the optional extras that leg's environment satisfies |
 | the project distribution's installed metadata | the optional extras this run's interpreter has |
 
@@ -38,6 +40,33 @@ A hand-written room list satisfies every test written beside it and goes stale t
 leg changes — which happened three times to this repository's own `DEFAULT_STATUS_CHECK_CONTEXTS`.
 Adding a leg to a workflow, or an interpreter to the classifiers, changes the answer by the same
 act that added it.
+
+**A monorepo is read where its project is** (BDL-083 S2a, BDL-UX #332). On 9.0.0 the census
+opened `<root>/pyproject.toml` and `.github/workflows` and nothing else, so the monorepo fixture
+— `backend/pyproject.toml`, `.gitlab-ci.yml`, nothing at the root — declared 0 rooms and `ci`
+printed `0 of 0 declared room(s)`. Three rules replace that:
+
+- **The packaging comes from the Python project found.** `infrastructure/python_projects.py`
+  finds every `pyproject.toml` at the root, under a scan path, and between the root and a scan
+  path (`scan_paths: [backend/src]` names the code, and `backend/` packages it). A root that
+  holds one is read as before; otherwise the first project found is read, the others are named
+  in an unresolved entry, and every entry about the packaging names its file
+  (`backend/pyproject.toml`).
+- **The pipeline files are chosen once, by `pipeline_sources()`.** The GitHub workflows take
+  precedence and `.gitlab-ci.yml` is read when they are absent. A project keeping a mirror for
+  the other host is set aside by name, because one project runs on one forge: this repository
+  keeps a `.gitlab-ci.yml` beside `.github/workflows`, and reading both would have added three
+  rooms no run of it ever took (33 measured before and after). `gate-coverage` takes its files
+  from the same function.
+- **A census that derived no room says why.** `RoomCensus.not_derived` carries the reason —
+  `no readable pipeline: …`, naming a `Jenkinsfile` or another pipeline from `UNREAD_PIPELINES`
+  when one is there — and every surface prints `rooms: not derived — <reason>` instead of a
+  count of zero.
+
+A GitLab room carries an `image` dimension no run can describe, so it is never entered from a
+host: a run on the host is not a run in the image. What the GitLab reader does not follow —
+`include:`, `extends:`, `parallel: matrix` — is an unresolved entry, and a job with no `image:`
+anywhere is unresolved rather than a room with nothing to compare.
 
 **A floor is not a set.** `requires-python = ">=3.10"` counted upward would need a hardcoded
 newest Python, so a project with a floor and no classifiers gets an unresolved entry rather than
@@ -202,7 +231,12 @@ its score through `describe_room`, which composes it here so both surfaces print
 empty answer would read as "this project has no such axis", which is the clean list an agent
 trusts and stops at.
 
-`WORKFLOW_DIR` and `load_jobs(path)` are public rather than private (BDL-068 S6): `gate-coverage`
+`rooms --json` and `ci --format json` carry `not_derived` beside the census: `null` when a room
+was derived, the reason otherwise (BDL-083 S2a). `--dimension` on a census that derived no room
+exits 2 with the reason.
+
+`WORKFLOW_DIR`, `load_jobs(path)` and `pipeline_sources(project_root)` are public rather than
+private (BDL-068 S6, BDL-083 S2a): `gate-coverage`
 reads the same workflow declaration for a different question — which verifications a gate run did
 not perform — and one reader means one wording for "this workflow could not be parsed" instead of
 two that can drift apart.

@@ -232,6 +232,11 @@ the optional extras a leg installs against the ones this run has — and this re
 project's own extras with the distributions each absent one needs. The values of an axis are
 printed in a stable order: they come from a set, so an axis whose values are not versions was
 previously printed in the hash order of that set, which differs between processes.
+A census that derived no room — no readable pipeline, in the census's words — is printed as
+`rooms: not derived — <reason>` by `rooms`, carried as `not_derived` in `rooms --json`, and
+refused with the reason by `--dimension` (exit 2). `federation.py` prints the same sentence
+under the `ci` verdict in the rich and GitHub formats and carries `room.not_derived` in
+`--format json`, where 9.0.0 printed `0 of 0 declared room(s)` (BDL-083 S2a, BDL-UX #332).
 
 `typed_surface.py` renders what `application.typed_surface` derived: the files this project
 declares type-checked, read from its own `[tool.mypy]` (BDL-068 S4, BDL-UX #231). `--filter`
