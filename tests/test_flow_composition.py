@@ -442,7 +442,7 @@ class TestTheBeadTrailerIsPlacedWhereGitReadsIt:
             ["git", "interpret-trailers", "--parse"],  # noqa: S607 - git from PATH, fixed argv
             input=example,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
             check=True,
         ).stdout.splitlines()
         assert f"{BEAD_TRAILER}: bd-a1b2" in parsed
