@@ -79,7 +79,9 @@ Parent: `beadloom-ba9w`.
 | S1F3 | `beadloom-7kas` | dev: S1R Minors 3, 4, 6 and the nitpick — the printed ownership rule states its binding; the "can match none" sentence hedged; the hook names public; the fixture rule named for its glob | P0 | S1R (first pass) |
 | S1F4 | `beadloom-ba9w.17` | dev: S1R — the MCP `complete_bead` gaps of the #318 class: `not_run` when the coverage report raised, the verdict room's census bounded | P0 | S1F3 |
 | S1F5 | `beadloom-ba9w.18` | dev: S1R pass 2 — the `Bead:` trailer in the message's final paragraph (format, fragments, checklist); the ownership report names a line git reads no trailer from; the MCP verdict reads the gate's room; the source-root lead-in; two nitpicks | P0 | S1R (second pass) |
-| S1W | `beadloom-hfxv` | tech-writer: the ci-gate and rule-engine SPECs, `docs/guides/ci-setup.md` (the hook's new behaviour), `docs/guides/public-api.md` (the MAJOR moves), CHANGELOG | P0 | S1R |
+| S1F6 | `beadloom-g64s` | dev: the JSON and MCP `claims` entry names the commits whose `Bead:` line git reads no trailer from; the pass-3 nitpicks | P0 | S1R (third pass) |
+| S1R6 | `beadloom-sywb` | review: fix 6, bead id only | P0 | S1F6 |
+| S1W | `beadloom-hfxv` | tech-writer: the ci-gate and rule-engine SPECs, `docs/guides/ci-setup.md` (the hook's new behaviour), `docs/guides/public-api.md` (the MAJOR moves), CHANGELOG | P0 | S1R, S1R6 |
 | S1P | `beadloom-c5m5` | coordinator: S1 PR, merge on green | P0 | S1W |
 | S2a | - | dev: `rooms` reads `.github/workflows/*.yml` and `.gitlab-ci.yml` as sources of legs, each room carrying its source; distributions by `**/pyproject.toml` under `scan_paths`; a CI the census cannot read is a named skip in `ci`; `gate-coverage` reads the same sources (D6; #332) | P0 | S1P |
 | S2b | - | dev: `clean-room` builds the environment of the distribution that owns the carried files from its `uv.lock` (`uv sync --frozen`), derives the "Measure in the room" hint from it, names the no-`.git` limit (D6; #333; `beadloom-ba9w.1` #311 closes inside) | P0 | S2a |

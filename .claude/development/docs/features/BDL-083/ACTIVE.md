@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** S1R third pass — `beadloom-pohj` at `5953af08`
-**Goal:** the second pass's findings confirmed closed or a third fix cycle opened
-**Done when:** `beadloom-pohj` closes OK; then S1W `beadloom-hfxv`
+**Bead:** S1 fix 6 — `beadloom-g64s` (the JSON/MCP `claims` count), then its review `beadloom-sywb`, then S1W `beadloom-hfxv`
+**Goal:** the owner's ruling of 2026-10-19 on the machine-readable ownership shape implemented and reviewed
+**Done when:** fix 6 green on two levels, committed with the trailer; its review OK; S1W ready
 
 ## Progress
 
@@ -35,13 +35,15 @@
 | `beadloom-jwfc` | S1e2 | done | `d1b7e520`; `ci` writes through `infrastructure/console_streams.write_whole`, new `--tee FILE`; the hook reads the verdict from the tee copy (wave 2's `printf` dropped the report on the same pipe: a second defect); before 83518 of 229492 bytes + `BlockingIOError`, after the whole report; room 14569 passed + 1 of #311's class, tree 14615 passed, `ci` rc 0; adopters re-run `install-hooks` |
 | `beadloom-6xdt` | S1f | done | `ba8ce1f4`; MAJOR move 1 measured (rc 0 → 1 on a declared log the tree does not hold); new `application/gate_issue_log.py`; room 14412 passed + 1 of #311's class, tree 14459 passed, `ci` rc 0 |
 | `beadloom-rupp` | S1T | done | `546a1c70`; 9 of 10 entries re-run green before (9.0.0) and after; #344's fallback half still broken; the three MAJOR moves + the `scope_base` move red on 9.0.0 by assertion; an end-to-end test for move 3 added; a hollow EAGAIN test fixed; full tree 14627 passed / 0 failed (four parts, foreground), ruff, mypy, `ci` rc 0 |
-| `beadloom-pohj` | S1R | in progress | pass 1 ISSUES 2026-10-18 (2 major, 7 minor); pass 2 ISSUES 2026-10-19 (1 major, 2 minor, 2 nitpicks); fixes 1–5 landed; pass 3 launched 2026-10-19 on the bead id and `5953af08` |
+| `beadloom-pohj` | S1R | done | pass 1 ISSUES 2026-10-18 (2 major, 7 minor); pass 2 ISSUES 2026-10-19 (1 major, 2 minor); pass 3 OK 2026-10-19 at `8f5ddd7a`: 0 critical, 0 major, 2 minor (the JSON/MCP `claims` count → fix 6 by the owner's ruling; #316 → S3), 2 nitpicks (→ fix 6); measured on the tree |
 | `beadloom-4m0w` | S1 fix 1 | done | `d8b26490`; the three post-step reports under `gate_boundary.derive_bounded`, a reason on the report, the steps' verdict kept; the lint line counts statements at info; room 14597 passed + 1 of #311's class; `ci` rc 0 on the tree |
 | `beadloom-ilrn` | S1 fix 2 | done | `d0b193a7`; `info` in neither count of the debt report; room 14583 passed + 1 of #311's class, tree 14647 passed; found BDL-UX #352 (TUI counts `warning`, the engine emits `warn`) |
 | `beadloom-7kas` | S1 fix 3 | done | `2a4de894`; D10: a commit is a bead's by its `Bead:` trailer only, the composed commit format carries it (flow template, `.claude/CLAUDE.md`, the five role files and `coordinator.md` recomposed); the `refs:` xfail deleted (D3); the source-root sentence hedged; the hook names public; the fixture rule renamed; attribution on this branch: 17 bindings over 14 beads by any mention -> 4 over 3 by the trailer (5 over 4 with this commit); room 14616 passed + 1 of #311's class; tree 14663 passed / 0 failed, `ci` rc 0 |
 | `beadloom-ba9w.17` | S1 fix 4 | done | `5e278da3`; `complete_bead` returns `not_run_reason` (the coverage report's reason when it raised, null otherwise); the room census under `gate_boundary.derive_bounded`, `room` as `{"reason": ...}` when it raised; 3 scenarios + 6 tests, 8 of 9 red first; room 14634 passed + 1 of #311's class over 2948 files; tree 14681 passed / 0 failed, ruff, mypy, `ci` rc 0 (32 advisory axes warnings, #316); CHANGELOG line for S1W; `mcp_server.py` failed `ruff format` before this bead (left) |
 | `beadloom-ba9w.18` | S1 fix 5 | done | `8600556e` + `f0427d09` + `5953af08`; the format puts the trailer in the final paragraph (template, both landing fragments, checklist; recomposed by `setup-agentic-flow`); the ownership report names a `Bead:` line git reads no trailer from (two wordings: outside the final paragraph; in a final paragraph git reads as no trailer block); the MCP verdict reads `gate.room`; liveness headline `looks unable to fire` for an inferred root; 2 scenarios + 21 tests red first; room 14658 passed + 1 of #311's class over 2949 files; tree 14705 passed / 0 failed, ruff, mypy, `config-check`, `ci` rc 0 |
-| `beadloom-hfxv` | S1W | blocked | blocked by S1R |
+| `beadloom-g64s` | S1 fix 6 | ready | the JSON report's and the MCP `owners` `claims` entry names the commits whose `Bead:` line git reads no trailer from (owner's ruling 2026-10-19); pass-3 nitpicks (a dataclass for `_liveness`; the stale `ci --help` step list) |
+| `beadloom-sywb` | S1R6 | blocked | review of fix 6, bead id only; blocks S1W |
+| `beadloom-hfxv` | S1W | blocked | blocked by the fix-6 review |
 | `beadloom-c5m5` | S1P | blocked | blocked by S1W |
 
 ## Notes
@@ -62,4 +64,5 @@
 - Fix wave 3 (2026-10-19, HEAD `5e278da3`, gate owner `beadloom-ba9w.17`): the tree 14681 passed, 0 failed, 145 skipped, 13 xfailed (seven foreground parts); ruff and mypy clean; `ci` rc 0 (32 advisory axes warnings, #316). Noticed and left: `complete_bead` still takes a second room census beside the Gate's own; `mcp_server.py` failed `ruff format` before this bead.
 - S1R pass 2 (2026-10-19): the fix for Minor 3 introduced a sentence of the S1 class — git reads a trailer from the final paragraph only, and a `Bead:` line followed by a separate `Co-Authored-By` paragraph binds nothing while the report denies the line. D10 clarified in the RFC (final paragraph beside the other trailers; the report names a misplaced line; git >= 2.22); fix 5 `beadloom-ba9w.18`. Coordinator lesson: the pass-2 launch prompt mapped the fix commits to the findings and pre-classified #316/#311 — the reviewer counted that as the agenda coming from the coordinator; the next pass carries the bead id and the commit hash only.
 - Fix wave 4 (2026-10-19, HEAD `5953af08`, gate owner `beadloom-ba9w.18`): the tree 14705 passed, 0 failed, 145 skipped, 13 xfailed (five foreground parts); ruff, mypy, `config-check`, `ci` rc 0 (32 advisory axes warnings, #316). For the owner: the JSON and MCP `claims` entry still counts bound commits only, so a machine reader sees `commits: 0` without the misplaced-line hint the text surfaces print — RULED 2026-10-19 by the owner: add it, in S1 — folded into fix 6 if S1R pass 3 returns ISSUES, else one small dev bead plus a review of that commit before S1W. For S1W: CHANGELOG lines for the liveness headline and the misplaced-line sentence; the declared surface 815 → 826 pairs re-recorded; the surface-drift warnings on `docs/guides/*` and `docs/services/cli.md` untouched.
+- S1R pass 3 (2026-10-19, HEAD `8f5ddd7a`): OK. The reviewer first recorded the 32 axes warnings as a major and amended it to a minor on reading the #316 deferral in this file; the git status attached to its context named the earlier findings (withholding partly defeated by the harness, not the prompt). Fix 6 `beadloom-g64s` + its review `beadloom-sywb` ordered before S1W by the owner's ruling.
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.
