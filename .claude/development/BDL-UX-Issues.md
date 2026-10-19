@@ -46,6 +46,7 @@
 
 | No | Date | Severity | What |
 |---|---|---|---|
+| 357 | 2026-10-19 | high | the hooks `install-hooks` writes never run on a repository `bd init` initialised: bd 1.0.4 sets `core.hooksPath=.beads/hooks` while `install-hooks` writes `.git/hooks`, so the pre-commit checks and the pre-push Gate are silent there and a push goes through with the hook installed |
 | 356 | 2026-10-19 | high | `setup-agentic-flow --tool cursor` writes the five role files and a 17-line rules stub and no core, no project layer and no commands, so an agent on Cursor runs the flow with no DoD, no tracker discipline and no epic-closure duties; `setup-mcp` writes one machine's absolute path |
 | 355 | 2026-10-19 | medium | the branch-to-work-item binding reads `features/<KEY>` exactly, so a work item that ships in several pull requests (one branch per slice, `features/BDL-083-S2`) loses its declared axes, its focus document and the scope check on every branch but the first |
 | 354 | 2026-10-19 | medium | a merge-slot `release` made after `git push` lands in no merged commit, so `master` carries the slot held by a closed bead and the next clone's `acquire` is refused |
@@ -175,6 +176,15 @@
 | 73 | 2026-03-10 | low | `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md` |
 
 ### Entries
+
+357. [2026-10-19] [HIGH] the hooks `install-hooks` writes never run on a repository `bd init` initialised: bd 1.0.4 sets `core.hooksPath=.beads/hooks` while `install-hooks` writes `.git/hooks`, so the pre-commit checks and the pre-push Gate are silent there and a push goes through with the hook installed
+
+    **Severity:** high (every check the hooks carry — lint over staged paths, sync-check, the ACTIVE/tracker coherence, the landing-lock check, the pre-push Gate — is silent on the layout `bd init` produces, and nothing says so; the #326 class, a gate that does not fire)
+    **Command:** `beadloom install-hooks`, `git push`, `beadloom doctor`
+    **Context:** measured 2026-10-19 on a copy of the monorepo fixture with bd 1.0.4 while measuring #354 (S2g, `beadloom-89gm`): `bd init` had set `core.hooksPath=.beads/hooks`; `install-hooks` reported success and wrote `.git/hooks/pre-commit` and `.git/hooks/pre-push`; a push that the new landing check must refuse went through, because git ran the hooks under `.beads/hooks` and nothing there. This repository is safe only because it sets `core.hooksPath` back to `.git/hooks` by hand, a fact recorded nowhere a new clone reads.
+    **Issue:** `install-hooks` writes where it assumes git looks instead of where git looks; `doctor` and `config-check` do not read `core.hooksPath`, so the installed-but-never-run state has no finding.
+    **Expected:** `install-hooks` reads `core.hooksPath` and installs where git looks (chaining to an existing hook of bd's if one is there), or refuses by name with the setting and the two paths; `doctor` names a `core.hooksPath` that points away from the installed hooks; the pre-push liveness is measurable (a test over a repository whose `core.hooksPath` points elsewhere). Placed 2026-10-19 by the coordinator in BDL-083 as `beadloom-ba9w.23`, to be placed by S3's result.
+    **Workaround:** `git config core.hooksPath .git/hooks` after `bd init`, or copy the hooks into `.beads/hooks`.
 
 356. [2026-10-19] [HIGH] `setup-agentic-flow --tool cursor` writes the five role files and a 17-line rules stub and no core, no project layer and no commands, so an agent on Cursor runs the flow with no DoD, no tracker discipline and no epic-closure duties; `setup-mcp` writes one machine's absolute path
 
