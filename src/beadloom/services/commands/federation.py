@@ -13,6 +13,8 @@ import click
 if TYPE_CHECKING:
     from beadloom.application.gate import GateResult
     from beadloom.graph.federation import GateFailure
+    from beadloom.graph.lint_scope import CommitLintScope
+    from beadloom.graph.linter import LintResult
 
 from beadloom import __version__
 from beadloom.services.commands._root import main
@@ -270,6 +272,16 @@ _FORMATS_SILENT_WHEN_CLEAN = frozenset({"porcelain", "github"})
     ),
 )
 @click.option(
+    "--staged",
+    is_flag=True,
+    default=False,
+    help=(
+        "Judge only the nodes that own a path this commit stages, and the findings "
+        "located in a staged file; say how many findings were left to the push gate. "
+        "For a pre-commit hook in a shared working tree (#118, #326)."
+    ),
+)
+@click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
@@ -281,6 +293,7 @@ def lint(
     strict: bool,
     fail_on_warn: bool,
     no_reindex: bool,
+    staged: bool,
     project: Path | None,
 ) -> None:
     """Run architecture lint rules against the project.
@@ -327,6 +340,10 @@ def lint(
         click.echo(f"Error: {exc}", err=True)
         sys.exit(2)
 
+    commit_scope = _lint_commit_scope(project_root, result) if staged else None
+    if commit_scope is not None:
+        result = commit_scope.result
+
     formatters = {
         "rich": _format_rich,
         "json": _format_json,
@@ -334,6 +351,8 @@ def lint(
         "github": _format_github,
     }
     output = formatters[fmt](result)
+    if commit_scope is not None:
+        output = _with_commit_scope(output, commit_scope, fmt)
     if output:
         click.echo(output)
     if not result.violations and fmt in _FORMATS_SILENT_WHEN_CLEAN:
@@ -373,6 +392,51 @@ def lint(
             "but the exit code stays 0 without --strict.",
             err=True,
         )
+
+
+def _lint_commit_scope(project_root: Path, result: LintResult) -> CommitLintScope:
+    """*result* narrowed to the nodes that own a staged path, by the index's ownership rule.
+
+    Composed here because the two inputs live in two domains the graph layer must not
+    reach: the staged paths are git's answer (``doc_sync``), the owner is the index's
+    most-specific-source rule (``infrastructure``).
+    """
+    from beadloom.doc_sync.git_baseline import staged_paths
+    from beadloom.graph.lint_scope import scope_lint_to_commit
+    from beadloom.infrastructure.db import readonly_connection
+    from beadloom.infrastructure.repository import get_owning_ref_id
+
+    staged = staged_paths(project_root)
+    db_path = project_root / ".beadloom" / "beadloom.db"
+    if staged is None or not db_path.is_file():
+        # A git that did not answer narrows nothing, and no index means no node owns a
+        # path: `lint` returns before it opens one when the project declares no rules.
+        return scope_lint_to_commit(result, staged, lambda _path: None)
+    with readonly_connection(db_path) as conn:
+        return scope_lint_to_commit(
+            result, staged, lambda path: get_owning_ref_id(conn, path)
+        )
+
+
+def _with_commit_scope(output: str, scope: CommitLintScope, fmt: str) -> str:
+    """*output* led by the commit-scope sentence, in the idiom of each format.
+
+    Porcelain marks it as a statement rather than a violation record, github as a
+    notice, and json carries it as an object beside the findings.
+    """
+    from beadloom.graph.linter import POPULATION_MARKER
+
+    if fmt == "json":
+        payload = json.loads(output)
+        payload["commit_scope"] = {
+            "staged": scope.staged,
+            "owned": scope.owned,
+            "nodes": list(scope.nodes),
+            "left_out": scope.left_out,
+        }
+        return json.dumps(payload, indent=2)
+    lead = {"porcelain": POPULATION_MARKER, "github": "::notice::"}.get(fmt, "")
+    return "\n".join(line for line in (f"{lead}{scope.sentence}", output) if line)
 
 
 # beadloom:domain=application
@@ -415,6 +479,16 @@ def lint(
     default=None,
     help="Project root (default: current directory).",
 )
+@click.option(
+    "--tee",
+    "tee",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Also write the report to FILE. The pre-push hook reads the verdict from it, "
+        "so the report reaches the terminal once, written by the Gate itself."
+    ),
+)
 def ci(
     *,
     hub: tuple[Path, ...],
@@ -422,15 +496,19 @@ def ci(
     fmt: str | None,
     no_reindex: bool,
     project: Path | None,
+    tee: Path | None,
 ) -> None:
-    """Run the unified CI gate (reindex -> lint -> sync-check -> config-check -> federate).
+    """Run the unified CI gate: every check this project declares, in one verdict.
 
     Composes the existing checkers into one verdict with a single exit code:
-    0 when every step passed, 1 when any step failed. The output names EVERY
-    step that ran and its honest result (PASS/WARN/FAIL/SKIP) — never a green that
-    silently skipped a step. ``--format`` applies uniformly across all steps
-    (findings share the agent-actionable {kind, rule, severity, locations, why,
-    remediation} shape). With ``--hub`` the cross-service landscape gate runs.
+    0 when every step passed, 1 when any step failed or crashed. The steps are not
+    listed here, because a copy of the list is the one that goes stale: the verdict
+    names every step that ran and its honest result (PASS/WARN/FAIL/SKIP/ERROR) — never
+    a green that silently skipped a step, and never a traceback in place of a verdict:
+    a step that raises reads ERROR and the steps after it still run. ``--format``
+    applies uniformly across all steps (findings share the agent-actionable {kind,
+    rule, severity, locations, why, remediation} shape). With ``--hub`` the
+    cross-service landscape gate runs.
     """
     from beadloom.application.gate import run_ci_gate
 
@@ -455,11 +533,27 @@ def ci(
     )
 
     output = _format_gate(result, fmt)
+    if tee is not None:
+        # Before the terminal, so a reader that closed early cannot take the copy the
+        # hook decides on with it.
+        tee.write_text(f"{output}\n" if output else "", encoding="utf-8")
     if output:
-        click.echo(output)
+        _write_report(output)
 
     if not result.ok:
         sys.exit(1)
+
+
+def _write_report(output: str) -> None:
+    """*output* on stdout whole, on a pipe that will not wait as well (BDL-UX #226).
+
+    Through click's stdout, so the codec is the one ``click.echo`` would have used, and
+    through :func:`write_whole`, so a non-blocking pipe whose reader is slow is waited
+    for instead of raising ``BlockingIOError`` part-way through the report.
+    """
+    from beadloom.infrastructure.console_streams import write_whole
+
+    write_whole(output, click.get_text_stream("stdout"))
 
 
 def _format_gate(result: GateResult, fmt: str) -> str:
@@ -489,11 +583,41 @@ def _format_gate_rich(result: GateResult) -> str:
             if remediation:
                 lines.append(f"      fix: {remediation}")
     lines.append("")
-    lines.append("PASS — gate clean" if result.ok else "FAIL — gate blocked")
+    lines.append(_gate_verdict_line(result))
+    lines.extend(_gate_crashed_lines(result))
     lines.extend(_gate_room_lines(result))
     lines.extend(_gate_coverage_lines(result))
     lines.extend(_gate_ownership_lines(result))
     return "\n".join(lines)
+
+
+def _gate_verdict_line(result: GateResult) -> str:
+    """``PASS``/``FAIL`` and, when a step raised, how many did and which (BDL-UX #318).
+
+    The clause sits INSIDE the line, before ``gate blocked``: the pre-push hook finds
+    the verdict by ``GATE_VERDICT_PATTERN``, which ends on those words, and a verdict
+    it cannot find is reported as a Gate that did not run.
+    """
+    from beadloom.application.gate import crashed_clause
+
+    if result.ok:
+        return "PASS — gate clean"
+    clause = crashed_clause(result.steps)
+    return f"FAIL — {clause} — gate blocked" if clause else "FAIL — gate blocked"
+
+
+def _gate_crashed_lines(result: GateResult) -> list[str]:
+    """The crashed steps under a heading of their own, each with what it raised.
+
+    Under the verdict rather than among the findings, because a crashed step is not
+    a finding about the project: it is a check that did not happen in this run.
+    """
+    crashed = result.crashed
+    if not crashed:
+        return []
+    lines = ["Crashed (the step raised; what it checks was not checked):"]
+    lines.extend(f"  - {step.name}: {step.error}" for step in crashed)
+    return lines
 
 
 def _gate_room_lines(result: GateResult) -> list[str]:
@@ -506,7 +630,7 @@ def _gate_room_lines(result: GateResult) -> list[str]:
 
     census = result.room
     if census is None:
-        return []
+        return _absent_report_lines("Room: not stated", result.room_reason)
     lines = [f"Room: {room_line(census.current)}"]
     if not census.comparisons:
         lines.append(
@@ -538,8 +662,19 @@ def _gate_coverage_lines(result: GateResult) -> list[str]:
     from beadloom.application.gate_coverage import gate_coverage_lines
 
     if result.coverage is None:
-        return []
+        return _absent_report_lines("Not run by this gate:", result.coverage_reason)
     return gate_coverage_lines(result.coverage)
+
+
+def _absent_report_lines(heading: str, reason: str | None) -> list[str]:
+    """A report that raised, under its own heading, saying why it makes no claim.
+
+    Nothing at all when there is no reason, because then nothing was asked and a
+    surface that was not told makes no claim (BDL-083 S1 fix 1).
+    """
+    if reason is None:
+        return []
+    return [heading, f"  {reason}, so this run makes no claim here"]
 
 
 def _gate_ownership_lines(result: GateResult) -> list[str]:
@@ -566,11 +701,16 @@ def _format_gate_json(result: GateResult) -> str:
             "passed": step.passed,
             "skipped": step.skipped,
             "summary": step.summary,
+            "error": step.error,
             "findings": step.findings,
         }
         for step in result.steps
     ]
-    payload: dict[str, object] = {"ok": result.ok, "steps": steps}
+    payload: dict[str, object] = {
+        "ok": result.ok,
+        "steps": steps,
+        "crashed": [step.name for step in result.crashed],
+    }
     coverage = result.coverage
     if coverage is not None:
         payload["not_run"] = {
@@ -584,26 +724,13 @@ def _format_gate_json(result: GateResult) -> str:
             ],
             "inspected": coverage.inspected,
         }
+    elif result.coverage_reason is not None:
+        payload["not_run"] = {"reason": result.coverage_reason}
     ownership = result.ownership
     if ownership is not None:
-        payload["ownership"] = {
-            "reason": ownership.reason,
-            "claimed": list(ownership.claimed),
-            "none_owned": ownership.none_owned,
-            "findings": [
-                {
-                    "rule": owner.rule,
-                    "verdict": owner.verdict,
-                    "node": owner.node,
-                    "beads": list(owner.beads),
-                    "where": owner.where,
-                }
-                for owner in ownership.owners
-            ],
-            "unread_claims": [
-                {"bead": claim.bead_id, "why": claim.why} for claim in ownership.unread
-            ],
-        }
+        from beadloom.application.gate_ownership import ownership_payload
+
+        payload["ownership"] = ownership_payload(ownership)
     census = result.room
     if census is not None:
         payload["room"] = {
@@ -617,6 +744,8 @@ def _format_gate_json(result: GateResult) -> str:
                 {"source": u.source, "why": u.why} for u in census.unresolved
             ],
         }
+    elif result.room_reason is not None:
+        payload["room"] = {"reason": result.room_reason}
     return json.dumps(payload, indent=2)
 
 
@@ -628,6 +757,7 @@ def _format_gate_github(result: GateResult) -> str:
     ``file``/``line`` parameters are comma-separated key=value pairs, NOT a
     ``file=<path:line>`` colon-joined string (which GitHub does not parse).
     """
+    from beadloom.application.gate import crashed_clause
     from beadloom.application.rooms import room_line
 
     lines: list[str] = []
@@ -638,13 +768,20 @@ def _format_gate_github(result: GateResult) -> str:
             f"::notice::room {room_line(result.room.current)} — "
             f"{entered} of {declared} declared room(s) entered by this run"
         )
+    elif result.room_reason is not None:
+        lines.append(f"::notice::room not stated: {result.room_reason}")
     for step in result.steps:
         lines.append(f"::notice::{step.name} {step.status}: {step.summary}")
+    clause = crashed_clause(result.steps)
+    if clause:
+        lines.append(f"::notice::{clause}")
     if result.coverage is not None and result.coverage.not_performed:
         named = ", ".join(
             f"{v.duty} (`{v.command}`)" for v in result.coverage.not_performed
         )
         lines.append(f"::notice::not run by this gate: {named}")
+    elif result.coverage_reason is not None:
+        lines.append(f"::notice::not run by this gate: no claim — {result.coverage_reason}")
     lines.extend(_gate_ownership_notices(result))
     for f in result.findings:
         level = "error" if f.get("severity") == "error" else "warning"
@@ -659,21 +796,19 @@ def _format_gate_github(result: GateResult) -> str:
 
 
 def _gate_ownership_notices(result: GateResult) -> list[str]:
-    """The ownership block as GitHub notices — the same claim, one line each."""
-    ownership = result.ownership
-    if ownership is None:
+    """The ownership block as GitHub notices — the same sentences, one notice each.
+
+    The rule the attribution was made by is the first of them, so a reader of the
+    annotations sees what "owned by" is a claim about (BDL-UX #329).
+    """
+    from beadloom.application.gate_ownership import ownership_sentences
+
+    if result.ownership is None:
         return []
-    if ownership.reason is not None:
-        return [f"::notice::findings by owner: {ownership.reason}"]
-    lines = [
-        f"::notice::owned by {bead}: {count} finding(s)"
-        for bead, count in ownership.by_bead()
-    ]
-    if ownership.none_owned:
-        lines.append(
-            "::notice::no finding of this run is owned by a bead claimed now"
-        )
-    return lines
+    sentences = ownership_sentences(result.ownership)
+    if result.ownership.reason is not None:
+        return [f"::notice::findings by owner: {sentence}" for sentence in sentences]
+    return [f"::notice::{sentence}" for sentence in sentences]
 
 
 def _finding_github_params(finding: dict[str, object]) -> str:

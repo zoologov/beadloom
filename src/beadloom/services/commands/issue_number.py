@@ -16,7 +16,9 @@ Codes (the contract a caller may rely on):
 * ``0`` — the number was allocated, or the check found nothing, or the check
   could not establish whether the project declares a log at all.
 * ``1`` — ``check`` found at least one finding, or the project declared a block
-  this reader could not use.
+  this reader could not use, or a declared log the tree does not hold. ``check``
+  exits 1 exactly when the Gate's ``issue-log`` step blocks: the code is that
+  step's verdict, not a second reading of the report (BDL-UX #331).
 * ``2`` — nothing was allocated: the project declares no ``issue_log:`` block,
   or the declaration could not be read.
 """
@@ -27,9 +29,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 
+from beadloom.application.gate_issue_log import step_issue_log
 from beadloom.doc_sync.issue_numbers import (
     CHECK_NAMES,
     IssueNumberReport,
@@ -38,6 +42,9 @@ from beadloom.doc_sync.issue_numbers import (
     refusal_sentence,
 )
 from beadloom.services.commands._root import main
+
+if TYPE_CHECKING:
+    from beadloom.application.gate_step import GateStep
 
 _EXIT_CLEAN = 0
 _EXIT_FINDINGS = 1
@@ -102,36 +109,29 @@ def _refuse(message: str, *, as_json: bool) -> None:
 def check(project: Path, *, as_json: bool) -> None:
     """Report duplicate, unwritten and unclaimed issue numbers."""
     report = check_issue_numbers(project)
+    step = step_issue_log(report)
     if as_json:
         click.echo(json.dumps(_payload(report), indent=2))
     else:
-        for line in _lines(report):
+        for line in _lines(report, step):
             click.echo(line)
-    raise SystemExit(_exit_code(report))
+    raise SystemExit(_exit_code(step))
 
 
-def _exit_code(report: IssueNumberReport) -> int:
-    """Which code this verdict earns, and why an unread config is not a finding.
+def _exit_code(step: GateStep) -> int:
+    """The Gate's verdict on this report, as an exit code — never a second reading of it.
 
-    The code answers "did a leg find something?", so it is about the log. When
-    the config could not be read no leg ran and no log was opened, and any
-    non-zero code would be a claim about a log nobody saw — the shape of the
-    sentence this branch exists to stop printing. ``2`` is worse still: its
-    documented meaning is "the project declares no ``issue_log:`` block", which
-    is the assertion that is not available here.
+    Before ``beadloom-6xdt`` this function decided on its own which states of the
+    report block, and it disagreed with the Gate on one: a declared log the tree
+    does not hold was exit 0 here and a FAIL there (BDL-UX #331). Taking the
+    code from the step both surfaces share is what keeps them from disagreeing.
 
-    So the state is reported at ``0``, matching the Gate — the surface that
-    decides what an unknown COSTS, and whose answer to this one is a
-    non-blocking WARN. What distinguishes it from a clean run is the verdict's
-    own words and, for a machine, ``undetermined`` in the payload.
-
-    A declaration that WAS read and could not be used is the opposite case and
-    keeps its ``1``: the project opted in and the legs it asked for did not run.
+    A config that could not be read is still ``0``: the step skips and WARNs,
+    because whether the project opted in is unknown, and any non-zero code would
+    be a claim about a log nobody saw. What distinguishes it from a clean run is
+    the verdict's own words and, for a machine, ``undetermined`` in the payload.
     """
-    if report.undetermined:
-        return _EXIT_CLEAN
-    unusable = report.declared and report.refusals
-    return _EXIT_FINDINGS if report.findings or unusable else _EXIT_CLEAN
+    return _EXIT_CLEAN if step.passed else _EXIT_FINDINGS
 
 
 def _payload(report: IssueNumberReport) -> dict[str, object]:
@@ -220,7 +220,16 @@ def _undetermined_lines(report: IssueNumberReport) -> list[str]:
     ]
 
 
-def _lines(report: IssueNumberReport) -> list[str]:
+def _unread_log_lines(step: GateStep) -> list[str]:
+    """A declared log the tree does not hold, in the words the Gate's step uses for it."""
+    lines = ["The declared issue log could not be read — no leg ran."]
+    for finding in step.findings:
+        lines.append(f"  {finding['why']}")
+        lines.append(f"  -> {finding['remediation']}")
+    return lines
+
+
+def _lines(report: IssueNumberReport, step: GateStep) -> list[str]:
     """The report as a reader sees it, stating what each leg could not read."""
     if report.undetermined:
         return _undetermined_lines(report)
@@ -232,7 +241,7 @@ def _lines(report: IssueNumberReport) -> list[str]:
     if report.refusals:
         return _refused_lines(report)
     if report.log_missing:
-        return ["The declared issue log is missing or unreadable — no leg ran."]
+        return _unread_log_lines(step)
     lines = [
         f"{report.entries} entr(ies), {report.claims} claim(s), "
         f"floor {report.floor if report.floor is not None else 'none'}"

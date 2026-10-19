@@ -13,11 +13,13 @@ The unified `beadloom ci` gate for the application domain.
 Compose Beadloom's individual checkers into ONE `GateResult` with a single `ok`
 verdict, so CI is the only true enforcement point — identical for any author,
 whether Claude Code, Cursor, or a human. `run_ci_gate` runs every step in order
-and never short-circuits, so a later failure is never hidden by an earlier one.
+and never short-circuits, so a later failure is never hidden by an earlier one —
+and a step that raises reads `ERROR` while the steps after it still run.
 
 ### Steps
 
-`run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex)` runs, in order:
+`run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex, performed_elsewhere=(),
+tracker=None)` runs, in order:
 
 1. **reindex** (unless `--no-reindex`) — rebuild the index, incrementally (`up to date` or
    `reindexed`). When the incremental run falls back to a full rebuild, as on a fresh checkout
@@ -26,7 +28,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    `git_activity.activity_history_note` gives (BDL-078 `beadloom-btkd.9`), and when the clone
    does not reach back over the 90-day window, so no activity was measured, the step reports
    `WARN` (`not_verified`) rather than `PASS`.
-2. **lint** — `lint --strict`, architecture boundaries. Its summary carries what a `forbid_import` exemption excused — the `10 crossings suppressed by an exemption` clause of the verbatim line quoted below — taken from the linter's own formatter so the Gate line cannot drift from the command it summarises (BDL-061.49). The clause is absent when nothing was suppressed. A SECOND clause names the population — `lint PASS: 0 error(s), 55 warning(s), 10 crossings suppressed by an exemption, architecture-layers judged 357 of 365 live depends_on edge(s)`, the Gate's lint line verbatim as `beadloom ci` printed it on this repository on 2026-09-13 — taken from the same formatter (`_population_note`) for the same reason, and present at FULL reach as well as partial: a suppressed crossing is an anomaly, so its absence means there is nothing to qualify, while a population is the denominator of the counts beside it and `357 of 365` reads exactly like `365 of 365` when neither is printed (BDL-070 A4). A project that declares no layer rule gets no clause. There is deliberately no matching clause for `rules_inert`: an inert rule always emits a finding, so a non-zero count already flips this summary to the `0 error(s), N warning(s)` branch. This step is also the only one exported under a public name (`lint_step`): `beadloom init` runs it over the graph it has just written and exits 1 when it does not pass, so a divergence between what `init` writes and what `init` requires surfaces at init time rather than at the adopter's first `ci` run (BDL-067, closing BDL-UX #192). Its `LintError` branch — `rules.yml` present and unloadable — is the one place a finding's `rule` is this step's own name rather than a rule's, with the loader's complaint in `why`, so the summary it carries is exported too, as `RULES_CONFIG_ERROR`: a caller that renders findings has to branch on it, and `init` did not, telling an adopter with a hand-edited rules file that a rule called `lint` had failed (BDL-067 `.6`).
+2. **lint** — `lint --strict`, architecture boundaries. Its summary carries what a `forbid_import` exemption excused — the `10 crossings suppressed by an exemption` clause of the verbatim line quoted below — taken from the linter's own formatter so the Gate line cannot drift from the command it summarises (BDL-061.49). The clause is absent when nothing was suppressed. A SECOND clause names the population — `lint PASS: 0 error(s), 55 warning(s), 10 crossings suppressed by an exemption, architecture-layers judged 357 of 365 live depends_on edge(s)`, the Gate's lint line verbatim as `beadloom ci` printed it on this repository on 2026-09-13 — taken from the same formatter (`_population_note`) for the same reason, and present at FULL reach as well as partial: a suppressed crossing is an anomaly, so its absence means there is nothing to qualify, while a population is the denominator of the counts beside it and `357 of 365` reads exactly like `365 of 365` when neither is printed (BDL-070 A4). A project that declares no layer rule gets no clause. There is deliberately no matching clause for `rules_inert`: an inert rule always emits a finding, so a non-zero count already flips this summary to the `0 error(s), N warning(s)` branch. A statement at `info` — a live rule with nothing to ban (BDL-083 S1b) — is neither an error nor a warning and is still a finding, so the line counts it when there is one: `0 error(s), 2 warning(s), 1 statement(s) at info`, as `beadloom ci` printed it over the monorepo fixture. Without the clause a lint of statements alone read `0 error(s), 0 warning(s)` above the findings it printed (S1R Minor 5). This step is also the only one exported under a public name (`lint_step`): `beadloom init` runs it over the graph it has just written and exits 1 when it does not pass, so a divergence between what `init` writes and what `init` requires surfaces at init time rather than at the adopter's first `ci` run (BDL-067, closing BDL-UX #192). Its `LintError` branch — `rules.yml` present and unloadable — is the one place a finding's `rule` is this step's own name rather than a rule's, with the loader's complaint in `why`, so the summary it carries is exported too, as `RULES_CONFIG_ERROR`: a caller that renders findings has to branch on it, and `init` did not, telling an adopter with a hand-edited rules file that a rule called `lint` had failed (BDL-067 `.6`).
 3. **sync-check** — symbol-pair doc freshness; fails on stale **and missing**
    pairs, reports `unverified` ones as `WARN` rather than fresh, and states how
    many pairs a WORKING declaration EXCUSED, with the reason it was declared
@@ -104,7 +106,10 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    `readme-pair` below and through the same reader. That fix covered THIS leg
    and not the two `issue-number` commands, which kept the old answer until
    `beadloom-rqma.8` — so the entry was closed on the Gate and live on the
-   command a person types, for one bead.
+   command a person types, for one bead. A declared log the tree does not hold
+   fails the step, and since `beadloom-6xdt` `issue-number check` exits 1 on it
+   too: the command's exit code is this step's `passed`, taken from the one
+   function both call (BDL-UX #331 — on 9.0.0 the command exited 0 there).
    `not_verified` carries the honest half — before a project's first allocation
    the ledger has no floor, so `unwritten-claim` and `unclaimed-number` enter no
    number at all and the summary says `NOT CHECKED:` rather than reporting them
@@ -188,7 +193,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    One case does not redden: a `.beadloom/config.yml` that could not be read at
    all says nothing about whether the key is there, so the STEP skips, WARNs and
    names the file rather than reddening a project that may never have written
-   it. That is a statement about `step_readme_pair` and `_step_issue_numbers`,
+   it. That is a statement about `step_readme_pair` and `step_issue_log`,
    which is where it is tested, and not about `beadloom ci`: a config file with
    a YAML syntax error ends the run in `infrastructure/scan_paths.py` during the
    reindex step, with a traceback and no gate line at all, before either leg is
@@ -285,9 +290,9 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    when BDL-062 `.4` gave that node an AS-IS document
    (`docs/services/components/cli-commands/DOC.md`).
 9. **scope-check** — did this branch leave the axes its work item declared?
-   (BDL-068 S1.6). BRANCH-scoped, `<trunk>...HEAD`, and that is the whole point:
+   (BDL-068 S1.6). BRANCH-scoped, `<base>...HEAD`, and that is the whole point:
    the tree is shared by several agents, so judging it would fail one agent's
-   push on a neighbour's edit, while `<trunk>...HEAD` is exactly what the pull
+   push on a neighbour's edit, while `<base>...HEAD` is exactly what the pull
    request contains and what the approval was spent on. The trunk is the
    `options.trunk` the `working-branch` guard already reads, preferring
    `origin/<trunk>` when that remote-tracking ref exists — measured on this
@@ -300,6 +305,17 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    with its reason — never a PASS, because a comparison over an empty
    population has verified nothing. The summary states the findings, the paths
    judged, the paths no node owns and the declared rows nobody decided.
+   Since BDL-083 S1d (RFC D4, BDL-UX #330) the base is not always the trunk: it
+   is `scope_base()`'s — the merge-base with the branch this one was cut from,
+   else the trunk — and the summary ends with the base, the rule that chose it
+   and how many files it attributed to the parent branch, so a work item cut
+   from an unmerged branch is judged over its own files and says so. Measured on the monorepo fixture:
+   the parent's two frontend files were both outside the axes before, and 0
+   were after. In CI the branch comes from `GITHUB_HEAD_REF` or
+   `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME` before the checkout's own name, because
+   a pull request is checked out on a detached HEAD and the step used to skip on
+   every one (BDL-UX #300). The ownership report lists commits against the same
+   base.
 10. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —
@@ -481,24 +497,108 @@ next one, and the cost is never the red itself but the work of proving a second 
 real against a background that already holds one.
 
 `GateResult` therefore carries a `GateOwnership` beside its room census and its coverage
-statement: one verdict per finding, held against the beads the tracker reports claimed while
-the run happened. `owned` names the beads. `unowned` says a node was derived and no claim
-covers it. `unattributed` says no node could be derived from the finding at all, which is a
-different absence and must not read as the same one. A tracker that cannot answer, and a
-project with no index, are a reason on the whole report rather than a page of `unowned`.
+statement: one verdict per finding, held against the commits of the beads the tracker reports
+claimed while the run happened. Since BDL-083 S1c (BDL-UX #329) `owned` names the claimed
+beads whose commits on the branch — a commit carrying the trailer `Bead: <bead-id>` (D10) — changed a
+file the finding is about, and `unattributed` says no claimed bead's commits did, or that the
+finding is about no file. A bead whose `refs:` name a node covering a directory owns nothing
+it did not commit to. A tracker that cannot answer, a project with no index and a git that
+cannot list the branch's commits are a reason on the whole report rather than a page of
+`unattributed`, and every surface prints the rule it attributed by and the base.
 
 **The claim is a bead, not the branch's approval.** The work item's `## Axes` answer whether a
 change is inside the approval, which the `scope-check` step of this same run already asks, and
 which every agent on one branch shares; a wave's plan names beads that have not started and
-beads whose wave is over. `gate-ownership` (DOC) states both trade-offs and the three routes a
-finding takes to reach a node.
+beads whose wave is over. `gate-ownership` (DOC) states both trade-offs and which files a
+finding is held against.
 
 **It is not a step either, and the tracker is asked only when there is a finding.** Same `ok`,
 same exit code, same findings; a green run attributes nothing and shells out to nothing.
 
+### A step that raises is reported, and the run goes on
+
+Until BDL-083 S1e (BDL-UX #318) the promise above held for a step that FAILED and not for a
+step that raised. The steps ran in a row with no boundary, so an exception in one ended the
+run. Measured on 2026-10-18 at `3e95a208`: `beadloom ci` over this repository with the
+`docs-audit` step made to raise exited 1 and printed nothing, the exception left the command,
+and the seven steps after `docs-audit` never ran. A full pipe (#226) and an unreadable configuration (#287) were two
+instances of the class, each fixed at its own site.
+
+Every step now runs through `gate_boundary.run_bounded`. An `Exception` a step raises becomes a
+`GateStep` whose `error` is `<class>: <message>` and whose status is `ERROR` — not `PASS`,
+because it checked nothing, and not `SKIP`, because it did not choose not to run. It fails the
+gate, and it carries one `error` finding whose rule is the step's name and whose `why` names
+the function, file and line that raised. `KeyboardInterrupt` and `SystemExit` are not caught:
+they are the operator and the process ending the run, not a checker failing.
+
+Every surface counts the crashed steps. The rich verdict reads
+`FAIL — 1 step(s) crashed: docs-audit — gate blocked`, the clause inside the line because the
+pre-push hook finds the verdict by a pattern that ends on `gate blocked`. A `Crashed` block lists
+each crashed step with its exception, under the verdict and apart from the findings, because a
+crashed step is a check that did not happen rather than a finding about the project. The JSON
+report carries `error` on every step (`null` when the step returned) and a top-level `crashed`
+list of step names. The GitHub format adds one `::notice::` with the same clause. The MCP
+`complete_bead` tool returns `FAIL` with the crashed step's finding among its findings.
+
+### The pre-push hook refuses a push it cannot judge
+
+`beadloom install-hooks` writes a pre-push hook that runs this gate, and until BDL-083 S1a it
+let through two pushes nobody judged (BDL-UX #326). Without `beadloom` on the `PATH` git runs
+the hook with, the hook exited 0 and printed nothing, measured at `fbc24284` with
+`PATH=/usr/bin:/bin`. And any non-zero exit of the gate was reported as stale documentation,
+a crash included. The hook text is `services/commands/hook_templates.HOOK_TEMPLATE_PRE_PUSH`.
+
+- Without `beadloom` on the `PATH`, the hook exits 1 with three sentences on stderr: the push
+  was not judged and is refused, how to put `beadloom` on that `PATH` or remove the hook, and
+  `git push --no-verify`.
+- The gate runs as `beadloom ci --format rich --tee <temporary file>`. `--format rich` because
+  it is the format that prints a verdict line whatever git's stdout is. The report goes to the
+  hook's output through `console_streams.write_whole` and a copy goes to the file, and the
+  verdict is read from the copy by `hook_templates.GATE_VERDICT_PATTERN`. A report the shell
+  captured and reprinted with `printf` was lost on a non-blocking pipe (BDL-UX #226): measured
+  at `12c35cf3` under `/bin/dash`, the reader got 65575 bytes, no verdict line and no sentence
+  from the hook.
+- A run whose copy holds no verdict line is reported as
+  `the Gate did not run: beadloom ci exited N without a verdict`, and the hook exits 1
+  whatever `N` was, a crash or a missing index included.
+- A red verdict exits 1 and names its fixes. A verdict that counts crashed steps adds that a
+  step that crashed checked nothing.
+
+An installed hook keeps the text it was written with, so an adopter re-runs
+`beadloom install-hooks` to get this behaviour. A hook written by an earlier version keeps
+working with this gate, because it does not pass `--tee`. A hook written by this version over an
+older `beadloom` reports `the Gate did not run`, because that `ci` refuses `--tee`.
+
+### A report derived after the steps that raises states its reason
+
+The room census, the coverage statement and the ownership report are derived after the steps,
+from the finished result. Until BDL-083 S1 fix 1 (`beadloom-4m0w`, S1R Major 1) they ran outside
+the boundary, so an exception in one of them left `run_ci_gate` as a traceback and the verdict
+of steps that had all run was lost with it. The pre-push hook refused the push as a Gate that
+did not run, so the push was not waved through; what was lost was the verdict.
+
+Each report is now derived through `gate_boundary.derive_bounded`. A report that raises is not
+an `ERROR` step, because it is not a step and has no status: the report is absent and the run
+carries a sentence `the <report> raised <class>: <message>`, where `<report>` is `room census`,
+`coverage report` or `ownership report`. The steps, their verdict and the exit code are the ones
+the steps produced. The census and the coverage report are carried as `None` with the sentence
+beside them, in `GateResult.room_reason` and `GateResult.coverage_reason`: `RoomCensus` is the
+answer `beadloom rooms` and the MCP verdict print too, and it has no shape for a census that was
+not taken. The ownership report is a `GateOwnership` whose `reason` is the sentence, because that
+type already has a reason every surface prints.
+
+The rich format prints the sentence under the report's own heading (`Room: not stated`, `Not run
+by this gate:`, `Findings by owner:`), followed by `so this run makes no claim here` for the first
+two. `--format json` carries it on the report's own key: `room` and `not_run` are
+`{"reason": "<the sentence>"}` in place of their objects, and `ownership` keeps its object with
+the sentence in `reason`. `--format github` prints it as that report's `::notice::`. A report that was not asked for
+— no tracker given, so no ownership — states nothing, which is a different answer from a report
+that raised.
+
 ## Invariants
 
-- Every step runs; the gate never short-circuits on the first failure.
+- Every step runs; the gate never short-circuits on the first failure, and never on a step
+  that raises: that step reads `ERROR`, fails the gate, and the steps after it report.
 - A skipped step counts as passed (it cannot block the build).
 - `docs-audit` blocks on `stale>0` and never counts an unverified fact as
   passing; `sync-check` `surface_drift`, `unverified` and
@@ -517,6 +617,10 @@ same exit code, same findings; a green run attributes nothing and shells out to 
 - The coverage block never changes the verdict either, and
   `tests/test_gate_not_run.py` fails if it starts to. It names a verification
   only when the project's own pipeline declares one this report can read.
+- A room census, coverage report or ownership report that raises never changes the verdict:
+  it states its reason and the steps' verdict and exit code stand, and
+  `tests/integration/application/gate/test_a_report_after_the_steps_that_raises_states_a_reason.py`
+  fails if one of them takes the run with it.
 - The ownership block never changes the verdict either, and
   `tests/test_gate_finding_owner.py` fails if it starts to. A finding nobody
   claims is still a finding; a gate that went green because no bead owned a red
@@ -531,11 +635,26 @@ Module `src/beadloom/application/gate_step.py` — the shape a step reports in,
 re-exported from `gate.py` so no caller's import path changed:
 
 - `GateStep` — one step: `name`, `passed`, `skipped`, `findings`, `summary`,
-  `not_verified`, and the `status` property (`PASS` / `WARN` / `FAIL` / `SKIP`).
+  `not_verified`, `error` (the exception a step raised, as `<class>: <message>`, or `None`),
+  and the `status` property (`PASS` / `WARN` / `FAIL` / `SKIP` / `ERROR`). `ERROR` is read
+  first, so a step that raised is not described by a flag it set before raising.
 - `gate_step_line(step) -> str` — the step's own report line, `[STATUS] name: summary`.
   `_format_gate_rich` renders it and `beadloom init` quotes it, so the line `init`
   attributes to `beadloom ci` is the line `beadloom ci` prints (BDL-067 `.14`).
 - `Finding` — the shared agent-actionable finding shape.
+
+Module `src/beadloom/application/gate_boundary.py` — the per-step exception boundary:
+
+- `run_bounded(name, run) -> GateStep` — run one step, and report an `Exception` it raises
+  as the `ERROR` step `name` instead of letting it end the run.
+- `crashed_step(name, exc) -> GateStep` — that step: `passed=False`, `error`, one `error`
+  finding naming where the exception was raised, and the summary `crashed — <error>`.
+- `crashed_clause(steps) -> str` — `N step(s) crashed: a, b` over the steps that raised, or
+  an empty string; re-exported from `gate.py`, and the clause every surface prints.
+- `derive_bounded(report, derive) -> tuple[report | None, str | None]` — derive one of the
+  reports made after the steps; an `Exception` it raises becomes `(None, reason)` instead of
+  ending the run. Exactly one of the two is set.
+- `report_raised(report, exc) -> str` — that reason, `the <report> raised <class>: <message>`.
 
 Module `src/beadloom/application/gate_declarations.py` — what an unusable opt-in
 declaration costs a leg, for the two legs that are opt-in:
@@ -552,13 +671,24 @@ Module `src/beadloom/application/gate_document_pairs.py` — the `readme-pair` l
   projection of what it found. The orchestrator composes it and renders none of
   it, which is the first slice of the per-leg extraction (`beadloom-oew7`).
 
+Module `src/beadloom/application/gate_issue_log.py` — the `issue-log` leg:
+
+- `step_issue_log(report) -> GateStep` — the verdict over one `IssueNumberReport`.
+  The Gate composes it and `beadloom issue-number check` takes its exit code from
+  the same step's `passed`, so the two surfaces cannot disagree about which states
+  of the report block (`beadloom-6xdt`, BDL-UX #331).
+
 Module `src/beadloom/application/gate.py`:
 
 - `GateResult` — aggregate: `steps`, the room census (`room`, a
   `RoomCensus | None`), the coverage statement (`coverage`, a
   `GateCoverage | None`), the ownership report (`ownership`, a
-  `GateOwnership | None`), plus the `ok` and `findings` properties. `None` means
-  nothing derived it, and a surface that was not told makes no claim.
+  `GateOwnership | None`), plus the `ok`, `findings` and `crashed` properties (the last
+  is the steps whose `error` is set, in step order). `None` means nothing derived it, and
+  a surface that was not told makes no claim. `room_reason` and `coverage_reason` are the
+  sentence a census or a coverage report that raised left in its place, and `None` otherwise.
+- `ROOM_REPORT`, `COVERAGE_REPORT`, `OWNERSHIP_REPORT` — the names those three reports are
+  stated under in that sentence: `room census`, `coverage report`, `ownership report`.
 - `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex,
   performed_elsewhere=(), tracker=None) -> GateResult` — run every gate step and
   aggregate the result. `performed_elsewhere` names verifications the CALLER runs
@@ -577,14 +707,29 @@ Module `src/beadloom/application/gate_coverage.py`:
 
 Module `src/beadloom/application/gate_ownership.py`:
 
-- `derive_gate_ownership(project_root, *, findings, tracker) -> GateOwnership` —
-  one verdict per finding, held against the beads the tracker reports claimed.
-- `gate_ownership_lines(ownership) -> list[str]` — the block all surfaces quote.
+- `derive_gate_ownership(project_root, *, findings, tracker, base=None) -> GateOwnership` —
+  one verdict per finding, held against the files the claimed beads' commits changed on
+  `base..HEAD` (`None` takes `scope_base(project_root).ref`, the base the `scope-check` step
+  judges against, so both lines name one base).
+- `ownership_sentences(ownership) -> list[str]` — the sentences every surface prints, the
+  rule first; `gate_ownership_lines(ownership)` is the rich block built from them.
+- `ownership_payload(ownership) -> dict` — the JSON report's `ownership`, and the MCP
+  `complete_bead` tool's `owners`. Each `claims` entry is `{bead, commits,
+  unread_bead_lines}`: `commits` counts the commits bound by the `Bead:` trailer, and
+  `unread_bead_lines` lists the commits whose `Bead: <id>` line git reads no trailer from,
+  one row `{placement, stated, count, commits}` per placement with the commit hashes newest
+  first, `[]` when there are none (BDL-083 S1 fix 6, the owner's ruling of 2026-10-19).
+  `placement` is a token, `outside_final` or `unread_final`, and `stated` is the text
+  surface's sentence for it (S1 fix 7).
 
 ## Testing
 
 Tests: `tests/test_gate.py`, `tests/integration/doc_sync/audit/test_ci_gate.py`,
-`tests/test_gate_not_run.py`, `tests/test_gate_finding_owner.py`,
+`tests/integration/application/gate/test_a_step_that_raises_does_not_abort_the_gate.py` (a
+fault injected in each step in turn, and the scenarios in
+`tests/acceptance/application/ci-gate/a_step_that_raises.feature`),
+`tests/test_gate_not_run.py`, `tests/test_gate_finding_owner.py` (and the scenarios in
+`tests/acceptance/application/gate-ownership/ownership_by_changed_files.feature`),
 `tests/test_f3_gate_coverage.py`, `tests/test_the_gate_blocks_each_break_class.py`,
 `tests/test_a_remediation_can_be_followed.py`, `tests/test_a_stale_line_names_its_pair.py`;
 scenarios in `tests/acceptance/features/remediation_that_can_be_followed.feature`

@@ -16,11 +16,14 @@ repository's own tracker and its own gate.
   the plan asked about. Measured: `beadloom waves beadloom-0mdo.69` names
   `beadloom-0mdo.70` — the S6 review task, whose whole population is the one
   bead the plan was asked about — and reports a clean line over it.
-* **BDL-UX #276**, `.78`: the GitHub annotation surface emits the ownership
-  headline and drops the `unowned` count, the `unattributed` count, which beads
-  were claimed, and the caveat that says `unowned` is not a proof. Measured on
+* **BDL-UX #276**, `.78`: the GitHub annotation surface emitted the ownership
+  headline and dropped the `unowned` count, the `unattributed` count, which beads
+  were claimed, and the caveat that said `unowned` is not a proof. Measured on
   this tree: 31 unowned, 165 unattributed, 2 of 2 claimed beads declaring a
-  scope the run could not read, one notice line.
+  scope the run could not read, one notice line. BDL-083 S1c (`beadloom-b23f`)
+  replaced the rule those verdicts came from and made the emitter quote the
+  human block's sentences, so the test that held this finding red now holds the
+  two surfaces equal.
 * **BDL-UX #277**, `ec1a`: the orphan check's ROLE population is the manifest
   and its TOOL population is `TOOL_AGENT_DIRS`, and only the first is stated.
 
@@ -38,10 +41,10 @@ import pytest
 from beadloom.application.gate import GateResult
 from beadloom.application.gate_ownership import (
     UNATTRIBUTED,
-    UNOWNED,
     GateOwnership,
     derive_gate_ownership,
     gate_ownership_lines,
+    ownership_sentences,
 )
 from beadloom.application.guards.contract import ClaimedBead
 from beadloom.application.waves.population import (
@@ -249,9 +252,9 @@ class TestWhichBeadIsTakenForAWorkItem:
 class TestWhatTheOwnershipReportSaysOnEachSurface:
     """One run, three formats, and the claim they are supposed to share.
 
-    `gate_ownership_lines` exists, in its own words, because "three formats and
+    `ownership_sentences` exists, in its own words, because "three formats and
     one MCP tool quote it, and a second wording is how two surfaces of one run
-    come to disagree". The GitHub emitter does not quote it.
+    come to disagree". The GitHub emitter did not quote it until BDL-083 S1c.
     """
 
     FINDINGS: tuple[dict[str, object], ...] = (
@@ -285,41 +288,20 @@ class TestWhatTheOwnershipReportSaysOnEachSurface:
         assert report.claimed == ("bead-a",)
         assert report.reason is not None
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-068.S6-8 (BDL-UX #276): the GitHub emitter calls itself "
-            "`the same claim, one line each` and drops the unowned count, the "
-            "unattributed count, which beads were claimed, and the caveat that "
-            "says `unowned` is not a proof. Measured on this tree: 31 unowned, "
-            "165 unattributed, 2 of 2 claimed beads with an unreadable scope, one "
-            "notice line"
-        ),
-    )
-    def test_the_annotation_surface_carries_the_unread_caveat(self) -> None:
-        notices = "\n".join(_gate_ownership_notices(_result(_ownership_with_unread())))
-        assert "not a proof" in notices
-
-    def test_the_two_surfaces_differ_in_the_way_recorded(self) -> None:
-        """The red above is red for the reason claimed, clause by clause."""
-        ownership = _ownership_with_unread()
+    def test_the_annotation_surface_carries_every_sentence_of_the_human_block(self) -> None:
+        """BDL-UX #276, held closed: one notice per sentence, and no sentence dropped."""
+        ownership = _ownership_owning_nothing()
+        notices = _gate_ownership_notices(_result(ownership))
+        assert notices == [f"::notice::{line}" for line in ownership_sentences(ownership)]
         human = "\n".join(gate_ownership_lines(ownership))
-        notices = "\n".join(_gate_ownership_notices(_result(ownership)))
-
-        assert UNOWNED in human
-        assert UNATTRIBUTED in human
-        assert "not a proof" in human
-        assert "claimed: bead-a, bead-b" in human
-
-        assert notices.count("\n") == 0
-        assert UNOWNED not in notices
-        assert UNATTRIBUTED not in notices
-        assert "not a proof" not in notices
-        assert "bead-a" not in notices
+        joined = "\n".join(notices)
+        for clause in (UNATTRIBUTED, "claimed: bead-a, bead-b", "bead-b owns no finding"):
+            assert clause in human
+            assert clause in joined
 
     def test_the_headline_itself_reaches_both_surfaces(self) -> None:
         """What the emitter does carry, held so the finding is a gap and not a denial."""
-        ownership = _ownership_with_unread()
+        ownership = _ownership_owning_nothing()
         headline = "no finding of this run is owned by a bead claimed now"
         assert headline in "\n".join(gate_ownership_lines(ownership))
         assert headline in "\n".join(_gate_ownership_notices(_result(ownership)))
@@ -398,26 +380,26 @@ class TestEveryFindingHereIsStrictAndNamesItself:
                     assert "FINDING BDL-068.S6-" in mark.kwargs.get("reason", ""), where
 
 
-def _ownership_with_unread() -> GateOwnership:
-    """A report shaped like this tree's: unowned, unattributed, nothing owned.
+def _ownership_owning_nothing() -> GateOwnership:
+    """A report shaped like this tree's: unattributed findings, nothing owned.
 
-    Both claimed beads declare no scope this run could read, which is the state
-    the tree was in when the finding was measured — so `unowned` there is a
-    statement about what could be asked, not about who owns the nodes.
+    Neither claimed bead has a commit on the branch that names it, which is the
+    state a tree is in when its commits are not written with the bead's id.
     """
-    from beadloom.application.gate_ownership import FindingOwner, UnreadClaim
+    from beadloom.application.gate_ownership import BeadCommits, FindingOwner
 
     return GateOwnership(
         owners=(
-            FindingOwner(rule="scenario-coverage", verdict=UNOWNED, node="cache"),
-            FindingOwner(rule="scenario-coverage", verdict=UNOWNED, node="watcher"),
+            FindingOwner(rule="scenario-coverage", verdict=UNATTRIBUTED, node="cache"),
+            FindingOwner(rule="scenario-coverage", verdict=UNATTRIBUTED, node="watcher"),
             FindingOwner(rule="doc-fact-stale", verdict=UNATTRIBUTED),
         ),
         claimed=("bead-a", "bead-b"),
-        unread=(
-            UnreadClaim(bead_id="bead-a", why="no_declared_refs"),
-            UnreadClaim(bead_id="bead-b", why="no_declared_refs"),
+        claims=(
+            BeadCommits(bead_id="bead-a", commits=0, paths=frozenset()),
+            BeadCommits(bead_id="bead-b", commits=0, paths=frozenset()),
         ),
+        base="main",
     )
 
 

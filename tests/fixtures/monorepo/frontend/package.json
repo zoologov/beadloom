@@ -1,0 +1,19 @@
+{
+  "name": "metrics-desk-frontend",
+  "version": "0.7.0",
+  "private": true,
+  "type": "module",
+  "description": "The desk's dashboard: the day's metrics as panels.",
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "test": "vitest run",
+    "lint:fsd": "steiger ./src"
+  },
+  "devDependencies": {
+    "@feature-sliced/steiger-plugin": "0.5.1",
+    "steiger": "0.5.3",
+    "typescript": "5.6.3",
+    "vite": "5.4.10",
+    "vitest": "2.1.4"
+  }
+}

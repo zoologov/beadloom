@@ -33,8 +33,11 @@ Rule type                        Inert when
 ``require``                      ``for`` selects 0 nodes, or ``has_edge_to`` selects 0
                                  (then every matched node fails, which is equally broken)
 ``forbid_cycles``                0 live edges of the declared ``edge_kind``(s)
-``forbid_import``                glob matches 0 indexed files / 0 indexed import paths
-                                 (owned by :mod:`.evaluators` — see below)
+``forbid_import``                ``from`` glob matches 0 indexed files, or the ``to``
+                                 glob can match no import path at all (owned by
+                                 :mod:`.evaluators` — see below). A ``to`` glob that CAN
+                                 match and matches none today is live with nothing to
+                                 ban, stated at ``info`` (:mod:`.import_glob`, BDL-083 D2)
 ``forbid``                       ``from``/``to`` selects 0 nodes, or 0 edges of ``edge_kind``
 ``layers``                       no live edge of ``edge_kind`` is one the rule COMPARES:
                                  across two layers for direction, or inside one
@@ -60,10 +63,11 @@ Rule type                        Inert when
                                  leg judges nothing (a ``files`` glob matching no test
                                  file it judges, a ``for`` matcher selecting no node).
                                  Counted here, reported by :mod:`.test_binding`
-``test_import_boundary``         no test import is recorded, or the ``from`` glob, the
-                                 ``of`` matcher or the ``to`` glob leaves nothing to
-                                 judge. Counted here, reported by
-                                 :mod:`.test_import_boundary`
+``test_import_boundary``         no test import is recorded, the ``from`` glob or the
+                                 ``of`` matcher leaves nothing to judge, or the ``to``
+                                 glob can match no import path. A ``to`` glob with
+                                 nothing to ban is live, as for ``forbid_import``.
+                                 Counted here, reported by :mod:`.test_import_boundary`
 ``scenario_binding``             the ``features`` glob matches 0 files. Counted here,
                                  reported by :mod:`.scenario_binding`
 ``slice_public_api``             no node carries any of its ``tags``, or no such node's

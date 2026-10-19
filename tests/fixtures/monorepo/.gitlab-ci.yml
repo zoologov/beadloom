@@ -1,0 +1,28 @@
+# The monorepo fixture's pipeline: one job per project, on merge requests and the trunk.
+stages:
+  - test
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+backend-tests:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    - pip install uv
+    - cd backend
+    - uv sync --frozen
+  script:
+    - uv run pytest tests
+
+frontend-tests:
+  stage: test
+  image: node:22-slim
+  before_script:
+    - cd frontend
+    - npm ci
+  script:
+    - npm run test
+    - npm run lint:fsd

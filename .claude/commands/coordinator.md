@@ -307,7 +307,7 @@ lock that granted neither.
 bd merge-slot create                            # once per repo
 # each agent (or the coordinator on its behalf), before committing/merging:
 bd merge-slot acquire --holder <bead-id>        # exit 0 means you hold it; anything else means you do not
-# ... commit/merge ...
+# ... commit (with `Bead: <bead-id>` in the message's last paragraph) / merge ...
 bd merge-slot release --holder <bead-id>        # the only release form bd verifies
 ```
 
@@ -395,6 +395,10 @@ BEFORE WAVE COMMIT:
 □ beadloom reindex && sync-check && lint --strict && doctor — clean
 □ beadloom snapshot save <label>  (per-wave architecture record)
 □ Landings serialized via the merge slot, acquired and released `--holder <bead-id>`
+□ Every commit carries `Bead: <bead-id>` in the message's last paragraph, beside any other
+  trailer (`Co-Authored-By`, ...), with no blank line between them and nothing after them:
+  git reads trailers from there only, and ownership binds by nothing else.
+  `git log -1 --format='%(trailers:key=Bead,valueonly)'` prints the id of a bound commit
 □ `beadloom waves` reports `landing-order` as passed (no instruction that grants less than it claims)
 ```
 

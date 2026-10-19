@@ -1,0 +1,47 @@
+version: 3
+rules:
+  - name: feature-needs-domain
+    description: "Every feature is part_of a domain"
+    require:
+      for: { kind: feature }
+      has_edge_to: { kind: domain }
+      edge_kind: part_of
+
+  - name: backend-layers
+    description: "The backend's application layer imports its domains, never the reverse"
+    severity: error
+    layers:
+      - name: application
+        tag: layer-application
+      - name: domain
+        tag: layer-domain
+    enforce: top-down
+    allow_skip: true
+    edge_kind: depends_on
+
+  - name: domain-no-io-imports-digest-os
+    description: "The digest domain does no I/O: it imports nothing of os"
+    forbid_import:
+      from: "backend/src/digest/**"
+      to: "os/**"
+
+  - name: fsd-layers
+    title: "FSD architecture"
+    description: "The frontend's Feature-Sliced layers import downward: app, pages, widgets, features, entities, shared"
+    severity: error
+    layers:
+      - name: app
+        tag: fsd-app
+      - name: pages
+        tag: fsd-pages
+      - name: widgets
+        tag: fsd-widgets
+      - name: features
+        tag: fsd-features
+      - name: entities
+        tag: fsd-entities
+      - name: shared
+        tag: fsd-shared
+    enforce: top-down
+    allow_skip: true
+    edge_kind: depends_on

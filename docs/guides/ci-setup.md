@@ -138,15 +138,19 @@ writes the index.
 ## Unified Gate (`beadloom ci`)
 
 `beadloom ci` composes, in order, **reindex -> lint --strict -> sync-check ->
-docs audit -> docs-quality -> doc-spaces -> config-check -> doctor -> (optional) federate
-landscape gate** into a single
-verdict with one exit code (0 = every step passed, 1 = any step failed). It never
-short-circuits — every step runs and contributes findings — and it names every
-step that ran with its honest result (PASS/WARN/FAIL/SKIP); a green is never a silently
-skipped step. All steps share one agent-actionable finding shape
+docs audit -> docs-quality -> issue-log -> readme-pair -> doc-spaces -> scope-check ->
+config-check -> doctor -> (optional) federate landscape gate** into a single verdict with one
+exit code (0 = every step passed, 1 = any step failed). The order is `run_ci_gate`'s, listed
+once in the [application README](../domains/application/README.md#api). It never
+short-circuits — every step runs and contributes findings — and it names every step that ran
+with its honest result (PASS/WARN/FAIL/SKIP/ERROR), and a green is never a silently skipped step.
+`ERROR` is a step that raised (BDL-083 S1e, BDL-UX #318): it fails the gate, the steps after
+it still run, and the verdict reads `FAIL — 1 step(s) crashed: docs-audit — gate blocked`.
+All steps share one agent-actionable finding shape
 (`{kind, rule, severity, node, locations, why, remediation}`), so `--format` applies
 uniformly: `rich` (default in a TTY), `json` (structured), or `github` (default
 when piped — emits `::error` annotations so violations show inline on the PR).
+`--tee FILE` writes a copy of the rendered report to `FILE` as well.
 
 | Step | What it enforces | Skipped when |
 |------|------------------|--------------|
@@ -155,15 +159,77 @@ when piped — emits `::error` annotations so violations show inline on the PR).
 | `sync-check` | doc-code freshness (stale docs) | — |
 | `docs audit` | stale numeric facts stated in documentation | — |
 | `docs-quality` | the writing standard over planning documents — **warn only** | no planning document matched (NAMED skip) |
+| `issue-log` | the issue log's numbers: duplicates, unwritten claims, unclaimed numbers | no log declared under `issue_log:` (NAMED skip) |
+| `readme-pair` | the declared document pairs, compared by shape | no pair declared under `document_pairs:` (NAMED skip) |
 | `doc-spaces` | recorded intent that never reached a document of reality — **warn only** | no TO-BE document matched (NAMED skip) |
+| `scope-check` | the branch's paths against the axes its work item declares — **warn only** | no branch, work item, index or `## Axes` section (NAMED skip) |
 | `config-check` | AgentConfigAsCode — generated agent-config matches the graph | — |
 | `doctor` | graph integrity | — |
 | `federate --fail-on` | cross-service landscape gate | no `--hub` exports given |
 
-Beadloom dogfoods this gate on its own CI: the per-repo gate (`reindex` →
-`lint --strict` → `sync-check` → `docs audit` → `docs-quality` → `doc-spaces` →
-`config-check` → `doctor`) shipped and runs on every Beadloom PR. The cross-service
-landscape step is opt-in via `--hub`.
+`scope-check` judges `<base>...HEAD`, where the base is the merge-base with the branch this one
+was cut from, else the trunk, and its line names it (BDL-083 S1d). In pull-request CI the
+branch is read from `GITHUB_HEAD_REF` or `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME` before the
+checkout's own name, so the step runs on a detached checkout where it used to skip (BDL-UX
+#300).
+
+Beadloom dogfoods this gate on its own CI: every step above runs on every Beadloom PR. The
+cross-service landscape step is opt-in via `--hub`.
+
+### The JSON report
+
+`beadloom ci --format json` prints one object. Its top-level keys are `ok`, `steps`,
+`crashed`, `not_run`, `ownership` and `room`:
+
+| Key | Shape |
+|-----|-------|
+| `ok` | `true` when every step passed |
+| `steps` | one `{name, status, passed, skipped, summary, error, findings}` per step; `error` is `<class>: <message>` for an `ERROR` step and `null` otherwise |
+| `crashed` | the names of the steps that raised, in step order, `[]` when none did |
+| `not_run` | `{performed, not_performed, ...}`: the verifications the project's pipeline declares that no step performed |
+| `room` | `{current, entered, not_entered, ...}`: the room the run was taken in |
+| `ownership` | `{reason, rule, base, claimed, none_owned, claims, findings}`: who owns what the run found |
+
+`room`, `not_run` and `ownership` are qualifications of the verdict, not steps, and none of
+them moves the exit code. Each is derived after the steps. A room census or a coverage report
+that raised is `{"reason": "the <report> raised <class>: <message>"}` in place of `room` or
+`not_run`, where `<report>` is `room census` or `coverage report`. An ownership report that
+raised keeps its object with that sentence in `reason` (BDL-083 S1 fix 1). A key is absent when
+nothing asked for that report, which is a different answer from a report that raised.
+
+In `ownership`, a finding is `owned` by a claimed bead whose commits on `<base>..HEAD` changed a
+file the finding is about, and `unattributed` otherwise. A commit is a bead's when its message
+carries the git trailer `Bead: <bead-id>` in its final paragraph (BDL-083 D10). Each `claims`
+entry is `{bead, commits, unread_bead_lines}`: `commits` counts the commits the trailer binds,
+and `unread_bead_lines` holds one `{placement, stated, count, commits}` row per place a
+`Bead: <id>` line stands where git reads no trailer, `[]` when there is none. `placement` takes
+the vocabulary `outside_final` (outside the message's final paragraph) or `unread_final` (in a
+final paragraph git does not read as a trailer block), and `stated` is the sentence the text
+report prints for it. Each `findings` entry is `{rule, verdict, node, beads, where, files,
+uncommitted}`. The MCP `complete_bead` tool returns the same object as `owners`
+([MCP reference](../services/mcp.md)).
+
+### The git hooks
+
+`beadloom install-hooks` writes two hooks, and an installed hook keeps the text it was
+written with: re-run the command after upgrading.
+
+- **pre-push** runs `beadloom ci --format rich --tee <temporary file>` and reads the verdict
+  line from the copy, because a report captured and reprinted by the shell was lost on a
+  non-blocking pipe (BDL-UX #226). A red verdict blocks the push. A run that leaves no
+  verdict line is reported as `the Gate did not run: beadloom ci exited N without a verdict`
+  and blocks the push too, whatever `N` was. Without `beadloom` on the `PATH` git runs the
+  hook with, it exits 1 with a sentence saying the push was not judged (BDL-UX #326). Through
+  9.0.0 that case exited 0 in silence. `git push --no-verify` skips the hook.
+- **pre-commit** judges the paths the commit stages. Its legs, in order: ruff over the staged
+  Python files, run from the outermost directory holding a `pyproject.toml` above them, with
+  ruff's own exit code read so `ruff did not run (exit N)` is told apart from violations
+  (BDL-UX #327), the type check over the declared typed surface, the architecture lint over
+  the nodes that own a staged path (`beadloom lint --staged --strict`, BDL-083 S1a),
+  `sync-check --staged`, the declared-axes verdict, and the ACTIVE/tracker coherence step.
+  `--mode warn` reports an error and `--mode block` refuses the commit on it. A leg that could
+  not run reads `NOT CHECKED` and blocks in neither mode, and the declared-axes verdict warns in
+  both.
 
 ### What `docs audit` reports: three populations, not one
 

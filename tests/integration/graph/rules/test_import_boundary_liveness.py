@@ -23,6 +23,7 @@ from beadloom.graph.rule_engine import (
     evaluate_import_boundary_rules,
     load_rules,
 )
+from beadloom.graph.rules.types import INFO_SEVERITY, NOTHING_TO_BAN_RULE_TYPE
 from beadloom.infrastructure.db import create_schema, open_db
 from tests.support.violation_kinds import forbidden_of, liveness_of
 
@@ -232,6 +233,103 @@ class TestDeadGlobIsDiagnosed:
         assert "file path" in finding.remediation
         assert "import path" in finding.remediation
         assert "src/" in finding.remediation
+
+
+class TestNothingToBanIsToldFromCannotFire:
+    """BDL-083 D2, BDL-UX #328: a glob that can match and matches nothing today is live.
+
+    ``to: os/**`` on a project importing no ``os`` was reported "cannot fire" while
+    ``import os`` fired the rule. The verdict is now decided by the matcher on a path built
+    from the glob, and the live case is stated at ``info``, never ``warn``.
+    """
+
+    def _os_rule(self, **kwargs: object) -> ImportBoundaryRule:
+        defaults: dict[str, object] = {
+            "name": "tui-no-io",
+            "description": "the TUI does no I/O",
+            "from_glob": "src/pkg/tui/**",
+            "to_glob": "os/**",
+        }
+        defaults.update(kwargs)
+        return ImportBoundaryRule(**defaults)  # type: ignore[arg-type]  # kwargs typed by the test
+
+    def test_a_banned_module_nobody_imports_is_stated_live_at_info(
+        self, indexed: sqlite3.Connection
+    ) -> None:
+        violations = evaluate_import_boundary_rules(indexed, [self._os_rule()])
+
+        (statement,) = violations
+        assert statement.rule_type == NOTHING_TO_BAN_RULE_TYPE
+        assert statement.severity == INFO_SEVERITY
+        assert statement.message.startswith(
+            "0 imports of `os/**` in the project; the rule is live"
+        )
+        assert "an import of `os` would fire it" in statement.message
+        assert "matches 0 of 3 indexed import paths" in statement.message
+        assert liveness_of(violations) == []
+
+    @pytest.mark.parametrize(
+        ("line", "import_path"),
+        [
+            pytest.param(1, "os", id="import os"),
+            pytest.param(2, "os.path", id="import os.path"),
+        ],
+    )
+    def test_the_import_it_was_stated_live_for_fires_it(
+        self, indexed: sqlite3.Connection, line: int, import_path: str
+    ) -> None:
+        _add_import(indexed, "src/pkg/tui/app.py", line, import_path)
+
+        violations = evaluate_import_boundary_rules(indexed, [self._os_rule()])
+
+        assert [v.line_number for v in forbidden_of(violations)] == [line]
+        assert [v.rule_type for v in violations] == ["forbid_import"]
+
+    def test_a_glob_naming_the_source_root_looks_unable_to_fire_and_says_so(
+        self, indexed: sqlite3.Connection
+    ) -> None:
+        rule = self._os_rule(to_glob="src/pkg/infrastructure/**")
+
+        (dead,) = evaluate_import_boundary_rules(indexed, [rule])
+
+        assert dead.rule_type == "rule_liveness"
+        assert dead.severity == "warn"
+        assert "looks unable to fire" in dead.message
+        assert "begins with 'src'" in dead.message
+        assert "0 of 3 indexed import paths" in dead.message
+
+    def test_a_dotted_glob_cannot_fire_and_says_so(self, indexed: sqlite3.Connection) -> None:
+        (dead,) = evaluate_import_boundary_rules(
+            indexed, [self._os_rule(to_glob="pkg.infrastructure.*")]
+        )
+
+        assert dead.severity == "warn"
+        assert "'.'" in dead.message
+
+    def test_an_exemption_of_a_live_rule_with_nothing_to_ban_excuses_nothing(
+        self, indexed: sqlite3.Connection
+    ) -> None:
+        from beadloom.graph.rule_engine import ImportExemption
+
+        rule = self._os_rule(
+            exempt=(ImportExemption(to_glob="os/path", reason="reads a path", until="never"),)
+        )
+
+        violations = evaluate_import_boundary_rules(indexed, [rule])
+
+        assert [v.rule_type for v in violations] == [NOTHING_TO_BAN_RULE_TYPE, "rule_liveness"]
+        assert "os/path" in violations[1].message
+
+    def test_a_dead_from_glob_still_cannot_fire_whatever_the_to_glob_can_match(
+        self, indexed: sqlite3.Connection
+    ) -> None:
+        (dead,) = evaluate_import_boundary_rules(
+            indexed, [self._os_rule(from_glob="src/pkg/ghost/**")]
+        )
+
+        assert dead.rule_type == "rule_liveness"
+        assert "`from` glob 'src/pkg/ghost/**'" in dead.message
+        assert "`to` glob 'os/**' matches 0 of 3 indexed import paths" in dead.message
 
 
 # ---------------------------------------------------------------------------

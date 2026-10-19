@@ -42,6 +42,19 @@ if TYPE_CHECKING:
 #: ``"# "`` — rather than a convention either end invented.
 POPULATION_MARKER = "# "
 
+#: How the text rendering marks a finding of each severity. ``info`` is the severity of a
+#: statement that decides nothing (BDL-083 D2): marking it ``[WARN]`` would say again, in
+#: the rendering, what the finding itself stopped saying.
+_TEXT_MARKERS = {
+    "error": "\u26d4 [ERROR]",
+    "warn": "\u26a0\ufe0f  [WARN]",
+    "info": "\u2139\ufe0f  [INFO]",
+}
+
+#: The workflow-command level of each severity: ``info`` is a ``notice``, which does not
+#: colour a pull request, as a layer population's statement does not.
+_GITHUB_LEVELS = {"error": "error", "warn": "warning", "info": "notice"}
+
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -419,7 +432,7 @@ def format_rich(result: LintResult) -> str:
 
     if result.violations:
         for v in result.violations:
-            marker = "\u26d4 [ERROR]" if v.severity == "error" else "\u26a0\ufe0f  [WARN]"
+            marker = _TEXT_MARKERS.get(v.severity, _TEXT_MARKERS["warn"])
             lines.append(f"{marker} {v.rule_name}")
             lines.append(f"  {v.rule_description}")
             if v.file_path is not None:
@@ -558,7 +571,7 @@ def format_github(result: LintResult) -> str:
         f"::notice::{population_phrase(reach)}" for reach in _stated_populations(result)
     ]
     for v in result.violations:
-        level = "error" if v.severity == "error" else "warning"
+        level = _GITHUB_LEVELS.get(v.severity, "warning")
         params: list[str] = []
         if v.file_path is not None:
             params.append(f"file={v.file_path}")

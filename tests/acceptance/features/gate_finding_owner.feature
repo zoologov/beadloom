@@ -11,38 +11,17 @@ Feature: a gate finding names its owner
   learns to ignore is the shape this project has now measured three times, and
   here it arrived on the instrument rather than in the suite.
 
-  So a finding names its owner: the graph node it is about, held against the
-  beads the tracker reports claimed right now and the scope each of them
-  declares. The other two candidate populations lose for stated reasons. The
-  work item's axes answer whether a change is inside the approval, which
-  `scope-check` already asks as a step of this same run, and which every agent
-  on one branch shares. A wave's plan names beads that have not started and
-  beads whose wave is over, and says what should run rather than what is
-  running.
+  So a finding names its owner. The rule it is attributed by changed in BDL-083
+  S1c (BDL-UX #329): a claimed bead owns a finding when its commits changed the
+  finding's files, never because its `refs:` name a node that covers them, and
+  the scenarios of that rule live in
+  `application/gate-ownership/ownership_by_changed_files.feature`. What stays
+  here is what the rule change did not touch: a tracker that cannot answer, and
+  a verdict that ownership never changes.
 
   Nothing here changes the verdict. A finding nobody claims is still a finding,
   and a gate that goes green because no bead owns a red would be the false
   green this epic exists to remove.
-
-  Scenario: a finding a claimed bead declares names that bead
-    Given a project whose gate finds a fault in a node
-    And a bead is claimed that declares that node
-    When the gate reports on that project
-    Then the report names the claimed bead as the owner of that finding
-
-  Scenario: a finding no claimed bead declares is unowned rather than blank
-    Given a project whose gate finds a fault in a node
-    And a bead is claimed that declares a different node
-    When the gate reports on that project
-    Then the report calls that finding unowned
-    And it says no bead claimed now declares the node that owns it
-
-  Scenario: a finding no node can be derived from is unattributed, not unowned
-    Given a project whose gate finds a fault with no node and no path
-    And a bead is claimed that declares a different node
-    When the gate reports on that project
-    Then the report calls that finding unattributed
-    And it does not call that finding unowned
 
   Scenario: a tracker that cannot answer is a reason, never an absence of owners
     Given a project whose gate finds a fault in a node
@@ -53,6 +32,6 @@ Feature: a gate finding names its owner
 
   Scenario: naming the owner of a finding does not change the verdict
     Given a project whose gate finds a fault in a node
-    And a bead is claimed that declares a different node
+    And a bead is claimed
     When the gate reports on that project
     Then the verdict and the exit code are the ones the steps produced

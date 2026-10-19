@@ -61,11 +61,6 @@ rules:
       edge_kind: part_of
 """
 
-#: A rules file no loader will read, so the run's findings are step-level ones
-#: that name no node and carry no path.
-_UNREADABLE_RULES = "rules:\n  - name: broken\n    require: {}\n"
-
-
 @pytest.fixture()
 def world(tmp_path: Path) -> dict[str, Any]:
     """The one mutable bag the steps share, kept explicit rather than global."""
@@ -99,19 +94,8 @@ def _fault_in_a_node(world: dict[str, Any]) -> None:
     """The graph the fixture already wrote: `beta` is part_of nothing."""
 
 
-@given("a project whose gate finds a fault with no node and no path")
-def _fault_with_no_node(world: dict[str, Any]) -> None:
-    graph = world["root"] / ".beadloom" / "_graph"
-    (graph / "rules.yml").write_text(_UNREADABLE_RULES, encoding="utf-8")
-
-
-@given("a bead is claimed that declares that node")
-def _bead_declares_the_node(monkeypatch: pytest.MonkeyPatch) -> None:
-    _claim(monkeypatch, (ClaimedBead(id="bd-1", title="bd-1", declaration="refs: beta"),))
-
-
-@given("a bead is claimed that declares a different node")
-def _bead_declares_another_node(monkeypatch: pytest.MonkeyPatch) -> None:
+@given("a bead is claimed")
+def _a_bead_is_claimed(monkeypatch: pytest.MonkeyPatch) -> None:
     _claim(
         monkeypatch, (ClaimedBead(id="bd-1", title="bd-1", declaration="refs: alpha"),)
     )
@@ -129,32 +113,6 @@ def _run_the_gate(world: dict[str, Any]) -> None:
     )
     world["output"] = result.output
     world["exit_code"] = result.exit_code
-
-
-@then("the report names the claimed bead as the owner of that finding")
-def _names_the_bead(world: dict[str, Any]) -> None:
-    assert "bd-1 — 1 finding(s)" in world["output"]
-
-
-@then("the report calls that finding unowned")
-def _calls_it_unowned(world: dict[str, Any]) -> None:
-    assert "unowned — 1 finding(s)" in world["output"]
-
-
-@then("it says no bead claimed now declares the node that owns it")
-def _says_no_bead_declares_it(world: dict[str, Any]) -> None:
-    assert "no bead claimed now declares the node that owns them" in world["output"]
-    assert "no finding of this run is owned by a bead claimed now" in world["output"]
-
-
-@then("the report calls that finding unattributed")
-def _calls_it_unattributed(world: dict[str, Any]) -> None:
-    assert "unattributed — " in world["output"]
-
-
-@then("it does not call that finding unowned")
-def _does_not_call_it_unowned(world: dict[str, Any]) -> None:
-    assert "unowned — " not in world["output"]
 
 
 @then("the report states that the claim could not be read")

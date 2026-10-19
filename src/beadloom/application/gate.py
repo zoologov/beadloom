@@ -14,7 +14,10 @@ Two honesty invariants (the Phase-0 lesson):
 1. **No silent skip.** Every step records its outcome — ``PASS`` / ``FAIL`` /
    ``SKIP`` — so the report never shows a green that quietly skipped a step.
 2. **No short-circuit.** All steps run and ALL findings are collected even after
-   an earlier failure, so one run surfaces every problem at once.
+   an earlier failure, so one run surfaces every problem at once. That includes a
+   step that RAISES: each step runs inside the boundary in
+   :mod:`beadloom.application.gate_boundary`, so an exception becomes a step that
+   reads ``ERROR`` and the steps after it still run (BDL-UX #318).
 
 Findings are projected to the shared agent-actionable shape
 (``{kind, rule, severity, locations, why, remediation}``, reused from
@@ -30,12 +33,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom.application.gate_boundary import crashed_clause, derive_bounded, run_bounded
 from beadloom.application.gate_coverage import GateCoverage, derive_gate_coverage
-from beadloom.application.gate_declarations import (
-    undetermined_declaration_step,
-    unusable_declaration_step,
-)
 from beadloom.application.gate_document_pairs import step_readme_pair
+from beadloom.application.gate_issue_log import step_issue_log
 from beadloom.application.gate_ownership import GateOwnership, derive_gate_ownership
 from beadloom.application.gate_step import Finding, GateStep, gate_step_line
 from beadloom.application.rooms import RoomCensus, take_census
@@ -72,7 +73,6 @@ if TYPE_CHECKING:
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
     from beadloom.doc_sync.declarations import Refusal
     from beadloom.doc_sync.doc_quality import QualityFinding
-    from beadloom.doc_sync.issue_numbers import IssueNumberReport, NumberFinding
 
 
 #: Re-exported so the move that lifted the step shape into
@@ -80,7 +80,14 @@ if TYPE_CHECKING:
 #: modules and test modules name ``beadloom.application.gate`` for these three,
 #: and a decomposition that also rewrites its callers is two changes reviewed as
 #: one (BDL-069, ``beadloom-rqma.8``).
-__all__ = ["Finding", "GateResult", "GateStep", "gate_step_line", "run_ci_gate"]
+__all__ = [
+    "Finding",
+    "GateResult",
+    "GateStep",
+    "crashed_clause",
+    "gate_step_line",
+    "run_ci_gate",
+]
 
 #: The ``lint`` step's summary when ``rules.yml`` could not be loaded at all.
 #: Named rather than spelled twice because that step is the one case where the
@@ -89,6 +96,12 @@ __all__ = ["Finding", "GateResult", "GateStep", "gate_step_line", "run_ci_gate"]
 #: loader's complaint here and the rule names everywhere else. Two copies of the
 #: string in two modules is exactly how the two would drift apart.
 RULES_CONFIG_ERROR = "rules configuration error"
+
+#: The names the three reports derived after the steps are stated under when one of
+#: them raises: ``the <name> raised <class>: <message>`` (BDL-083 S1 fix 1).
+ROOM_REPORT = "room census"
+COVERAGE_REPORT = "coverage report"
+OWNERSHIP_REPORT = "ownership report"
 
 
 def _run_doctor_checks(
@@ -147,6 +160,23 @@ class GateResult:
     not told makes no claim about the suite (BDL-UX #247).
     """
 
+    room_reason: str | None = None
+    """Why ``room`` is absent when the census raised, naming the exception.
+
+    Carried beside the census rather than on it: :class:`RoomCensus` is the answer
+    ``beadloom rooms`` and the MCP verdict print as well, and a census has no shape for
+    "not taken" — its current room is the one field it cannot do without. ``None``
+    whenever ``room`` is set, and whenever nothing was asked.
+    """
+
+    coverage_reason: str | None = None
+    """Why ``coverage`` is absent when its derivation raised, naming the exception.
+
+    Beside the report for the reason ``room_reason`` is: an absent report and a
+    present one with nothing in it must not read alike, and "no claim because the
+    report raised" is a third answer to "what did this run not do".
+    """
+
     ownership: GateOwnership | None = None
     """Who owns each finding of this run, held against the beads claimed now.
 
@@ -158,7 +188,9 @@ class GateResult:
     ``None`` means no work tracker was supplied to the run, so nothing was
     asked — the same convention ``room`` and ``coverage`` follow, and distinct
     from a report whose ``reason`` says the tracker was asked and did not
-    answer.
+    answer. A report that raised is a report with ``reason`` set to the sentence
+    naming the exception, because its type already has a reason every surface
+    prints.
     """
 
     @property
@@ -170,6 +202,11 @@ class GateResult:
     def findings(self) -> list[Finding]:
         """All findings across every step, in step order."""
         return [f for step in self.steps for f in step.findings]
+
+    @property
+    def crashed(self) -> list[GateStep]:
+        """The steps that raised instead of reporting, in step order (BDL-UX #318)."""
+        return [step for step in self.steps if step.error is not None]
 
 
 # ---------------------------------------------------------------------------
@@ -210,39 +247,63 @@ def run_ci_gate(
     """
     # Built in execution order rather than as one literal: `sync-check` needs the
     # index `reindex` writes, and the doc-spaces step needs the excused-pair count
-    # `sync-check` measured. Order is behaviour here, not layout.
+    # `sync-check` measured. Order is behaviour here, not layout. Every step runs
+    # through the boundary, which reports a step that raised as ERROR and lets the
+    # rest run; the lambdas look each step function up when it is called, which is
+    # also what lets a test break one step at a time.
     steps: list[GateStep] = [
-        _step_reindex(project_root, no_reindex=no_reindex),
-        lint_step(project_root),
+        run_bounded("reindex", lambda: _step_reindex(project_root, no_reindex=no_reindex)),
+        run_bounded("lint", lambda: lint_step(project_root)),
     ]
-    sync = _step_sync_check(project_root)
+    sync = run_bounded("sync-check", lambda: _step_sync_check(project_root))
     steps.append(sync)
-    steps.append(_step_docs_audit(project_root))
-    steps.append(_step_docs_quality(project_root))
-    steps.append(_step_issue_numbers(project_root))
-    steps.append(step_readme_pair(project_root))
+    steps.append(run_bounded("docs-audit", lambda: _step_docs_audit(project_root)))
+    steps.append(run_bounded("docs-quality", lambda: _step_docs_quality(project_root)))
+    steps.append(run_bounded("issue-log", lambda: _step_issue_numbers(project_root)))
+    steps.append(run_bounded("readme-pair", lambda: step_readme_pair(project_root)))
     # The excused-pair count travels from the step that produced it, so the two
-    # lines of one run cannot say different numbers about one word.
-    steps.append(_step_doc_spaces(project_root, pairs_excused=sync.pairs_excused))
-    steps.append(_step_scope_check(project_root))
-    steps.append(_step_config_check(project_root))
-    steps.append(_step_doctor(project_root))
+    # lines of one run cannot say different numbers about one word. A sync-check
+    # that crashed measured nothing, and its count is `None`.
+    steps.append(
+        run_bounded(
+            "doc-spaces",
+            lambda: _step_doc_spaces(project_root, pairs_excused=sync.pairs_excused),
+        )
+    )
+    steps.append(run_bounded("scope-check", lambda: _step_scope_check(project_root)))
+    steps.append(run_bounded("config-check", lambda: _step_config_check(project_root)))
+    steps.append(run_bounded("doctor", lambda: _step_doctor(project_root)))
     if hub_exports:
-        steps.append(_step_federate(project_root, hub_exports, fail_on))
+        steps.append(
+            run_bounded(
+                "federate", lambda: _step_federate(project_root, hub_exports, fail_on)
+            )
+        )
     performed = tuple(step.name for step in steps) + performed_elsewhere
+    # The three reports below describe the finished run and are derived under the
+    # boundary too: one that raises is absent with a reason, and the steps' verdict
+    # stands (BDL-083 S1 fix 1).
+    room, room_reason = derive_bounded(ROOM_REPORT, lambda: take_census(project_root))
+    coverage, coverage_reason = derive_bounded(
+        COVERAGE_REPORT, lambda: derive_gate_coverage(project_root, performed=performed)
+    )
     result = GateResult(
         steps=steps,
-        room=take_census(project_root),
-        coverage=derive_gate_coverage(project_root, performed=performed),
+        room=room,
+        room_reason=room_reason,
+        coverage=coverage,
+        coverage_reason=coverage_reason,
     )
     if tracker is None:
         return result
     # Built from the finished result rather than beside the steps: the report is
     # about the findings the run produced, and reading them back off the result
     # is what makes it impossible for it to describe a different set.
-    result.ownership = derive_gate_ownership(
-        project_root, findings=result.findings, tracker=tracker
+    ownership, ownership_reason = derive_bounded(
+        OWNERSHIP_REPORT,
+        lambda: derive_gate_ownership(project_root, findings=result.findings, tracker=tracker),
     )
+    result.ownership = GateOwnership(reason=ownership_reason) if ownership is None else ownership
     return result
 
 
@@ -303,8 +364,11 @@ def lint_step(project_root: Path) -> GateStep:
             findings=[_simple_finding("lint", "error", str(exc), None)],
             summary=RULES_CONFIG_ERROR,
         )
+    from beadloom.graph.rules import INFO_SEVERITY
+
     findings = [_finding(v) for v in result.violations]
     passed = not result.has_errors
+    statements = sum(1 for v in result.violations if v.severity == INFO_SEVERITY)
     # The suppressed-crossing and population clauses come from the linter's own
     # formatter rather than being restated here, so the Gate line cannot drift
     # from the command it summarises. The first is absent when nothing was
@@ -313,10 +377,14 @@ def lint_step(project_root: Path) -> GateStep:
     # counts beside it and `16 of 362` and `362 of 362` read alike when neither
     # is printed (BDL-070 A4). The OTHER counter needs no clause: an inert rule
     # always emits a finding, so `rules_inert > 0` already flips this summary to
-    # the "0 error(s), N warning(s)" branch (BDL-061.48/.49).
+    # the "0 error(s), N warning(s)" branch (BDL-061.48/.49). A statement at info
+    # is neither an error nor a warning and is still a finding, so it is counted
+    # when there is one; otherwise a lint of statements alone read
+    # "0 error(s), 0 warning(s)" above the findings it printed (S1R Minor 5).
+    info_note = f", {statements} statement(s) at info" if statements else ""
     summary = (
         (
-            f"{result.error_count} error(s), {result.warning_count} warning(s)"
+            f"{result.error_count} error(s), {result.warning_count} warning(s){info_note}"
             if result.violations
             else f"{result.rules_evaluated} rules, 0 violations"
         )
@@ -658,118 +726,16 @@ def _convention_finding(convention: SectionConvention) -> Finding:
     }
 
 
-
 def _step_issue_numbers(project_root: Path) -> GateStep:
-    """``issue-number check`` — the issue log's numbers; BLOCKS on a finding.
+    """``issue-number check`` — the leg is :mod:`beadloom.application.gate_issue_log`.
 
-    Unlike its ``docs-quality`` neighbour this step blocks, and the difference is
-    the kind of claim each makes. A writing-standard finding is an opinion about
-    prose that a project may reasonably carry for a release. A duplicate number
-    is a reference that resolves to two entries and to neither, and this
-    repository shipped one for fifteen days across a CHANGELOG, a ROADMAP, eight
-    test files and thirty-six tracker records before anyone noticed (BDL-UX
-    #187). Its three legs each have a repair the author can perform in the same
-    commit, which is what makes blocking fair.
-
-    **It cannot redden a project that has not opted in.** The log is DECLARED in
-    ``.beadloom/config.yml``; an adopter who declares none gets a named skip, so
-    the upgrade that ships this step turns nobody's green tree red.
-
-    **A project that opted in BADLY is a different project.** Writing
-    ``issue_log:`` and misspelling ``ledger:`` is opting in, and the verdict it
-    gets says how many entries were declared and how many could not be used —
-    not the sentence a project that wrote nothing gets (BDL-UX #270, closed
-    HERE by ``beadloom-rqma.7`` together with its twin in ``readme-pair``, and on
-    the two ``issue-number`` commands by ``beadloom-rqma.8``). Only the third
-    case skips: a config file that will not parse says nothing about whether the
-    key is there at all.
-
-    ``not_verified`` carries the honest half: before a project's first
-    allocation the ledger has no floor, so ``unwritten-claim`` and
-    ``unclaimed-number`` enter no number at all and a clean result would
-    describe their ignorance rather than the log (BDL-UX #173).
+    The step reads the report here and hands it to the function the
+    ``issue-number check`` command also takes its exit code from, so the two
+    surfaces give one verdict about one log (BDL-UX #331).
     """
     from beadloom.doc_sync.issue_numbers import check_issue_numbers
 
-    report = check_issue_numbers(project_root)
-    if report.undetermined:
-        return undetermined_declaration_step("issue-log", "an issue log", report.refusals)
-    if not report.declared:
-        return GateStep(
-            "issue-log",
-            skipped=True,
-            summary=(
-                "skipped — no issue log is declared; add an `issue_log:` block with "
-                "`path:` and `ledger:` to .beadloom/config.yml"
-            ),
-        )
-    if report.refusals:
-        return unusable_declaration_step(
-            "issue-log", report.entries_declared, report.refusals
-        )
-    if report.log_missing:
-        return GateStep(
-            "issue-log",
-            passed=False,
-            findings=[
-                _simple_finding(
-                    "issue-log",
-                    "error",
-                    "the declared issue log is missing or could not be decoded",
-                    "point `issue_log.path` at the log, or remove the declaration",
-                )
-            ],
-            summary="declared issue log missing",
-        )
-    findings = [_issue_number_finding(f) for f in report.findings]
-    return GateStep(
-        "issue-log",
-        passed=not report.findings,
-        not_verified=report.not_verified,
-        findings=findings,
-        summary=_issue_number_summary(report),
-    )
-
-
-def _issue_number_summary(report: IssueNumberReport) -> str:
-    """The issue-log line, which states what it COVERED and not only what it found."""
-    floor = report.floor if report.floor is not None else "none"
-    head = (
-        f"{len(report.findings)} finding(s)"
-        if report.findings
-        else f"{report.entries} entr(ies) uniquely numbered"
-    )
-    line = f"{head}; {report.claims} claim(s), floor {floor}"
-    if report.floor is None:
-        line += (
-            "; NOT CHECKED: unwritten-claim, unclaimed-number "
-            "(the ledger holds no claim, so neither entered a number)"
-        )
-    elif report.entries_below_floor:
-        line += (
-            f"; PARTLY CHECKED: {report.entries_below_floor} of {report.entries} "
-            f"entr(ies) are below floor {report.floor}, where unclaimed-number "
-            "did not enter"
-        )
-    if report.unaccounted:
-        line += (
-            f"; {len(report.unaccounted)} number(s) below the highest are stated "
-            "nowhere and are unaccounted for, not free"
-        )
-    return line
-
-
-def _issue_number_finding(finding: NumberFinding) -> Finding:
-    """Project one issue-number finding onto the shared finding shape."""
-    return {
-        "kind": "issue-log",
-        "rule": finding.check,
-        "severity": "error",
-        "locations": [{"file": finding.where}],
-        "why": finding.why,
-        "remediation": finding.remediation,
-    }
-
+    return step_issue_log(check_issue_numbers(project_root))
 
 
 def _step_doc_spaces(project_root: Path, *, pairs_excused: int | None = None) -> GateStep:
@@ -935,10 +901,13 @@ def _step_scope_check(project_root: Path) -> GateStep:
 
     Branch-scoped rather than tree-scoped, and that is the whole point: the tree
     is shared by several agents, so judging it would fail one agent's push on a
-    neighbour's edit, while ``<trunk>...HEAD`` is exactly what the pull request
+    neighbour's edit, while ``<base>...HEAD`` is exactly what the pull request
     contains and what the approval was spent on. The pre-commit hook asks the
     same question of one commit; this asks it of the branch, so a commit made
-    through a hook nobody re-installed is still caught before the push.
+    through a hook nobody re-installed is still caught before the push. The base
+    is :func:`~beadloom.application.scope_base.scope_base`'s — the merge-base with
+    the branch this one was cut from, else the trunk — and the summary names it
+    with the count of files it attributed to the parent branch (BDL-UX #330).
 
     ``passed=True`` unconditionally, like its two siblings above: the check ships
     as ``warn`` so a project whose work items predate ``## Axes`` does not go red
@@ -950,9 +919,10 @@ def _step_scope_check(project_root: Path) -> GateStep:
     ``a4738b7c`` — another work item's landed commit — for
     ``src/beadloom/graph/linter.py``.
     """
-    from beadloom.application.declared_scope import scope_check, trunk_ref
+    from beadloom.application.declared_scope import scope_check
+    from beadloom.application.scope_base import scope_base
 
-    run = scope_check(project_root, since=trunk_ref(project_root))
+    run = scope_check(project_root, base=scope_base(project_root))
     if not run.checked:
         return GateStep("scope-check", skipped=True, summary=f"skipped — {run.reason}")
     findings = [_scope_finding(finding) for finding in run.verdict.findings]
@@ -963,6 +933,8 @@ def _step_scope_check(project_root: Path) -> GateStep:
     )
     if run.verdict.undecided:
         summary += f", {run.verdict.undecided} declared row(s) nobody decided"
+    if run.base is not None:
+        summary += f"; against {run.base.describe()}"
     if not run.verdict.judged:
         # Nothing this branch changed belongs to a node, so the comparison ran
         # over an empty population. PASS would claim it checked something.
@@ -1218,7 +1190,11 @@ def _sync_finding(row: dict[str, object]) -> Finding:
     code_path = str(row.get("code_path", ""))
     reason = str(row.get("reason", "stale"))
     ref_id = str(row.get("ref_id", ""))
-    locations: list[Finding] = [{"file": doc_path}] if doc_path else []
+    # The code file is the pair's second location, after the document: a pair is
+    # stale because one of its two files moved, and the ownership report needs both
+    # to find the bead whose commits moved it (BDL-UX #329). Surfaces that print one
+    # location read the first, which stays the document.
+    locations: list[Finding] = [{"file": path} for path in (doc_path, code_path) if path]
     if str(row.get("status")) == STATUS_MISSING:
         gone = code_path if reason == "code_missing" else doc_path
         return {

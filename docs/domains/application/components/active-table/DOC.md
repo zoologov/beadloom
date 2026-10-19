@@ -245,9 +245,10 @@ headings, the Progress Log, and non-Status columns are always left untouched.
 
 ## Collaborators
 
-- **`services/commands/docsync.py` — `active-sync` command (and helpers).** The same
-  module also carries the pre-commit and pre-push hook TEMPLATES, whose subject is
-  `guard-hooks` rather than this component; the one line of them that belongs here is the
+- **`services/commands/docsync.py` — `active-sync` command (and helpers).** The
+  pre-commit and pre-push hook TEMPLATES sit beside it in `hook_templates.py` since
+  BDL-083 S1a; their subject is `guard-hooks` rather than this component, and the one
+  line of them that belongs here is the
   coherence block, which runs `active-sync --stage` and prints the paths it withheld.
   The block runs no `git add` of its own, and it selects the withheld lines with
   `grep` rather than with the `sed -n 's/^# //p'` shape the two porcelain legs beside

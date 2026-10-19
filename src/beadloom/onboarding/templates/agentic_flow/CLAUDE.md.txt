@@ -324,11 +324,32 @@ Trunk-based flow:
 Commit format:
 [{ISSUE-KEY}] <type>: <description>
 
+<body>
+
+Bead: <bead-id>
+Co-Authored-By: <name> <email>
+
 Types: feat, fix, refactor, docs, test, chore
 
 Example:
 [MCP-001] feat: add health endpoint
+
+The endpoint answers 200 while the index is readable.
+
+Bead: bd-a1b2
+Co-Authored-By: Agent <agent@example.invalid>
 ```
+
+The `Bead: <bead-id>` trailer is what binds a commit to its bead: the Gate's ownership
+report reads that trailer and nothing else, so a bead id mentioned anywhere else in the
+message leaves the commit unattributed.
+
+Git reads trailers from the message's final paragraph only. `Bead:` therefore goes in the
+LAST paragraph, beside any other trailer (`Co-Authored-By`, ...), with no blank line between
+them and nothing after them. A `Bead:` line followed by a paragraph of its own binds the
+commit to no bead, which is the shape a harness produces when it appends its attribution
+after this format. `git log -1 --format='%(trailers:key=Bead,valueonly)'` prints the bead id
+when the commit is bound, and prints nothing when it is not.
 
 One-time per repo: `beadloom setup-branch-protection` configures `main` protection
 (PR required, `beadloom ci` a required check, `enforce_admins: true` — strict

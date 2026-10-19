@@ -48,6 +48,19 @@ LIVENESS_RULE_TYPE = "rule_liveness"
 #: advisory (:mod:`.advisories`) and ``--fail-on-warn`` does not exit on it.
 SUITE_POPULATION_RULE_TYPE = "suite_population"
 
+#: ``rule_type`` of the statement an import rule makes when its ``to:`` glob CAN match an
+#: import path and the index holds none it matches today (BDL-083 D2, BDL-UX #328). The rule
+#: is live: one import of the banned module fires it. Before this type the same fact was
+#: reported as :data:`LIVENESS_RULE_TYPE`, in the sentence a glob that can match nothing
+#: gets, and two reviews read a live boundary as unchecked. It decides nothing, so it is an
+#: advisory (:mod:`.advisories`) and is stated at :data:`INFO_SEVERITY`.
+NOTHING_TO_BAN_RULE_TYPE = "nothing_to_ban"
+
+#: The severity of a finding that informs and decides nothing. It is never a rule's declared
+#: severity (:data:`VALID_RULE_SEVERITIES` holds only the two a rule may carry), and neither
+#: ``error_count`` nor ``warning_count`` counts it.
+INFO_SEVERITY = "info"
+
 
 #: What each side of a ``forbid_import`` rule is matched against. Stated on every
 #: liveness finding because the mismatch it describes is invisible otherwise: a

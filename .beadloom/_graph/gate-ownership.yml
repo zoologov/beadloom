@@ -1,11 +1,12 @@
-  # Component: who owns what a gate run found, derived from the index and from
-  # the beads claimed while it ran (BDL-068 S6, offered by beadloom-0mdo.76). A
+  # Component: who owns what a gate run found, derived from the index, from the
+  # beads claimed while it ran and from the commits of each on the branch (BDL-068
+  # S6, offered by beadloom-0mdo.76; the commit rule since BDL-083 S1c). A
   # component rather than a feature, for `gate-coverage`'s reason: the capability
   # an adopter runs is the gate, and this is a qualification its verdict carries.
 nodes:
   - ref_id: gate-ownership
     kind: component
-    summary: "Which bead claimed now owns each finding of a gate run, and the verdict when none does"
+    summary: "Which claimed bead's commits changed the files each finding of a gate run is about, and the verdict when none did"
     source: src/beadloom/application/gate_ownership.py
     docs:
       - docs/domains/application/components/gate-ownership/DOC.md
@@ -15,12 +16,6 @@ edges:
     kind: part_of
   - src: gate-ownership
     dst: flow-guards
-    kind: depends_on
-  - src: gate-ownership
-    dst: wave-plan
-    kind: depends_on
-  - src: gate-ownership
-    dst: impact
     kind: depends_on
   # Declared here rather than in `ci-gate.yml`: the layout's own rule is that a
   # node-adding bead writes the edges pointing at its new node into that node's

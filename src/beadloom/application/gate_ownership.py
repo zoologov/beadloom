@@ -1,55 +1,80 @@
 # beadloom:domain=application
 # beadloom:component=gate-ownership
-"""Who owns what a gate run found, so a red nobody owns stops training a discount.
+"""Who owns what a gate run found: the bead whose commits changed the finding's files.
 
-**The defect this closes.** This project's own branch carried a red Gate across
-two waves — two stale docs owned by no bead in the running plan — and every gate
-owner in those waves had to be told by the coordinator, by hand, that the red was
-not theirs, so their reports would attribute the finding rather than discount it.
-A known red trains its reader to discount the next one; the cost is never the red
-itself but the work of proving a SECOND finding is real against a background that
-already holds one, and this project has now paid it three times (BDL-UX #233,
-#258, and here on the instrument rather than in the suite).
+**The defect this closes, twice.** BDL-068 S6 added the report because a red that
+nobody owns trains its reader to discount the next one: every gate owner of two
+waves had to be told by the coordinator, by hand, that the red on the branch was
+not theirs. The report it added attributed a finding to every claimed bead whose
+``refs:`` declared the node that covers the finding's path — and the first outside
+adopter measured what that says (BDL-UX #329): in a wave of two beads each was told
+it owned the same nine findings, all of them the first bead's work, and a second
+work item's bead was told it owned 36 findings on files it never touched, because
+its ``refs:`` named the node that covers the frontend's source whole. A node that
+covers a directory says what a bead may touch, never what it touched.
 
-**The move is :mod:`beadloom.application.gate_coverage`'s, one layer over.** That
-one derives what a run did NOT do from the run's own step list. This one derives
-who owns what it DID find, from the index and from the tracker — and like it, it
-is not a step: it has no status, and the exit code is the one the steps produced.
+**So ownership is read from the commits (RFC D3).** A finding is owned by a bead
+claimed now whose commits on the branch changed a file the finding is about. The
+commits are the ones ``HEAD`` holds against the base the scope check compares
+against, so a commit already on the trunk is nobody's work in flight.
 
-**Where the claim is read from, and why the other two lose.** The owner is a
-BEAD the tracker reports ``in_progress`` right now, and the nodes its own
-``refs:`` declare — the same population ``bead-claimed`` reads, through the same
-port, resolved by the same parser the wave planner uses.
+**A commit is a bead's by its trailer, and by nothing else (RFC D10).** It belongs to
+a bead when its message carries the git trailer ``Bead: <bead-id>``, read as git
+reads trailers: the message's final paragraph only, the key in any case. Until the
+owner's ruling of 2026-10-19 any mention of the id bound the commit, and on
+BDL-083's own branch at 996781dd that bound 17 (bead, commit) pairs where 4 were declared: a
+landing-lock note ("released from beadloom-7pd6") and a test bead naming what it
+measured each made their files another bead's. A commit with no trailer is
+nobody's, which is the honest reading of a branch written before the rule.
 
-* *The work item's declared axes* answer a different question — is this change
-  inside the approval — and ``scope-check`` already asks it, as a step of this
-  same run. Every finding on one branch is inside one approval, so an owner
-  derived from the axes names the work item, which every agent on that branch
-  shares. That is not the sentence the coordinator had to write.
-* *A wave's plan* names beads that have not started and beads whose wave is
-  over, and it exists only where a plan was made. A plan states what SHOULD run;
-  a claim states what IS running, and "is this red mine" is about the second.
+**A `Bead:` line git reads no trailer from is named, never denied (D10 as clarified on
+2026-10-19).** A harness that appends its attribution as a paragraph of its own, after
+the documented format, leaves ``Bead: <id>`` one paragraph short of the end, and git
+then reads no trailer from it (measured on git 2.49: ``-m subj -m body -m "Bead: bd-1"
+-m "Co-Authored-By: X"`` binds nothing). The report used to answer "no commit carries
+`Bead: bd-1`" about a commit that visibly carries the line. When a claimed bead has no
+bound commit, the commits holding a whole ``Bead: <id>`` line are counted by where the
+line stands — outside the final paragraph, or inside a final paragraph git does not
+read as a trailer block — so the reader gets the one fix rather than a denial. They
+still bind nothing: the binding stays git's reading. That reading needs git 2.22 or
+later (``%(trailers:key=...,valueonly)``). The JSON report and the MCP ``owners`` payload
+carry the same fact on each ``claims`` entry, as ``unread_bead_lines``: one row per
+placement, with the count and the commit hashes (the owner's ruling of 2026-10-19, S1
+fix 6), so a machine reader does not get ``commits: 0`` and nothing else where the text
+names the misplaced line. The placement is a token, ``outside_final`` or ``unread_final``,
+with the text's sentence beside it as ``stated`` (S1 fix 7): a returned value's vocabulary
+is public, and the sentence was reworded twice in the slice that introduced it.
 
-**Three verdicts, because they are three different facts.** ``owned`` names the
-beads. ``unowned`` says a node was derived and no claim covers it — the
-interesting case, and precisely what had to be said by hand. ``unattributed``
-says no node could be derived from the finding at all, which is not the same
-absence and must not be read as one. A tracker that cannot answer, or a project
-with no index, is a :attr:`GateOwnership.reason` on the whole report rather than
-a page of ``unowned``: telling every gate owner "not yours" when nobody was asked
-would be the false green this epic exists to remove, wearing the new vocabulary.
+**The files a finding is about.** The files its locations name, with a document
+named in the documentation root's frame re-rooted onto the project's; a stale or
+missing pair locates its code file as well as its document. A finding that locates
+no file and names a node is about the files that node owns — by most-specific
+ownership, so a node never answers for a nested node's files. The bead's ``refs:``
+do not attribute anything: the declaration grammar reads node ids and no file
+path, and a node is the directory-sized claim the defect was made of.
+
+**Two verdicts, and the reason is on every one.** ``owned`` names the beads.
+``unattributed`` says no claimed bead's commits changed the files the finding is
+about, or that the finding is about no file at all — the honest answer, and never
+"owned by the neighbour whose node covers the directory". A tracker that cannot
+answer, a project with no index and a git that cannot list the branch's commits
+are a :attr:`GateOwnership.reason` on the whole report rather than a page of
+``unattributed``: telling every gate owner "not yours" when nobody was asked would
+be the false green this epic exists to remove.
+
+It is not a step: it has no status, and the exit code is the one the steps produced.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from beadloom.application.impact.boundary import GraphBoundary
-from beadloom.application.waves.models import BeadRecord
-from beadloom.application.waves.scope import resolve_scope
+from beadloom.doc_sync.git_baseline import changed_paths, commits_since
 from beadloom.infrastructure.db import open_db_readonly
 from beadloom.infrastructure.doc_roots import resolve_docs_dir
+from beadloom.infrastructure.repository import get_owned_code_files
 
 if TYPE_CHECKING:
     import sqlite3
@@ -57,73 +82,119 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from beadloom.application.guards.contract import ClaimedBead, WorkTracker
-    from beadloom.application.waves.models import BeadScope
+    from beadloom.doc_sync.git_baseline import BranchCommit
 
 #: A finding in the gate's shared shape. Spelled here rather than imported from
 #: :mod:`beadloom.application.gate`, which imports this module.
 Finding = dict[str, object]
 
-#: A claimed bead declares the node this finding is about.
+#: A claimed bead's commits changed a file the finding is about.
 OWNED = "owned"
 
-#: A node was derived and no bead claimed now declares it. A VERDICT, not a
-#: blank: it is the answer the coordinator had to supply by hand twice.
-UNOWNED = "unowned"
-
-#: No node could be derived from the finding — it names none and its locations
-#: (if any) belong to no node this index knows. A different fact from
-#: :data:`UNOWNED`, and reporting the two as one would hide which of "nobody
-#: claims it" and "there was nothing to claim" actually happened.
+#: No claimed bead's commits changed a file the finding is about, or it is about none.
 UNATTRIBUTED = "unattributed"
+
+#: The git trailer that binds a commit to a bead (RFC D10): ``Bead: <bead-id>``.
+BEAD_TRAILER = "Bead"
+
+#: The rule every surface prints beside the owners, so a reader can tell what an
+#: attribution is a claim about.
+ATTRIBUTION_RULE = f"by the files the commits carrying `{BEAD_TRAILER}: <id>` changed"
+
+#: The clause beside each owner, RFC D3's wording.
+OWNED_CLAUSE = "by the files its commits changed"
 
 #: The tracker did not answer, so no claim was read at all.
 NO_TRACKER = (
-    "the work tracker could not be reached, so no finding of this run was held "
-    "against a claim"
+    "the work tracker could not be reached, so no finding of this run was held against a claim"
 )
 
-#: There is no index, so no finding could be resolved to the node it is about.
+#: There is no index, so no finding could be resolved to the files it is about.
 NO_INDEX = (
-    "the project has no index, so no finding could be resolved to the node it is "
+    "the project has no index, so no finding could be resolved to the files it is "
     "about — run `beadloom reindex`"
 )
 
-#: How many beads or paths a line spells out before it counts the rest. The
-#: reader needs the shape of the attribution, not a transcript of it.
-_NAMED_LIMIT = 5
+#: Git could not list the branch's commits; formatted with the base it was asked about.
+NO_HISTORY = (
+    "git could not list the commits this branch holds against {base}, so no finding "
+    "could be held against a bead's commits"
+)
 
-#: How the node was reached, when the finding named it itself.
-_NAMED_BY_FINDING = "named by the finding"
+#: Why a finding that locates no file and names no node cannot be attributed.
+_NO_FILE = "it locates no file and names no node"
+
+#: The ``placement`` token of a ``Bead:`` line outside the message's final paragraph.
+PLACEMENT_OUTSIDE_FINAL = "outside_final"
+
+#: The ``placement`` token of a ``Bead:`` line in a final paragraph git reads no trailer from.
+PLACEMENT_UNREAD_FINAL = "unread_final"
+
+#: A ``Bead:`` line that stands outside the message's final paragraph.
+_OUTSIDE_FINAL = "outside the message's final paragraph"
+
+#: A ``Bead:`` line inside a final paragraph that git does not read as a trailer block.
+_UNREAD_FINAL = "in a final paragraph git does not read as a trailer block"
+
+#: Each placement token, and the words the text surface states it in.
+_STATED = {PLACEMENT_OUTSIDE_FINAL: _OUTSIDE_FINAL, PLACEMENT_UNREAD_FINAL: _UNREAD_FINAL}
+
+#: One or more blank lines: what separates two paragraphs of a commit message for git.
+_PARAGRAPH_BREAK = re.compile(r"\n(?:[ \t]*\n)+")
+
+#: How many beads a line spells out before it counts the rest.
+_NAMED_LIMIT = 5
 
 
 @dataclass(frozen=True)
 class FindingOwner:
-    """One finding, the node it is about, and the beads that claim that node."""
+    """One finding, the beads whose commits changed its files, and why."""
 
     rule: str
     verdict: str
     node: str | None = None
     beads: tuple[str, ...] = ()
     where: str = ""
-    """How the node was reached — named by the finding, or owner of a path."""
+    """The file that decided the verdict, or why no file could."""
+
+    files: tuple[str, ...] = ()
+    """The project-relative files the finding was held against; empty when it is about none."""
+
+    uncommitted: bool = False
+    """Unattributed, and the working tree changes a file it is about that no commit holds."""
 
 
 @dataclass(frozen=True)
-class UnreadClaim:
-    """A claimed bead whose own declaration this run could not read as a scope.
-
-    Carried because it qualifies every :data:`UNOWNED` verdict in the same
-    report: a bead whose scope could not be read might own any of them, so
-    "nobody claims this" is a statement about the claims that WERE readable.
-    """
+class BeadCommits:
+    """A claimed bead, how many commits on the branch carry it, and the paths they changed."""
 
     bead_id: str
-    why: str
+    commits: int
+    paths: frozenset[str]
+    outside_final: tuple[str, ...] = ()
+    """Hashes of unbound commits holding a ``Bead: <id>`` line outside the final paragraph."""
+
+    unread_final: tuple[str, ...] = ()
+    """Hashes of unbound commits holding it in a final paragraph git does not read as trailers.
+
+    Both are in the branch's commit order, newest first.
+    """
+
+    def unread_lines(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        """Each placement where a ``Bead: <id>`` line was read as no trailer, with its commits.
+
+        By its token; a placement no commit has is left out.
+        """
+        placed = (
+            (PLACEMENT_OUTSIDE_FINAL, self.outside_final),
+            (PLACEMENT_UNREAD_FINAL, self.unread_final),
+        )
+        return tuple((where, hashes) for where, hashes in placed if hashes)
 
 
 @dataclass(frozen=True)
 class GateOwnership:
-    """What a gate run found, held against the beads claimed while it ran."""
+    """What a gate run found, held against the commits of the beads claimed while it ran."""
 
     owners: tuple[FindingOwner, ...] = ()
     """One entry per finding, in the run's finding order."""
@@ -131,35 +202,31 @@ class GateOwnership:
     claimed: tuple[str, ...] = ()
     """The bead ids the tracker reported claimed, in sorted order."""
 
-    unread: tuple[UnreadClaim, ...] = ()
-    """Claimed beads whose declaration could not be read as a scope."""
+    claims: tuple[BeadCommits, ...] = ()
+    """Each claimed bead's commits on the branch, in sorted bead order."""
+
+    base: str | None = None
+    """The ref the branch's commits were listed against."""
 
     reason: str | None = None
     """Present exactly when nothing was attributed, and never with owners."""
 
     @property
     def owned(self) -> tuple[FindingOwner, ...]:
-        """Findings a claimed bead declares the node of."""
+        """Findings a claimed bead's commits explain."""
         return tuple(o for o in self.owners if o.verdict == OWNED)
 
     @property
-    def unowned(self) -> tuple[FindingOwner, ...]:
-        """Findings whose node no bead claimed now declares."""
-        return tuple(o for o in self.owners if o.verdict == UNOWNED)
-
-    @property
     def unattributed(self) -> tuple[FindingOwner, ...]:
-        """Findings no node could be derived from."""
+        """Findings no claimed bead's commits explain."""
         return tuple(o for o in self.owners if o.verdict == UNATTRIBUTED)
 
     @property
     def none_owned(self) -> bool:
         """True when findings were attributed and not one of them is owned.
 
-        The sentence a gate owner needs, and the one a coordinator wrote by hand:
-        the run is red and none of it belongs to a bead running now. False when
-        there was nothing to attribute or nobody was asked, because neither of
-        those is that sentence.
+        False when there was nothing to attribute or nobody was asked, because
+        neither of those is the sentence "none of this red is a running bead's".
         """
         return bool(self.owners) and not self.owned
 
@@ -171,191 +238,310 @@ class GateOwnership:
                 counts[bead] = counts.get(bead, 0) + 1
         return tuple(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
 
+    def owning_nothing(self) -> tuple[BeadCommits, ...]:
+        """The claimed beads that own no finding of this run."""
+        owning = {bead for bead, _count in self.by_bead()}
+        return tuple(claim for claim in self.claims if claim.bead_id not in owning)
+
 
 def derive_gate_ownership(
-    project_root: Path, *, findings: Sequence[Finding], tracker: WorkTracker
+    project_root: Path,
+    *,
+    findings: Sequence[Finding],
+    tracker: WorkTracker,
+    base: str | None = None,
 ) -> GateOwnership:
-    """Attribute every finding of a run to the beads claimed while it ran.
+    """Attribute every finding of a run to the claimed beads whose commits explain it.
 
-    The tracker is asked only when there is something to attribute: a green run
-    has no finding to own, and a report that shells out to ``bd`` on every push
-    to say nothing is a cost with no reader.
+    *base* is the ref the branch's commits are listed against; ``None`` takes the
+    one the scope check compares against (``scope_base``), so the older commits
+    of a parent branch not yet merged are nobody's work in flight. The tracker is
+    asked only when there is something to attribute: a report that shells out to
+    ``bd`` on every push to say nothing is a cost with no reader.
     """
     if not findings:
         return GateOwnership()
     beads = tracker.claimed_beads()
     if beads is None:
         return GateOwnership(reason=NO_TRACKER)
+    claimed = tuple(sorted(bead.id for bead in beads))
+    if base is None:
+        from beadloom.application.scope_base import scope_base
+
+        base = scope_base(project_root).ref
     database = project_root / ".beadloom" / "beadloom.db"
     try:
         connection = open_db_readonly(database)
     except FileNotFoundError:
-        return GateOwnership(
-            claimed=tuple(sorted(bead.id for bead in beads)), reason=NO_INDEX
-        )
+        return GateOwnership(claimed=claimed, base=base, reason=NO_INDEX)
     try:
-        return _attribute(project_root, connection, findings=findings, beads=beads)
+        commits = commits_since(project_root, base, trailer=BEAD_TRAILER)
+        if commits is None:
+            return GateOwnership(claimed=claimed, base=base, reason=NO_HISTORY.format(base=base))
+        claims = tuple(_commits_of(bead, commits) for bead in sorted(beads, key=_id))
+        files = _FindingFiles(project_root, connection)
+        tree = changed_paths(project_root) or frozenset()
+        owners = tuple(_owner_of(f, files=files, claims=claims, tree=tree) for f in findings)
     finally:
         connection.close()
+    return GateOwnership(owners=owners, claimed=claimed, claims=claims, base=base)
 
 
-def _attribute(
-    project_root: Path,
-    connection: sqlite3.Connection,
-    *,
-    findings: Sequence[Finding],
-    beads: Sequence[ClaimedBead],
-) -> GateOwnership:
-    """The attribution itself, once the index and the claims are both in hand."""
-    boundary = GraphBoundary(connection)
-    documented = _documented_nodes(project_root, connection)
-    scopes = {
-        bead.id: resolve_scope(
-            connection, BeadRecord(bead_id=bead.id, declaration=bead.declaration)
-        )
-        for bead in beads
-    }
-    owners = tuple(
-        _owner_of(finding, boundary=boundary, documented=documented, scopes=scopes)
-        for finding in findings
+def _id(bead: ClaimedBead) -> str:
+    return bead.id
+
+
+def _commits_of(bead: ClaimedBead, commits: Sequence[BranchCommit]) -> BeadCommits:
+    """The commits whose ``Bead:`` trailer names *bead*, the paths they changed, and the strays.
+
+    A stray is an unbound commit whose message holds a whole ``Bead: <id>`` line git read
+    no trailer from, counted by where the line stands.
+    """
+    own = [commit for commit in commits if bead.id in commit.trailer_values]
+    paths = frozenset(path for commit in own for path in commit.paths)
+    line = re.compile(rf"^(?i:{BEAD_TRAILER}):[ \t]*{re.escape(bead.id)}[ \t]*$", re.MULTILINE)
+    placements = [
+        (commit.sha, _placement(commit.message, line))
+        for commit in commits
+        if bead.id not in commit.trailer_values
+    ]
+    return BeadCommits(
+        bead_id=bead.id,
+        commits=len(own),
+        paths=paths,
+        outside_final=tuple(sha for sha, where in placements if where == PLACEMENT_OUTSIDE_FINAL),
+        unread_final=tuple(sha for sha, where in placements if where == PLACEMENT_UNREAD_FINAL),
     )
-    unread = tuple(
-        UnreadClaim(bead_id=bead_id, why=scope.unresolved)
-        for bead_id, scope in sorted(scopes.items())
-        if scope.unresolved is not None
-    )
-    return GateOwnership(
-        owners=owners, claimed=tuple(sorted(scopes)), unread=unread
-    )
+
+
+def _placement(message: str, line: re.Pattern[str]) -> str | None:
+    """Where *line* stands in *message*, as a placement token, or ``None`` when it does not."""
+    paragraphs = _PARAGRAPH_BREAK.split(message.strip())
+    if line.search(paragraphs[-1]):
+        return PLACEMENT_UNREAD_FINAL
+    if any(line.search(paragraph) for paragraph in paragraphs[:-1]):
+        return PLACEMENT_OUTSIDE_FINAL
+    return None
+
+
+class _FindingFiles:
+    """The project-relative files a finding is about, read once per run from the index."""
+
+    def __init__(self, project_root: Path, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+        self._prefix = resolve_docs_dir(project_root).strip("/")
+        rows = connection.execute(
+            "SELECT path, ref_id FROM docs WHERE ref_id IS NOT NULL"
+        ).fetchall()
+        self._docs: dict[str, str] = {str(row["path"]): str(row["ref_id"]) for row in rows}
+        self._node_files: dict[str, tuple[str, ...]] = {}
+
+    def located(self, finding: Finding) -> tuple[str, ...]:
+        """Every file the finding's locations name, in the project's frame."""
+        locations = finding.get("locations")
+        if not isinstance(locations, list):
+            return ()
+        files: list[str] = []
+        for location in locations:
+            file = location.get("file") if isinstance(location, dict) else None
+            if isinstance(file, str) and file:
+                path = self._project_path(file)
+                if path not in files:
+                    files.append(path)
+        return tuple(files)
+
+    def of_node(self, ref_id: str) -> tuple[str, ...]:
+        """The code files *ref_id* owns and the documents declared for it."""
+        if ref_id not in self._node_files:
+            code = [path for path, _hash in get_owned_code_files(self._connection, ref_id)]
+            docs = [self._docs_path(doc) for doc, ref in self._docs.items() if ref == ref_id]
+            self._node_files[ref_id] = tuple(code + sorted(docs))
+        return self._node_files[ref_id]
+
+    def _project_path(self, file: str) -> str:
+        """*file* re-rooted when it is a document named in the documentation root's frame.
+
+        The sync steps locate a document as the ``docs`` table stores it, relative
+        to the documentation root, while a commit names it relative to the project.
+        """
+        return self._docs_path(file) if file in self._docs else file
+
+    def _docs_path(self, doc: str) -> str:
+        return f"{self._prefix}/{doc}" if self._prefix else doc
 
 
 def _owner_of(
     finding: Finding,
     *,
-    boundary: GraphBoundary,
-    documented: dict[str, str],
-    scopes: dict[str, BeadScope],
+    files: _FindingFiles,
+    claims: Sequence[BeadCommits],
+    tree: frozenset[str],
 ) -> FindingOwner:
-    """One finding's node, and the claims that cover it."""
+    """One finding, held against the paths each claimed bead's commits changed."""
     rule = str(finding.get("rule", ""))
-    node, where = _node_of(finding, boundary=boundary, documented=documented)
-    if node is None:
-        return FindingOwner(rule=rule, verdict=UNATTRIBUTED)
-    claiming = tuple(
-        bead_id
-        for bead_id, scope in sorted(scopes.items())
-        if node in scope.refs
-    )
-    verdict = OWNED if claiming else UNOWNED
-    return FindingOwner(
-        rule=rule, verdict=verdict, node=node, beads=claiming, where=where
-    )
-
-
-def _node_of(
-    finding: Finding, *, boundary: GraphBoundary, documented: dict[str, str]
-) -> tuple[str | None, str]:
-    """The node a finding is about, and how it was reached.
-
-    The finding's own ``node`` field first, because a step that already knows
-    which node it is reporting on is a better source than any re-derivation —
-    the linter has carried it since BDL-067 `.14` and the sync steps carry it for
-    this report. Failing that, each location's path is resolved through the
-    INDEX: source ownership as ``scope-check`` resolves it, then the documented
-    node, since a doc is owned by no source prefix and half of this gate's
-    findings are about documents.
-    """
     named = finding.get("node")
-    if isinstance(named, str) and named:
-        return named, _NAMED_BY_FINDING
-    for path in _located_paths(finding):
-        owner = boundary.owner_of(path).node
-        if owner is not None:
-            return owner, f"owner of {path}"
-        documents = documented.get(path)
-        if documents is not None:
-            return documents, f"documented node of {path}"
-    return None, ""
+    node = named if isinstance(named, str) and named else None
+    about = files.located(finding)
+    subject = "the files it locates"
+    if not about and node is not None:
+        about = files.of_node(node)
+        subject = f"the files {node} owns"
+    if not about:
+        why = _NO_FILE if node is None else f"{node} names no file a commit could have changed"
+        return FindingOwner(rule=rule, verdict=UNATTRIBUTED, node=node, where=why)
+    beads: list[str] = []
+    decided = ""
+    for claim in claims:
+        touched = [path for path in about if path in claim.paths]
+        if touched:
+            beads.append(claim.bead_id)
+            decided = decided or f"{touched[0]}, changed by its commits"
+    if beads:
+        return FindingOwner(
+            rule=rule,
+            verdict=OWNED,
+            node=node,
+            beads=tuple(beads),
+            where=decided,
+            files=about,
+        )
+    return FindingOwner(
+        rule=rule,
+        verdict=UNATTRIBUTED,
+        node=node,
+        where=f"no claimed bead's commits changed {subject}",
+        files=about,
+        uncommitted=any(path in tree for path in about),
+    )
 
 
-def _located_paths(finding: Finding) -> list[str]:
-    """Every project-relative path the finding's locations name."""
-    locations = finding.get("locations")
-    if not isinstance(locations, list):
-        return []
-    paths: list[str] = []
-    for location in locations:
-        if not isinstance(location, dict):
-            continue
-        file = location.get("file")
-        if isinstance(file, str) and file and file not in paths:
-            paths.append(file)
-    return paths
+def ownership_sentences(ownership: GateOwnership) -> list[str]:
+    """The ownership block's sentences, once, for every surface that prints it.
 
-
-def _documented_nodes(
-    project_root: Path, connection: sqlite3.Connection
-) -> dict[str, str]:
-    """Project-relative doc path -> the node that document is declared for.
-
-    The ``docs`` table stores a path relative to the documentation root, while a
-    finding carries one relative to the project. The root is read from the
-    project's own configuration rather than assumed, so a project that renames
-    ``docs/`` is still joined correctly.
+    Beside the model rather than in a renderer, for the reason
+    :func:`beadloom.application.gate_coverage.gate_coverage_lines` is: three formats
+    and one MCP tool quote it, and a second wording is how two surfaces of one run
+    come to disagree.
     """
-    prefix = resolve_docs_dir(project_root).strip("/")
-    rows = connection.execute(
-        "SELECT path, ref_id FROM docs WHERE ref_id IS NOT NULL"
-    ).fetchall()
-    return {
-        f"{prefix}/{row['path']}" if prefix else str(row["path"]): str(row["ref_id"])
-        for row in rows
-    }
+    if ownership.reason is not None:
+        return [ownership.reason]
+    if not ownership.owners:
+        return []
+    sentences = [f"attributed {ATTRIBUTION_RULE}, over {ownership.base}..HEAD"]
+    sentences.extend(
+        f"owned by {bead}: {count} finding(s), {OWNED_CLAUSE}"
+        for bead, count in ownership.by_bead()
+    )
+    sentences.extend(_owning_nothing(claim, ownership) for claim in ownership.owning_nothing())
+    if ownership.unattributed:
+        sentences.append(_unattributed_sentence(ownership.unattributed, ownership))
+    if ownership.none_owned:
+        sentences.append(
+            f"no finding of this run is owned by a bead claimed now ({_claimed_clause(ownership)})"
+        )
+    return sentences
 
 
 def gate_ownership_lines(ownership: GateOwnership) -> list[str]:
-    """The human report's block: who owns what this run found.
+    """The human report's block: who owns what this run found, and by which rule."""
+    sentences = ownership_sentences(ownership)
+    if not sentences:
+        return []
+    return ["Findings by owner:", *(f"  {sentence}" for sentence in sentences)]
 
-    Beside the model rather than in a renderer, for the same reason
-    :func:`beadloom.application.gate_coverage.gate_coverage_lines` is: three
-    formats and one MCP tool quote it, and a second wording is how two surfaces
-    of one run come to disagree.
+
+def ownership_payload(ownership: GateOwnership) -> dict[str, object]:
+    """The block as structured data, for the JSON report and the MCP tool alike."""
+    return {
+        "reason": ownership.reason,
+        "rule": ATTRIBUTION_RULE,
+        "base": ownership.base,
+        "claimed": list(ownership.claimed),
+        "none_owned": ownership.none_owned,
+        "claims": [_claim_payload(claim) for claim in ownership.claims],
+        "findings": [
+            {
+                "rule": owner.rule,
+                "verdict": owner.verdict,
+                "node": owner.node,
+                "beads": list(owner.beads),
+                "where": owner.where,
+                "files": list(owner.files),
+                "uncommitted": owner.uncommitted,
+            }
+            for owner in ownership.owners
+        ],
+    }
+
+
+def _claim_payload(claim: BeadCommits) -> dict[str, object]:
+    """One claimed bead: its bound commits, and the commits whose line git read no trailer from.
+
+    ``commits`` stays the bound count. ``unread_bead_lines`` is the fact the text
+    names beside it, one row per placement with its count and hashes, and ``[]``
+    when every ``Bead: <id>`` line was read as a trailer. ``placement`` is the token a
+    script matches; ``stated`` is the text surface's sentence, for a reader.
     """
-    if ownership.reason is not None:
-        return ["Findings by owner:", f"  {ownership.reason}"]
-    if not ownership.owners:
-        return []
-    lines = ["Findings by owner:"]
-    for bead, count in ownership.by_bead():
-        lines.append(f"  {bead} — {count} finding(s)")
-    lines.extend(_unowned_lines(ownership))
-    if ownership.unattributed:
-        lines.append(
-            f"  {UNATTRIBUTED} — {len(ownership.unattributed)} finding(s): no node "
-            "could be derived from them, so no claim could cover them"
-        )
-    lines.extend(_unread_lines(ownership))
-    return lines
+    return {
+        "bead": claim.bead_id,
+        "commits": claim.commits,
+        "unread_bead_lines": [
+            {
+                "placement": where,
+                "stated": _STATED[where],
+                "count": len(hashes),
+                "commits": list(hashes),
+            }
+            for where, hashes in claim.unread_lines()
+        ],
+    }
 
 
-def _unowned_lines(ownership: GateOwnership) -> list[str]:
-    """The unowned count, and the headline when nothing at all is owned."""
-    if not ownership.unowned:
-        return []
-    nodes = sorted({owner.node for owner in ownership.unowned if owner.node})
-    named = ", ".join(nodes[:_NAMED_LIMIT])
-    if len(nodes) > _NAMED_LIMIT:
-        named += f" and {len(nodes) - _NAMED_LIMIT} more"
-    lines = [
-        f"  {UNOWNED} — {len(ownership.unowned)} finding(s): no bead claimed now "
-        f"declares the node that owns them ({named})"
-    ]
-    if ownership.none_owned:
-        lines.append(
-            "  no finding of this run is owned by a bead claimed now"
-            f" ({_claimed_clause(ownership)})"
+def _owning_nothing(claim: BeadCommits, ownership: GateOwnership) -> str:
+    """Why a claimed bead owns nothing: no commit carries it, or its commits explain none."""
+    if claim.commits == 0 and (claim.outside_final or claim.unread_final):
+        return f"{claim.bead_id} owns no finding: {_stray_clause(claim, ownership)}"
+    if claim.commits == 0:
+        return (
+            f"{claim.bead_id} owns no finding: no commit on {ownership.base}..HEAD carries "
+            f"`{BEAD_TRAILER}: {claim.bead_id}`"
         )
-    return lines
+    return (
+        f"{claim.bead_id} owns no finding: its {claim.commits} commit(s) changed none "
+        "of the files these findings are about"
+    )
+
+
+def _stray_clause(claim: BeadCommits, ownership: GateOwnership) -> str:
+    """The commits holding a ``Bead:`` line git read no trailer from, by where it stands."""
+    outside, unread = len(claim.outside_final), len(claim.unread_final)
+    carry = (
+        f"{outside + unread} commit(s) on {ownership.base}..HEAD carry "
+        f"`{BEAD_TRAILER}: {claim.bead_id}`"
+    )
+    if not unread:
+        return f"{carry} {_OUTSIDE_FINAL}, where git reads no trailer"
+    if not outside:
+        return f"{carry} {_UNREAD_FINAL}"
+    return (
+        f"{carry} where git reads no trailer: {outside} {_OUTSIDE_FINAL}, {unread} {_UNREAD_FINAL}"
+    )
+
+
+def _unattributed_sentence(unattributed: Sequence[FindingOwner], ownership: GateOwnership) -> str:
+    """The unattributed count, with the two qualifications a reader acts on."""
+    uncommitted = sum(1 for owner in unattributed if owner.uncommitted)
+    fileless = sum(1 for owner in unattributed if not owner.files)
+    clauses = []
+    if uncommitted:
+        clauses.append(f"{uncommitted} on files the working tree changes and no commit holds yet")
+    if fileless:
+        clauses.append(f"{fileless} about no file a commit could have changed")
+    qualified = f" ({'; '.join(clauses)})" if clauses else ""
+    return (
+        f"{UNATTRIBUTED}: {len(unattributed)} finding(s) no claimed bead's commits on "
+        f"{ownership.base}..HEAD explain{qualified}"
+    )
 
 
 def _claimed_clause(ownership: GateOwnership) -> str:
@@ -366,19 +552,3 @@ def _claimed_clause(ownership: GateOwnership) -> str:
     if len(ownership.claimed) > _NAMED_LIMIT:
         named += f" and {len(ownership.claimed) - _NAMED_LIMIT} more"
     return f"claimed: {named}"
-
-
-def _unread_lines(ownership: GateOwnership) -> list[str]:
-    """The claims whose own words could not be read, and what that costs."""
-    if not ownership.unread:
-        return []
-    named = ", ".join(
-        f"{claim.bead_id} ({claim.why})" for claim in ownership.unread[:_NAMED_LIMIT]
-    )
-    if len(ownership.unread) > _NAMED_LIMIT:
-        named += f" and {len(ownership.unread) - _NAMED_LIMIT} more"
-    return [
-        f"  {len(ownership.unread)} of {len(ownership.claimed)} claimed bead(s) "
-        f"declare a scope this run could not read, so `{UNOWNED}` is not a proof "
-        f"that nobody owns it: {named}"
-    ]

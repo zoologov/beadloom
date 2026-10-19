@@ -13,6 +13,7 @@ Every ``bd`` invocation and ``run_ci_gate`` is MOCKED — no real ``bd``, no net
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -392,6 +393,23 @@ def test_new_tools_registered() -> None:
 
     names = {t.name for t in _TOOLS}
     assert {"task_init", "bead_context", "complete_bead", "checkpoint"} <= names
+
+
+#: Steps of the Gate a copied step list has named; any two joined by an arrow is a copy.
+_GATE_STEPS = r"(?:reindex|lint|sync-check|docs-audit|config-check|scope-check|doctor|federate)"
+
+
+def test_no_tool_description_copies_the_gate_s_step_list() -> None:
+    # BDL-083 S1 fix 7 (S1R6 Minor 2): the copy "reindex -> lint -> sync-check ->
+    # config-check -> doctor" in `complete_bead` went stale as steps were added, and it
+    # is what an agent reads in the tool list. The verdict names every step that ran.
+    from beadloom.services.mcp_server import _TOOLS
+
+    arrow = re.compile(rf"\b{_GATE_STEPS}\s*(?:->|→)\s*{_GATE_STEPS}\b")
+    copies = {t.name for t in _TOOLS if arrow.search(t.description or "")}
+    assert copies == set()
+    (complete_bead,) = (t for t in _TOOLS if t.name == "complete_bead")
+    assert "the verdict names every step" in " ".join((complete_bead.description or "").split())
 
 
 def test_dispatch_routes_checkpoint(project: Path) -> None:

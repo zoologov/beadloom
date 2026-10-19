@@ -1,0 +1,63 @@
+# One node per Feature-Sliced slice or segment of the frontend; the layer is a tag on the node.
+nodes:
+  - ref_id: app-styles
+    kind: component
+    summary: "The app's styles: the colour a panel line is drawn in"
+    source: frontend/src/app/styles/
+    tags: [fsd-app]
+    docs:
+      - docs/frontend/app-styles.md
+  - ref_id: pages-dashboard
+    kind: component
+    summary: "The dashboard page: one panel line per tracked metric"
+    source: frontend/src/pages/dashboard/
+    tags: [fsd-pages]
+    docs:
+      - docs/frontend/pages-dashboard.md
+  - ref_id: widgets-kpi-panel
+    kind: component
+    summary: "The KPI panel: a metric as a line with its share of the target"
+    source: frontend/src/widgets/kpi-panel/
+    tags: [fsd-widgets]
+    docs:
+      - docs/frontend/widgets-kpi-panel.md
+  - ref_id: features-filter-metrics
+    kind: component
+    summary: "The metric filter: the metrics below their target"
+    source: frontend/src/features/filter-metrics/
+    tags: [fsd-features]
+    docs:
+      - docs/frontend/features-filter-metrics.md
+  - ref_id: entities-metric
+    kind: component
+    summary: "The metric: a tracked value and the target it is held against"
+    source: frontend/src/entities/metric/
+    tags: [fsd-entities]
+    docs:
+      - docs/frontend/entities-metric.md
+  - ref_id: shared-lib
+    kind: component
+    summary: "The shared library: a ratio as a whole percentage"
+    source: frontend/src/shared/lib/
+    tags: [fsd-shared]
+    docs:
+      - docs/frontend/shared-lib.md
+edges:
+  - src: app-styles
+    dst: frontend
+    kind: part_of
+  - src: pages-dashboard
+    dst: frontend
+    kind: part_of
+  - src: widgets-kpi-panel
+    dst: frontend
+    kind: part_of
+  - src: features-filter-metrics
+    dst: frontend
+    kind: part_of
+  - src: entities-metric
+    dst: frontend
+    kind: part_of
+  - src: shared-lib
+    dst: frontend
+    kind: part_of

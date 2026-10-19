@@ -272,3 +272,93 @@ class TestLintCommand:
         # with 0 rules (no rules.yml). However, if the project structure
         # is completely missing, reindex may raise. Let's verify:
         assert result.exit_code in (0, 2), result.output
+
+
+# ---------------------------------------------------------------------------
+# `--staged`: the lint the pre-commit hook runs (BDL-083 S1a, BDL-UX #326)
+# ---------------------------------------------------------------------------
+
+#: The monorepo fixture's widget spec, and the import of the app layer that breaks fsd-layers.
+_WIDGET_SPEC = "frontend/src/widgets/kpi-panel/ui/KpiPanel.spec.ts"
+_DIGEST = "backend/src/digest/sections.py"
+
+
+class TestLintStaged:
+    """`lint --staged` judges the nodes that own a staged path and counts the rest."""
+
+    @staticmethod
+    def _monorepo(tmp_path: Path) -> Path:
+        from tests.support.monorepo_fixture import monorepo_checkout
+
+        root = monorepo_checkout(tmp_path)
+        spec = root / _WIDGET_SPEC
+        spec.write_text("import '@/app/styles'\n" + spec.read_text(encoding="utf-8"))
+        return root
+
+    @staticmethod
+    def _stage(root: Path, path: str) -> None:
+        from tests.support.committed_project import git
+
+        git(root, "add", path)
+
+    @staticmethod
+    def _lint(root: Path, *args: str) -> tuple[int, str]:
+        result = CliRunner().invoke(main, ["lint", *args, "--project", str(root)])
+        return result.exit_code, result.output
+
+    def test_a_staged_violation_of_a_node_blocks_under_strict(self, tmp_path: Path) -> None:
+        root = self._monorepo(tmp_path)
+        self._stage(root, _WIDGET_SPEC)
+        code, output = self._lint(root, "--staged", "--strict", "--format", "rich")
+        assert code == 1, output
+        assert output.startswith("Lint over this commit: 1 node(s) own 1 of 1 staged path(s)")
+        assert "(widgets-kpi-panel)" in output.splitlines()[0]
+        assert "fsd-layers" in output
+
+    def test_a_violation_outside_the_staged_nodes_is_counted_not_judged(
+        self, tmp_path: Path
+    ) -> None:
+        root = self._monorepo(tmp_path)
+        digest = root / _DIGEST
+        digest.write_text(digest.read_text(encoding="utf-8") + "\n# touched\n")
+        self._stage(root, _DIGEST)
+        code, output = self._lint(root, "--staged", "--strict", "--format", "rich")
+        assert code == 0, output
+        first = output.splitlines()[0]
+        assert "0 error(s)" in first, first
+        assert "finding(s) elsewhere left to the pre-push Gate" in first, first
+        assert "widgets-kpi-panel" not in output
+
+    def test_without_staged_the_whole_tree_is_judged_as_before(self, tmp_path: Path) -> None:
+        root = self._monorepo(tmp_path)
+        code, output = self._lint(root, "--strict", "--format", "rich")
+        assert code == 1, output
+        assert "Lint over this commit" not in output
+
+    def test_porcelain_marks_the_scope_line_as_a_statement(self, tmp_path: Path) -> None:
+        from beadloom.graph.linter import POPULATION_MARKER
+
+        root = self._monorepo(tmp_path)
+        self._stage(root, _WIDGET_SPEC)
+        _, output = self._lint(root, "--staged", "--format", "porcelain")
+        assert output.splitlines()[0].startswith(f"{POPULATION_MARKER}Lint over this commit: ")
+
+    def test_json_carries_the_scope_beside_the_findings(self, tmp_path: Path) -> None:
+        root = self._monorepo(tmp_path)
+        self._stage(root, _WIDGET_SPEC)
+        result = CliRunner().invoke(
+            main, ["lint", "--staged", "--format", "json", "--project", str(root)]
+        )
+        payload = json.loads(result.stdout)
+        assert payload["commit_scope"]["nodes"] == ["widgets-kpi-panel"]
+        assert payload["commit_scope"]["staged"] == 1
+        assert payload["summary"]["error_count"] == 1
+
+    def test_a_project_with_no_rules_and_no_index_still_states_its_scope(
+        self, tmp_path: Path
+    ) -> None:
+        """`lint` returns before it opens an index when there are no rules; so must this."""
+        project = _minimal_project(tmp_path)
+        code, output = self._lint(project, "--staged", "--strict", "--format", "rich")
+        assert code == 0, output
+        assert output.startswith("Lint over this commit: ")

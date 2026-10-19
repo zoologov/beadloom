@@ -1,0 +1,27 @@
+# The two projects of the monorepo, each a service of the one product.
+nodes:
+  - ref_id: metrics-desk
+    kind: service
+    summary: "The metrics desk: a Python backend and a Feature-Sliced frontend in one repository"
+    source: ""
+    docs:
+      - docs/architecture.md
+  - ref_id: backend
+    kind: service
+    summary: "The backend: builds the daily digest from the file history"
+    source: backend/src/
+    docs:
+      - docs/backend/README.md
+  - ref_id: frontend
+    kind: service
+    summary: "The frontend: the dashboard of the day's metrics, in Feature-Sliced layers"
+    source: frontend/src/
+    docs:
+      - docs/frontend/README.md
+edges:
+  - src: backend
+    dst: metrics-desk
+    kind: part_of
+  - src: frontend
+    dst: metrics-desk
+    kind: part_of

@@ -833,18 +833,31 @@ def _run_test_suite(project_root: Path) -> tuple[bool, str]:
     return passed, summary[0]
 
 
-def _verdict_room(project_root: Path) -> dict[str, object]:
+#: The room payload of a gate result that carries neither a census nor its reason.
+_NO_CENSUS = "the gate took no room census"
+
+
+def _verdict_room(gate: GateResult) -> dict[str, object]:
     """The room this verdict was taken in, and how much of the declaration it covers.
 
     Carried on the verdict an agent closes a bead on, because that is the
     strongest claim this tool makes and it is true of one room. It changes no
     status and adds no finding — the same verdict, answerable.
-    """
-    from beadloom.application.rooms import room_line, take_census
 
-    census = take_census(project_root)
+    Read off the gate's own census (``gate.room``) and its reason
+    (``gate.room_reason``), the shape the JSON report gives the same run: a census
+    that raised is ``{"reason": "the room census raised <class>: <message>"}``. Until
+    BDL-083 S1 fix 5 the tool took a second census of its own beside the gate's, so
+    one call derived the room twice and the two answers could differ (S1R second
+    pass Minor 1); before fix 4 that second census had no boundary at all.
+    """
+    from beadloom.application import rooms
+
+    census = gate.room
+    if census is None:
+        return {"reason": gate.room_reason or _NO_CENSUS}
     return {
-        "current": room_line(census.current),
+        "current": rooms.room_line(census.current),
         "declared": len(census.comparisons),
         "entered": len(census.entered),
         "not_entered": [c.room.label for c in census.not_entered],
@@ -856,34 +869,42 @@ def _not_run(gate: GateResult) -> list[str]:
 
     The room says which rooms the verdict covers; this says which verifications
     it is a verdict about. Names only, because the agent reading it is inside
-    the project and the commands are in its own pipeline.
+    the project and the commands are in its own pipeline. An empty list is also
+    what a coverage report that raised leaves, so it is never read without
+    :func:`_not_run_reason` beside it.
     """
     if gate.coverage is None:
         return []
     return [item.duty for item in gate.coverage.not_performed]
 
 
+def _not_run_reason(gate: GateResult) -> str | None:
+    """Why ``not_run`` names nothing although the run may have skipped something.
+
+    The coverage report's own reason when its derivation raised — ``the coverage
+    report raised <class>: <message>`` — and ``None`` when it was derived. Until
+    BDL-083 S1 fix 4 the tool dropped it, and a report that raised read as "this run
+    skipped nothing". A sibling key rather than a new type for ``not_run``, so a
+    client that iterates the list keeps working.
+    """
+    return gate.coverage_reason if gate.coverage is None else None
+
+
 def _finding_owners(gate: GateResult) -> dict[str, object]:
     """Which bead claimed now owns each finding this run is refusing to close on.
 
     The agent reading this holds one of those beads, so the distinction it needs
-    is between a finding its own claim covers and one nobody's does. A report
-    that could not be produced states its reason rather than an empty list, so
-    "nobody owns these" and "nobody was asked" do not read alike (BDL-068 S6).
+    is between a finding its own commits explain and one no claimed bead's do
+    (BDL-UX #329). A report that could not be produced states its reason rather
+    than an empty list, so "nobody owns these" and "nobody was asked" do not read
+    alike (BDL-068 S6). The payload is the JSON report's, rule and base included.
     """
+    from beadloom.application.gate_ownership import ownership_payload
+
     ownership = gate.ownership
     if ownership is None:
         return {}
-    return {
-        "reason": ownership.reason,
-        "claimed": list(ownership.claimed),
-        "none_owned": ownership.none_owned,
-        "findings": [
-            {"rule": owner.rule, "verdict": owner.verdict, "node": owner.node,
-             "beads": list(owner.beads)}
-            for owner in ownership.owners
-        ],
-    }
+    return ownership_payload(ownership)
 
 
 def handle_complete_bead(
@@ -894,10 +915,11 @@ def handle_complete_bead(
 ) -> dict[str, Any]:
     """The refusing gate: run ``beadloom ci`` (+ tests) before closing a bead.
 
-    Reuses :func:`application.gate.run_ci_gate` (reindex → lint → sync-check →
-    config-check → doctor) and, when *run_tests* is True (the default), the test
-    suite. On FAIL the bead is NOT closed — the findings are returned so the
-    agent must fix them first.
+    Reuses :func:`application.gate.run_ci_gate` — every step ``beadloom ci`` runs,
+    listed there and not repeated here, because a copy of the list is the one that
+    goes stale — and, when *run_tests* is True (the default), the test suite. On
+    FAIL the bead is NOT closed: the findings are returned so the agent must fix
+    them first.
 
     **On PASS the bead is closed and the suggestion is CONFIRMED before it is
     returned** (BDL-UX #97). ``bd close --suggest-next`` names beads for which
@@ -947,8 +969,9 @@ def handle_complete_bead(
                 }
             )
 
-    room = _verdict_room(project_root)
+    room = _verdict_room(gate)
     not_run = _not_run(gate)
+    not_run_reason = _not_run_reason(gate)
     if not (gate_ok and tests_ok):
         return {
             "status": "FAIL",
@@ -956,6 +979,7 @@ def handle_complete_bead(
             "findings": findings,
             "room": room,
             "not_run": not_run,
+            "not_run_reason": not_run_reason,
             "owners": _finding_owners(gate),
         }
 
@@ -983,6 +1007,7 @@ def handle_complete_bead(
         "findings": [],
         "room": room,
         "not_run": not_run,
+        "not_run_reason": not_run_reason,
         "next": list(suggestion.confirmed),
         "next_candidates": list(suggestion.candidates),
         "next_still_blocked": list(suggestion.still_blocked),
@@ -1373,8 +1398,9 @@ _TOOLS = [
     mcp.Tool(
         name="complete_bead",
         description=(
-            "Refusing completion gate: run `beadloom ci` (reindex -> lint -> "
-            "sync-check -> config-check -> doctor) and, by default, the test suite. "
+            "Refusing completion gate: run `beadloom ci` (every step of the Gate; the "
+            "verdict names every step that ran and its result) and, by default, the test "
+            "suite. "
             "On PASS: close the bead (`bd close --suggest-next`) and return next-ready. "
             "On FAIL: do NOT close — return the findings so the agent must fix them. "
             "Advisory-strong only: the true enforcement point remains `beadloom ci` in CI."

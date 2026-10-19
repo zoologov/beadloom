@@ -400,20 +400,22 @@ no-op).
 
 `beadloom install-hooks --pre-push` installs the **Beadloom Gate** — the
 authoritative *blocking* enforcement of the hard invariant *"no code in `main`
-without current docs."* On every `git push` it runs the full Gate
-(`beadloom ci` — incremental reindex → `lint --strict` → sync-check → docs audit →
-docs-quality → doc-spaces → config-check → doctor) and **exits non-zero to block
-the push** on red, printing
-an actionable message that points at the tech-writer / `/coordinator` to fix the
-drift, then re-push.
+without current docs."* On every `git push` it runs every step of the Gate
+(`beadloom ci --format rich --tee <temporary file>`, the steps in the order the
+[application README](../domains/application/README.md#api) lists) and **exits non-zero to
+block the push** on red, saying that the findings above name their fixes.
 
 - **`--no-verify` is the documented (discouraged) escape hatch** — `git push
   --no-verify` skips the hook.
-- **Fail-safe:** in any repo without `beadloom` on `PATH` the hook is a safe
-  no-op and never blocks.
+- **A push the hook cannot judge is refused (BDL-083 S1a, BDL-UX #326).** Without
+  `beadloom` on the `PATH` git runs the hook with, it exits 1 with a sentence saying the
+  push was not judged. Through 9.0.0 that case was a silent no-op that let the push through.
+  A run whose `--tee` copy holds no verdict line is reported as `the Gate did not run` and
+  refused as well.
 - The full Gate lives in **pre-push** (not on every commit) because pushes are
-  less frequent than commits; the lighter pre-commit hook stays the warn/block
-  `sync-check` + ACTIVE/tracker coherence step.
+  less frequent than commits. The lighter pre-commit hook judges the paths the commit
+  stages, in warn or block mode: ruff, the type check, `lint --staged --strict`,
+  `sync-check --staged`, the declared-axes verdict and the ACTIVE/tracker coherence step.
 
 The pre-push Gate is the **local** half of local-primary / CI-fallback: it is the
 same `beadloom ci` that runs on the PR as a required check, so a clean push is
@@ -633,9 +635,9 @@ Read-only and deterministic; reuses `context_oracle` (ctx/why) and
 
 ### `complete_bead(bead, run_tests=true)`
 
-The **refusing completion gate**. It runs `beadloom ci` (reindex → lint → sync-check →
-docs audit → docs-quality → doc-spaces → config-check → doctor, via
-`application/gate.run_ci_gate`) and, by
+The **refusing completion gate**. It runs every step of `beadloom ci` (through
+`application/gate.run_ci_gate`, whose step order the
+[application README](../domains/application/README.md#api) lists once) and, by
 default, the test suite. Then:
 
 - **On PASS** it closes the bead (`bd close --suggest-next`) and returns the
@@ -731,7 +733,7 @@ This is stated deliberately, not glossed over:
   harness binding, not by the guard — see
   [the binding](#the-binding-and-what-it-does-not-cover).
 - **CI is the single source of true enforcement.** `beadloom ci` runs
-  independently in CI (reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor) as a
+  independently in CI, every step of it, as a
   required check on `main`; that is the gate nothing can route around (no
   `--no-verify`).
 

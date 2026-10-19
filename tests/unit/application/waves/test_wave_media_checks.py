@@ -479,14 +479,14 @@ class TestTheCommitGateCheckReadsWhatIsInstalled:
         reason `.22` gave about the scope block — a retyped copy stays green while
         the thing it claims to describe moves.
         """
-        from beadloom.services.commands.docsync import (
-            _HOOK_SCOPE_MARKER,
-            _HOOK_TEMPLATE_BLOCK,
-            _HOOK_TEMPLATE_WARN,
+        from beadloom.services.commands.hook_templates import (
+            HOOK_SCOPE_MARKER,
+            HOOK_TEMPLATE_BLOCK,
+            HOOK_TEMPLATE_WARN,
         )
 
-        assert _HOOK_SCOPE_MARKER in _HOOK_TEMPLATE_WARN
-        assert _HOOK_SCOPE_MARKER in _HOOK_TEMPLATE_BLOCK
+        assert HOOK_SCOPE_MARKER in HOOK_TEMPLATE_WARN
+        assert HOOK_SCOPE_MARKER in HOOK_TEMPLATE_BLOCK
 
 
 class TestTheDocBaselineCheckStatesWhatTheWaveInherits:

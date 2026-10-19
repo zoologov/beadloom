@@ -35,11 +35,8 @@ from beadloom.doc_sync.engine import (
     content_remedy,
 )
 from beadloom.services.cli import main
-from beadloom.services.commands.docsync import (
-    _HOOK_TEMPLATE_BLOCK,
-    _HOOK_TEMPLATE_WARN,
-    _build_sync_report,
-)
+from beadloom.services.commands.docsync import _build_sync_report
+from beadloom.services.commands.hook_templates import HOOK_TEMPLATE_BLOCK, HOOK_TEMPLATE_WARN
 from tests.support import stale_pair_project as project
 
 if TYPE_CHECKING:
@@ -210,7 +207,7 @@ class TestTheOtherPrintedInstructionsFollowTheFlag:
     """The hook and the markdown report print an instruction too."""
 
     @pytest.mark.parametrize(
-        "template", [_HOOK_TEMPLATE_WARN, _HOOK_TEMPLATE_BLOCK], ids=["warn", "block"]
+        "template", [HOOK_TEMPLATE_WARN, HOOK_TEMPLATE_BLOCK], ids=["warn", "block"]
     )
     def test_the_hook_scopes_its_re_attest_instruction(self, template: str) -> None:
         lines = [ln for ln in template.splitlines() if "sync-update" in ln]

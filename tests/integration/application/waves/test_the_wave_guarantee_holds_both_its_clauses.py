@@ -786,9 +786,9 @@ def _hook_scope_block() -> str:
     Retyping the two lines would test a copy of the hook, which is the "TRUE
     HERE IS NOT TRUE" failure: the copy stays green while the hook drifts.
     """
-    from beadloom.services.commands.docsync import _HOOK_COMMIT_SCOPE
+    from beadloom.services.commands.hook_templates import HOOK_COMMIT_SCOPE
 
-    return _HOOK_COMMIT_SCOPE
+    return HOOK_COMMIT_SCOPE
 
 
 def _git(project: Path, *args: str) -> None:

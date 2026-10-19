@@ -17,7 +17,7 @@ from click.testing import CliRunner
 
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.services.cli import main
-from beadloom.services.commands.docsync import _HOOK_TEMPLATE_WARN
+from beadloom.services.commands.hook_templates import HOOK_TEMPLATE_WARN
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -95,7 +95,7 @@ def _measured_project(tmp_path: Path) -> Path:
     (project / ".gitignore").write_text(".beadloom/\n", encoding="utf-8")
     (project / ".git" / "hooks").mkdir(parents=True)
     (project / ".git" / "hooks" / "pre-commit").write_text(
-        _HOOK_TEMPLATE_WARN, encoding="utf-8"
+        HOOK_TEMPLATE_WARN, encoding="utf-8"
     )
     _work_item(project)
     for args in (

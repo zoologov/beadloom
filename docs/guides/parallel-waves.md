@@ -426,6 +426,11 @@ carrying the node that owns it). It does not hand over the bead's comments. Thos
 never printed: `N author comment(s) withheld`, with the reason, the release condition and a
 notice about the defeats the command cannot see.
 
+The change is measured against a base the brief prints on its `Base:` line, and as `base` in
+`--json`. `--since REF` names it. Without the option it is the merge-base with the branch this
+one was cut from, else the trunk: the base `scope-check` and the Gate's ownership report use
+(BDL-083 S1d, the base half of BDL-UX #344).
+
 **Its boundary is as sharp as its purpose, and both belong in the same paragraph.**
 
 **Enforced**, in code, with a test that bites: the command will not print the comments before a
@@ -563,7 +568,7 @@ Where it runs, and what it does there:
 | Where | Scope | On a finding |
 |---|---|---|
 | the pre-commit hook | the staged paths | warns, in both hook modes, and never blocks |
-| `beadloom ci` (`scope-check` step) | `<trunk>...HEAD`, what the pull request contains | reports; the step passes |
+| `beadloom ci` (`scope-check` step) | `<base>...HEAD`, what the pull request contains; the base is the merge-base with the branch this one was cut from, else the trunk | reports; the step passes |
 
 Both are `warn`, and the reason was measured twice. When the check shipped, one work item in 64
 on this repository carried an `## Axes` section (12 of 75 on 2026-10-08), so a check that

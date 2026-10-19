@@ -128,11 +128,11 @@ class TestSyncCheckStagedFlagIsWiredThroughOnePath:
         flags = {param.name for param in sync_check.params}
         assert "staged" in flags
 
-    @pytest.mark.parametrize("template", ["_HOOK_TEMPLATE_WARN", "_HOOK_TEMPLATE_BLOCK"])
+    @pytest.mark.parametrize("template", ["HOOK_TEMPLATE_WARN", "HOOK_TEMPLATE_BLOCK"])
     def test_both_hook_modes_use_the_same_scope_header(self, template: str) -> None:
-        from beadloom.services.commands import docsync
+        from beadloom.services.commands import hook_templates
 
-        assert docsync._HOOK_COMMIT_SCOPE in getattr(docsync, template)
+        assert hook_templates.HOOK_COMMIT_SCOPE in getattr(hook_templates, template)
 
 
 class TestTheDeclaredSurfaceIsNotNarrowedByAReportFilter:

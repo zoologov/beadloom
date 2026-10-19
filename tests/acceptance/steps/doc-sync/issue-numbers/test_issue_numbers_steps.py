@@ -344,3 +344,40 @@ def _payload_says_undetermined(world: dict[str, Any]) -> None:
     assert payload["undetermined"] is True, payload
     assert payload["declared"] is None, payload
     assert payload["refusals"], payload
+
+
+# ---------------------------------------------------------------------------
+# beadloom-6xdt — a declared log that cannot be read fails both surfaces
+# ---------------------------------------------------------------------------
+
+
+@given("a project that declares an issue log the tree does not hold")
+def _declared_log_absent(world: dict[str, Any], tmp_path: Path) -> None:
+    root = _project(tmp_path, "## Open Issues\n")
+    (root / ".claude" / "development" / "Issues.md").unlink()
+    world["root"] = root
+
+
+@then("the check exits with code 1")
+def _exits_one(world: dict[str, Any]) -> None:
+    assert world["text"].exit_code == 1, world["text"].output
+    assert world["json"].exit_code == 1, world["json"].output
+
+
+@then("the Gate's issue-log step on the same project fails")
+def _gate_step_fails(world: dict[str, Any]) -> None:
+    from beadloom.application.gate import run_ci_gate
+
+    result = run_ci_gate(world["root"], fail_on=None, hub_exports=[], no_reindex=False)
+    step = next(step for step in result.steps if step.name == "issue-log")
+    assert step.passed is False, step
+    world["gate_step"] = step
+
+
+@then("the check prints the reason the Gate's issue-log step gives")
+def _same_reason(world: dict[str, Any]) -> None:
+    """Held against the Gate's OWN finding, so rewording one surface cannot pass it."""
+    reasons = [finding["why"] for finding in world["gate_step"].findings]
+    assert reasons, world["gate_step"]
+    for reason in reasons:
+        assert reason in world["text"].output, world["text"].output

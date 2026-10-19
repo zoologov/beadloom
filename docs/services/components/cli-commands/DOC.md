@@ -43,6 +43,7 @@ is what holds that line.
 | `index_ops.py` | `reindex`, `doctor`, `diff`, `link` |
 | `status.py` | `status` |
 | `docsync.py` | `sync-check`, `sync-update`, `install-hooks`, `active-sync` |
+| `hook_templates.py` | no command: the text of the git hooks `install-hooks` writes |
 | `federation.py` | `export`, `federate`, `lint`, `ci` |
 | `docs.py` | `docs generate`, `docs polish`, `docs site`, `docs audit`, `docs quality`, `docs spaces` |
 | `setup.py` | `setup-mcp`, `setup-rules`, `setup-ai-techwriter`, `setup-agentic-flow`, `setup-branch-protection`, `config-check`, `mcp-serve`, `init` |
@@ -259,8 +260,14 @@ Places nothing checks do not make the exit code non-zero: the gap is what the re
 state. Exit `2` is for a version that could not be derived at all, and carries the reason on
 standard output.
 
-`docsync.py` also holds the two hook TEMPLATES, and since BDL-068 S5 the coherence block in
-them takes no staging decision for the committer. `active-sync --stage` re-stages the corrected
+`hook_templates.py` holds the hook TEMPLATES, lifted out of `docsync.py` in BDL-083 S1a
+(`beadloom-7i09`), where they were about 400 of its 2020 lines; `docsync.py` keeps the command
+that writes them. Since S1 fix 3 (`beadloom-7kas`) every name another module imports from it
+is public — `HOOK_ENCODING`, `HOOK_SCOPE_MARKER`, `HOOK_COMMIT_SCOPE`, `REATTEST_INSTRUCTION`,
+`HOOK_TEMPLATE_WARN`, `HOOK_TEMPLATE_BLOCK`, `HOOK_TEMPLATE_PRE_PUSH` and `hook_type_check` —
+and the callers import them from `hook_templates.py`, not through a re-export in `docsync.py`:
+a private name imported by a second module is no longer private. Since BDL-068
+S5 the coherence block in them takes no staging decision for the committer. `active-sync --stage` re-stages the corrected
 content of the paths a commit already carries and prints the ones it withheld; the block runs no
 `git add` of its own and selects those lines with `grep`, deliberately not with the
 `sed -n 's/^# //p'` shape the verdict legs beside it use — that shape is the verdict/payload
@@ -268,8 +275,58 @@ split and giving it a second meaning is how two protocols stop being checkable t
 hook body is reachable as `pre_commit_hook_body(blocking=...)` so a test asserts the promise over
 the text that is actually installed rather than over a copy of it (BDL-UX #207).
 
+Since BDL-083 S1a no leg of the composed hooks passes without running (BDL-UX #326, #327).
+The pre-push hook without `beadloom` on the PATH git runs it with prints three sentences on
+standard error — the Gate did not run and the push is refused, how to put `beadloom` on that
+PATH or remove the hook, and `git push --no-verify` — and exits `1`; it exited `0` in silence
+before, and the move is one of BDL-083's three MAJOR ones. With `beadloom` present it runs
+`beadloom ci --format rich --tee <temporary file>`, because the rich format is the one that
+prints a verdict line whatever git's standard output is. The verdict is found in the copy by
+`GATE_VERDICT_PATTERN`, which a test holds against `_format_gate_rich`; an exit code with no
+verdict line is reported as "the Gate did not run" and refused whatever the code was, never as
+stale documentation.
+
+Since BDL-083 S1e2 the report reaches the terminal once, written by `ci` itself (BDL-UX #226).
+Until then the hook captured it in a command substitution and reprinted it with `printf`, which
+gives up on a non-blocking pipe: measured at `12c35cf3` under `dash`, with the reader starting
+late, the reader got 65575 bytes, no verdict line and no sentence from the hook, and the hook
+exited `0`. `ci` writes through `console_streams.write_whole`, which waits for the reader. The
+hook's own sentences go through a `say` function that retries while the pipe is full; each is
+shorter than `PIPE_BUF` (512 bytes on Darwin), so a retry repeats nothing, and a test holds
+that bound over the template. A verdict that names crashed steps is answered with "a step that
+crashed checked nothing" rather than "the findings above name their fixes", by the
+`step(s) crashed` clause a test holds against `crashed_clause`.
+
+Since BDL-083 S1e a step that raises no longer ends `ci` (BDL-UX #318): the application layer
+reports it as an `ERROR` step and the command renders it. `_gate_verdict_line` puts the
+`N step(s) crashed: <steps>` clause inside the verdict, before `gate blocked`, so the line
+still matches `GATE_VERDICT_PATTERN`; `_gate_crashed_lines` prints a `Crashed` block under it
+with each step's exception. `--format json` adds `error` to every step and a top-level
+`crashed` list, and `--format github` adds one `::notice::` with the clause.
+
+The pre-commit hook gained an architecture-lint leg, `_hook_architecture_lint`, that runs
+`beadloom lint --staged --strict --format rich` and finds its verdict by
+`graph.lint_scope.COMMIT_SCOPE_LEAD`. An error on a node the commit touches warns in the warn
+mode and blocks in the blocking one; no verdict line is `NOT CHECKED` and never blocks.
+Measured on this repository: 1.2 s with a warm index, 4.5 s when the incremental reindex
+first has the bead's changed files to read. The ruff leg, `_hook_ruff_check`, hands the staged
+files to ruff as arguments rather than through `xargs`, which folds ruff's exit code to `1`
+(BSD) or `123` (GNU); `0` is clean, `1` is violations, and any other code is "ruff did not
+run" with ruff's or uv's own standard error shown. It runs `uv run ruff check` from the
+outermost directory holding a `pyproject.toml` between the repository root and each staged
+file, so `uv` finds the environment of the project that holds the file, and ruff reads the
+nearest configuration above each file by itself. Outermost rather than nearest, because this
+repository holds whole projects as test data under `tests/fixtures/`, where `uv run` would
+build an environment inside the fixture.
+
+`lint --staged`, in `federation.py`, composes git's staged paths (`doc_sync.git_baseline`)
+with the index's ownership rule (`infrastructure.repository.get_owning_ref_id`) and hands
+both to `graph.lint_scope.scope_lint_to_commit`. Its sentence leads the output in every
+format: as is in `rich`, marked `# ` in `porcelain`, as a `::notice::` in `github`, and as a
+`commit_scope` object in `json`.
+
 The instructions `docsync.py` prints come from the doc-sync engine's vocabulary, not from a
-list kept here (BDL-069, BDL-UX #282). `_REATTEST_INSTRUCTION` names the reasons in
+list kept here (BDL-069, BDL-UX #282). `REATTEST_INSTRUCTION` names the reasons in
 `REASONS_ATTESTATION_CLEARS`, and both the hook's closing line (`_HOOK_REMEDIATION`, with
 backticks turned into quotes because the hook echoes it inside double quotes) and the
 `sync-check --report` footer print it only as far as it is true; every other stale pair gets
@@ -300,7 +357,12 @@ of its slices' and a bead's scope is a SUBSET chosen for that bead, so this line
 a bead's own scope sits inside and never that scope itself. Handing it to every bead would make
 every pair share a node and collapse every wave to a wave of one. `scope-check` exits 2 when a path
 falls outside and 0 otherwise, and a run that could not find a branch, a work item, an index
-or a section prints its reason rather than a clean sheet. `--porcelain` LEADS with that line,
+or a section prints its reason rather than a clean sheet. `--base [REF]` (BDL-083 S1d) judges
+the branch instead of the staged paths: against REF, or without one against the merge-base
+with the branch it was cut from, else the trunk (`application.scope_base`); `--since REF` is
+the same as `--base REF`. The header and the JSON `base` object name the base, the rule that
+chose it and the files it attributed to the parent branch. `review-brief` takes the same base
+unless `--since` names one, prints it as its `Base:` line and carries it as `base` in JSON. `--porcelain` LEADS with that line,
 marked `# ` and on standard output, whether the run compared anything or not: the reason used
 to go to standard error alone, and the pre-commit hook reads the command as `2>/dev/null`, so
 a clean run and an unattributable one were the same empty string there and the gate printed
@@ -331,7 +393,9 @@ claimed and the `bd` seam lives in THIS layer: `architecture-layers` (severity
 nothing about ownership; it supplies the port and renders the block the
 application layer computed, under the verdict beside the room and coverage lines.
 `--format json` carries the same report as `ownership`, and `--format github`
-renders one `::notice::` per owning bead plus the headline when nothing is owned.
+renders the same sentences one `::notice::` each — the rule the attribution was
+made by first, then one per owning bead:
+`owned by <bead>: N finding(s), by the files its commits changed` (BDL-UX #329).
 It is the same arrangement `guard` already uses for the flow guards.
 
 ## The one command that ends in a verdict
@@ -497,7 +561,7 @@ constant, so a second string added later is judged by the same claim.
   ([docs/services/cli.md](../../cli.md))
 - `guard-probes`, `bd-seam` — the other two `services`-layer components
 
-`issue_number.py` is the one surface that WRITES rather than reports. `allocate` takes the next number in a numbered issue log by creating one claim file per number with `O_CREAT | O_EXCL`, so two writers racing receive two numbers instead of one; `check` runs the three legs the Gate's `issue-log` step runs. Both refuse a project that declares no `issue_log:` block rather than guessing a path, and `allocate` exits 2 naming the key (BDL-068 S6, BDL-UX #187). Since `beadloom-rqma.8` both also tell a project that declared the block BADLY from one that declared nothing: a misspelled `ledger:` makes `allocate` exit 2 with the entry, the key it lacks and the keys it has, and makes `check` exit 1 with `1 entr(ies) declared, 1 unusable — no leg ran.` rather than the `No duplicate, unwritten or unclaimed number.` it used to print, at exit 0, over a log it had never opened (BDL-UX #270, closed on the Gate leg one bead earlier and on these two here). `beadloom-rqma.9` added the third state to `check`: over a `.beadloom/config.yml` it could not read at all it said `Whether this project declares an issue log is unknown — no leg ran.` instead of the opt-out's own sentence, at exit 0 and with `"undetermined": true` in the payload, because a check that never saw the key cannot assert an opt-out. `check`'s verdict names the population it did NOT reach: the entries below the ledger's floor, which `unclaimed-number` skips by design, and the numbers it cannot account for, spelled out rather than counted and bounded so an adopter with a hundred gaps gets a line they can read (BDL-UX #267).
+`issue_number.py` is the one surface that WRITES rather than reports. `allocate` takes the next number in a numbered issue log by creating one claim file per number with `O_CREAT | O_EXCL`, so two writers racing receive two numbers instead of one; `check` runs the three legs the Gate's `issue-log` step runs. Both refuse a project that declares no `issue_log:` block rather than guessing a path, and `allocate` exits 2 naming the key (BDL-068 S6, BDL-UX #187). Since `beadloom-rqma.8` both also tell a project that declared the block BADLY from one that declared nothing: a misspelled `ledger:` makes `allocate` exit 2 with the entry, the key it lacks and the keys it has, and makes `check` exit 1 with `1 entr(ies) declared, 1 unusable — no leg ran.` rather than the `No duplicate, unwritten or unclaimed number.` it used to print, at exit 0, over a log it had never opened (BDL-UX #270, closed on the Gate leg one bead earlier and on these two here). `beadloom-rqma.9` added the third state to `check`: over a `.beadloom/config.yml` it could not read at all it said `Whether this project declares an issue log is unknown — no leg ran.` instead of the opt-out's own sentence, at exit 0 and with `"undetermined": true` in the payload, because a check that never saw the key cannot assert an opt-out. Since `beadloom-6xdt` `check` takes its exit code from the Gate's own `issue-log` step (`application/gate_issue_log.py:step_issue_log`) rather than deciding it twice: over a declared log the tree does not hold it printed "no leg ran" at exit 0 while the Gate failed the step, and it now exits 1 with the Gate's finding (BDL-UX #331). `check`'s verdict names the population it did NOT reach: the entries below the ledger's floor, which `unclaimed-number` skips by design, and the numbers it cannot account for, spelled out rather than counted and bounded so an adopter with a hundred gaps gets a line they can read (BDL-UX #267).
 
 `bd_calls.py` renders the derived `bd` call-site population that `bd_seam` computes. BDL-068's
 CONTEXT Q4 decided the shape: an External `bd` finding is answered by deriving our own call

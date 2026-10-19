@@ -110,9 +110,9 @@ class TestTheCommitGateJudgesTheCommit:
         marker is how `beadloom waves` can tell which hook a concurrent wave is
         about to commit through.
         """
-        from beadloom.services.commands.docsync import _HOOK_SCOPE_MARKER
+        from beadloom.services.commands.hook_templates import HOOK_SCOPE_MARKER
 
-        assert _HOOK_SCOPE_MARKER in _hook(_git_project(tmp_path), mode)
+        assert HOOK_SCOPE_MARKER in _hook(_git_project(tmp_path), mode)
 
 
 class TestNothingStopsBeingEnforced:

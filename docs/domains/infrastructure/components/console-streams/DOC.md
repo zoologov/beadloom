@@ -13,6 +13,9 @@ Internal building block of the infrastructure domain.
 terminal cannot represent is printed as its escape instead of killing the
 command. It does **not** change the streams' codec.
 
+`write_whole(text, stream)` writes a report and a newline to a stream whole, on a pipe whose
+write end is non-blocking as well: see [A pipe that will not wait](#a-pipe-that-will-not-wait-bdl-083-s1e2).
+
 It relaxes the two handlers a console stream carries when nobody chose one —
 `strict` under a named locale and `surrogateescape` under C/POSIX — and leaves
 alone any handler the operator named through `PYTHONIOENCODING`. The handler's
@@ -131,6 +134,49 @@ import a service; the decision and its reasons live only here.
 The function returns the names of the streams it actually reconfigured, so
 "nothing needed changing" is distinguishable from "nothing was done" — a silent
 no-op is how a policy stops being applied without anyone noticing.
+
+## A pipe that will not wait (BDL-083 S1e2)
+
+An agent's shell hands a command a pipe it reads when it gets to it, and sets the write end
+non-blocking. A write that does not fit then fails with `EAGAIN` at once instead of waiting
+for the reader, and Python reports it as `BlockingIOError`. The bigger the honest report, the
+likelier it fails, so the failure arrives when there is most to say (BDL-UX #226).
+
+```
+Darwin arm64 · CPython 3.13.7 · commit 12c35cf3 · reader starts 2 s late
+```
+
+| Invocation, same room | Before | After |
+|---|---|---|
+| `beadloom ci --format rich` over this repository | exit **1**, `BlockingIOError: [Errno 35] write could not complete without blocking` from `click.echo`; the reader got 83518 of the 229492 bytes the same run writes to a file | the reader gets every byte the same run writes to a file |
+
+`write_whole` sets the descriptor blocking for the write and puts it back as it found it.
+The flag belongs to the open file description, which every holder of that end of the pipe
+shares, so a parent that chose non-blocking writes keeps its choice once the report is out.
+Another holder can set the flag again while the write is under way, so an `EAGAIN` is still
+expected: it is retried once `poll` reports room. The retry is on raw `os.write`, which
+returns how many bytes it took, so nothing is dropped and nothing is written twice. A text
+stream that raises part-way through a write cannot say how much of it went out, which is why
+the retry does not go through one.
+
+The wait is `poll`, not `select`, because `select` takes no descriptor at or above
+`FD_SETSIZE`, which is 1024 on Linux and Darwin alike, and CPython raises `ValueError` for one.
+That was measured on PR #106 (`beadloom-tlgk`): the `tests (3.13)` leg on Linux handed the
+writer descriptor 4066 after a long suite, and two of its tests raised
+`ValueError: filedescriptor out of range in select()`. A process holding many files is an
+ordinary room for a CLI, so the limit was a defect of the writer and not of the suite. `poll`
+has no descriptor limit, and a reader that has gone away ends its wait, so the retry raises
+`BrokenPipeError` instead of waiting forever. Windows has no `poll`, and its `select` takes
+sockets only, so on a platform without `poll` the writer pauses for 10 ms and retries: the same
+bytes, a coarser wait. A test removes `poll` and reads the whole report through that path.
+
+The bytes are the stream's own codec and error handler applied to the text, so the handler
+policy above still decides what an unencodable glyph becomes. Text the stream had buffered is
+flushed first. A stream with no descriptor, such as Click's test runner, is written through
+its own `write`. The call waits as long as the reader takes, as a blocking write does.
+
+It is applied where the report is largest: `beadloom ci`, through Click's stdout, so the codec
+is the one `click.echo` would have used.
 
 ## The read side: a handler as wide as what the read can raise (BDL-061.68)
 

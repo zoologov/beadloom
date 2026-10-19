@@ -211,10 +211,15 @@ class TestEvaluateImportBoundaryRules:
         assert violations[0].severity == "warn"
         assert "components/features/admin/**" in violations[0].message
 
-    def test_to_glob_matching_no_import_is_reported_not_counted_clean(
+    def test_to_glob_matching_no_import_today_is_stated_live_not_counted_clean(
         self, db_with_imports: sqlite3.Connection
     ) -> None:
-        """The #150 shape itself: a ``to_glob`` no indexed import can match."""
+        """A ``to_glob`` that can match and matches no indexed import is live (BDL-083 D2).
+
+        Before D2 this was the #150 finding, "cannot fire" at ``warn``. On this flat
+        layout ``components`` is imported, so the glob names modules and one import of
+        the admin feature fires the rule: it is stated at ``info``, never counted clean.
+        """
         rules = [
             ImportBoundaryRule(
                 name="no-map-to-admin",
@@ -224,8 +229,9 @@ class TestEvaluateImportBoundaryRules:
             ),
         ]
         violations = evaluate_import_boundary_rules(db_with_imports, rules)
-        assert [v.rule_type for v in violations] == ["rule_liveness"]
+        assert [(v.rule_type, v.severity) for v in violations] == [("nothing_to_ban", "info")]
         assert "components/features/admin/**" in violations[0].message
+        assert "an import of `components.features.admin` would fire it" in violations[0].message
 
     def test_empty_imports_table_no_violations(
         self, db_conn: sqlite3.Connection

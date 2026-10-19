@@ -19,6 +19,13 @@ from typing import TYPE_CHECKING
 from beadloom.graph.rules.attribution import FileAttribution
 from beadloom.graph.rules.cross_imports import read_cross_import_facts
 from beadloom.graph.rules.exemptions import exemption_index_for, stale_exemption_findings
+from beadloom.graph.rules.import_glob import (
+    GlobReach,
+    fire_headline,
+    nothing_to_ban_finding,
+    source_roots,
+    to_glob_reach,
+)
 from beadloom.graph.rules.layer_crossings import same_layer_statements
 from beadloom.graph.rules.layer_declaration import declaration_statement
 from beadloom.graph.rules.layer_reach import (
@@ -330,23 +337,35 @@ def _dead_glob_finding(
     *,
     from_matched: bool,
     to_matched: bool,
+    to_reach: GlobReach | None,
     file_count: int,
     target_count: int,
 ) -> Violation:
-    """Report a rule whose glob matches nothing that exists — one finding per rule."""
+    """Report a rule whose glob matches nothing that exists — one finding per rule.
+
+    *to_reach* says whether the ``to`` glob can match an import path at all
+    (:func:`~beadloom.graph.rules.import_glob.to_glob_reach`); a ``to`` glob that can match
+    is named here only beside a dead ``from`` glob, by its count alone. A reason that rests
+    on an inferred source root is stated as one, and so is the headline when it is the
+    only reason (S1R second pass Minor 2).
+    """
+    unmatchable = None if to_reach is None else to_reach.unmatchable
     parts: list[str] = []
     if not from_matched:
         parts.append(
             f"its `from` glob '{rule.from_glob}' matches 0 of {file_count} indexed source files"
         )
     if not to_matched:
+        lead_in = f" and {to_reach.claim}: {unmatchable}" if to_reach and unmatchable else ""
         parts.append(
-            f"its `to` glob '{rule.to_glob}' matches 0 of {target_count} indexed import paths"
+            f"its `to` glob '{rule.to_glob}' matches 0 of {target_count} indexed import "
+            f"paths{lead_in}"
         )
+    inferred = from_matched and to_reach is not None and to_reach.inferred
     return _liveness_finding(
         rule,
-        f"Rule '{rule.name}' cannot fire: " + "; ".join(parts) + ". It is counted as "
-        "evaluated but checks nothing",
+        f"{fire_headline(rule.name, inferred=inferred)}: " + "; ".join(parts) + ". It is "
+        "counted as evaluated but checks nothing",
     )
 
 
@@ -356,8 +375,16 @@ def evaluate_one_import_rule(
     *,
     file_count: int,
     target_count: int,
+    roots: frozenset[str] = frozenset(),
 ) -> list[Violation]:
-    """Evaluate one rule: its crossings, or the reason it can produce none."""
+    """Evaluate one rule: its crossings, or the reason it can produce none.
+
+    A ``to`` glob that matches no import is asked whether it CAN match one (BDL-083 D2):
+    *roots* are the project's source roots
+    (:func:`~beadloom.graph.rules.import_glob.source_roots`), which a ``to`` glob never
+    names. A glob that can match, under a ``from`` glob that matches, is a live rule with
+    nothing to ban today, stated at ``info``; one that cannot is a rule that cannot fire.
+    """
     violations: list[Violation] = []
     # How many crossings each exemption excused. A COUNT, not a set of indices:
     # an entry that suppresses nothing is dead, and one that suppresses something
@@ -402,6 +429,18 @@ def evaluate_one_import_rule(
         )
 
     if not (from_matched and to_matched):
+        reach = None if to_matched else to_glob_reach(rule.to_glob, source_roots=roots)
+        if from_matched and reach is not None and reach.example is not None:
+            # Live with nothing to ban: one import of the module fires it, so its
+            # exemptions are judged as a live rule's are — each excuses nothing.
+            statement = nothing_to_ban_finding(
+                rule_name=rule.name,
+                rule_description=rule.description,
+                glob=rule.to_glob,
+                example=reach.example,
+                searched=f"0 of {target_count} indexed import paths",
+            )
+            return [statement, *stale_exemption_findings(rule, {})]
         # The rule cannot match at all, so its exemptions cannot be judged either:
         # one finding, naming the side(s) at fault.
         return [
@@ -409,6 +448,7 @@ def evaluate_one_import_rule(
                 rule,
                 from_matched=from_matched,
                 to_matched=to_matched,
+                to_reach=reach,
                 file_count=file_count,
                 target_count=target_count,
             )
@@ -429,10 +469,12 @@ def evaluate_import_boundary_rules(
 
     A rule whose ``from``/``to`` glob matches **nothing at all** in the index is
     itself reported (``severity: warn``, ``rule_type`` ``rule_liveness``), and so is
-    an ``exempt`` entry that suppresses nothing. Without that, a mistyped glob is
-    indistinguishable from a clean codebase — which is exactly how four of this
-    project's own rules stayed inert while ``lint --strict`` printed
-    ``12 rules, 0 violations`` (BDL-UX #150).
+    an ``exempt`` entry that suppresses nothing. The one exception is a ``to`` glob that
+    CAN match an import path and matches none today: that rule is live with nothing to
+    ban, stated at ``info`` (``rule_type`` ``nothing_to_ban``; BDL-083 D2, BDL-UX #328).
+    Without that, a mistyped glob is indistinguishable from a clean codebase — which is
+    exactly how four of this project's own rules stayed inert while ``lint --strict``
+    printed ``12 rules, 0 violations`` (BDL-UX #150).
 
     Liveness is not reported when the index holds **no imports at all**: that is a
     different diagnosis (lint's header already says ``0 files scanned``), and firing
@@ -452,12 +494,15 @@ def evaluate_import_boundary_rules(
 
     file_count = len({imp[0] for imp in imports})
     target_count = len({imp[2] for imp in imports})
+    roots = source_roots(
+        (imp[0] for imp in imports), (import_path_as_path(imp[2]) for imp in imports)
+    )
 
     violations: list[Violation] = []
     for rule in rules:
         violations.extend(
             evaluate_one_import_rule(
-                rule, imports, file_count=file_count, target_count=target_count
+                rule, imports, file_count=file_count, target_count=target_count, roots=roots
             )
         )
     return violations

@@ -50,9 +50,9 @@ from beadloom.application.declared_scope import (
     ScopeRun,
     scope_check,
     scope_of_branch,
-    trunk_ref,
     work_item_of_branch,
 )
+from beadloom.application.scope_base import trunk_ref
 from beadloom.doc_sync.axes_section import derived_targets, read_axes_section
 from beadloom.doc_sync.git_baseline import (
     current_branch,

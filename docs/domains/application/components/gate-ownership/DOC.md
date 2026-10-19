@@ -1,6 +1,7 @@
 # Gate Ownership (component)
 
-Which bead claimed now owns each finding of a gate run, and the verdict when none does.
+Which claimed bead's commits changed the files each finding of a gate run is about, and the verdict
+when none did.
 
 **Source:** `src/beadloom/application/gate_ownership.py`
 
@@ -28,63 +29,130 @@ no finding and it moves no exit code. A finding nobody claims is still a finding
 that went green because no bead owned a red would be the false green BDL-068 exists to
 remove. `tests/test_gate_finding_owner.py` fails if that stops being true.
 
-## Where the claim is read from, and why the other two lose
+**And the owner is the bead that did the work.** The scenarios of the rule are in
+`tests/acceptance/application/gate-ownership/ownership_by_changed_files.feature`, measured on
+the monorepo fixture.
 
-The owner is a **bead the tracker reports `in_progress` right now**, and the nodes its own
-`refs:` declare. That is the same population `bead-claimed` reads, through the same port
-(`application/guards/contract.WorkTracker`), parsed by the same `waves.scope.resolve_scope`
-the wave planner uses — so the gate and the plan cannot come to disagree about what a bead
-said.
+## The rule: the files a bead's commits changed
 
-| Candidate population | Why it is not the owner |
-|----------------------|-------------------------|
-| the work item's declared `## Axes` | It answers a different question — is this change inside the approval — and `scope-check` already asks it, as a step of the same run. Every finding on one branch is inside one approval, so the owner it derives is the work item, which every agent on that branch shares. |
-| a wave's plan | It names beads that have not started and beads whose wave is over, and it exists only where a plan was made. A plan states what *should* run; a claim states what *is* running, and "is this red mine" is about the second. |
+The first rule attributed a finding to every claimed bead whose `refs:` declared the node that
+covers the finding's path. The first outside adopter measured what that says (BDL-UX #329): in
+a wave of two beads each was told it owned the same nine findings, all of them the first bead's
+work, and a second work item's bead was told it owned 36 findings on files it never touched,
+because its `refs:` named the node that covers the frontend's source whole. A node that covers
+a directory says what a bead may touch, never what it touched.
 
-## Three verdicts, because they are three different facts
+So since BDL-083 S1c a finding is owned by a **bead the tracker reports `in_progress` right
+now** whose **commits on the branch changed a file the finding is about**:
+
+- A commit is a bead's when its message carries the git trailer `Bead: <bead-id>`, and only
+  then (RFC D10, the owner's ruling of 2026-10-19). The trailer is read as git reads one
+  (`%(trailers:key=Bead,valueonly)`, through `commits_since(..., trailer="Bead")`): from the
+  message's final paragraph, the key in any case, the value compared whole. A bead id
+  mentioned anywhere else binds nothing. Before the ruling any mention did, and on BDL-083's
+  own branch at `996781dd` that bound 17 (bead, commit) pairs over 14 beads where the
+  trailers declare 4 over 3: a landing-lock note and a test bead naming what it measured each
+  made their files another bead's. A commit with no trailer is nobody's.
+- The reading needs **git 2.22 or later**, the first release with
+  `%(trailers:key=...,valueonly)`. An older git prints the placeholder literally, and every
+  commit then reads as unbound.
+- The trailer sits in the message's **last paragraph**, beside any other trailer
+  (`Co-Authored-By`, ...), with no blank line between them and nothing after them (D10 as
+  clarified on 2026-10-19, S1R second pass). Git reads no trailer from anywhere else, and it
+  reads a final paragraph as trailers only when that paragraph reads as a trailer block.
+  Measured on git 2.49: `-m subj -m body -m "Bead: bd-1" -m "Co-Authored-By: X"` binds
+  nothing, and `-m subj -m "Bead: bd-2\nCo-Authored-By: X"` binds `bd-2`. The composed commit
+  format, both landing fragments and the coordinator's checklist say so.
+- The commits are those `HEAD` holds against the base `scope-check` compares against
+  (`scope_base.scope_base`, since BDL-083 S1d: the merge-base with the branch this one was
+  cut from, else the trunk), listed by `doc_sync.git_baseline.commits_since`. A commit
+  already on the trunk, or on a parent branch not yet merged, is nobody's work in flight, and
+  the report's `over <base>..HEAD` names the same base as the `scope-check` line.
+- A bead's `refs:` attribute nothing. The declaration grammar reads node ids and no file path,
+  and a node is the directory-sized claim the defect was made of.
+
+The claim population is still the one `bead-claimed` reads, through the same port
+(`application/guards/contract.WorkTracker`). The work item's `## Axes` lose because they
+answer `scope-check`'s question and name the work item every agent on the branch shares. A
+wave's plan loses because it names beads that have not started and beads whose wave is over.
+
+## The files a finding is about
+
+| Finding | Files it is held against |
+|---------|--------------------------|
+| locates files | the files its locations name; a document located in the documentation root's frame, as the `sync-check` findings locate one, is re-rooted onto the project's frame through the index's `docs` table |
+| a stale or missing pair | its document and its code file — the pair's code file is the finding's second location, after the document |
+| locates no file and names a node | the code files that node owns, by the most-specific ownership rule, and the documents declared for it; a nested node's files are not the parent's |
+| locates no file and names no node | none — the finding is `unattributed`, and says so |
+
+Everything is read **through the index**, never by opening a graph file by name.
+
+## Two verdicts, and the reason is on every one
 
 | Verdict | What it says |
 |---------|--------------|
-| `owned` | a node was derived and at least one claimed bead declares it — the beads are named |
-| `unowned` | a node was derived and no bead claimed now declares it |
-| `unattributed` | no node could be derived from the finding at all |
+| `owned` | a claimed bead's commits changed a file the finding is about — the beads are named, with the file that decided it |
+| `unattributed` | no claimed bead's commits changed such a file, or the finding is about no file at all |
 
-`unowned` is the interesting case rather than the failure: it is precisely what the
-coordinator had to say by hand. `unattributed` is a different absence — "there was nothing to
-claim" rather than "nobody claims it" — and collapsing the two would hide which one happened.
+`unattributed` is the honest answer, never "owned by the neighbour whose node covers the
+directory". Two qualifications are counted beside it, because a reader acts on them: how many
+of those findings sit on files the working tree changes and no commit holds yet, and how many
+are about no file a commit could have changed. A claimed bead that owns nothing is named with
+its reason: no commit on the branch carries `Bead: <its id>`, or its commits changed none of
+the files the findings are about.
 
-A tracker that cannot answer, and a project with no index, are a `reason` on the whole report
-rather than a page of `unowned`. Telling every gate owner "not yours" when nobody was asked
-would be the same false green in the new vocabulary.
+A bead with no bound commit whose id stands on a whole `Bead: <its id>` line that git read no
+trailer from is not told "no commit carries" it: the report counts those commits by where the
+line stands, because the reader then needs one fix rather than a denial (S1 fix 5,
+`beadloom-ba9w.18`). `N commit(s) on <base>..HEAD carry `Bead: <id>` outside the message's
+final paragraph, where git reads no trailer` is the common case, a harness that appended its
+attribution as a paragraph of its own. `… in a final paragraph git does not read as a trailer
+block` is the other, a final paragraph that also holds a line that is not a trailer. When both
+occur the sentence counts each. Those commits still bind nothing, and the JSON `claims` entry's
+`commits` still counts only the bound ones.
 
-A claimed bead whose own declaration cannot be read as a scope is reported beside the
-verdicts, because it qualifies every `unowned` in the same run: that bead might own any of
-them, so "nobody claims this" is a statement about the claims that *were* readable.
+The machine-readable surfaces carry the same fact (S1 fix 6, `beadloom-g64s`, the owner's
+ruling of 2026-10-19). Each `claims` entry holds `unread_bead_lines`, one row per placement,
+with the hashes newest first:
 
-## How a finding reaches a node
+```json
+{"placement": "outside_final", "stated": "outside the message's final paragraph",
+ "count": 1, "commits": ["<hash>"]}
+```
 
-| Route | Read from | Used when |
-|-------|-----------|-----------|
-| the finding's `node` field | the step that produced it | a step already knows which node it reports on — the linter has carried it since BDL-067 `.14`, and the `sync-check` findings carry it for this report |
-| source ownership of a location path | the index, through `impact.boundary.GraphBoundary` — the same most-specific-wins ownership `scope-check` uses | a finding names a code path |
-| the documented node of a location path | the index's `docs` table, joined under the documentation root the project configures | a finding names a document, which no source prefix owns |
+`placement` takes one of two tokens: `outside_final` (the line stands outside the message's
+final paragraph) or `unread_final` (it stands in a final paragraph git does not read as a
+trailer block). `stated` is the sentence the text surface prints for that placement. A script
+matches the token: the sentence was reworded twice in the slice that introduced it, and S1 fix
+7 (`beadloom-kdx7`) took the placement off the sentence for that reason. A placement no commit
+has is left out, and the list is `[]` when every `Bead: <id>` line was read as a trailer. The
+rows are present whatever `commits` is, while the text names them only for a bead with no
+bound commit. Before this, a harness reading the MCP verdict got `commits: 0` and
+nothing else where the text named the misplaced line.
 
-Everything is read **through the index**, never by opening a graph file by name.
-`beadloom-0mdo.80` replaced `.beadloom/_graph/services.yml` with 100 per-node files plus
-`graph-layout.yml`, and nine Gate steps read the graph without noticing precisely because
-they read the loader's output.
-
-A bead's scope expands **downward** through `part_of`, as `resolve_scope` defines it: a bead
-that declares a domain owns a finding about its component, and a bead that declares the
-component does not own a finding about the domain.
+A tracker that cannot answer, a project with no index, and a git that cannot list the branch's
+commits against the base are a `reason` on the whole report rather than a page of
+`unattributed`. So is a derivation that raised: the Gate derives this report under its
+boundary, and an exception becomes the reason `the ownership report raised <class>: <message>`
+while the steps' verdict stands (BDL-083 S1 fix 1). Telling every gate owner "not yours" when nobody was asked would be the false
+green this report exists to remove.
 
 ## Where it surfaces
 
-- `beadloom ci --format rich` — a block under the verdict, beside the room and coverage lines.
-- `--format json` — `ownership: {reason, claimed, none_owned, findings[], unread_claims[]}`.
-- `--format github` — one `::notice::` per owning bead, plus the headline when nothing is owned.
-- the MCP `complete_bead` tool — `owners` on the FAIL payload, where the agent reading it
-  holds one of the claimed beads and needs to know whether the refusal is about its own work.
+Every surface prints the rule it attributed by and the base, from one wording
+(`ownership_sentences`) and one payload (`ownership_payload`):
+
+- `beadloom ci --format rich` — a block under the verdict, beside the room and coverage lines:
+  the rule over `<base>..HEAD`, then one line per owning bead,
+  `owned by <bead>: N finding(s), by the files its commits changed`, the claimed beads that
+  own nothing, and the `unattributed` count.
+- `--format json` — `ownership: {reason, rule, base, claimed, none_owned, claims[],
+  findings[]}`, each claim carrying `bead`, `commits` and `unread_bead_lines`, each finding
+  carrying `verdict`, `beads`, `where`, `files` and `uncommitted`.
+- `--format github` — the same sentences, one `::notice::` each.
+- the MCP `complete_bead` tool — `owners` on the FAIL payload, the JSON report's payload,
+  where the agent reading it holds one of the claimed beads and needs to know whether the
+  refusal is about its own work.
 
 The tracker is asked only when the run produced a finding: a green run has nothing to
 attribute, and shelling out to `bd` on every push to say nothing is a cost with no reader.
@@ -94,4 +162,5 @@ attribute, and shelling out to `bd` on every push to say nothing is a cost with 
 - `gate-coverage` — the same move one layer under: what a run did *not* do, from its step list.
 - `verdict-room` — which rooms a verdict is true of.
 - `ci-gate` — the run this component qualifies.
-- `wave-plan` — the parser that reads a bead's `refs:` declaration.
+- `sync-check` — `git_baseline`, the one reader of git the commits are listed by.
+- `declared-scope` — the base the branch's commits are listed against.

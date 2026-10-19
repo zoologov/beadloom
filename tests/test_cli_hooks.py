@@ -124,6 +124,25 @@ class TestInstallHooksCommand:
         assert not hook_path.exists()
 
 
+def _write_gate_shim(shim: Path, exit_code: int) -> None:
+    """A fake `beadloom` whose Gate prints the verdict line `ci` prints, then exits.
+
+    It writes the copy `--tee` names as well, because that copy is what the pre-push hook
+    reads the verdict from (BDL-UX #226).
+    """
+    verdict = "PASS \u2014 gate clean" if exit_code == 0 else "FAIL \u2014 gate blocked"
+    shim.write_text(
+        "#!/bin/sh\n"
+        "while [ $# -gt 0 ]; do\n"
+        f"  if [ \"$1\" = --tee ]; then echo '{verdict}' > \"$2\"; fi\n"
+        "  shift\n"
+        "done\n"
+        f"echo '{verdict}'\nexit {exit_code}\n",
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+
+
 def _run_hook(hook_path: Path, cwd: Path, path_env: str) -> int:
     """Execute a POSIX-sh hook with a controlled PATH; return its exit code."""
     proc = subprocess.run(  # noqa: S603
@@ -161,12 +180,10 @@ class TestInstallHooksPrePush:
 
     @staticmethod
     def _shim_beadloom(tmp_path: Path, exit_code: int) -> str:
-        """Put a fake `beadloom` on PATH that exits with ``exit_code``."""
+        """Put a fake `beadloom` on PATH whose Gate prints its verdict and exits ``exit_code``."""
         bindir = tmp_path / "bin"
         bindir.mkdir()
-        shim = bindir / "beadloom"
-        shim.write_text(f"#!/bin/sh\nexit {exit_code}\n")
-        shim.chmod(0o755)
+        _write_gate_shim(bindir / "beadloom", exit_code)
         return f"{bindir}:/usr/bin:/bin"
 
     def test_pre_push_blocks_on_red(self, tmp_path: Path) -> None:
@@ -187,14 +204,55 @@ class TestInstallHooksPrePush:
         path_env = self._shim_beadloom(tmp_path, exit_code=0)
         assert _run_hook(hook_path, project, path_env) == 0
 
-    def test_pre_push_no_op_without_beadloom(self, tmp_path: Path) -> None:
-        """Outside a flow repo (beadloom absent) the hook is a safe no-op."""
+    def test_pre_push_without_beadloom_fails_with_a_sentence(self, tmp_path: Path) -> None:
+        """A hook that cannot find beadloom refuses the push and says why (BDL-UX #326).
+
+        One of BDL-083's three MAJOR moves, measured on 9.0.0: this exit code was 0, and
+        the hook printed nothing. The hook is installed per clone by `install-hooks`, so
+        a missing binary is a setup error the person pushing must see (PRD ruling 3).
+        """
         project = _setup_git_project(tmp_path)
         runner = CliRunner()
         runner.invoke(main, ["install-hooks", "--project", str(project)])
         hook_path = project / ".git" / "hooks" / "pre-push"
-        # PATH with NO beadloom on it.
-        assert _run_hook(hook_path, project, "/usr/bin:/bin") == 0
+        proc = subprocess.run(  # noqa: S603
+            ["/bin/sh", str(hook_path)],
+            cwd=project,
+            env={"PATH": "/usr/bin:/bin"},  # NO beadloom on it.
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        assert proc.returncode == 1
+        assert "Beadloom Gate did not run" in proc.stderr
+        assert "'beadloom' is not on the PATH" in proc.stderr
+        assert "install-hooks --remove --pre-push" in proc.stderr
+        assert "git push --no-verify" in proc.stderr
+
+    def test_a_gate_with_no_verdict_is_a_gate_that_did_not_run(self, tmp_path: Path) -> None:
+        """An exit code without a verdict line is not read as a verdict, either way."""
+        project = _setup_git_project(tmp_path)
+        CliRunner().invoke(main, ["install-hooks", "--project", str(project)])
+        hook_path = project / ".git" / "hooks" / "pre-push"
+        for exit_code in (0, 1):
+            bindir = tmp_path / f"silent-{exit_code}"
+            bindir.mkdir()
+            shim = bindir / "beadloom"
+            shim.write_text(f"#!/bin/sh\nexit {exit_code}\n", encoding="utf-8")
+            shim.chmod(0o755)
+            proc = subprocess.run(  # noqa: S603
+                ["/bin/sh", str(hook_path)],
+                cwd=project,
+                env={"PATH": f"{bindir}:/usr/bin:/bin"},
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+            assert proc.returncode == 1, (exit_code, proc.stdout)
+            assert f"beadloom ci exited {exit_code} without a verdict" in proc.stdout
+            assert "stale" not in proc.stdout
 
     def test_pre_push_is_executable(self, tmp_path: Path) -> None:
         import stat
@@ -261,8 +319,10 @@ class TestInstallHooksPrePush:
         runner = CliRunner()
         runner.invoke(main, ["install-hooks", "--project", str(project)])
         content = (project / ".git" / "hooks" / "pre-push").read_text(encoding="utf-8")
-        assert "tech-writer" in content or "coordinator" in content
         assert "--no-verify" in content
+        # The remedy is the findings' own, not a guess that every red is stale docs.
+        assert "docs stale" not in content
+        assert "findings above" in content
 
 
 def _init_real_git_repo(tmp_path: Path, name: str) -> Path:
@@ -321,9 +381,7 @@ class TestPrePushEndToEndViaGit:
     def _shim(tmp_path: Path, name: str, exit_code: int) -> str:
         bindir = tmp_path / f"bin-{name}"
         bindir.mkdir()
-        shim = bindir / "beadloom"
-        shim.write_text(f"#!/bin/sh\nexit {exit_code}\n")
-        shim.chmod(0o755)
+        _write_gate_shim(bindir / "beadloom", exit_code)
         # Include git's own dir on PATH so `git push` can re-exec git.
         return _path_with_git(str(bindir))
 
@@ -341,18 +399,18 @@ class TestPrePushEndToEndViaGit:
         path_env = self._shim(tmp_path, "green", exit_code=0)
         assert _push(repo, path_env) == 0  # green Gate -> push goes through.
 
-    def test_push_allowed_when_beadloom_absent(self, tmp_path: Path) -> None:
-        """A non-flow repo (beadloom not on PATH) is never blocked by the guard."""
+    def test_push_refused_when_beadloom_absent(self, tmp_path: Path) -> None:
+        """A clone whose hook cannot find beadloom does not push unjudged (BDL-UX #326)."""
         repo = _init_real_git_repo(tmp_path, "noflow")
         runner = CliRunner()
         runner.invoke(main, ["install-hooks", "--pre-push", "--project", str(repo)])
         path_env = _path_with_git()  # no beadloom anywhere on PATH.
-        assert _push(repo, path_env) == 0
+        assert _push(repo, path_env) != 0
 
 
 class TestPrePushHookFailSafe:
-    """The hook content is fail-safe: the absence guard precedes the Gate so a
-    repo without beadloom never reaches (and never hangs/raises on) `beadloom ci`."""
+    """The absence guard precedes the Gate, so a clone without beadloom never reaches
+    (and never hangs or raises on) `beadloom ci` -- and is refused, not waved through."""
 
     def _pre_push(self, tmp_path: Path) -> str:
         project = _setup_git_project(tmp_path)
@@ -364,11 +422,13 @@ class TestPrePushHookFailSafe:
         content = self._pre_push(tmp_path)
         assert content.index("command -v beadloom") < content.index("beadloom ci")
 
-    def test_guard_exits_zero_before_running_ci(self, tmp_path: Path) -> None:
+    def test_guard_exits_one_before_running_ci(self, tmp_path: Path) -> None:
         content = self._pre_push(tmp_path)
-        # The guard's body is a bare `exit 0` (no-op), reached when beadloom absent.
+        # The guard refuses the push when beadloom is absent (BDL-UX #326); 9.0.0's
+        # guard was a bare `exit 0`.
         guard_block = content.split("beadloom ci")[0]
-        assert "exit 0" in guard_block
+        assert "exit 1" in guard_block
+        assert "exit 0" not in guard_block
 
     def test_blocks_only_via_explicit_nonzero_exit(self, tmp_path: Path) -> None:
         content = self._pre_push(tmp_path)
@@ -401,6 +461,7 @@ def _runs_the_gate(hook: str) -> bool:
     """
     return any(
         line.strip().startswith(("beadloom ci", "uv run beadloom ci"))
+        or "$(beadloom ci" in line
         for line in hook.splitlines()
     )
 
@@ -475,7 +536,7 @@ class TestIdempotentNoDuplication:
         # Clean overwrite, not append: re-install leaves identical content with no
         # extra Gate invocation lines.
         assert first == second
-        assert second.count("\nbeadloom ci\n") == 1
+        assert second.count("\nbeadloom ci --format rich --tee ") == 1
 
     def test_block_mode_with_both_hooks(self, tmp_path: Path) -> None:
         project = _setup_git_project(tmp_path)
@@ -489,3 +550,136 @@ class TestIdempotentNoDuplication:
         assert "Error: ruff" in pre_commit
         pre_push = (project / ".git" / "hooks" / "pre-push").read_text(encoding="utf-8")
         assert "beadloom ci" in pre_push
+
+
+class TestThePrePushVerdictIsReadFromTheGatesOwnLine:
+    """The hook reads the verdict line `ci --format rich` prints, so the two must agree.
+
+    The pattern lives in the hook template and the line in the renderer; if either moved
+    alone every push would read as a Gate that did not run. This holds them together.
+    """
+
+    def test_the_pattern_selects_the_verdict_line_of_both_outcomes(self) -> None:
+        import re
+
+        from beadloom.application.gate import GateResult
+        from beadloom.application.gate_step import GateStep
+        from beadloom.services.commands.federation import _format_gate_rich
+        from beadloom.services.commands.hook_templates import GATE_VERDICT_PATTERN
+
+        pattern = re.compile(GATE_VERDICT_PATTERN)
+        for passed in (True, False):
+            rendered = _format_gate_rich(GateResult(steps=[GateStep(name="lint", passed=passed)]))
+            matched = [line for line in rendered.splitlines() if pattern.search(line)]
+            assert len(matched) == 1, rendered
+            assert matched[0].startswith("PASS" if passed else "FAIL")
+
+    def test_the_hook_carries_that_pattern_and_forces_the_format_that_prints_it(self) -> None:
+        from beadloom.services.commands.hook_templates import (
+            GATE_VERDICT_PATTERN,
+            HOOK_TEMPLATE_PRE_PUSH,
+        )
+
+        assert f"grep -E '{GATE_VERDICT_PATTERN}'" in HOOK_TEMPLATE_PRE_PUSH
+        assert "beadloom ci --format rich" in HOOK_TEMPLATE_PRE_PUSH
+
+
+class TestThePrePushHookWritesNothingTheShellCouldDrop:
+    """BDL-UX #226: the report reaches the terminal once, written by the Gate itself.
+
+    Measured at 12c35cf3: the hook captured the report and printed it with printf, and
+    under dash on a non-blocking pipe whose reader was slow the reader got 65575 bytes,
+    no verdict line and no sentence from the hook. printf gives up on EAGAIN.
+    """
+
+    def test_the_report_is_not_captured_for_the_shell_to_print(self) -> None:
+        from beadloom.services.commands.hook_templates import HOOK_TEMPLATE_PRE_PUSH
+
+        assert "$(beadloom ci" not in HOOK_TEMPLATE_PRE_PUSH
+        assert '\nbeadloom ci --format rich --tee "$gate_copy"\n' in HOOK_TEMPLATE_PRE_PUSH
+        assert "\"$gate_copy\" | tail -n 1" in HOOK_TEMPLATE_PRE_PUSH
+
+    def test_the_hook_s_sentences_fit_a_write_that_lands_whole(self) -> None:
+        """A pipe write of PIPE_BUF bytes or fewer lands whole or not at all.
+
+        512 bytes is Darwin's PIPE_BUF, the smallest of the supported platforms, so a
+        sentence `say` retries is never repeated in part. The verdict line the Gate
+        prints is the one value spliced in, and it is bounded by the step names.
+        """
+        import re
+
+        from beadloom.services.commands.hook_templates import HOOK_TEMPLATE_PRE_PUSH
+
+        sentences = re.findall(r'^\s*say ((?:"[^"]*"\s*\\?\s*)+)$', HOOK_TEMPLATE_PRE_PUSH, re.M)
+        assert len(sentences) >= 8, sentences
+        for sentence in sentences:
+            assert len(sentence.encode("utf-8")) < 512 - 200, sentence
+
+    def test_the_crash_the_hook_names_is_the_clause_the_gate_prints(self) -> None:
+        from beadloom.application.gate_boundary import crashed_clause
+        from beadloom.application.gate_step import GateStep
+        from beadloom.services.commands.hook_templates import HOOK_TEMPLATE_PRE_PUSH
+
+        clause = crashed_clause([GateStep(name="docs-audit", passed=False, error="E")])
+        assert '*"step(s) crashed"*)' in HOOK_TEMPLATE_PRE_PUSH
+        assert "step(s) crashed" in clause
+
+
+class TestThePreCommitLegsSayWhenTheyDidNotRun:
+    """BDL-UX #326 and #327: the architecture lint is a leg, and ruff's exit code is read."""
+
+    def test_both_modes_lint_the_nodes_the_commit_touches(self) -> None:
+        from beadloom.graph.lint_scope import COMMIT_SCOPE_LEAD
+        from beadloom.services.commands.docsync import pre_commit_hook_body
+
+        for blocking in (False, True):
+            body = pre_commit_hook_body(blocking=blocking)
+            assert "beadloom lint --staged --strict --format rich" in body
+            # The hook finds the verdict by the lead the command prints it with.
+            assert f"grep '^{COMMIT_SCOPE_LEAD}'" in body
+
+    def test_only_the_blocking_mode_blocks_on_a_lint_error(self) -> None:
+        from beadloom.services.commands.docsync import pre_commit_hook_body
+
+        assert "architecture lint errors on the node(s) this commit touches" in (
+            pre_commit_hook_body(blocking=False)
+        )
+        blocking = pre_commit_hook_body(blocking=True)
+        lint_leg = blocking.split("# --- Architecture lint")[1].split("# ---")[0]
+        assert "failed=1" in lint_leg
+
+    def test_ruff_is_not_run_through_xargs(self) -> None:
+        """BSD xargs folds an exit code to 1 and GNU to 123, so ruff's 1 cannot be read."""
+        from beadloom.services.commands.docsync import pre_commit_hook_body
+
+        for blocking in (False, True):
+            body = pre_commit_hook_body(blocking=blocking)
+            assert "xargs uv run ruff" not in body
+            assert "uv run ruff check \"$@\" 2>&1" in body
+
+    def test_ruff_that_did_not_run_never_blocks(self, tmp_path: Path) -> None:
+        """A ruff that could not start is NOT CHECKED, in the blocking mode too."""
+        project = tmp_path / "proj"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q", str(project)], check=True)  # noqa: S603, S607
+        (project / "module.py").write_text("VALUE = 1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "module.py"], cwd=project, check=True)  # noqa: S607
+        CliRunner().invoke(main, ["install-hooks", "--mode", "block", "--project", str(project)])
+        bindir = tmp_path / "bin"
+        bindir.mkdir()
+        uv = bindir / "uv"
+        uv.write_text("#!/bin/sh\necho 'error: Failed to spawn: `ruff`' >&2\nexit 2\n")
+        uv.chmod(0o755)
+        proc = subprocess.run(  # noqa: S603
+            ["/bin/sh", str(project / ".git" / "hooks" / "pre-commit")],
+            cwd=project,
+            env={"PATH": _path_with_git(str(bindir))},
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        assert "Ruff: NOT CHECKED in the repository root -- ruff did not run (exit 2)" in (
+            proc.stdout
+        )
+        assert "commit blocked" not in proc.stdout.split("Typed surface")[0]

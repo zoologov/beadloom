@@ -21,8 +21,12 @@ same boundary could otherwise report a crossing in a test that it would not
 report in the source file it tests.
 
 Liveness is decided before the crossings: a ``from`` glob no test file matches,
-an ``of`` matcher that leaves no file, or a ``to`` glob no recorded test import
-reaches stands the rule down, in the test-file vocabulary.
+an ``of`` matcher that leaves no file, or a ``to`` glob that can match no import path
+stands the rule down, in the test-file vocabulary. A ``to`` glob that CAN match and that
+no recorded test import reaches is a live rule with nothing to ban, stated at ``info``
+(BDL-083 D2, BDL-UX #328) — the same two sentences ``forbid_import`` says, decided by
+:mod:`.import_glob`. The source roots that question needs are read from the code's
+import index, where the source files are, beside the test imports' targets.
 """
 
 from __future__ import annotations
@@ -33,6 +37,12 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.evaluators import evaluate_one_import_rule
 from beadloom.graph.rules.exemptions import exemption_index_for, stale_exemption_findings
+from beadloom.graph.rules.import_glob import (
+    fire_headline,
+    nothing_to_ban_finding,
+    source_roots,
+    to_glob_reach,
+)
 from beadloom.graph.rules.suite_tables import (
     NodeSelection,
     read_test_files,
@@ -79,6 +89,30 @@ class _Selection:
     unbound: int
     outside_of: int
     dead_reason: str | None
+    #: The dead reason rests on a source root inferred from the index, so it is hedged.
+    dead_inferred: bool
+    #: An import path the ``to`` glob would fire on, when it is live with nothing to ban.
+    nothing_to_ban: str | None
+    #: How many distinct import paths are recorded for test files.
+    recorded_targets: int
+
+
+@dataclass(frozen=True)
+class _Liveness:
+    """Why a rule can judge nothing, or the import it would fire on with nothing to ban.
+
+    At most one of the two is set; both are ``None`` for a rule some recorded test
+    import's target already matches.
+    """
+
+    dead_reason: str | None = None
+    nothing_to_ban: str | None = None
+    #: The dead reason rests on an inferred source root, so the finding states an inference.
+    inferred: bool = False
+
+
+#: A rule some recorded test import's target already matches: live, with something to ban.
+_LIVE = _Liveness()
 
 
 def _select(conn: sqlite3.Connection, rule: TestImportBoundaryRule) -> _Selection:
@@ -104,6 +138,8 @@ def _select(conn: sqlite3.Connection, rule: TestImportBoundaryRule) -> _Selectio
             outside_of += 1
 
     imports = [(i.file_path, i.line_number, i.import_path) for p in judged for i in by_file[p]]
+    targets = {import_path_as_path(i.import_path) for i in recorded}
+    liveness = _liveness(conn, rule, recorded, len(by_file) - outside_from, judged, targets)
     return _Selection(
         imports=imports,
         judged_files=len(judged),
@@ -111,33 +147,55 @@ def _select(conn: sqlite3.Connection, rule: TestImportBoundaryRule) -> _Selectio
         outside_from=outside_from,
         unbound=unbound,
         outside_of=outside_of,
-        dead_reason=_dead_reason(rule, recorded, len(by_file) - outside_from, judged),
+        dead_reason=liveness.dead_reason,
+        dead_inferred=liveness.inferred,
+        nothing_to_ban=liveness.nothing_to_ban,
+        recorded_targets=len(targets),
     )
 
 
-def _dead_reason(
+def _code_source_roots(conn: sqlite3.Connection, test_targets: set[str]) -> frozenset[str]:
+    """The project's source roots, read from the code's imports beside the tests' targets."""
+    rows = conn.execute("SELECT file_path, import_path FROM code_imports").fetchall()
+    return source_roots(
+        (str(row[0]) for row in rows),
+        [*test_targets, *(import_path_as_path(str(row[1])) for row in rows)],
+    )
+
+
+def _liveness(
+    conn: sqlite3.Connection,
     rule: TestImportBoundaryRule,
     recorded: list[TestImport],
     from_matches: int,
     judged: list[str],
-) -> str | None:
+    targets: set[str],
+) -> _Liveness:
+    """Whether the rule can judge anything, decided before its crossings are."""
     files = len({i.file_path for i in recorded})
     if not recorded:
-        return "the index records no test import — no test file was read, or none imports"
+        return _Liveness(
+            "the index records no test import — no test file was read, or none imports"
+        )
     if from_matches == 0:
-        return f"its `from` glob '{rule.from_glob}' matches 0 of {files} test file(s) with imports"
+        return _Liveness(
+            f"its `from` glob '{rule.from_glob}' matches 0 of {files} test file(s) with imports"
+        )
     if not judged and rule.of_matcher is not None:
-        return (
+        return _Liveness(
             f"its `of` matcher ({rule.of_matcher.describe()}) selects no node that one of "
             f"the {from_matches} test file(s) matching `from` is bound to"
         )
-    targets = {import_path_as_path(i.import_path) for i in recorded}
-    if not any(matches_import_target(target, rule.to_glob) for target in targets):
-        return (
-            f"its `to` glob '{rule.to_glob}' matches 0 of {len(targets)} import path(s) "
-            f"recorded for test files"
-        )
-    return None
+    if any(matches_import_target(target, rule.to_glob) for target in targets):
+        return _LIVE
+    reach = to_glob_reach(rule.to_glob, source_roots=_code_source_roots(conn, targets))
+    if reach.unmatchable is None:
+        return _Liveness(nothing_to_ban=reach.example)
+    return _Liveness(
+        f"its `to` glob '{rule.to_glob}' matches 0 of {len(targets)} import path(s) "
+        f"recorded for test files and {reach.claim}: {reach.unmatchable}",
+        inferred=reach.inferred,
+    )
 
 
 def test_import_boundary_inert_reason(
@@ -187,7 +245,8 @@ def _evaluate_one(conn: sqlite3.Connection, rule: TestImportBoundaryRule) -> lis
                 rule_name=rule.name,
                 rule_description=rule.description,
                 message=(
-                    f"Rule '{rule.name}' cannot fire: {chosen.dead_reason}. It is counted "
+                    f"{fire_headline(rule.name, inferred=chosen.dead_inferred)}: "
+                    f"{chosen.dead_reason}. It is counted "
                     f"as evaluated but checks nothing"
                 ),
                 remediation=_MATCHING_FORM,
@@ -216,6 +275,17 @@ def _evaluate_one(conn: sqlite3.Connection, rule: TestImportBoundaryRule) -> lis
         else v
         for v in found
     ]
+    if chosen.nothing_to_ban is not None:
+        renamed.insert(
+            0,
+            nothing_to_ban_finding(
+                rule_name=rule.name,
+                rule_description=rule.description,
+                glob=rule.to_glob,
+                example=chosen.nothing_to_ban,
+                searched=f"0 of {chosen.recorded_targets} import path(s) recorded for test files",
+            ),
+        )
     return [*renamed, _population(rule, chosen)]
 
 

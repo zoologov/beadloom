@@ -19,7 +19,7 @@ Internal building blocks, each with a `DOC.md`:
 - **[Doc Roots](components/doc-roots/DOC.md)** — the three documentation spaces (TO-BE / AS-IS / WORKING), their configurable roots and kinds, and which space a document belongs to. Beside `scan-paths` for the same reason: `doc-sync` resolves the WORKING freshness exemption without reaching up into `application`.
 - **[Exit Condition](components/exit-condition/DOC.md)** — the one definition of what retires a declared exclusion: the date an `until:` names, and whether that day has passed. Beside `scan-paths` and `doc-roots` for the same reason, and for a fourth surface: `graph` reads it for both exemption lists in `rules.yml` and `onboarding` for `flow.yml`'s guard exclusions, so the vocabulary sits below both rather than inside whichever domain wrote it first.
 - **[Atomic IO](components/atomic-io/DOC.md)** — atomic YAML writes (temp-file + `os.replace`) so a crash mid-write never corrupts the source-of-truth graph YAML.
-- **[Console Streams](components/console-streams/DOC.md)** — the CLI's own `stdout`/`stderr` keep the operator's codec but degrade an unencodable glyph to its escape instead of dying on it.
+- **[Console Streams](components/console-streams/DOC.md)** — the CLI's own `stdout`/`stderr` keep the operator's codec but degrade an unencodable glyph to its escape instead of dying on it, and a report reaches a non-blocking pipe whole instead of dying part-way through it.
 - **[Surface Registry](components/surface-registry/DOC.md)** — the port through which the services layer hands its live CLI/MCP surface to the checks below it, so `doctor` / `docs audit` / `sync-check` can compare a documented claim against runtime truth without importing upward.
 
 ## Specification

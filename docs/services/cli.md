@@ -541,7 +541,10 @@ beadloom install-hooks --remove [--pre-commit|--pre-push] [--project DIR]
 (selected by suffix, so a package at the repository root is judged like one under `src/`),
 mypy over those staged files **inside the surface the project declares typed** (derived per run by
 [`typed-surface`](#beadloom-typed-surface); a surface that could not be derived reads
-`NOT CHECKED` with its reason and never blocks), `beadloom sync-check`
+`NOT CHECKED` with its reason and never blocks), the **architecture lint** over the nodes that
+own a staged path ([`lint --staged --strict`](#beadloom-lint); an error warns in `--mode warn`
+and blocks in `--mode block`, and a lint that printed no verdict reads `NOT CHECKED` and never
+blocks), `beadloom sync-check`
 (`--mode warn` reports stale docs; `--mode block` fails the commit on stale docs;
 either way it closes with an instruction scoped to the reasons re-attesting
 clears, because the hook prints porcelain rows and cannot choose per row),
@@ -555,16 +558,36 @@ in `block` mode without affecting the exit code), and in any repo without `bd` �
 or without ACTIVE tables — the block is a complete no-op (see
 [`active-sync`](#beadloom-active-sync)).
 
+The ruff leg runs `uv run ruff check` from the outermost directory holding a `pyproject.toml`
+between the repository root and each staged file, so a Python project under `backend/` in a
+repository with nothing Python at its root is checked in its own environment, and ruff reads
+the nearest configuration above each file by itself. It shows ruff's and uv's standard error
+and reads the exit code: `0` is clean, `1` is violations, and any other code — uv's `2` for a
+ruff it could not spawn, the shell's `127` for one that is not installed — is "ruff did not
+run" and never blocks (BDL-UX #327). Outermost rather than nearest, because a repository can
+hold whole projects as test data, where `uv run` would build an environment inside one.
+
 **Pre-push hook (Beadloom Gate)** is the authoritative blocking enforcement of
 the hard invariant *"no code in `main` without current docs."* On every push it
 runs the full Gate (`beadloom ci` — incremental reindex → `lint --strict`
 (module-coverage included) → sync-check → docs-audit → docs-quality → config-check →
 doctor) and **exits
-non-zero to block the push** on red, printing an
-actionable message ("Beadloom Gate failed … run the tech-writer (or
-`/coordinator`) then re-push; `git push --no-verify` to override"). It is
-**fail-safe**: in any repo without `beadloom` on `PATH` the hook is a safe no-op
-and never blocks. The full Gate lives in pre-push (not duplicated on every commit)
+non-zero to block the push** on red. It runs `beadloom ci --format rich --tee <temporary file>`: the rich format
+prints a verdict line whatever git's standard output is, the Gate writes its report to the
+hook's output itself, and the hook reads the verdict from the copy. It closes with that verdict
+line and `git push --no-verify` as the override; when a step crashed, it says that the step
+checked nothing instead of saying the findings name their fixes. An exit code with no verdict
+line is reported as "the Gate did not run" and refused, never as stale documentation. The
+hook does not print the report a second time through the shell, because `printf` gives up on
+a non-blocking pipe: measured at `12c35cf3` under `dash`, the reader got 65575 bytes, no
+verdict line and no sentence from the hook (BDL-UX #226). Its own sentences are retried while
+the pipe is full, and each is shorter than `PIPE_BUF`, so a retry repeats nothing.
+**Without `beadloom` on the `PATH` git runs the hook with, the push is refused** with three
+sentences on standard error: the Gate did not run, how to put `beadloom` on that `PATH` or
+remove the hook (`beadloom install-hooks --remove --pre-push`), and the `--no-verify`
+override. The hook is installed per clone, so a missing binary is a setup error the person
+pushing must see. Before BDL-083 S1a this branch exited `0` in silence (BDL-UX #326), and the
+move to `1` is a change of exit code on an input the earlier release accepted. The full Gate lives in pre-push (not duplicated on every commit)
 because pushes are less frequent than commits; the pre-commit hook stays the
 lighter warn/block check. `--no-verify` is the documented (discouraged) escape
 hatch.
@@ -772,7 +795,7 @@ beadloom why REF_ID [--depth N] [--json] [--reverse] [--format {panel,tree}] [--
 Run architecture lint rules against the project.
 
 ```bash
-beadloom lint [--format {rich,json,porcelain,github}] [--strict] [--fail-on-warn] [--no-reindex] [--project DIR]
+beadloom lint [--format {rich,json,porcelain,github}] [--strict] [--fail-on-warn] [--no-reindex] [--staged] [--project DIR]
 ```
 
 Checks cross-boundary imports against rules defined in `rules.yml`. Format auto-detects: `rich` if TTY, `porcelain` if piped.
@@ -786,6 +809,8 @@ Checks cross-boundary imports against rules defined in `rules.yml`. Format auto-
 Each violation carries an agent-actionable `remediation` hint derived per rule kind (deny/forbid → remove/reroute the import or edge; cycle → break the cycle at a named edge; layer → invert the dependency or extract a shared abstraction; cardinality → split the node; require → add the required edge).
 
 Exit codes: 0 = clean (or violations without `--strict`/`--fail-on-warn`), 1 = violations with `--strict` (errors only) or `--fail-on-warn` (any finding a rule decided), 2 = configuration error or missing index.
+
+**`--staged` judges the commit, not the tree (BDL-083 S1a, BDL-UX #326).** It keeps the findings of the nodes that own a path the commit stages — by the most-specific `source`, the index's own ownership rule — and the findings located in a staged file, and leaves the rest to the pre-push Gate. A finding about a rule rather than a node, such as a liveness or population statement, is among the rest. The output leads with one sentence that names the nodes and counts what was left out, for example `Lint over this commit: 1 node(s) own 1 of 1 staged path(s) (widgets-kpi-panel); 1 error(s), 0 warning(s) on them; 3 finding(s) elsewhere left to the pre-push Gate`. `porcelain` marks that sentence with `# `, `github` prints it as a `::notice::`, and `json` carries it as a `commit_scope` object (`staged`, `owned`, `nodes`, `left_out`). When git cannot name the staged paths, nothing is narrowed and the sentence says the whole tree was judged. The exit code under `--strict` is decided by the narrowed findings. This is the form the composed pre-commit hook runs; measured on this repository, 1.2 s with a warm index.
 
 **A layer rule states how much of its edge set it judged.** `architecture-layers` resolves each end of an edge to the layer it is IN — the node's own declared layer tag, else the nearest `part_of` container that declares one (BDL-070 B3) — and passes over an edge with an end in no declared layer at all. The green line `0 violations, N rules evaluated` used to say the same words for a rule that had looked at a fraction of the graph as for one that had looked at all of it, so every run now states that fraction — on the rich summary line, GREEN and RED alike, and in each of the other three formats' own idiom (BDL-070 A3). The summary line in full, as `beadloom lint --no-reindex --format rich` printed it on this repository on 2026-09-13 over the carried-forward index:
 
@@ -1223,7 +1248,7 @@ Judge the paths a commit stages against the axes its work item declared
 (BDL-068 S1.6).
 
 ```bash
-beadloom scope-check [--project DIR] [--since REF] [--branch NAME] [--porcelain] [--json]
+beadloom scope-check [--project DIR] [--base [REF]] [--since REF] [--branch NAME] [--porcelain] [--json]
 ```
 
 The work item is the one the checked-out branch names, and its `## Axes` section
@@ -1236,15 +1261,25 @@ the file system allows. What the check raises is detectability — the crossing 
 named, with the axis it fell outside, at the moment it is made rather than at
 review.
 
-- `--since REF` — judge every path the branch changes against REF (`REF...HEAD`),
-  which is what a pull request contains, instead of only the staged ones.
+- `--base [REF]` — judge every path the branch changes (`<base>...HEAD`), which is
+  what a pull request contains, instead of only the staged ones. Without REF the
+  base is the merge-base with the branch this one was cut from, else the trunk —
+  the base the Gate's `scope-check` step uses. The header names the base, the rule
+  that chose it and how many files of the trunk's diff it attributed to the parent
+  branch (BDL-UX #330).
+- `--since REF` — the same as `--base REF`.
 - `--branch NAME` — name the work item's branch instead of reading the
   checked-out one.
 - `--porcelain` — the verdict first as a `# `-marked line, then one finding per
   line (`path:line`, check, excerpt). A hook splits the two on the marker: a
   finding line opens with a project-relative path and no path opens with `# `.
 - `--json` — the verdict plus `checked`, `reason`, `work_item`, `document`,
-  `scope`, `judged`, `unowned` and `undecided`.
+  `scope`, `base` (`ref`, `kind`, `parent`, `parent_files`, `trunk`; `null` for the
+  staged paths), `judged`, `unowned` and `undecided`.
+
+The work item is the one the branch names, and in CI the branch is read from the
+pull or merge request first (`GITHUB_HEAD_REF`, `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`),
+because a CI job checks it out on a detached HEAD (BDL-UX #300).
 
 **The verdict is printed whatever it says, on standard output, in both forms.**
 Until BDL-068 S4 (`beadloom-0mdo.32`) the reason for having compared nothing
@@ -1982,6 +2017,11 @@ The brief carries the **assignment** (the bead's title and description), the
 and every scenario whose `@bead:` tag names the bead) and the **change**
 (`git diff <base>...HEAD`, the working tree, and the untracked files, each path
 carrying the node that owns it). It does not carry the bead's comments.
+
+The base is `--since REF` when given, and otherwise the base `scope-check` uses:
+the merge-base with the branch this one was cut from, else the trunk. The brief
+prints it as its `Base:` line, with how many files of the trunk's diff it
+attributed to the parent branch, and carries it as `base` in `--json` (BDL-UX #344).
 
 The measurement behind that ordering: in hidden-profile tasks a group that hears
 one member's conclusion first scores 17-36% where a single holder of all the
@@ -2909,9 +2949,23 @@ No duplicate, unwritten or unclaimed number.
 
 Exit codes are the contract a caller may rely on: `0` the number was allocated, or the check found
 nothing, or the check could not establish whether a log is declared at all; `1` the check found at
-least one finding, or the project declared an `issue_log:` block this reader could not use; `2`
-nothing was allocated, because the project declares no block or wrote a config that could not be
-read.
+least one finding, or the project declared an `issue_log:` block this reader could not use, or the
+log it declared is not on the tree; `2` nothing was allocated, because the project declares no
+block or wrote a config that could not be read.
+
+**`check` exits 1 exactly when the Gate's `issue-log` step blocks** (BDL-083, `beadloom-6xdt`).
+The code is that step's verdict, taken from the one function both surfaces call, not a second
+reading of the report. On 9.0.0 the two disagreed on one state: over a declared log the tree
+does not hold, `check` printed "no leg ran" and exited `0` while `beadloom ci` failed the step —
+measured with this repository's own declaration and the log absent (BDL-UX #331).
+It now prints the Gate's own finding and exits `1`:
+
+```
+$ beadloom issue-number check
+The declared issue log could not be read — no leg ran.
+  the declared issue log is missing or could not be decoded
+  -> point `issue_log.path` at the log, or remove the declaration
+```
 
 **Three states about the declaration, and the check tells them apart** (BDL-069,
 `beadloom-rqma.9`). A project that declared no log is told so. A project that declared one and
@@ -2943,7 +2997,7 @@ in the [Issue Numbers SPEC](../domains/doc-sync/features/issue-numbers/SPEC.md).
 The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).
 
 ```bash
-beadloom ci [--hub EXPORT.json ...] [--fail-on CSV] [--format {rich,json,github}] [--no-reindex] [--project DIR]
+beadloom ci [--hub EXPORT.json ...] [--fail-on CSV] [--format {rich,json,github}] [--no-reindex] [--tee FILE] [--project DIR]
 ```
 
 Composes the existing checkers, in order, into ONE verdict with a single exit code (0 = all steps passed, 1 = any step failed):
@@ -2956,14 +3010,16 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 6. `issue-log` — the issue log's numbers (BDL-068 S6): `duplicate-number`, `unwritten-claim` and `unclaimed-number` over a log declared under `issue_log:` in `.beadloom/config.yml`. Unlike its two document neighbours it BLOCKS, because a duplicate number is a reference that resolves to two entries and to neither rather than an opinion about prose. A project declaring no log is a NAMED skip. This step was missing from this list until BDL-069 S4 renumbered it.
 7. `readme-pair` — the document pairs declared under `document_pairs:` in `.beadloom/config.yml`, compared by SHAPE (BDL-069 S4). What is compared is the sequence of blocks each document is built from — heading, paragraph, code, list, table — with the heading levels and the row counts, never the text: the pair this repository declares is `README.ru.md` and `README.md`, and a text comparison over a translation is a check somebody has to switch off. It BLOCKS, on the `issue-log` terms rather than the `docs-quality` ones, and a declared path nothing could read fails too, because a declaration pointing at nothing would otherwise report `0 finding(s)` having compared no document at all. A project that declares no pair is a NAMED skip stating the key to add, so the upgrade shipping the step reddens nobody. The line states the population it held: `1 pair(s) held, 109 block(s) compared, 0 finding(s); README.ru.md <-> README.md (109 block(s))`, measured on this repository 2026-09-11, with `UNREADABLE:` naming each declared path nothing read and `NOT COMPARED:` counting the pairs read that hold no block between them — the second sets `not_verified`, so the step reports `WARN`.
 8. `doc-spaces` — the TO-BE → AS-IS relation over the project's documentation spaces (BDL-061 S5). Warn only, on the same terms as the step above, and a project with no TO-BE document is a NAMED skip stating the roots it looked under. FOUR states set `not_verified` and the step then reports `WARN`: no tracker was readable, no epic with closed beads declared a node, some epics declare none, and some epics the tracker does not name. The line states both WORKING populations apart — `N WORKING document(s) in the exempt space, M sync pair(s) excused` — because one word for two populations is how a reader takes the document count as the excused-pair count; the pair count is carried from the sync-check step that measured it, never recomputed here.
-9. `scope-check` — did this branch leave the axes its work item declared? Branch-scoped (`<trunk>...HEAD`, what the pull request contains) rather than tree-scoped, because the tree is shared by several agents and judging it would fail one agent's push on a neighbour's edit. Warn only, and `passed=True` unconditionally: one work item in 64 on this repository carries an `## Axes` section, so a check that blocked would meet a repository that cannot satisfy it. A run with no branch, no work item, no index or no section is SKIPPED with its reason, and a run over a branch whose changed paths no node owns is SKIPPED too, because a comparison over an empty population is not a pass. The report names each path and the axis it fell outside. It does not prevent the commit that made it.
+9. `scope-check` — did this branch leave the axes its work item declared? Branch-scoped (`<base>...HEAD`, what the pull request contains, where the base is the merge-base with the branch this one was cut from, else the trunk, and the line ends with it: `; against <ref> (<rule>; N file(s) attributed to the parent branch)`, BDL-083 S1d) rather than tree-scoped, because the tree is shared by several agents and judging it would fail one agent's push on a neighbour's edit. Warn only, and `passed=True` unconditionally: one work item in 64 on this repository carries an `## Axes` section, so a check that blocked would meet a repository that cannot satisfy it. A run with no branch, no work item, no index or no section is SKIPPED with its reason, and a run over a branch whose changed paths no node owns is SKIPPED too, because a comparison over an empty population is not a pass. The report names each path and the axis it fell outside. It does not prevent the commit that made it.
 10. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`. The SCORE half is not a gate step: it needs counters a runner wrote, and [`beadloom mutation`](#beadloom-mutation) is where they are read.
 11. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
 12. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
 
+**The report survives a pipe that will not wait (BDL-083 S1e2, BDL-UX #226).** An agent's shell hands a command a pipe it reads when it gets to it and sets the write end non-blocking, so a write that does not fit fails with `EAGAIN` at once. `ci` used to write its whole report with one `click.echo`, and measured at `12c35cf3` on Darwin arm64, with the reader starting two seconds late, it exited `1` with `BlockingIOError: [Errno 35] write could not complete without blocking` after 83518 of the 229492 bytes the same run writes to a file. The report is now written through `console_streams.write_whole`: the descriptor is set blocking for the write and put back as it was found, and an `EAGAIN` that arrives anyway is retried once the pipe has room, on raw writes that report how many bytes they took, so nothing is dropped and nothing is written twice. Measured after, same room: the reader received every byte the same run writes to a file. `--tee FILE` writes the same report to `FILE` as well, before the terminal; the pre-push hook reads its verdict from that copy.
+
 **What `--no-reindex` changes about the verdict.** It skips step 1, so every later step describes the INDEX rather than the working tree. With an index older than the tree, the `lint` step reports `PASS` over a live error-severity violation that the same gate catches after a reindex (measured), and the `sync-check` step compares against whatever baseline the index holds. Use it only where something else has just reindexed.
 
-**Honest gate (the Phase-0 lesson):** the report names every step that ran and its outcome — `PASS` / `WARN` / `FAIL` / `SKIP` — never a green that silently skipped a step, and never a `PASS` over something the step could not check (`WARN`: it ran, found nothing wrong, and part of what it reports on was not verifiable — see `sync-check` above). **No short-circuit:** all steps run and ALL findings are collected even after an earlier failure, so one run surfaces every problem. `--format` applies uniformly across every step; findings share the agent-actionable `{kind, rule, severity, node, locations, why, remediation}` shape (`github` emits valid `::error file=<path>,line=<n>::<msg>` workflow-command annotations, matching `lint --format github`; `json` emits `{ok, steps[]}`). The per-repo `beadloom-aac-lint.yml` reindex+lint+sync steps collapse into one `beadloom ci` call. Orchestration lives in `application/gate.py:run_ci_gate()`; the CLI only parses options and renders.
+**Honest gate (the Phase-0 lesson):** the report names every step that ran and its outcome — `PASS` / `WARN` / `FAIL` / `SKIP` / `ERROR` — never a green that silently skipped a step, and never a `PASS` over something the step could not check (`WARN`: it ran, found nothing wrong, and part of what it reports on was not verifiable — see `sync-check` above). **No short-circuit:** all steps run and ALL findings are collected even after an earlier failure, so one run surfaces every problem. A step that RAISES reads `ERROR` with the exception it raised, fails the gate, and the steps after it still run; the verdict reads `FAIL — 1 step(s) crashed: <step> — gate blocked` and a `Crashed` block under it names each crashed step with its exception (BDL-UX #318). A report derived after the steps that raises — the room census, the coverage report or the ownership report — is not a step: it is absent, the run states `the <report> raised <class>: <message>` under that report's heading (as `reason` on its key in `json`, as its `::notice::` in `github`), and the steps' verdict and exit code stand (BDL-083 S1 fix 1). `--format` applies uniformly across every step; findings share the agent-actionable `{kind, rule, severity, node, locations, why, remediation}` shape (`github` emits valid `::error file=<path>,line=<n>::<msg>` workflow-command annotations, matching `lint --format github`; `json` emits `{ok, steps[], crashed[]}`, each step with an `error` that is `null` unless it raised). The per-repo `beadloom-aac-lint.yml` reindex+lint+sync steps collapse into one `beadloom ci` call. Orchestration lives in `application/gate.py:run_ci_gate()`; the CLI only parses options and renders.
 
 **The verdict names the room it was taken in (BDL-068 S3.2), and does not change because of it.** `GateResult` carries a `RoomCensus` populated by `run_ci_gate()`, and all three output shapes print it: a `Room:` block under the rich verdict (the current room, then `N of M declared room(s) not entered by this run:` with the first three named, or `every declared room entered (M)`); a `room` object in `--format json` with `current`, `entered`, `not_entered` and `unresolved`; and one `::notice::room <room> — N of M declared room(s) entered by this run` line in `--format github`. It is printed UNDER the verdict rather than beside it, because it is not a step and has no status — a passing gate still passes with zero findings and a failing gate still exits 1. Measured on this repository, 2026-09-10: a local macOS run enters NONE of the declared rooms -- `--format github` prints `0 of 21 declared room(s) entered by this run` and the rich block prints the complement, `21 of 21 declared room(s) not entered by this run`, naming the first three. The two shapes count opposite populations and a number carried between them inverts the claim: this passage previously read `0 of 21 declared room(s) not entered`, which says a local run misses nothing. It is the verdict's address rather than a caveat on it, and the address of a local run is a room this project's CI declares no leg for. The census itself is [`beadloom rooms`](#beadloom-rooms).
 
@@ -2982,23 +3038,36 @@ pipeline verifying under a name the vocabulary does not read (`pytest`; `ruff`/`
 `mypy`/`pyright`) is told the population is empty with the vocabulary named, never that nothing is
 left to run. Like the room, it is not a step: same verdict, same exit code, same findings.
 
-**And the verdict names who owns what it found (BDL-068 S6).** This project's own branch
-carried a red Gate across two waves — two stale docs owned by no bead in the running plan —
-and every gate owner in those waves had to be told by the coordinator, by hand, that the red
-was not theirs. `GateResult` carries a `GateOwnership`: one verdict per finding, held against
-the beads the tracker reports claimed while the run happened. `owned` names the beads;
-`unowned` says a node was derived and no claim covers it; `unattributed` says no node could be
-derived from the finding at all. A tracker that cannot answer, and a project with no index,
-are a reason on the whole report rather than a page of `unowned` — telling every gate owner
-"not yours" when nobody was asked would be the same false green in a new vocabulary. All three
-shapes print it: a `Findings by owner:` block under the rich verdict, an `ownership` object in
-`--format json` (`reason`, `claimed`, `none_owned`, `findings`, `unread_claims`) and one
-`::notice::` per owning bead in `--format github`, plus the headline `no finding of this run
-is owned by a bead claimed now`. The owner is a BEAD and never the work item: the work item's
-`## Axes` answer whether a change is inside the approval, which the `scope-check` step of the
-same run already asks and which every agent on one branch shares. Like the room and the
-coverage block, it is not a step — same verdict, same exit code, same findings — and the
-tracker is asked only when the run produced a finding, so a green run shells out to nothing.
+**And the verdict names who owns what it found (BDL-068 S6; the rule since BDL-083 S1c).**
+This project's own branch carried a red Gate across two waves — two stale docs owned by no bead
+in the running plan — and every gate owner in those waves had to be told by the coordinator, by
+hand, that the red was not theirs. `GateResult` carries a `GateOwnership`: one verdict per
+finding, held against the files the commits of the beads the tracker reports claimed changed on
+`<base>..HEAD`. A commit is a bead's when its message carries the git trailer `Bead: <bead-id>`
+in its final paragraph, and by nothing else (BDL-083 D10): a bead id mentioned anywhere else in
+the message binds no commit, and a bead's `refs:` attribute no file. `owned` names the beads
+whose commits changed a file the finding is about. `unattributed` says no claimed bead's commits
+did, or that the finding is about no file. Until BDL-083 a third verdict, `unowned`, said a
+node was derived and no claim covered it. Ownership by node attributed a finding to every bead
+whose node covered the directory, so it was removed (BDL-UX #329). The base is the one the
+`scope-check` step judges against (`scope_base`: the merge-base with the branch this one was cut
+from, else the trunk). A tracker that cannot answer, a project with no index and a git that
+cannot list the branch's commits are a reason on the whole report rather than a page of
+`unattributed`. When a claimed bead has no bound commit and a `Bead: <id>` line stands where git
+reads no trailer, the report says so instead of denying the line. It counts the commits on
+`<base>..HEAD` that carry the line and says where it stands: outside the message's final
+paragraph, where git reads no trailer, or in a final paragraph git does not read as a trailer
+block. All three shapes print it: a `Findings by owner:` block under the rich verdict, an
+`ownership` object in `--format json` (`reason`, `rule`, `base`, `claimed`, `none_owned`,
+`claims`, `findings`) and one `::notice::` per sentence in `--format github`, the rule first.
+Each `claims` entry is `{bead, commits, unread_bead_lines}`, and each row of
+`unread_bead_lines` is `{placement, stated, count, commits}`, where `placement` is the token
+`outside_final` or `unread_final` and `stated` is the sentence the text report prints for it.
+Each `findings` entry is `{rule, verdict, node, beads, where, files, uncommitted}`. The owner is a BEAD and never the work item: the work item's `## Axes` answer
+whether a change is inside the approval, which the `scope-check` step of the same run already
+asks and which every agent on one branch shares. Like the room and the coverage block, it is
+not a step — same verdict, same exit code, same findings — and the tracker is asked only when
+the run produced a finding, so a green run shells out to nothing.
 
 ### beadloom setup-mcp
 
@@ -3298,7 +3367,7 @@ Commands (re-exported from the package via the registration shell):
 - `status` -- show index statistics with health trends and context metrics (data gathered by `application/status.py:gather_status`); `--debt-report` mode with `--fail-if`, `--category` flags
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`); `--since GIT_REF` measures drift against a git ref instead of the stored baseline (fresh-checkout / per-push drift detection)
 - `sync_update` -- review and update stale docs interactively; `--check` for status-only; `--yes`/`-y` for a non-interactive re-baseline; `--all` (with `--yes`) re-baselines every stale ref
-- `install_hooks` -- install/remove the pre-commit hook (lint -> mypy over the declared typed surface -> sync-check -> declared-axes verdict -> guarded ACTIVE/tracker-coherence auto-fix step) AND/OR the pre-push Beadloom Gate hook (`beadloom ci`, blocks the push on red; `command -v beadloom` guard -> safe no-op outside a flow repo); `--pre-commit`/`--pre-push` selectors (default both), `--remove`, idempotent
+- `install_hooks` -- install/remove the pre-commit hook (ruff -> mypy over the declared typed surface -> `lint --staged --strict` -> sync-check -> declared-axes verdict -> guarded ACTIVE/tracker-coherence auto-fix step) AND/OR the pre-push Beadloom Gate hook (`beadloom ci --format rich`, blocks the push on red and on a Gate with no verdict; without `beadloom` on `PATH` it refuses the push with a sentence); `--pre-commit`/`--pre-push` selectors (default both), `--remove`, idempotent. The hook text is in `hook_templates.py`
 - `active_sync` -- reconcile each epic's ACTIVE.md bead-status table from `bd` (`--epic`/`--check`/`--json`/`--no-export`); fix mode also `bd export`s the tracked `.beads/issues.jsonl`; safe no-op when no ACTIVE table or no `bd`; delegates to `application/active_table/reconcile.py:reconcile_active_tables()`
 - `link` -- manage external tracker links
 - `search` -- FTS5 search with LIKE fallback
@@ -3315,7 +3384,7 @@ Commands (re-exported from the package via the registration shell):
 - `setup_ai_techwriter` -- scaffold the AI tech-writer (vendored harness + recipe + chosen platform CI wrapper + getting-started guide) for one-command opt-in; delegates to `onboarding/ai_techwriter_setup.py:scaffold()`
 - `setup_agentic_flow` -- scaffold the packaged multi-agent dev flow (`.claude/agents/*` + `commands/*` vendored byte-identical + CLAUDE.md auto-regions per-project); idempotent, `--force` overwrites hand-edited flow files; delegates to `onboarding/agentic_flow_setup.py:scaffold()`
 - `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator; also drift-checks/restores the scaffolded agentic-flow files when the flow is present
-- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> docs-quality -> issue-log -> readme-pair -> doc-spaces -> scope-check -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the verdict carries the room it was taken in (`GateResult.room`), printed in all three formats and changing no step's status; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
+- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> docs-quality -> issue-log -> readme-pair -> doc-spaces -> scope-check -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the verdict carries the room it was taken in (`GateResult.room`), printed in all three formats and changing no step's status; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP/ERROR, where `ERROR` is a step that raised, fails the gate and lets the steps after it run (BDL-083 S1e); uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); `--tee FILE` writes a copy of the rendered report, the copy the pre-push hook reads its verdict from; the report is written whole to a pipe that will not wait (`console_streams.write_whole`, BDL-UX #226); delegates to `application/gate.py:run_ci_gate()`
 - `waves` -- decide which of the named beads may run at the same time, from the code-level independence of their declared node scopes; prints one named reason per serialised pair, the media a concurrent wave shares, one plan-time verdict per medium and each wave's `gate_owner` (`--json`; exit 0 clean / 1 findings / 2 undecidable); delegates to `application/waves/planner.py:plan_waves()`
 - `review_brief` -- assemble a reviewer's input (assignment, declared scope, specification documents, bound scenarios, changed files) while withholding the bead's own comments, and state what is REACHABLE per channel: bead comments (counted on that bead and on no other), the documents of the work item the branch names, the commit bodies of the reviewed range, and the launch prompt, which is named as a channel nothing here can inspect; `--release` prints the account once a verdict is recorded and reports whether that verdict's independence can be established (`--since`, `--json`; exit 0 clean / 1 findings / 2 unassemblable / 3 release refused); delegates to `application/review_brief/`
 - `mutation` -- the score a run produced over the declared `mutation.targets`, from the counters the project's own runner wrote (`--stats`/`--target`/`--only`/`--tool`/`--min-score`/`--json`); reads counters by NAME and reports one it did not find rather than as zero; folds the scope check in, so an empty population is a finding and not a 100%; exit 0 clean or nothing declared / 1 findings or under the floor / 2 counters named without the scope they cover; delegates to `application/mutation_scope/score.py:report_mutation_score()`
