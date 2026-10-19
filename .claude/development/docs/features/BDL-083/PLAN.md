@@ -91,17 +91,17 @@ Parent: `beadloom-ba9w`.
 | S1R8 | `beadloom-kwc3` | review: fix 8, bead id only | P0 | S1F8 |
 | S1W | `beadloom-hfxv` | tech-writer: the ci-gate and rule-engine SPECs, `docs/guides/ci-setup.md` (the hook's new behaviour), `docs/guides/public-api.md` (the MAJOR moves), CHANGELOG | P0 | S1R, S1R6, S1R7 |
 | S1P | `beadloom-c5m5` | coordinator: S1 PR, merge on green | P0 | S1W, S1R8 |
-| S2a | - | dev: `rooms` reads `.github/workflows/*.yml` and `.gitlab-ci.yml` as sources of legs, each room carrying its source; distributions by `**/pyproject.toml` under `scan_paths`; a CI the census cannot read is a named skip in `ci`; `gate-coverage` reads the same sources (D6; #332) | P0 | S1P |
-| S2b | - | dev: `clean-room` builds the environment of the distribution that owns the carried files from its `uv.lock` (`uv sync --frozen`), derives the "Measure in the room" hint from it, names the no-`.git` limit (D6; #333; `beadloom-ba9w.1` #311 closes inside) | P0 | S2a |
-| S2c | - | dev: `config-check` composes by the declared project name and names both files; one verdict in a room, a worktree and the checkout (D7; #334) | P0 | S1P |
-| S2d | - | dev: `--carry` of a path the tree no longer holds is a deletion in the room; the room reports files where the tree differs from HEAD by more than this bead's commits (D6; #335) | P0 | S1P |
+| S2a | `beadloom-3618` | dev: `rooms` reads `.github/workflows/*.yml` and `.gitlab-ci.yml` as sources of legs, each room carrying its source; distributions by `**/pyproject.toml` under `scan_paths`; a CI the census cannot read is a named skip in `ci`; `gate-coverage` reads the same sources (D6; #332) | P0 | S1P |
+| S2b | `beadloom-cptm` | dev: `clean-room` builds the environment of the distribution that owns the carried files from its `uv.lock` (`uv sync --frozen`), derives the "Measure in the room" hint from it, names the no-`.git` limit (D6; #333; `beadloom-ba9w.1` #311 closes inside) | P0 | S2a |
+| S2c | `beadloom-ixbd` | dev: `config-check` composes by the declared project name and names both files; one verdict in a room, a worktree and the checkout (D7; #334) | P0 | S1P |
+| S2d | `beadloom-flrc` | dev: `--carry` of a path the tree no longer holds is a deletion in the room; the room reports files where the tree differs from HEAD by more than this bead's commits (D6; #335) | P0 | S1P |
 | S2e | `beadloom-7pd6` | dev: a project root below the git root is refused by `init` and `doctor` in words, non-zero (D6; #325) | P0 | S1P |
-| S2f | - | dev: indexed paths written as POSIX at every write site and `source:` normalised at every match site; `doctor` names a backslash index as one to rebuild; `sync-surface.json` carries the pair list; a backslash test over the three match sites and a simulated-separator index of the fixture (D11; #353) | P0 | S1P |
-| S2g | - | dev: the composed landing fragments and the coordinator checklist state acquire → commit → release → export landed → push; the pre-push hook refuses a tree whose export holds the slot for the pushed bead; `waves` names the remedy for a slot held by a closed bead; two tests (D12; #354) | P0 | S1P |
-| S2T | - | test: each S2 entry's own `Command` on the fixture — a named room, a built environment, one `config-check` verdict in a room and the checkout; the full tree once | P0 | S2a–S2g |
-| S2R | - | review: S2, bead id only | P0 | S2T |
-| S2W | - | tech-writer: the verdict-room and wave-plan SPECs, `docs/guides/parallel-waves.md` (the room's environment and hint), the monorepo paragraph of `docs/getting-started.md`, CHANGELOG | P0 | S2R |
-| S2P | - | coordinator: S2 PR, merge on green | P0 | S2W |
+| S2f | `beadloom-27br` | dev: indexed paths written as POSIX at every write site and `source:` normalised at every match site; `doctor` names a backslash index as one to rebuild; `sync-surface.json` carries the pair list; a backslash test over the three match sites and a simulated-separator index of the fixture (D11; #353) | P0 | S1P |
+| S2g | `beadloom-89gm` | dev: the composed landing fragments and the coordinator checklist state acquire → commit → release → export landed → push; the pre-push hook refuses a tree whose export holds the slot for the pushed bead; `waves` names the remedy for a slot held by a closed bead; two tests (D12; #354) | P0 | S1P |
+| S2T | `beadloom-w2v6` | test: each S2 entry's own `Command` on the fixture — a named room, a built environment, one `config-check` verdict in a room and the checkout, one pair set under both separators, the lock's release landed before the push; the full tree once | P0 | S2a–S2g |
+| S2R | `beadloom-x94h` | review: S2, bead id only | P0 | S2T |
+| S2W | `beadloom-sc9d` | tech-writer: the verdict-room and wave-plan SPECs, `docs/guides/parallel-waves.md` (the room's environment and hint), the monorepo paragraph of `docs/getting-started.md`, CHANGELOG | P0 | S2R |
+| S2P | `beadloom-6svu` | coordinator: S2 PR, merge on green | P0 | S2W |
 | S3a | - | measure: the open entries of the Gate, CI, hooks and rooms area, each re-run by its `Command` on the S2 version; closed with evidence, filed as a bead under `beadloom-ba9w`, or put to the owner for a `Won't fix` ruling (D9) | P0 | S2P |
 | S3b | - | measure: the doc-sync and docs-audit entries, the same protocol | P0 | S2P |
 | S3c | - | measure: the rules, lint and liveness entries | P0 | S2P |

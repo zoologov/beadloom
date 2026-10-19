@@ -49,6 +49,17 @@
 | `beadloom-tlgk` | S1 fix 8 | done | `f205e95b`; the writer waits with `poll`, on a platform without it pauses 10 ms and retries; 2 tests, the descriptor-above-1024 one red first on the `select` version with CI's exact error (Darwin's limit is 1024 too: fd 1023 ok, 1024 raises); room 14671 passed + 1 of #311's class over 2951 files; tree 14718 passed / 0 failed, ruff, mypy, `ci` rc 0; Linux not measured (no docker daemon) |
 | `beadloom-kwc3` | S1R8 | done | OK 2026-10-19 at `fbad81ed`: 0 critical, 0 major, 3 minor (test strength: the waits list discarded; waiting vs spinning untested; a low hard RLIMIT_NOFILE reads as ERROR), 1 nitpick (the fd leak) → `beadloom-ba9w.19` for S3a; the old wait fails the new test with CI's error word for word; 12 of 12 in a Darwin room |
 | `beadloom-c5m5` | S1P | in progress | PR #106 squash-merged into `main` as `ab174d34` on 2026-10-19 (owner's decision with the advisory `site-e2e` red → `beadloom-ba9w.20`); required checks green |
+| `beadloom-3618` | S2a | ready | wave shape to be derived |
+| `beadloom-cptm` | S2b | blocked | blocked by its blockers in the PLAN |
+| `beadloom-ixbd` | S2c | ready | wave shape to be derived |
+| `beadloom-flrc` | S2d | ready | wave shape to be derived |
+| `beadloom-7pd6` | S2e | ready | #325, an existing bead reused |
+| `beadloom-27br` | S2f | ready | wave shape to be derived |
+| `beadloom-89gm` | S2g | ready | wave shape to be derived |
+| `beadloom-w2v6` | S2T | blocked | blocked by its blockers in the PLAN |
+| `beadloom-x94h` | S2R | blocked | blocked by its blockers in the PLAN |
+| `beadloom-sc9d` | S2W | blocked | blocked by its blockers in the PLAN |
+| `beadloom-6svu` | S2P | blocked | blocked by its blockers in the PLAN |
 
 ## Notes
 
@@ -79,4 +90,5 @@
 - PR #106 CI (2026-10-19): `tests (3.13)` on Linux failed 2 of 14669 — `console_streams._write_all` waits with `select.select`, which Linux limits to descriptors below 1024, and the suite's pipe was fd 4066; the writer that exists to survive a non-blocking pipe raised instead (the S1 class, in S1e2's own code; macOS does not reproduce it, the local tree ran green). Fix 8 `beadloom-tlgk` (poll) + review `beadloom-kwc3` before the merge; the other Python legs are expected to fail the same way.
 - Fix 8 note (2026-10-19): Darwin's `select` limit is 1024 as well, so the local green was a low descriptor number, not a platform difference; CI's writer got fd 4066, which suggests the suite leaks descriptors somewhere — an observation on `beadloom-tlgk`, unverified, for S3's Gate/CI area to measure.
 - PR #106 site-e2e (2026-10-19): 5 of 363 fail on both runs, deterministic, all layout assertions over this project's own architecture graph; the last completed site-e2e on a PR was #99 (green, 2026-10-10), #101/#102/#105 were cancelled at 45 min, so the suite was unmeasured through BDL-082's viewer work and S1's graph growth; filed as `beadloom-ba9w.20`; the job now finishes in 27–41 min.
+- S2 activation (2026-10-19): ten beads created as one plan under `beadloom-ba9w` on `features/BDL-083-S2`; `beadloom-7pd6` reused as S2e and wired as S2T's blocker; `refs:` declared by hand (#316). The S1 close-out chore was committed while `bd merge-slot acquire` had returned 1 — `check` showed the slot available right after and no agent was landing; recorded as a coordinator lapse, the exit code is read before the commit from here.
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.
