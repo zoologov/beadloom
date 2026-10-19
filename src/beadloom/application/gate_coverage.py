@@ -22,7 +22,8 @@ test legs went red on one assertion that reproduces locally in 0.07 s.
   become the stale sentence one level up — the trap ``beadloom-0mdo.42``
   measured when a derivation shipped behind a hand-written path filter.
 * *What the project verifies* comes from the project's CI pipeline, chosen by
-  :func:`beadloom.application.rooms.pipeline_sources` and read through
+  :func:`beadloom.application.pipeline_sources.pipeline_sources` -- the files
+  ``rooms.pipelines`` names, or every one present -- and read through
   :func:`beadloom.application.rooms.load_jobs` (GitHub) or
   :func:`beadloom.application.gitlab_pipeline.load_gitlab_pipeline` (GitLab) — the
   same declaration the room census reads for its legs, so one file has one reader
@@ -42,7 +43,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from beadloom.application.gitlab_pipeline import GITLAB_CI_FILE, load_gitlab_pipeline
-from beadloom.application.rooms import WORKFLOW_DIR, load_jobs, pipeline_sources
+from beadloom.application.pipeline_sources import WORKFLOW_DIR, pipeline_sources
+from beadloom.application.rooms import load_jobs
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -151,7 +153,10 @@ class GateCoverage:
     """Workflow files this report could not read, so it claims nothing from them."""
 
     inspected: int = 0
-    """Workflow files read. ``0`` with no ``unresolved`` means none exists."""
+    """Workflow files read. ``0`` with no ``unresolved`` and no ``not_read`` means none exists."""
+
+    not_read: tuple[UnreadPipeline, ...] = ()
+    """Pipeline files ``rooms.pipelines`` set aside, and names it gives with no file."""
 
 
 def derive_gate_coverage(
@@ -165,6 +170,7 @@ def derive_gate_coverage(
     """
     step_names = tuple(performed)
     declared, unresolved, inspected = _read_pipeline(project_root)
+    sources = pipeline_sources(project_root)
     covered = {
         duty.name
         for duty in DUTIES
@@ -177,6 +183,10 @@ def derive_gate_coverage(
         not_performed=not_performed,
         unresolved=unresolved,
         inspected=inspected,
+        not_read=tuple(
+            UnreadPipeline(source=n.source, why=n.why)
+            for n in sources.missing + sources.set_aside
+        ),
     )
 
 
@@ -209,6 +219,10 @@ def _empty_population(coverage: GateCoverage) -> str:
         )
     if coverage.declared:
         return "every verification this report reads is performed by a step of this run"
+    if coverage.inspected == 0 and coverage.not_read:
+        return "no pipeline file this report reads: " + "; ".join(
+            f"{item.source} — {item.why}" for item in coverage.not_read
+        )
     if coverage.inspected == 0:
         return (
             "this project declares no pipeline, so there is no verification to "

@@ -1,6 +1,6 @@
 {
   "declared_docs": 139,
-  "declared_pairs": 833,
+  "declared_pairs": 835,
   "pairs": [
     ["architecture.md", "src/beadloom/__init__.py"],
     ["architecture.md", "src/beadloom/services/__init__.py"],
@@ -77,6 +77,7 @@
     ["domains/application/README.md", "src/beadloom/application/mutation_scope/score.py"],
     ["domains/application/README.md", "src/beadloom/application/mutation_scope/survivors.py"],
     ["domains/application/README.md", "src/beadloom/application/mutation_scope/touched.py"],
+    ["domains/application/README.md", "src/beadloom/application/pipeline_sources.py"],
     ["domains/application/README.md", "src/beadloom/application/planning_report.py"],
     ["domains/application/README.md", "src/beadloom/application/reindex/change_detection.py"],
     ["domains/application/README.md", "src/beadloom/application/reindex/enrichment.py"],
@@ -172,6 +173,7 @@
     ["domains/application/components/source-derivation/DOC.md", "src/beadloom/application/source_derivation/termination.py"],
     ["domains/application/components/typed-surface/DOC.md", "src/beadloom/application/typed_surface.py"],
     ["domains/application/components/verdict-room/DOC.md", "src/beadloom/application/gitlab_pipeline.py"],
+    ["domains/application/components/verdict-room/DOC.md", "src/beadloom/application/pipeline_sources.py"],
     ["domains/application/components/verdict-room/DOC.md", "src/beadloom/application/rooms.py"],
     ["domains/application/components/work-item-routing/DOC.md", "src/beadloom/application/work_item_routing.py"],
     ["domains/application/features/ci-gate/SPEC.md", "src/beadloom/application/gate.py"],
@@ -836,5 +838,5 @@
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/lib/queryState.js"],
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/model/useUrlState.js"]
   ],
-  "recorded_at": "2026-10-19T16:07:48.320401+00:00"
+  "recorded_at": "2026-10-19T17:57:12.260575+00:00"
 }

@@ -47,15 +47,42 @@ def test_the_verifications_of_a_gitlab_pipeline_are_read(tmp_path: Path) -> None
     assert coverage.inspected == 1
 
 
-def test_a_gitlab_mirror_beside_github_workflows_is_not_read(tmp_path: Path) -> None:
-    # Arrange
-    _gitlab(tmp_path)
-    workflows = tmp_path / ".github" / "workflows"
+def _mypy_workflow(root: Path) -> None:
+    workflows = root / ".github" / "workflows"
     workflows.mkdir(parents=True)
     (workflows / "ci.yml").write_text(
         "jobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: uv run mypy src\n",
         encoding="utf-8",
     )
+
+
+def _declare_pipelines(root: Path, pipelines: str) -> None:
+    (root / ".beadloom").mkdir(exist_ok=True)
+    (root / ".beadloom" / "config.yml").write_text(
+        f"rooms:\n  pipelines: {pipelines}\n", encoding="utf-8"
+    )
+
+
+def test_with_no_declaration_both_pipelines_are_read(tmp_path: Path) -> None:
+    # Arrange: the GitHub-first ordering S2a shipped is withdrawn (RFC D6, 2026-10-19).
+    _gitlab(tmp_path)
+    _mypy_workflow(tmp_path)
+
+    # Act
+    coverage = derive_gate_coverage(tmp_path, performed=[])
+
+    # Assert
+    sources = {v.source for v in coverage.declared}
+    assert ".github/workflows/ci.yml: t" in sources
+    assert ".gitlab-ci.yml: backend-tests" in sources
+    assert coverage.inspected == 2
+
+
+def test_a_gitlab_mirror_the_declaration_leaves_out_is_not_read(tmp_path: Path) -> None:
+    # Arrange
+    _gitlab(tmp_path)
+    _mypy_workflow(tmp_path)
+    _declare_pipelines(tmp_path, "[github]")
 
     # Act
     coverage = derive_gate_coverage(tmp_path, performed=[])
@@ -63,6 +90,19 @@ def test_a_gitlab_mirror_beside_github_workflows_is_not_read(tmp_path: Path) -> 
     # Assert
     assert [v.source for v in coverage.declared] == [".github/workflows/ci.yml: t"]
     assert coverage.inspected == 1
+
+
+def test_a_pipeline_set_aside_by_the_key_is_named_not_reported_absent(tmp_path: Path) -> None:
+    # Arrange
+    _gitlab(tmp_path)
+    _declare_pipelines(tmp_path, "[github]")
+
+    # Act
+    lines = gate_coverage_lines(derive_gate_coverage(tmp_path, performed=[]))
+
+    # Assert
+    assert "`rooms.pipelines`" in lines[1]
+    assert "there is no .gitlab-ci.yml" not in lines[1]
 
 
 def test_an_unreadable_gitlab_pipeline_is_unresolved(tmp_path: Path) -> None:

@@ -280,7 +280,14 @@ class TestTheLegsAPipelineDeclares:
             (".gitlab-ci.yml: backend-tests", ("dev",))
         ]
 
-    def test_a_gitlab_pipeline_beside_github_workflows_is_set_aside(self, tmp_path: Path) -> None:
+    def test_a_gitlab_pipeline_beside_github_workflows_is_set_aside_when_declared(
+        self, tmp_path: Path
+    ) -> None:
+        # The owner's ruling of 2026-10-19 (RFC D6, S2F1): the pipeline read is declared.
+        (tmp_path / ".beadloom").mkdir()
+        (tmp_path / ".beadloom" / "config.yml").write_text(
+            "rooms:\n  pipelines: [github]\n", encoding="utf-8"
+        )
         (tmp_path / ".gitlab-ci.yml").write_text(
             "t:\n  image: python:3.12\n  script:\n    - uv sync --extra gl\n",
             encoding="utf-8",

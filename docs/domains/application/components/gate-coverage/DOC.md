@@ -34,7 +34,7 @@ stops being true.
 | Side | Read from | Goes stale when |
 |------|-----------|-----------------|
 | what this run performed | the run's own `GateStep` names, plus any verification the caller ran beside it | never — a suite step added to the gate removes the line by the same act |
-| what the project verifies | the files `rooms.pipeline_sources` chooses: `.github/workflows/*.yml` through `rooms.load_jobs`, else `.gitlab-ci.yml` through `gitlab_pipeline.load_gitlab_pipeline` | never — a job added to the pipeline is read on the next run |
+| what the project verifies | the files `pipeline_sources.pipeline_sources` returns — the ones `rooms.pipelines` names, or every one present: `.github/workflows/*.yml` through `rooms.load_jobs`, `.gitlab-ci.yml` through `gitlab_pipeline.load_gitlab_pipeline` | never — a job added to the pipeline is read on the next run |
 
 A hand-written sentence ("this gate does not run pytest") is the defect one level up:
 `beadloom-0mdo.42` measured that trap when a derivation shipped behind a hand-written
@@ -76,7 +76,7 @@ epic has shipped for an empty typed surface (`NOTHING TO CHECK`), an unowned pat
 compared`), an unresolvable write target (`not_covered`) and a guard that cannot evaluate
 itself (`unresolved`).
 
-Four statements, one of which every run makes:
+Six statements, one of which every run makes:
 
 | Situation | What the report says |
 |-----------|----------------------|
@@ -85,6 +85,7 @@ Four statements, one of which every run makes:
 | workflows exist and declare none it reads | the count of files read, the tools it recognises, and that another name is not claimed about |
 | a workflow could not be parsed | the file and the reason, and no claim about what was not run |
 | no workflow and no `.gitlab-ci.yml` exists | `this project declares no pipeline` |
+| `rooms.pipelines` leaves the report no file to read: every present file set aside, or the named one absent | `no pipeline file this report reads:` and each file with the key's sentence (`GateCoverage.not_read`) |
 
 A GitLab job's `before_script`, `script` and `after_script` lines are read as one block of shell
 lines, so `cd backend && uv run pytest tests` performs the test suite (BDL-083 S2a, BDL-UX #332).

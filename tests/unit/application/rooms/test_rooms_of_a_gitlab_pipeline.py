@@ -99,13 +99,36 @@ class TestAGitlabJobIsARoom:
         assert ".gitlab-ci.yml" in sources
         assert ".gitlab-ci.yml: tests" in sources
 
-    def test_with_both_hosts_declared_the_github_legs_are_read_and_gitlab_is_named(
+    def test_with_both_hosts_and_no_declaration_both_sets_of_legs_are_read(
+        self, tmp_path: Path
+    ) -> None:
+        # Arrange: S2a read GitHub first and set this file aside; the owner's ruling of
+        # 2026-10-19 (RFC D6, S2F1) withdrew that ordering -- which pipeline is read is
+        # declared under `rooms.pipelines`, and with no key every file present is read.
+        _gitlab(tmp_path, _BACKEND_JOB)
+        _github(tmp_path, "jobs:\n  build:\n    runs-on: ubuntu-latest\n    steps: []\n")
+
+        # Act
+        declared = derive_declared_rooms(tmp_path)
+
+        # Assert
+        assert [room.source for room in declared.rooms] == [
+            ".github/workflows/ci.yml: build",
+            ".gitlab-ci.yml: backend-tests",
+        ]
+        assert not [entry for entry in declared.unresolved if entry.source == ".gitlab-ci.yml"]
+
+    def test_a_declaration_of_github_sets_the_gitlab_file_aside_naming_the_key(
         self, tmp_path: Path
     ) -> None:
         # Arrange: a project on one forge that keeps a mirror pipeline for the other, as
-        # this repository does -- reading both would add legs no run of it ever took.
+        # this repository does, and says so in its config.
         _gitlab(tmp_path, _BACKEND_JOB)
         _github(tmp_path, "jobs:\n  build:\n    runs-on: ubuntu-latest\n    steps: []\n")
+        (tmp_path / ".beadloom").mkdir()
+        (tmp_path / ".beadloom" / "config.yml").write_text(
+            "rooms:\n  pipelines: [github]\n", encoding="utf-8"
+        )
 
         # Act
         declared = derive_declared_rooms(tmp_path)
@@ -115,7 +138,25 @@ class TestAGitlabJobIsARoom:
         set_aside = [entry for entry in declared.unresolved if entry.source == ".gitlab-ci.yml"]
         assert len(set_aside) == 1
         assert "not read" in set_aside[0].why
-        assert ".github/workflows" in set_aside[0].why
+        assert "`rooms.pipelines`" in set_aside[0].why
+
+    def test_a_declared_pipeline_with_no_file_is_not_derived_with_the_key_named(
+        self, tmp_path: Path
+    ) -> None:
+        # Arrange
+        _github(tmp_path, "jobs:\n  build:\n    runs-on: ubuntu-latest\n    steps: []\n")
+        (tmp_path / ".beadloom").mkdir()
+        (tmp_path / ".beadloom" / "config.yml").write_text(
+            "rooms:\n  pipelines: [gitlab]\n", encoding="utf-8"
+        )
+
+        # Act
+        census = take_census(tmp_path)
+
+        # Assert
+        assert census.not_derived is not None
+        assert "`rooms.pipelines` names `gitlab`" in census.not_derived
+        assert "no `.github/workflows/*.yml` and no" not in census.not_derived
 
     def test_a_run_outside_the_image_does_not_enter_it_and_says_why(self, tmp_path: Path) -> None:
         # Arrange
@@ -205,8 +246,8 @@ class TestThePipelineSourcesAreChosenOnce:
         assert sources.gitlab == tmp_path / ".gitlab-ci.yml"
         assert sources.set_aside == ()
 
-    def test_github_workflows_take_precedence_over_a_gitlab_mirror(self, tmp_path: Path) -> None:
-        # Arrange
+    def test_with_no_declaration_both_hosts_are_read(self, tmp_path: Path) -> None:
+        # Arrange: the GitHub-first ordering S2a shipped is withdrawn (RFC D6, 2026-10-19).
         _gitlab(tmp_path, _BACKEND_JOB)
         _github(tmp_path, "jobs: {}\n")
 
@@ -215,8 +256,8 @@ class TestThePipelineSourcesAreChosenOnce:
 
         # Assert
         assert [path.name for path in sources.workflows] == ["ci.yml"]
-        assert sources.gitlab is None
-        assert [entry.source for entry in sources.set_aside] == [".gitlab-ci.yml"]
+        assert sources.gitlab == tmp_path / ".gitlab-ci.yml"
+        assert sources.set_aside == ()
 
     def test_no_pipeline_is_no_source(self, tmp_path: Path) -> None:
         # Act

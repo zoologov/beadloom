@@ -56,12 +56,14 @@ from beadloom.application.gitlab_pipeline import (
     load_gitlab_pipeline,
     python_of_image,
 )
+from beadloom.application.pipeline_sources import WORKFLOW_DIR, pipeline_sources
 from beadloom.infrastructure.python_projects import census_packaging
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
     from beadloom.application.gitlab_pipeline import GitlabJob
+    from beadloom.application.pipeline_sources import PipelineSources
 
 #: Runner-label families and the platform each names. A VOCABULARY, not a room
 #: list: it translates the names GitHub gives its images into what
@@ -95,11 +97,6 @@ _MATRIX_EXPRESSION_RE = re.compile(r"^\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}$"
 
 #: ``${{ anything }}`` — an expression this report cannot resolve.
 _ANY_EXPRESSION_RE = re.compile(r"\$\{\{(.+?)\}\}")
-
-#: Where a project declares its pipeline. Public because two derivations read
-#: one declaration: this module's rooms, and the verifications a gate run did
-#: not perform (:mod:`beadloom.application.gate_coverage`).
-WORKFLOW_DIR = Path(".github") / "workflows"
 
 #: The dimension a GitLab leg's container image is reported under. No run can describe
 #: it, so a leg that carries it is never entered: a run on the host is not a run in the
@@ -221,27 +218,6 @@ class UnresolvedRoom:
 
     source: str
     why: str
-
-
-@dataclass(frozen=True)
-class PipelineSources:
-    """The pipeline files a census reads its legs from, and a declared one it set aside.
-
-    One project runs on one forge. A project keeping a mirror pipeline for the other
-    host -- this repository keeps a ``.gitlab-ci.yml`` beside ``.github/workflows`` --
-    would otherwise report legs no run of it ever took, so the GitHub workflows take
-    precedence and the GitLab file is read when they are absent. What was set aside is
-    named, so the choice is visible and not a silence.
-    """
-
-    workflows: tuple[Path, ...] = ()
-    gitlab: Path | None = None
-    set_aside: tuple[UnresolvedRoom, ...] = ()
-
-    @property
-    def declared(self) -> bool:
-        """Whether the project declares a pipeline this census reads, read or set aside."""
-        return bool(self.workflows) or self.gitlab is not None
 
 
 @dataclass(frozen=True)
@@ -488,8 +464,12 @@ def derive_declared_rooms(project_root: Path) -> DeclaredRooms:
     github_rooms, github_unresolved = _read_workflows(project_root, extras.distribution)
     gitlab_rooms, gitlab_unresolved = _read_gitlab(project_root, extras.distribution)
     rooms = github_rooms + gitlab_rooms
-    pipeline_unresolved = [*github_unresolved, *gitlab_unresolved, *sources.set_aside]
-    if not sources.declared:
+    pipeline_unresolved = [
+        *github_unresolved,
+        *gitlab_unresolved,
+        *(UnresolvedRoom(source=note.source, why=note.why) for note in sources.notes),
+    ]
+    if not sources.declared and not sources.missing and not sources.set_aside:
         pipeline_unresolved.append(
             UnresolvedRoom(
                 source=f"{WORKFLOW_DIR.as_posix()}, {GITLAB_CI_FILE}",
@@ -510,41 +490,18 @@ def derive_declared_rooms(project_root: Path) -> DeclaredRooms:
         supported=supported,
         floor=floor,
         extras=extras,
-        not_derived=None if rooms else _not_derived(project_root, pipeline_unresolved),
+        not_derived=None if rooms else _not_derived(project_root, sources, pipeline_unresolved),
     )
 
 
-def pipeline_sources(project_root: Path) -> PipelineSources:
-    """The pipeline files this project's legs are read from, chosen once for every reader.
-
-    Public because two derivations read one declaration: the rooms here, and the
-    verifications a gate run did not perform (:mod:`beadloom.application.gate_coverage`).
-    """
-    directory = project_root / WORKFLOW_DIR
-    workflows = tuple(sorted(p for p in directory.glob("*.y*ml") if p.is_file()))
-    gitlab = project_root / GITLAB_CI_FILE
-    if not gitlab.is_file():
-        return PipelineSources(workflows=workflows)
-    if not workflows:
-        return PipelineSources(gitlab=gitlab)
-    return PipelineSources(
-        workflows=workflows,
-        set_aside=(
-            UnresolvedRoom(
-                source=GITLAB_CI_FILE,
-                why=(
-                    f"not read: `{WORKFLOW_DIR.as_posix()}` also declares this project's "
-                    "pipeline and takes precedence, so the GitLab jobs are not among the "
-                    "legs reported here"
-                ),
-            ),
-        ),
-    )
-
-
-def _not_derived(project_root: Path, unresolved: list[UnresolvedRoom]) -> str:
+def _not_derived(
+    project_root: Path, sources: PipelineSources, unresolved: list[UnresolvedRoom]
+) -> str:
     """Why a census derived no room: the reason a surface prints instead of ``0 of 0``."""
-    if not pipeline_sources(project_root).declared:
+    declared = sources.missing + sources.set_aside
+    if not sources.declared and declared:
+        return f"no readable pipeline: {'; '.join(note.why for note in declared)}"
+    if not sources.declared:
         reason = (
             f"no readable pipeline: no `{WORKFLOW_DIR.as_posix()}/*.yml` and no "
             f"`{GITLAB_CI_FILE}`"
@@ -554,10 +511,10 @@ def _not_derived(project_root: Path, unresolved: list[UnresolvedRoom]) -> str:
             named = ", ".join(f"`{name}`" for name in unread)
             reason += f"; the pipeline is declared in {named}, which this census does not read"
         return reason
-    sources = sorted({entry.source for entry in unresolved})
-    if not sources:
+    unread_sources = sorted({entry.source for entry in unresolved})
+    if not unread_sources:
         return "no readable pipeline: the pipeline files declare no job"
-    return f"no readable pipeline: no leg could be read from {', '.join(sources)}"
+    return f"no readable pipeline: no leg could be read from {', '.join(unread_sources)}"
 
 
 def _read_packaging(

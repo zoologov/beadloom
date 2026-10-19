@@ -4,7 +4,8 @@ The rooms a verdict can be taken in: the one this run is in, the ones the projec
 the ones the run did not enter.
 
 **Source:** `src/beadloom/application/rooms.py`, with `src/beadloom/application/gitlab_pipeline.py`
-(the GitLab reader) beside it
+(the GitLab reader) and `src/beadloom/application/pipeline_sources.py` (which pipeline files are
+read) beside it
 
 ---
 
@@ -52,12 +53,17 @@ printed `0 of 0 declared room(s)`. Three rules replace that:
   holds one is read as before; otherwise the first project found is read, the others are named
   in an unresolved entry, and every entry about the packaging names its file
   (`backend/pyproject.toml`).
-- **The pipeline files are chosen once, by `pipeline_sources()`.** The GitHub workflows take
-  precedence and `.gitlab-ci.yml` is read when they are absent. A project keeping a mirror for
-  the other host is set aside by name, because one project runs on one forge: this repository
-  keeps a `.gitlab-ci.yml` beside `.github/workflows`, and reading both would have added three
-  rooms no run of it ever took (33 measured before and after). `gate-coverage` takes its files
-  from the same function.
+- **The pipeline files are declared, and chosen once by `pipeline_sources()`** (RFC D6 as
+  amended on 2026-10-19; BDL-083 S2F1). `.beadloom/config.yml` carries `rooms.pipelines`, a
+  list of `github` and/or `gitlab`. Unset, every pipeline file the tree holds is read, each
+  room carrying its source. Set, the named ones only: a present file the key leaves out is an
+  unresolved entry that names the key, and a name with no file in the tree is an unresolved
+  entry as well, never an error. A name outside the vocabulary, a value that is not a list and
+  a key `rooms:` does not read are refused by name; a value that is not a list leaves the
+  census reading every file present. The GitHub-first ordering S2a shipped is withdrawn. This
+  repository declares `[github]`, because its `.gitlab-ci.yml` is the BDL-050 mirror no run
+  takes: 33 rooms with the key and 36 without it, measured on 2026-10-19. `gate-coverage` takes
+  its files from the same function, so the key governs it too.
 - **A census that derived no room says why.** `RoomCensus.not_derived` carries the reason —
   `no readable pipeline: …`, naming a `Jenkinsfile` or another pipeline from `UNREAD_PIPELINES`
   when one is there — and every surface prints `rooms: not derived — <reason>` instead of a
@@ -136,8 +142,8 @@ record would state the extras of an environment no verdict was taken in.
 
 **And the typed names are a second, different answer.** `typed_extras_of_job(job)` returns what
 a leg's install step NAMES, before the satisfied set is computed from it, and
-`leg_installs(project_root)` is that read over every job of the pipeline `pipeline_sources`
-chooses — the GitHub workflows, or `.gitlab-ci.yml` where they are absent — so a room in a GitLab
+`leg_installs(project_root)` is that read over every job of the pipeline files `pipeline_sources`
+returns — the ones `rooms.pipelines` names, or every one present — so a room in a GitLab
 monorepo finds the job that installs its project (BDL-083 S2b, BDL-UX #333). The census needs
 the satisfied set so two identical environments are not reported as two rooms; a room BUILDER
 needs the typed names, because an install command takes names and not a satisfied set — and it
@@ -238,7 +244,9 @@ was derived, the reason otherwise (BDL-083 S2a). `--dimension` on a census that 
 exits 2 with the reason.
 
 `WORKFLOW_DIR`, `load_jobs(path)` and `pipeline_sources(project_root)` are public rather than
-private (BDL-068 S6, BDL-083 S2a): `gate-coverage`
+private (BDL-068 S6, BDL-083 S2a). Since S2F1 the first and the last live in `pipeline_sources.py`
+and `rooms` imports them, so `rooms.WORKFLOW_DIR` and `rooms.pipeline_sources` still resolve:
+`gate-coverage`
 reads the same workflow declaration for a different question — which verifications a gate run did
 not perform — and one reader means one wording for "this workflow could not be parsed" instead of
 two that can drift apart.
