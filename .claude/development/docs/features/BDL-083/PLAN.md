@@ -87,8 +87,10 @@ Parent: `beadloom-ba9w`.
 | S1R6 | `beadloom-sywb` | review: fix 6, bead id only | P0 | S1F6 |
 | S1F7 | `beadloom-kdx7` | dev: `placement` a token with the sentence beside it; the `complete_bead` tool description points at the verdict | P0 | S1R6 |
 | S1R7 | `beadloom-mnln` | review: fix 7, bead id only | P0 | S1F7 |
+| S1F8 | `beadloom-tlgk` | dev: the pipe-safe writer waits for room with `poll`, not `select` (Linux FD_SETSIZE); a test over a descriptor >= 1024 | P0 | S1P (CI) |
+| S1R8 | `beadloom-kwc3` | review: fix 8, bead id only | P0 | S1F8 |
 | S1W | `beadloom-hfxv` | tech-writer: the ci-gate and rule-engine SPECs, `docs/guides/ci-setup.md` (the hook's new behaviour), `docs/guides/public-api.md` (the MAJOR moves), CHANGELOG | P0 | S1R, S1R6, S1R7 |
-| S1P | `beadloom-c5m5` | coordinator: S1 PR, merge on green | P0 | S1W |
+| S1P | `beadloom-c5m5` | coordinator: S1 PR, merge on green | P0 | S1W, S1R8 |
 | S2a | - | dev: `rooms` reads `.github/workflows/*.yml` and `.gitlab-ci.yml` as sources of legs, each room carrying its source; distributions by `**/pyproject.toml` under `scan_paths`; a CI the census cannot read is a named skip in `ci`; `gate-coverage` reads the same sources (D6; #332) | P0 | S1P |
 | S2b | - | dev: `clean-room` builds the environment of the distribution that owns the carried files from its `uv.lock` (`uv sync --frozen`), derives the "Measure in the room" hint from it, names the no-`.git` limit (D6; #333; `beadloom-ba9w.1` #311 closes inside) | P0 | S2a |
 | S2c | - | dev: `config-check` composes by the declared project name and names both files; one verdict in a room, a worktree and the checkout (D7; #334) | P0 | S1P |

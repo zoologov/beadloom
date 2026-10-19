@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** S1P — `beadloom-c5m5`: the combined tree measured, push, PR, merge on green
-**Goal:** S1 on `main`
-**Done when:** the PR merged with CI green; S1 beads closed; the documents' S1 state recorded
+**Bead:** S1 fix 8 — `beadloom-tlgk` (the writer's wait primitive), then its review `beadloom-kwc3`, then the PR #106 merge (`beadloom-c5m5`)
+**Goal:** the CI failure on Linux closed by a fix, not a re-run
+**Done when:** fix 8 green on two levels and committed; its review OK; pushed; PR #106 CI green; merged
 
 ## Progress
 
@@ -46,7 +46,9 @@
 | `beadloom-kdx7` | S1 fix 7 | done | `5ed74aac` + `dca00751`; `placement` takes `outside_final` / `unread_final`, the sentence beside it as `stated`, the vocabulary in `mcp.md` and the ci-gate docs; the `complete_bead` tool description points at the verdict; 8 tests red first; the DOC example fenced after `test_site_markdown_compiles` went red; room 14669 passed + 1 of #311's class over 2950 files; tree 14716 passed / 0 failed, ruff, mypy, `ci` rc 0 |
 | `beadloom-mnln` | S1R7 | done | OK 2026-10-19 at `6a6c7fc4`: 0 critical, 0 major, 2 minor (both docs → S1W: `mcp.md:362` mangled sentence; the Gate step-list copies incl. `mcp.md:351`), 3 nitpicks; 138 touched tests on the tree, 8 red on the pre-fix source |
 | `beadloom-hfxv` | S1W | done | `a883cccb`; CHANGELOG (MAJOR, Breaking with measurements), 12 docs, the surface 815 → 826; sync-check 0 stale / 0 surface-drift; `ci` rc 0 on the tree; doc-shape tests 2836 passed; two Breaking moves added to the RFC's Public API list (MCP `unowned` gone; `config-check` 0 → 1 on pre-release role files); left for code: `ci --help`, the `ai_techwriter` templates and the two workflow step-list comments, `ruff format` on two MCP files |
-| `beadloom-c5m5` | S1P | in progress | the combined tree measured by the coordinator at `a883cccb`; then push, PR, merge on green |
+| `beadloom-tlgk` | S1 fix 8 | ready | the pipe-safe writer waits for room with `poll`, not `select` (Linux FD_SETSIZE 1024; CI fd 4066); a red-first test over a descriptor >= 1024 |
+| `beadloom-kwc3` | S1R8 | blocked | review of fix 8, bead id only; blocks the PR merge |
+| `beadloom-c5m5` | S1P | in progress | PR #106 open at `daeca647`; CI: gate, site-build, mutation-per-change, both locale legs and the adopter legs green; `tests (3.13)` red on Linux: 2 tests of `console_streams` raise `ValueError: filedescriptor out of range in select()` (fd 4066) → fix 8; merge after the fix lands and CI is green |
 
 ## Notes
 
@@ -74,4 +76,5 @@
 - S1W doc list (consolidated 2026-10-19 from the review passes and the fix beads): the ci-gate SPEC (the hook's behaviour, `ERROR`, `room`/`not_run` as `{reason}`, `unread_bead_lines` tokens, the line still saying the base defaults to `trunk_ref`); the rule-engine SPEC (`nothing_to_ban` at info, the `looks unable to fire` headline); `docs/guides/ci-setup.md` (pre-push fails without `beadloom`, the verdict from the tee copy, pre-commit `lint --staged`, the ci JSON shape, line 145 statuses + `ERROR`); `docs/guides/public-api.md` item 4 (MCP keys `not_run_reason`, `room.reason`, `unread_bead_lines` + `placement` vocabulary) and item 5 (`info`, `nothing_to_ban`); CHANGELOG (MAJOR: the three measured moves + the `scope_base` move + D10 + the new keys + the liveness headline + the misplaced-line sentence; adopters re-run `install-hooks` and `setup-agentic-flow`); `docs/services/cli.md` (:3374; the ownership paragraph near :3040); `docs/services/mcp.md` (:351 step list, :362, the `complete_bead` paragraph); `docs/architecture.md`; the ten CLI-surface drift docs (`testing.md`, `bdd-scenarios.md`, `parallel-waves.md`, …); the declared surface re-recorded (815 → 826). Not for S1W (code): `ci --help` wording ("every step of the Gate"); the step list in the `ai_techwriter` workflow templates under `src/`; `ruff format` on the two MCP files — S3's rules area.
 - 2026-10-19: BDL-UX #354 (a merge-slot release after the push leaves the trunk exporting a closed bead's hold; the next clone's acquire is refused) from the first outside adopter's second clone, taken into this epic by the owner as S2g, RFC D12; the entry anonymised before it was committed.
 - S1P combined tree (coordinator, 2026-10-19, HEAD `06e32924`): `beadloom ci` rc 0; the full suite 14716 passed, 145 skipped, 13 xfailed, 0 failed (23 min, Darwin arm64). Pushed; the PR opened from this state.
+- PR #106 CI (2026-10-19): `tests (3.13)` on Linux failed 2 of 14669 — `console_streams._write_all` waits with `select.select`, which Linux limits to descriptors below 1024, and the suite's pipe was fd 4066; the writer that exists to survive a non-blocking pipe raised instead (the S1 class, in S1e2's own code; macOS does not reproduce it, the local tree ran green). Fix 8 `beadloom-tlgk` (poll) + review `beadloom-kwc3` before the merge; the other Python legs are expected to fail the same way.
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.
