@@ -16,7 +16,7 @@ from click.testing import CliRunner
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.services.cli import main
-from tests.support.monorepo_fixture import monorepo_checkout
+from tests.support.shipped_monorepo import shipped_monorepo_checkout
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -37,7 +37,7 @@ def state() -> dict[str, Any]:
 
 @given("the monorepo fixture indexed")
 def _indexed(tmp_path: Path, state: dict[str, Any]) -> None:
-    root = monorepo_checkout(tmp_path)
+    root = shipped_monorepo_checkout(tmp_path)
     result = CliRunner().invoke(main, ["reindex", "--project", str(root)])
     assert result.exit_code == 0, result.output
     state["root"] = root

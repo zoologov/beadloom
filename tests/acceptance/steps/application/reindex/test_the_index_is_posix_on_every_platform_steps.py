@@ -19,7 +19,7 @@ from click.testing import CliRunner
 from pytest_bdd import given, scenarios, then, when
 
 from beadloom.services.cli import main
-from tests.support.monorepo_fixture import monorepo_checkout
+from tests.support.shipped_monorepo import shipped_monorepo_checkout
 from tests.support.windows_separator import spell_relative_paths_as_windows
 
 if TYPE_CHECKING:
@@ -57,13 +57,13 @@ def _declared_pairs(report: dict[str, Any]) -> set[tuple[str, str]]:
 
 @given("the monorepo fixture indexed and sync-checked on this platform")
 def _first(tmp_path: Path, state: dict[str, Any]) -> None:
-    state["first"] = _index_and_check(monorepo_checkout(tmp_path / "posix"))
+    state["first"] = _index_and_check(shipped_monorepo_checkout(tmp_path / "posix"))
     assert _declared_pairs(state["first"]), "the fixture declares pairs to compare"
 
 
 @given("a second checkout of it on which a relative path prints with a backslash")
 def _second(tmp_path: Path, state: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-    state["root"] = monorepo_checkout(tmp_path / "windows")
+    state["root"] = shipped_monorepo_checkout(tmp_path / "windows")
     spell_relative_paths_as_windows(monkeypatch)
     probe = state["root"] / "backend" / "src"
     assert str(probe.relative_to(state["root"])) == "backend\\src", "the simulation is on"

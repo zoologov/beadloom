@@ -19,7 +19,7 @@ from pytest_bdd import given, scenarios, then, when
 from beadloom.application.gate import run_ci_gate
 from beadloom.doc_sync.surface_ledger import read_ledger
 from beadloom.services.cli import main
-from tests.support.monorepo_fixture import monorepo_checkout
+from tests.support.shipped_monorepo import shipped_monorepo_checkout
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -48,7 +48,7 @@ def _invoke(*args: str) -> str:
 
 @given("the monorepo fixture indexed with its declared surface recorded")
 def _recorded(tmp_path: Path, state: dict[str, Any]) -> None:
-    root = monorepo_checkout(tmp_path)
+    root = shipped_monorepo_checkout(tmp_path)
     _invoke("reindex", "--project", str(root))
     _invoke("sync-check", "--record-surface", "--project", str(root))
     state["root"] = root
