@@ -78,6 +78,6 @@ and `archive/BDL-UX-Issues-closed.md`, `.claude/development/BDL-UX-Issues/` (the
 
 ## Current Phase
 
-- **Phase:** Planning (CONTEXT and PLAN drafted 2026-10-18, awaiting the owner)
+- **Phase:** Development — S1 merged into `main` as `ab174d34` on 2026-10-19 (PR #106); S2 next on `features/BDL-083-S2`
 - **Current bead:** see ACTIVE.md
 - **Blockers:** none

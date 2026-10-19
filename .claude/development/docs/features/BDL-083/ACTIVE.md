@@ -1,22 +1,22 @@
 # ACTIVE: BDL-083 — Debt to zero
 
 > **Last updated:** 2026-10-19
-> **Phase:** Development — S1 the gates that lie
+> **Phase:** Planning — S2 the monorepo on GitLab (S1 merged 2026-10-19)
 
 ---
 
 ## Current Bead
 
-**Bead:** S1P — `beadloom-c5m5`: PR #106 CI re-run after fix 8; merge on green
-**Goal:** S1 on `main`
-**Done when:** the PR merged with CI green; the S1 beads closed; the documents' S1 state recorded
+**Bead:** S2 activation — the S2 beads (S2a–S2g, S2T, S2R, S2W, S2P) created from the PLAN's rows on branch `features/BDL-083-S2`, the wave shape derived by `beadloom waves`
+**Goal:** S2 — the monorepo on GitLab: rooms from two sources, the room's environment, `config-check`, carry deletions, the nested-root refusal, POSIX paths (D11), the lock's release before the push (D12)
+**Done when:** the beads exist with `refs:`, the first wave launched
 
 ## Progress
 
 - [x] Step 1: `/task-init` — axes derived (eight targets, 406 rows ruled in the RFC), PRD, RFC, CONTEXT and PLAN approved by the owner on 2026-10-18
 - [x] Step 2: S1 beads created as one plan; `beadloom-ba9w.13` and `beadloom-jwfc` wired in as S1e and S1e2
 - [x] Step 3: S1 — the fixture landed (`14d89ecb`, 2026-10-18); the seven dev beads in the six waves `beadloom waves` derived: S1f → S1a → S1c → S1e + S1b → S1d → S1e2, all landed 2026-10-18 (`ba8ce1f4`, `32197286`, `9780e302`, `c275db19`, `fedf52e9`, `dea426eb`, `d1b7e520`)
-- [ ] Step 4: S1 test, review, tech-writer, PR, merge on green
+- [x] Step 4: S1 — test `546a1c70`; review in three passes with eight fix beads; docs `a883cccb`; PR #106 merged into `main` as `ab174d34` on 2026-10-19
 - [ ] Step 5: S2 beads created; S2 — the monorepo on GitLab
 - [ ] Step 6: S3 beads created; S3 — the re-measurement; the S4–S7 sections put to the owner
 - [ ] Step 7: S4–S7, one PR each
@@ -48,7 +48,7 @@
 | `beadloom-hfxv` | S1W | done | `a883cccb`; CHANGELOG (MAJOR, Breaking with measurements), 12 docs, the surface 815 → 826; sync-check 0 stale / 0 surface-drift; `ci` rc 0 on the tree; doc-shape tests 2836 passed; two Breaking moves added to the RFC's Public API list (MCP `unowned` gone; `config-check` 0 → 1 on pre-release role files); left for code: `ci --help`, the `ai_techwriter` templates and the two workflow step-list comments, `ruff format` on two MCP files |
 | `beadloom-tlgk` | S1 fix 8 | done | `f205e95b`; the writer waits with `poll`, on a platform without it pauses 10 ms and retries; 2 tests, the descriptor-above-1024 one red first on the `select` version with CI's exact error (Darwin's limit is 1024 too: fd 1023 ok, 1024 raises); room 14671 passed + 1 of #311's class over 2951 files; tree 14718 passed / 0 failed, ruff, mypy, `ci` rc 0; Linux not measured (no docker daemon) |
 | `beadloom-kwc3` | S1R8 | done | OK 2026-10-19 at `fbad81ed`: 0 critical, 0 major, 3 minor (test strength: the waits list discarded; waiting vs spinning untested; a low hard RLIMIT_NOFILE reads as ERROR), 1 nitpick (the fd leak) → `beadloom-ba9w.19` for S3a; the old wait fails the new test with CI's error word for word; 12 of 12 in a Darwin room |
-| `beadloom-c5m5` | S1P | in progress | PR #106; fix 8 pushed at `fbad81ed`+; CI re-running; merge on green |
+| `beadloom-c5m5` | S1P | in progress | PR #106 squash-merged into `main` as `ab174d34` on 2026-10-19 (owner's decision with the advisory `site-e2e` red → `beadloom-ba9w.20`); required checks green |
 
 ## Notes
 
@@ -78,4 +78,5 @@
 - S1P combined tree (coordinator, 2026-10-19, HEAD `06e32924`): `beadloom ci` rc 0; the full suite 14716 passed, 145 skipped, 13 xfailed, 0 failed (23 min, Darwin arm64). Pushed; the PR opened from this state.
 - PR #106 CI (2026-10-19): `tests (3.13)` on Linux failed 2 of 14669 — `console_streams._write_all` waits with `select.select`, which Linux limits to descriptors below 1024, and the suite's pipe was fd 4066; the writer that exists to survive a non-blocking pipe raised instead (the S1 class, in S1e2's own code; macOS does not reproduce it, the local tree ran green). Fix 8 `beadloom-tlgk` (poll) + review `beadloom-kwc3` before the merge; the other Python legs are expected to fail the same way.
 - Fix 8 note (2026-10-19): Darwin's `select` limit is 1024 as well, so the local green was a low descriptor number, not a platform difference; CI's writer got fd 4066, which suggests the suite leaks descriptors somewhere — an observation on `beadloom-tlgk`, unverified, for S3's Gate/CI area to measure.
+- PR #106 site-e2e (2026-10-19): 5 of 363 fail on both runs, deterministic, all layout assertions over this project's own architecture graph; the last completed site-e2e on a PR was #99 (green, 2026-10-10), #101/#102/#105 were cancelled at 45 min, so the suite was unmeasured through BDL-082's viewer work and S1's graph growth; filed as `beadloom-ba9w.20`; the job now finishes in 27–41 min.
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.
