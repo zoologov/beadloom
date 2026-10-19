@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** S2 wave 5 — `beadloom-ba9w.22` (S2F1: the pipeline files the census reads are declared under `rooms.pipelines`)
-**Goal:** D6 as amended; unset reads every file present; an excluded present file set aside naming the key; this repository declares `[github]` and keeps 33 rooms
-**Done when:** three tests red first, green on two levels, committed with the trailer, the combined tree green by the gate owner
+**Bead:** S2 wave 6 — `beadloom-ybxm` (S2h: the Cursor composition reads the same flow, D13, #356)
+**Goal:** `.cursor/rules/` carries the core, the project layer, the STACK overlay and the four commands as `alwaysApply` rules; `config-check` names a missing layer and no false missing file; portable MCP command; absolute plan path
+**Done when:** tests red first, green on two levels, committed with the trailer, the combined tree green by the gate owner
 
 ## Progress
 
@@ -54,8 +54,8 @@
 | `beadloom-ixbd` | S2c | ready | wave shape to be derived |
 | `beadloom-flrc` | S2d | ready | wave shape to be derived |
 | `beadloom-7pd6` | S2e | ✓ done | `17102216` (30 files, 27 tests red first); fixture below its git root: `sync-check --since` 0 → 1, `doctor` 0 → 1, `init` 0 → 1 in every mode; tree green at `17102216` (14841 passed, `ci` rc 0, 833 pairs, doctor 15 checks); room green over 2990 files (0 failed) |
-| `beadloom-ba9w.22` | S2F1 | in progress | wave 5 of 7; gate owner |
-| `beadloom-ybxm` | S2h | ready | #356; after S2F1 (shared `cli-commands`) |
+| `beadloom-ba9w.22` | S2F1 | ✓ done | `0f2fa2ec` (15 files, 17 tests); 33 rooms before and after with `[github]` (36 without the key); tree green at `0f2fa2ec` (14861 passed, `ci` rc 0, 835 pairs); room green over 15 files, partial population (5159 passed: unit, integration/application, verdict-room steps) |
+| `beadloom-ybxm` | S2h | in progress | wave 6 of 8; gate owner |
 | `beadloom-27br` | S2f | ✓ done | `317016aa` + `dc4b9e8d` + `cb0100ce`; 826 pairs before and after; tree green at `cb0100ce` (14746 passed); room green over 2963 files (1 failed = #311) |
 | `beadloom-89gm` | S2g | ready | wave shape to be derived |
 | `beadloom-w2v6` | S2T | blocked | blocked by its blockers in the PLAN |
@@ -100,4 +100,5 @@
 - Owner's ruling 2026-10-19 on S2a's judgement call: the pipeline files the census reads are declared, `config.yml` `rooms.pipelines` (`github`, `gitlab`); unset reads every file present; GitHub-first withdrawn; this repository declares `[github]`. D6 amended, bead `beadloom-ba9w.22` (S2F1) wired before S2T; `beadloom waves` serialises it after S2e on `cli-commands`, so the S2 shape is seven waves of one.
 - S2 wave 4 (S2e, `beadloom-7pd6`, #325) landed 2026-10-19 as `17102216`: new module `infrastructure/git_root.py` (node `git-root`), git asked by `rev-parse --show-cdup`; `doctor` row `git_root`, `init` refuses before writing in every mode, `sync-check --since` refuses before validating the ref; the composed CLAUDE.md core gains "The project root is the git root" (adopters re-run `setup-agentic-flow`, the D10 `config-check` move again). MAJOR moves for S2W: `doctor` exits 1 on any ERROR row (was the Gate step's rule only), `init` 0 → 1 and `sync-check --since` 0 → 1 below the git root, `ci` and the pre-push hook red in that layout. Open for S2R: `doctor` exit 1 generalised to every ERROR row (a rule made in code beyond the ruling's `git_root`); still not refused below the git root and left to S3: `install-hooks`, `diff --since`, `review-brief`, `export`, dashboard git activity, `<project>/.github` workflows. S2T helper `tests/support/shipped_monorepo.py::shipped_monorepo_below_its_git_root`. `ruff format` not run on `doctor.py`, `docsync.py`, `setup.py` (unformatted at HEAD). Wave 5 (S2F1, `beadloom-ba9w.22`) launched.
 - BDL-UX #356 (the adopter's second tool, Cursor, runs the flow with none of the rules the Gate's prose relies on) measured 2026-10-19 on this repository at `0f2fa2ec` by an Explore agent: all six claims hold; corrections and two further defects written into the entry. Taken 2026-10-19: S2h `beadloom-ybxm` (D13: the Cursor composition, `config-check` on a missing layer, portable MCP command, absolute plan path); `beadloom-ujm0` (#356 b, a closing bead without a COMPLETED measurement — rule to agree with the owner before code, placed by S3); features outside the epic `beadloom-9yny` (epic-closure check), `beadloom-vtul` (language rule), `beadloom-rkiu` (one full-check command). S1P `beadloom-c5m5` found still in progress after the merge and closed with the evidence. S2 is now eight waves of one.
+- S2 wave 5 (S2F1, `beadloom-ba9w.22`) landed 2026-10-19 as `0f2fa2ec`: new `application/pipeline_sources.py` (moved out of `rooms.py`, now 1540 lines, not split); `rooms.pipelines` key, this repository `[github]`; `GateCoverage.not_read` when the key leaves no file; four GitHub-first tests re-pinned. The room measurement covered a partial population (unit, integration/application, verdict-room steps), the tree the full suite. For S2R: `config-check` does not validate the key's values (a bad value is only an unresolved census entry, while the sibling `activity:`/`imports:` blocks block); a named pipeline with no file reaches ci's rich Room block only when no room is left; `GateCoverage.not_read` absent from ci JSON `not_run` and MCP; the pre-commit scope report maps `pipeline_sources.py` and `gitlab_pipeline.py` to `application`, not `verdict-room`; `gate_coverage.py` unformatted. For S2W: `rooms.PipelineSources` gone (`WORKFLOW_DIR`, `pipeline_sources` still resolve), `set_aside` items are `PipelineNote`; CHANGELOG, `docs/guides/public-api.md`, `docs/services/cli.md` ~3024, ci-gate SPEC / ci-setup guide wherever precedence is stated. Wave 6 (S2h, `beadloom-ybxm`) launched.
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.
