@@ -69,6 +69,11 @@ in one coordinator's memory.
    checkout of one commit, and the surface ledger names its pairs (#353, added 2026-10-19).
    The landing lock's release reaches the trunk with the landing, and a push that would leave the
    trunk's export holding the slot is refused (#354, added 2026-10-19).
+   The second tool reads the same flow as the first: `setup-agentic-flow --tool cursor` composes
+   the core, the project layer, the STACK overlay and the commands for Cursor, `config-check` names
+   a tool whose composition lacks a layer the other has, and the MCP configuration carries no one
+   machine's path (#356 a, e, g, added 2026-10-19; its b stays in the epic for S3's placement, its
+   c, d, f are features filed outside).
    *Done when* a fixture with `backend/pyproject.toml`, `frontend/` and `.gitlab-ci.yml`
    gets a named room, a built environment and the same `config-check` verdict in a room as
    in the checkout, and the matching of `source:` against the index gives one pair set under

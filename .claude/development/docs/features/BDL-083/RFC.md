@@ -692,6 +692,24 @@ with the one remedy (`release --holder <closed-bead>`), because bd's own refusal
 queue nothing drains. One test pushes a tree whose export holds the slot and reads the refusal;
 one plans a wave over a slot held by a closed bead and reads the remedy.
 
+### D13 — The second tool reads the composed flow the first one reads (S2; added 2026-10-19 for #356)
+
+The composer gains a `cursor` artifact kind beside `roles`, `commands`, `claude` and `docs`:
+for a project whose `flow.yml` names Cursor, `setup-agentic-flow` composes the core, the project
+layer and the STACK overlay — the same text `CLAUDE.md` carries — and the four commands into
+`.cursor/rules/` as `alwaysApply` rules, replacing the stub; the role files stay shared. The
+project layer's reach is stated in the flow documentation per kind (`roles` reaches every tool,
+`claude` reaches Claude, `cursor` reaches Cursor), and `config-check` reports a tool whose
+composition lacks a layer the other tool has, and stops naming `.claude/agents/<role>.md` as
+missing on a project composed for Cursor alone. `setup-mcp` and `init --bootstrap` write a
+portable MCP command (`beadloom` on PATH, as the composed instructions assume) and never
+`shutil.which`'s absolute path; the composed `task-init` text names an absolute path outside the
+document folder for the plan file, as the MCP `task_init` already does. Measured by a test that
+byte-compares the rule bodies composed for the two tools, a test over a PATH without `beadloom`,
+and a `config-check` red on a composition that lacks a layer. The refusals of (b) — a bead closed
+with no COMPLETED measurement — are a behaviour rule agreed with the owner before code
+(`beadloom-ujm0`, placed by S3); (c), (d) and (f) are features outside this epic.
+
 ## Public API (MAJOR)
 
 - Exit codes: the pre-push hook without `beadloom` (0 → 1), `issue-number check` on a declared
@@ -711,6 +729,7 @@ one plans a wave over a slot held by a closed bead and reads the remedy.
   exit-code move on an input 9.0.0 accepted, D12).
 - `sync-surface.json` gains the pair list beside `declared_pairs` (additive); indexed paths are
   POSIX on every platform (a finding-set move on Windows only, D11).
+- `setup-agentic-flow` writes `.cursor/rules/` rules in place of the stub on a project naming Cursor (a file-set move, D13); `config-check` exits 1 on a composition that lacks a layer the other tool has (an exit-code move on an input 9.0.0 accepted); `setup-mcp` and `init --bootstrap` write `beadloom` instead of an absolute path (a text move in a generated file).
 - `rules.yml`: no vocabulary change in S1–S2; liveness findings for `forbid_import` change
   level from `warn` to `info` when live with nothing to ban (a finding-set move, named).
 - The issue-log entry format gains `measured_on` (S7, additive); the leg's summary adds the
@@ -728,7 +747,8 @@ one plans a wave over a slot held by a closed bead and reads the remedy.
   distributions (#332); the room's environment and hint (#333, #311); `config-check` (#334);
   carry deletions and the HEAD-difference report (#335); the nested-root refusal (#325); POSIX
   paths in the index and the pair list in the surface ledger (#353, D11); the lock's release
-  landed before the push (#354, D12). Then test, review, tech-writer, PR.
+  landed before the push (#354, D12); the Cursor composition, the portable MCP command and the
+  plan path (#356, D13). Then test, review, tech-writer, PR.
 - **S3 — re-measurement** (D9): measurement beads by area — Gate and CI; doc-sync; rules and
   lint; init and scanning; site and viewer; the rest — each closing, filing or ruling its
   entries; one bead writes the archive and the stubs. Review, PR. No dev bead.
