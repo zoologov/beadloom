@@ -644,6 +644,9 @@ the final paragraph, or in a final paragraph git does not read as a trailer bloc
 ownership report names those commits and where the line sits instead of denying the line
 ("N commit(s) carry `Bead: <id>` outside the message's final paragraph, where git reads no
 trailer"). The reading needs git 2.22 or later; the gate-ownership DOC names it.
+The JSON report's and the MCP tool's `claims` entry carries the same fact as a count and the
+commit hashes (owner's ruling 2026-10-19), so a machine reader does not see `commits: 0` and nothing
+else where the text surface names the misplaced line.
 
 ## Public API (MAJOR)
 

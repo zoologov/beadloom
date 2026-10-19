@@ -61,6 +61,7 @@ commits `[BDL-083] <type>: <description>`; one PR per slice; merge on green CI.
 | 2026-10-18 | Re-measurement after S1 and S2, feeding S4–S7; `measured_on` and an age rule in the issue-log leg ship in this epic | Owner's rulings 7, 8; D9 |
 | 2026-10-19 | D3 amended: ownership by the files a bead's commits changed only; `refs:` attributes nothing. D10: a commit is a bead's by its `Bead: <id>` trailer, the composed commit format carries it | Owner's rulings on S1R Minors 1 and 3 |
 | 2026-10-19 | D10 clarified: the trailer sits in the message's final paragraph beside the other trailers; the ownership report names a `Bead:` line outside it instead of denying it; git >= 2.22 | S1R second pass, Major 1 |
+| 2026-10-19 | The JSON and MCP `claims` entry carries the count and hashes of the commits whose `Bead:` line git reads no trailer from, the same fact the text surfaces print (one shape, as S1c ruled for `ownership`/`owners`); done in S1, folded into the next fix bead or as a bead of its own after S1R pass 3 | Owner's ruling on the fix-5 question |
 | 2026-10-18 | Rooms from `.github/workflows` and `.gitlab-ci.yml`; distributions by `**/pyproject.toml` under `scan_paths`; the room's environment and hint from the found distribution; `config-check` by the declared project name | D6, D7 |
 
 ## Related Files
