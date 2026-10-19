@@ -7,8 +7,8 @@
 
 ## Current Bead
 
-**Bead:** S2 wave 1 — `beadloom-27br` (S2f: POSIX paths in the index, the pair list in the surface ledger)
-**Goal:** D11 implemented; the POSIX pair set unchanged on this repository; the Windows case covered by simulated-separator tests
+**Bead:** S2 wave 2 — `beadloom-3618` (S2a: rooms from `.github/workflows` and `.gitlab-ci.yml`)
+**Goal:** D6 implemented; a room per source; the monorepo fixture's `.gitlab-ci.yml` yields a room; this repository's room set unchanged
 **Done when:** green on two levels, committed with the trailer, the combined tree green by the gate owner
 
 ## Progress
@@ -49,12 +49,12 @@
 | `beadloom-tlgk` | S1 fix 8 | done | `f205e95b`; the writer waits with `poll`, on a platform without it pauses 10 ms and retries; 2 tests, the descriptor-above-1024 one red first on the `select` version with CI's exact error (Darwin's limit is 1024 too: fd 1023 ok, 1024 raises); room 14671 passed + 1 of #311's class over 2951 files; tree 14718 passed / 0 failed, ruff, mypy, `ci` rc 0; Linux not measured (no docker daemon) |
 | `beadloom-kwc3` | S1R8 | done | OK 2026-10-19 at `fbad81ed`: 0 critical, 0 major, 3 minor (test strength: the waits list discarded; waiting vs spinning untested; a low hard RLIMIT_NOFILE reads as ERROR), 1 nitpick (the fd leak) → `beadloom-ba9w.19` for S3a; the old wait fails the new test with CI's error word for word; 12 of 12 in a Darwin room |
 | `beadloom-c5m5` | S1P | in progress | PR #106 squash-merged into `main` as `ab174d34` on 2026-10-19 (owner's decision with the advisory `site-e2e` red → `beadloom-ba9w.20`); required checks green |
-| `beadloom-3618` | S2a | ready | wave shape to be derived |
+| `beadloom-3618` | S2a | in progress | wave 2 of 6; gate owner |
 | `beadloom-cptm` | S2b | blocked | blocked by its blockers in the PLAN |
 | `beadloom-ixbd` | S2c | ready | wave shape to be derived |
 | `beadloom-flrc` | S2d | ready | wave shape to be derived |
 | `beadloom-7pd6` | S2e | ready | #325, an existing bead reused |
-| `beadloom-27br` | S2f | in progress | wave 1 of 6; gate owner |
+| `beadloom-27br` | S2f | ✓ done | `317016aa` + `dc4b9e8d` + `cb0100ce`; 826 pairs before and after; tree green at `cb0100ce` (14746 passed); room green over 2963 files (1 failed = #311) |
 | `beadloom-89gm` | S2g | ready | wave shape to be derived |
 | `beadloom-w2v6` | S2T | blocked | blocked by its blockers in the PLAN |
 | `beadloom-x94h` | S2R | blocked | blocked by its blockers in the PLAN |
@@ -92,4 +92,5 @@
 - PR #106 site-e2e (2026-10-19): 5 of 363 fail on both runs, deterministic, all layout assertions over this project's own architecture graph; the last completed site-e2e on a PR was #99 (green, 2026-10-10), #101/#102/#105 were cancelled at 45 min, so the suite was unmeasured through BDL-082's viewer work and S1's graph growth; filed as `beadloom-ba9w.20`; the job now finishes in 27–41 min.
 - S2 activation (2026-10-19): ten beads created as one plan under `beadloom-ba9w` on `features/BDL-083-S2`; `beadloom-7pd6` reused as S2e and wired as S2T's blocker; `refs:` declared by hand (#316). The S1 close-out chore was committed while `bd merge-slot acquire` had returned 1 — `check` showed the slot available right after and no agent was landing; recorded as a coordinator lapse, the exit code is read before the commit from here.
 - S2 wave shape (derived 2026-10-19 over the six ready beads): six waves of one, fifteen serialisations by `cli-commands`, `doctor`, `agentic-flow-setup`, `wave-plan` and dependency edges — S2f `27br` → S2a `3618` → S2e `7pd6` → S2g `89gm` → S2d `flrc` → S2c `ixbd`; S2b `cptm` after S2a. The slice branch `features/BDL-083-S2` bound to no work item (BDL-UX #355 filed): renamed to `features/BDL-083` after the merged remote branch was deleted (its commits are PR #106's); the S1 branch kept locally as `archive/BDL-083-S1`. With the name restored the plan reads the focus document (passed) and the axes (25 not reached — #316).
+- S2 wave 1 (S2f, `beadloom-27br`) landed 2026-10-19 as `317016aa` + `dc4b9e8d` + `cb0100ce`: POSIX index at the write sites, `source:` normalised at the match sites, `doctor` names a backslash index (14 doctor checks on this repository now), `sync-surface.json` re-recorded with the 826-pair list, `declared_surface.dropped` in `sync-check --json`. Windows not measured; the separator is simulated by `tests/support/windows_separator.py` (fixture: 0 pairs before, the macOS set after). For S2W: CHANGELOG, `docs/guides/public-api.md`, the doctor check count. For S2R: a commit that moves a pair to another doc keeps the count, so the Gate reports nothing, though `dropped` lists it. Wave 2 (S2a, `beadloom-3618`) launched.
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.
