@@ -47,7 +47,7 @@ def _index_and_check(root: Path) -> dict[str, Any]:
     reindexed = CliRunner().invoke(main, ["reindex", "--full", "--project", str(root)])
     assert reindexed.exit_code == 0, reindexed.output
     checked = CliRunner().invoke(main, ["sync-check", "--json", "--project", str(root)])
-    report: dict[str, Any] = json.loads(checked.output)
+    report: dict[str, Any] = json.loads(checked.stdout)
     return report
 
 

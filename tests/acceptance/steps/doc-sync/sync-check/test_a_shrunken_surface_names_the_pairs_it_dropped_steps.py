@@ -41,9 +41,10 @@ def state() -> dict[str, Any]:
 
 
 def _invoke(*args: str) -> str:
+    """Run the CLI and return its standard output, which is where ``--json`` writes."""
     result = CliRunner().invoke(main, list(args))
     assert result.exit_code in (0, 2), result.output
-    return result.output
+    return result.stdout
 
 
 @given("the monorepo fixture indexed with its declared surface recorded")
