@@ -1,15 +1,15 @@
 # ACTIVE: BDL-083 — Debt to zero
 
 > **Last updated:** 2026-10-19
-> **Phase:** Planning — S2 the monorepo on GitLab (S1 merged 2026-10-19)
+> **Phase:** Development — S2 the monorepo on GitLab (S1 merged 2026-10-19 as `ab174d34`)
 
 ---
 
 ## Current Bead
 
-**Bead:** S2 activation — the S2 beads (S2a–S2g, S2T, S2R, S2W, S2P) created from the PLAN's rows on branch `features/BDL-083-S2`, the wave shape derived by `beadloom waves`
-**Goal:** S2 — the monorepo on GitLab: rooms from two sources, the room's environment, `config-check`, carry deletions, the nested-root refusal, POSIX paths (D11), the lock's release before the push (D12)
-**Done when:** the beads exist with `refs:`, the first wave launched
+**Bead:** S2 wave 1 — `beadloom-27br` (S2f: POSIX paths in the index, the pair list in the surface ledger)
+**Goal:** D11 implemented; the POSIX pair set unchanged on this repository; the Windows case covered by simulated-separator tests
+**Done when:** green on two levels, committed with the trailer, the combined tree green by the gate owner
 
 ## Progress
 
@@ -54,7 +54,7 @@
 | `beadloom-ixbd` | S2c | ready | wave shape to be derived |
 | `beadloom-flrc` | S2d | ready | wave shape to be derived |
 | `beadloom-7pd6` | S2e | ready | #325, an existing bead reused |
-| `beadloom-27br` | S2f | ready | wave shape to be derived |
+| `beadloom-27br` | S2f | in progress | wave 1 of 6; gate owner |
 | `beadloom-89gm` | S2g | ready | wave shape to be derived |
 | `beadloom-w2v6` | S2T | blocked | blocked by its blockers in the PLAN |
 | `beadloom-x94h` | S2R | blocked | blocked by its blockers in the PLAN |
@@ -91,4 +91,5 @@
 - Fix 8 note (2026-10-19): Darwin's `select` limit is 1024 as well, so the local green was a low descriptor number, not a platform difference; CI's writer got fd 4066, which suggests the suite leaks descriptors somewhere — an observation on `beadloom-tlgk`, unverified, for S3's Gate/CI area to measure.
 - PR #106 site-e2e (2026-10-19): 5 of 363 fail on both runs, deterministic, all layout assertions over this project's own architecture graph; the last completed site-e2e on a PR was #99 (green, 2026-10-10), #101/#102/#105 were cancelled at 45 min, so the suite was unmeasured through BDL-082's viewer work and S1's graph growth; filed as `beadloom-ba9w.20`; the job now finishes in 27–41 min.
 - S2 activation (2026-10-19): ten beads created as one plan under `beadloom-ba9w` on `features/BDL-083-S2`; `beadloom-7pd6` reused as S2e and wired as S2T's blocker; `refs:` declared by hand (#316). The S1 close-out chore was committed while `bd merge-slot acquire` had returned 1 — `check` showed the slot available right after and no agent was landing; recorded as a coordinator lapse, the exit code is read before the commit from here.
+- S2 wave shape (derived 2026-10-19 over the six ready beads): six waves of one, fifteen serialisations by `cli-commands`, `doctor`, `agentic-flow-setup`, `wave-plan` and dependency edges — S2f `27br` → S2a `3618` → S2e `7pd6` → S2g `89gm` → S2d `flrc` → S2c `ixbd`; S2b `cptm` after S2a. The slice branch `features/BDL-083-S2` bound to no work item (BDL-UX #355 filed): renamed to `features/BDL-083` after the merged remote branch was deleted (its commits are PR #106's); the S1 branch kept locally as `archive/BDL-083-S1`. With the name restored the plan reads the focus document (passed) and the axes (25 not reached — #316).
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.
