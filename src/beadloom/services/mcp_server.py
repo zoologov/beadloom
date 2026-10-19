@@ -26,7 +26,8 @@ from beadloom.application.active_table import (
 from beadloom.application.active_table import (
     split_table_row as _split_table_row,
 )
-from beadloom.application.gate import GateResult, run_ci_gate
+from beadloom.application.gate import ROOM_REPORT, GateResult, run_ci_gate
+from beadloom.application.gate_boundary import derive_bounded
 from beadloom.application.reindex import incremental_reindex
 from beadloom.application.waves import compose_declaration, declared_refs
 from beadloom.context_oracle.builder import bfs_subgraph, build_context
@@ -839,12 +840,20 @@ def _verdict_room(project_root: Path) -> dict[str, object]:
     Carried on the verdict an agent closes a bead on, because that is the
     strongest claim this tool makes and it is true of one room. It changes no
     status and adds no finding — the same verdict, answerable.
-    """
-    from beadloom.application.rooms import room_line, take_census
 
-    census = take_census(project_root)
+    The census is taken through the Gate's report boundary: one that raises is
+    ``{"reason": "the room census raised <class>: <message>"}``, the shape the JSON
+    report gives the same case, and the verdict is the one the gate produced. Until
+    BDL-083 S1 fix 4 it was taken with no boundary, and an exception here ended the
+    tool call with a traceback after the gate had run (BDL-UX #318's class).
+    """
+    from beadloom.application import rooms
+
+    census, reason = derive_bounded(ROOM_REPORT, lambda: rooms.take_census(project_root))
+    if census is None:
+        return {"reason": reason}
     return {
-        "current": room_line(census.current),
+        "current": rooms.room_line(census.current),
         "declared": len(census.comparisons),
         "entered": len(census.entered),
         "not_entered": [c.room.label for c in census.not_entered],
@@ -856,11 +865,25 @@ def _not_run(gate: GateResult) -> list[str]:
 
     The room says which rooms the verdict covers; this says which verifications
     it is a verdict about. Names only, because the agent reading it is inside
-    the project and the commands are in its own pipeline.
+    the project and the commands are in its own pipeline. An empty list is also
+    what a coverage report that raised leaves, so it is never read without
+    :func:`_not_run_reason` beside it.
     """
     if gate.coverage is None:
         return []
     return [item.duty for item in gate.coverage.not_performed]
+
+
+def _not_run_reason(gate: GateResult) -> str | None:
+    """Why ``not_run`` names nothing although the run may have skipped something.
+
+    The coverage report's own reason when its derivation raised — ``the coverage
+    report raised <class>: <message>`` — and ``None`` when it was derived. Until
+    BDL-083 S1 fix 4 the tool dropped it, and a report that raised read as "this run
+    skipped nothing". A sibling key rather than a new type for ``not_run``, so a
+    client that iterates the list keeps working.
+    """
+    return gate.coverage_reason if gate.coverage is None else None
 
 
 def _finding_owners(gate: GateResult) -> dict[str, object]:
@@ -943,6 +966,7 @@ def handle_complete_bead(
 
     room = _verdict_room(project_root)
     not_run = _not_run(gate)
+    not_run_reason = _not_run_reason(gate)
     if not (gate_ok and tests_ok):
         return {
             "status": "FAIL",
@@ -950,6 +974,7 @@ def handle_complete_bead(
             "findings": findings,
             "room": room,
             "not_run": not_run,
+            "not_run_reason": not_run_reason,
             "owners": _finding_owners(gate),
         }
 
@@ -977,6 +1002,7 @@ def handle_complete_bead(
         "findings": [],
         "room": room,
         "not_run": not_run,
+        "not_run_reason": not_run_reason,
         "next": list(suggestion.confirmed),
         "next_candidates": list(suggestion.candidates),
         "next_still_blocked": list(suggestion.still_blocked),
