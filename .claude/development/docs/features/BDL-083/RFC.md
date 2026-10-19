@@ -639,7 +639,8 @@ Clarified 2026-10-19 (S1R second pass): git reads trailers from the message's fi
 only, so the trailer sits in the last paragraph beside any other trailer (`Co-Authored-By`, ...),
 with no blank line between them and nothing after them; the composed format, both landing
 fragments and the coordinator checklist say so and the example shows the two together. When a
-claimed bead has no bound commit and a `Bead: <id>` line stands outside the final paragraph, the
+claimed bead has no bound commit and a `Bead: <id>` line stands where git reads no trailer (outside
+the final paragraph, or in a final paragraph git does not read as a trailer block), the
 ownership report names those commits and where the line sits instead of denying the line
 ("N commit(s) carry `Bead: <id>` outside the message's final paragraph, where git reads no
 trailer"). The reading needs git 2.22 or later; the gate-ownership DOC names it.
