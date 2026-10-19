@@ -648,6 +648,22 @@ The JSON report's and the MCP tool's `claims` entry carries the same fact as a c
 commit hashes (owner's ruling 2026-10-19), so a machine reader does not see `commits: 0` and nothing
 else where the text surface names the misplaced line.
 
+### D11 — Indexed paths are POSIX on every platform, and the surface ledger names its pairs (S2; added 2026-10-19 for #353)
+
+The index writes a file's path as `Path.relative_to(root).as_posix()` at every write site
+(`application/reindex/change_detection.py`, `application/reindex/indexing.py`), and every site
+that matches a node's `source:` against the index normalises the declaration the same way before
+it compares (`infrastructure/repository.py` `_owned_file_clause` and `source_covers`,
+`doc_sync/engine.py` `_unchecked_reason`). On POSIX nothing changes; on Windows a directory
+`source:` covers its files and a file `source:` matches its file, which today it does not (the
+first outside adopter's teammate measured 167 declared pairs against 347 for one commit). The
+index built by an older version is rebuilt by `reindex --full`, and `doctor` names an index
+whose paths carry a backslash as one to rebuild. `.beadloom/sync-surface.json` carries the pair
+list `(doc, file)` beside `declared_pairs`, so `sync-check` can name the pairs a platform or a
+commit dropped instead of printing a smaller number. One test feeds backslash paths through the
+three match sites; one indexes the monorepo fixture under a simulated Windows separator. The
+Windows CI leg stays withdrawn (owner's decision of BDL-074); the two tests are the measurement.
+
 ## Public API (MAJOR)
 
 - Exit codes: the pre-push hook without `beadloom` (0 → 1), `issue-number check` on a declared
@@ -657,6 +673,8 @@ else where the text surface names the misplaced line.
 - `GateStep` gains the status `ERROR` (additive; consumers that switch on `passed`/`skipped`
   read it as not passed).
 - `rooms` JSON gains `source` per room and a `not_derived` reason (additive).
+- `sync-surface.json` gains the pair list beside `declared_pairs` (additive); indexed paths are
+  POSIX on every platform (a finding-set move on Windows only, D11).
 - `rules.yml`: no vocabulary change in S1–S2; liveness findings for `forbid_import` change
   level from `warn` to `info` when live with nothing to ban (a finding-set move, named).
 - The issue-log entry format gains `measured_on` (S7, additive); the leg's summary adds the
@@ -672,8 +690,9 @@ else where the text surface names the misplaced line.
   review, tech-writer, PR.
 - **S2 — the monorepo on GitLab** (D6, D7): dev beads: rooms from two sources and nested
   distributions (#332); the room's environment and hint (#333, #311); `config-check` (#334);
-  carry deletions and the HEAD-difference report (#335); the nested-root refusal (#325). Then
-  test, review, tech-writer, PR.
+  carry deletions and the HEAD-difference report (#335); the nested-root refusal (#325); POSIX
+  paths in the index and the pair list in the surface ledger (#353, D11). Then test, review,
+  tech-writer, PR.
 - **S3 — re-measurement** (D9): measurement beads by area — Gate and CI; doc-sync; rules and
   lint; init and scanning; site and viewer; the rest — each closing, filing or ruling its
   entries; one bead writes the archive and the stubs. Review, PR. No dev bead.

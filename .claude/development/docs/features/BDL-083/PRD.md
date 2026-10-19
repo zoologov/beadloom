@@ -65,9 +65,12 @@ in one coordinator's memory.
    main checkout (#334); `--carry` of a path the tree no longer holds is a deletion in the
    room (#335); the ruff leg shows stderr, tells "not found" from "violations" and reads the
    owning project's configuration (#327); a project root below the git root is refused in
-   words (#325). *Done when* a fixture with `backend/pyproject.toml`, `frontend/` and
-   `.gitlab-ci.yml` gets a named room, a built environment and the same `config-check`
-   verdict in a room as in the checkout.
+   words (#325); a Windows checkout pairs the same documents with the same files as a POSIX
+   checkout of one commit, and the surface ledger names its pairs (#353, added 2026-10-19).
+   *Done when* a fixture with `backend/pyproject.toml`, `frontend/` and `.gitlab-ci.yml`
+   gets a named room, a built environment and the same `config-check` verdict in a room as
+   in the checkout, and the matching of `source:` against the index gives one pair set under
+   both separators.
 3. **Every open entry is re-measured on the current version and closed or owned.** Each of the
    125 entries is re-run against its own `Command` on the version this epic ships from; an
    entry whose issue is gone closes with dated evidence in the archive; an entry whose issue
