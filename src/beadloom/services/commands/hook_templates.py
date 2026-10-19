@@ -8,6 +8,7 @@ writes the hooks stays there; this module holds what they say, and nothing else.
 
 from __future__ import annotations
 
+from beadloom.application.landing_slot import VERDICT_LEAD as LANDING_VERDICT_LEAD
 from beadloom.doc_sync.engine import REASONS_ATTESTATION_CLEARS
 from beadloom.graph.lint_scope import COMMIT_SCOPE_LEAD
 
@@ -530,6 +531,33 @@ say() {
   done
 }
 
+# The landing lock's release, landed before the push (BDL-UX #354, BDL-083 RFC D12). The
+# slot is tracker state exported into .beads/issues.jsonl, so the trunk says what the last
+# landed export says. `landing-check` reads git's input to this hook -- one line per
+# pushed ref -- and refuses a push whose export at the pushed commit still holds the slot
+# for a bead its commits carry (by their `Bead:` trailer): pushed as it is, every later
+# clone imports a hold by a closed bead and its `acquire` is refused. It runs before the
+# Gate and is cheap. A run with no verdict line, or one that could not judge the push, is
+# NOT CHECKED, which never blocks: this check refuses one thing and only that.
+landing_out=$(beadloom landing-check --stdin 2>&1)
+landing_rc=$?
+landing_verdict=$(printf '%s\n' "$landing_out" | grep '^__LANDING_LEAD__' | head -n 1)
+if [ -z "$landing_verdict" ]; then
+  landing_verdict="__LANDING_LEAD__NOT CHECKED -- landing-check gave no verdict (exit $landing_rc)"
+fi
+case "$landing_rc:$landing_verdict" in
+  "1:__LANDING_LEAD__REFUSED"*)
+    printf '%s\n' "$landing_out" | while IFS= read -r landing_line; do
+      say "$landing_line"
+    done
+    say "To push without this check (discouraged): git push --no-verify"
+    exit 1
+    ;;
+  *)
+    say "$landing_verdict"
+    ;;
+esac
+
 gate_copy=$(mktemp "${TMPDIR:-/tmp}/beadloom-gate.XXXXXX") || {
   say "Beadloom Gate did not run: no temporary file for its verdict, so this push was" \
     "not judged and is refused."
@@ -563,7 +591,7 @@ if [ $gate_rc -ne 0 ]; then
   say "To override (discouraged): git push --no-verify"
   exit 1
 fi
-""".replace("__VERDICT__", GATE_VERDICT_PATTERN)
+""".replace("__VERDICT__", GATE_VERDICT_PATTERN).replace("__LANDING_LEAD__", LANDING_VERDICT_LEAD)
 
 
 def pre_commit_hook_body(*, blocking: bool) -> str:

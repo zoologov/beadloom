@@ -1,14 +1,14 @@
 {
   "version": 1,
   "written": {
-    ".claude/CLAUDE.md": "71ca3176664d2ffcfc6fc46b94ff6c1123f89bbce368de33c79173d527594db2",
-    ".claude/agents/dev.md": "68054c0c06a1394accda9f113e563fb11c2adc2a210cafd31826f2d8d4a499b0",
-    ".claude/agents/explore.md": "5fbebcfa57bf9bc341337938830aae9aa5cea084cd705318593ff469e61bd893",
-    ".claude/agents/review.md": "d685b9115ea35c5df6d911aa7ce743e68be79236a78a40fe4a1c085210a94dfb",
-    ".claude/agents/tech-writer.md": "3dc3ad85a926413c73c2fb6aa26deefdec8aa08e1276478cc05756ac7758adcb",
-    ".claude/agents/test.md": "37bf77a47695bde4920a2d9fcfd1d052e4da3a589d530ab835c58f5fd2be77e7",
+    ".claude/CLAUDE.md": "123645f741093bfb1929ac1e7dfb61364388767e17dde79e17805f23cf529c83",
+    ".claude/agents/dev.md": "74fde1e5d6dbddeffa791fc038b22a3d5b9f7b0ed84620c29e2085bf170a5388",
+    ".claude/agents/explore.md": "6072d1f102563ff76f1250bdf33cd6d50a58a3843099f689da20c6cbd8ff2ec3",
+    ".claude/agents/review.md": "d411b17f115e931de69b7136d75be9ef8a876328497005a12b6b45bccb055de7",
+    ".claude/agents/tech-writer.md": "2ac3c224e16e9b6840e3154674c0ebcf082093dc6c7e61219325d7a9ad393002",
+    ".claude/agents/test.md": "feb28a8eb9c1f864f546e3ea63f434cccfe6128a1e889e59da9e14a6f14535f2",
     ".claude/commands/checkpoint.md": "d6019d0b91d01f6243b749bf9d8beb61426aa8e190d2660110942c6c2468e900",
-    ".claude/commands/coordinator.md": "353846ece9c382f088e08976d1cd812530246fb06cbdbccaa3ca1c09c5d296ae",
+    ".claude/commands/coordinator.md": "f2d1870c7fab7f6003a3cc48c0496c56b716246f367f252a8999f4024759b941",
     ".claude/commands/task-init.md": "d3c694f94a8f9d4ce129c6ff364aa0bfe5b3f2f5b73f354d353b7dc7dbbe870f",
     ".claude/commands/templates.md": "e7d0a300bbaee8327bae0bcda9f36707f4a8540f14d49b0939392f38e34540d8"
   }

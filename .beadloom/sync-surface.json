@@ -1,6 +1,6 @@
 {
-  "declared_docs": 140,
-  "declared_pairs": 837,
+  "declared_docs": 141,
+  "declared_pairs": 840,
   "pairs": [
     ["architecture.md", "src/beadloom/__init__.py"],
     ["architecture.md", "src/beadloom/services/__init__.py"],
@@ -70,6 +70,7 @@
     ["domains/application/README.md", "src/beadloom/application/impact/unresolved.py"],
     ["domains/application/README.md", "src/beadloom/application/import_aliases.py"],
     ["domains/application/README.md", "src/beadloom/application/intent_reader.py"],
+    ["domains/application/README.md", "src/beadloom/application/landing_slot.py"],
     ["domains/application/README.md", "src/beadloom/application/mutation_scope/acceptance.py"],
     ["domains/application/README.md", "src/beadloom/application/mutation_scope/change.py"],
     ["domains/application/README.md", "src/beadloom/application/mutation_scope/sample.py"],
@@ -157,6 +158,7 @@
     ["domains/application/components/gate-coverage/DOC.md", "src/beadloom/application/gate_coverage.py"],
     ["domains/application/components/gate-ownership/DOC.md", "src/beadloom/application/gate_ownership.py"],
     ["domains/application/components/intent-reader/DOC.md", "src/beadloom/application/intent_reader.py"],
+    ["domains/application/components/landing-slot/DOC.md", "src/beadloom/application/landing_slot.py"],
     ["domains/application/components/mutation-scope/DOC.md", "src/beadloom/application/mutation_scope/acceptance.py"],
     ["domains/application/components/mutation-scope/DOC.md", "src/beadloom/application/mutation_scope/change.py"],
     ["domains/application/components/mutation-scope/DOC.md", "src/beadloom/application/mutation_scope/sample.py"],
@@ -603,6 +605,7 @@
     ["services/components/cli-commands/DOC.md", "src/beadloom/services/commands/impact.py"],
     ["services/components/cli-commands/DOC.md", "src/beadloom/services/commands/index_ops.py"],
     ["services/components/cli-commands/DOC.md", "src/beadloom/services/commands/issue_number.py"],
+    ["services/components/cli-commands/DOC.md", "src/beadloom/services/commands/landing_check.py"],
     ["services/components/cli-commands/DOC.md", "src/beadloom/services/commands/mutation.py"],
     ["services/components/cli-commands/DOC.md", "src/beadloom/services/commands/query.py"],
     ["services/components/cli-commands/DOC.md", "src/beadloom/services/commands/review_brief.py"],
@@ -840,5 +843,5 @@
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/lib/queryState.js"],
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/model/useUrlState.js"]
   ],
-  "recorded_at": "2026-10-19T19:16:32.938632+00:00"
+  "recorded_at": "2026-10-19T21:02:04.281111+00:00"
 }

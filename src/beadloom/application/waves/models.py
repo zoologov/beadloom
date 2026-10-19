@@ -30,6 +30,7 @@ from beadloom.graph.rules import exit_condition_deadline
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from beadloom.application.landing_slot import SlotHold
     from beadloom.application.waves.landing import LockSite
 
 #: The two beads' node scopes intersect — the same node, or one inside the other.
@@ -556,6 +557,13 @@ class WaveEnvironment:
     #: empty tuple is a real observation — somebody read the artifacts and the
     #: lock is instructed nowhere — and is not the same fact as ``None``.
     landing_lock_sites: tuple[LockSite, ...] | None = None
+
+    #: Who holds the landing slot, read from the tracker the wave's agents will
+    #: ``acquire`` against (BDL-UX #354). ``None`` means nobody read the tracker, and
+    #: the landing-order check then judges the instructions alone; a
+    #: :class:`~beadloom.application.landing_slot.SlotHold` whose ``slot`` is ``None``
+    #: is a tracker read that holds no slot, which is not the same fact.
+    landing_slot: SlotHold | None = None
 
     #: The documents every work-item type of this flow writes, and the rows each
     #: carries. An empty tuple is a real observation — the routes were read and

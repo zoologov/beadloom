@@ -178,7 +178,10 @@ bd dep tree <id>                  # confirm the edge against the titles, not the
 - the merge slot — serialize parallel LANDINGS: `bd merge-slot acquire --holder <bead-id>`,
   where exit 0 means you hold it, and `release --holder <bead-id>`, the only release form bd
   verifies. It orders the commits and nothing else; keeping two agents out of one FILE is what
-  `beadloom waves` derives
+  `beadloom waves` derives. The release is exported and landed before the push
+  (acquire → commit → release → `bd export` → the export landed → push), because other
+  clones read the slot from the export the trunk carries; the pre-push hook runs
+  `beadloom landing-check` and refuses a push whose export still holds the slot for its bead
 
 **IMPORTANT:**
 - `bd comments add` — for checkpoints (preserves history)

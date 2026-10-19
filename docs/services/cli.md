@@ -587,7 +587,12 @@ sentences on standard error: the Gate did not run, how to put `beadloom` on that
 remove the hook (`beadloom install-hooks --remove --pre-push`), and the `--no-verify`
 override. The hook is installed per clone, so a missing binary is a setup error the person
 pushing must see. Before BDL-083 S1a this branch exited `0` in silence (BDL-UX #326), and the
-move to `1` is a change of exit code on an input the earlier release accepted. The full Gate lives in pre-push (not duplicated on every commit)
+move to `1` is a change of exit code on an input the earlier release accepted. Since BDL-083 S2g
+the hook first runs [`landing-check --stdin`](#beadloom-landing-check) over the refs git hands
+it, and refuses a push whose export at the pushed commit still holds the merge slot for a bead
+the push carries, printing the release and the sequence before the Gate runs. Under 9.0.0 that push
+exited `0` (BDL-UX #354). A `landing-check` that gave no verdict, or could not judge the
+push, prints `NOT CHECKED` and never blocks. The full Gate lives in pre-push (not duplicated on every commit)
 because pushes are less frequent than commits; the pre-commit hook stays the
 lighter warn/block check. `--no-verify` is the documented (discouraged) escape
 hatch.
@@ -2991,6 +2996,58 @@ no log is told so and no leg runs, and a ledger holding no claim leaves `unwritt
 
 The grammar, the two populations a numbered log states and the regions the legs cannot reach are
 in the [Issue Numbers SPEC](../domains/doc-sync/features/issue-numbers/SPEC.md).
+
+### beadloom landing-check
+
+Refuse a push whose exported tracker still holds the landing slot for a bead the push lands
+(BDL-083 S2g, BDL-UX #354, RFC D12).
+
+```bash
+beadloom landing-check [--stdin] [--project DIR]
+```
+
+The landing lock is bd's merge slot, and the slot is tracker state exported into
+`.beads/issues.jsonl`, so what the trunk says about the slot is what the last landed export
+says. A release made after the push reaches no merged commit: the trunk exports the slot as held
+by a bead that is closed by then, and the next clone's `bd merge-slot acquire` is refused naming
+a holder nobody can wait on. The sequence that avoids it is acquire -> commit -> release ->
+export -> the export landed -> push.
+
+The command reads the export at the pushed commit (`git show <commit>:.beads/issues.jsonl`, never
+the working-tree file, which bd rewrites after every command) and the `Bead:` trailers of the
+commits the push carries: `<remote tip>..<pushed commit>` when the remote holds the ref, every
+commit no remote-tracking ref holds otherwise. `--stdin` reads the refs as git hands them to a
+pre-push hook, one `<local ref> <local oid> <remote ref> <remote oid>` line each; without it
+`HEAD` is judged as a branch no remote holds yet. The pre-push hook
+[`install-hooks`](#beadloom-install-hooks) writes runs `beadloom landing-check --stdin` before the
+Gate.
+
+The first line is the verdict, led by `Landing lock: `. Measured on a copy of the monorepo
+fixture with bd 1.0.4, pushing a commit whose export still held the slot for its own bead:
+
+```
+Landing lock: REFUSED -- the export this push lands (.beads/issues.jsonl at 9390e70) holds the merge slot for mono-141, a bead this push carries.
+Pushed as it is, the trunk exports the slot as held once mono-141 has landed, and the next clone's `bd merge-slot acquire` is refused naming a bead nobody can wait on (BDL-UX #354).
+The landing sequence is acquire -> commit -> release -> export -> the export landed -> push:
+  bd merge-slot release --holder mono-141
+  bd export -o .beads/issues.jsonl
+  git commit -m "<subject>" -m "Bead: mono-141" -- .beads/issues.jsonl
+  git push
+```
+
+After those four commands the same push read
+`Landing lock: clean -- the export at 5ee836c shows the merge slot free`, and a second clone's
+`bd import` and `acquire` exited `0`. Before them, a second clone's `acquire` exited `1` with
+`Slot held by: <bead>`.
+
+A hold by a bead the push does not carry is a neighbour's, which its own landing releases: the
+verdict is `clean` and names the holder. A pushed commit that carries no export, an export with
+no slot, and a deletion are `clean` with their reason.
+
+Exit `0` when no ref of the push lands its own hold, `1` when one does, `2` (`NOT CHECKED`) when
+git does not know the pushed commit, cannot list what it carries, or the input is not what git
+writes. A push nobody could judge never reads as a clean one. The reading rule is in the
+[Landing Slot DOC](../domains/application/components/landing-slot/DOC.md).
 
 ### beadloom ci
 

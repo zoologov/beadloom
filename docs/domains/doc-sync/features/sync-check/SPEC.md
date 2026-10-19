@@ -607,6 +607,14 @@ that.
   (`%(trailers:key=<key>,valueonly)`): the message's final paragraph only, the key in any
   case. The ownership report asks for `Bead`, because a commit is a bead's by its `Bead:`
   trailer and by nothing else. A key that could close the placeholder is a `ValueError`.
+- `commits_in(project_root, revisions, *, trailer=None) -> tuple[BranchCommit, ...] | None`
+  — the commits a revision list selects, in the record `commits_since` returns; since BDL-083
+  S2g `commits_since` is its `<ref>..HEAD` case. Added for the landing check, which lists
+  what a push carries the way git says it: `<old>..<new>`, or `<new> --not --remotes` for a
+  branch no remote holds.
+- `text_at(project_root, ref, path) -> str | None` — the text of a repository path at a
+  commit (`git show <ref>:<path>`), `None` when the commit holds no such path or git cannot
+  answer. Added by BDL-083 S2g to read the export a push would land.
 - `merge_base(project_root, first, second) -> str | None`, `is_ancestor(project_root,
   ancestor, descendant) -> bool`, `short_commit(project_root, ref) -> str | None`,
   `commit_distance(project_root, ancestor, descendant) -> int | None`,

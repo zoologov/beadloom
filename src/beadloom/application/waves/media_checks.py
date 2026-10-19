@@ -36,6 +36,7 @@ import re
 from typing import TYPE_CHECKING
 
 from beadloom.application.active_table import names_bead
+from beadloom.application.landing_slot import release_command
 from beadloom.application.waves.landing import LOCK_COMMAND, defect_detail
 from beadloom.application.waves.media import (
     MEDIUM_COMMIT_GATE,
@@ -387,7 +388,32 @@ def _check_landing_order(environment: WaveEnvironment) -> MediumCheck:
     a flow into a directory where the lock is instructed nowhere, but an adopter
     has, and a pass that only means *we found nothing to judge* is the silence
     this whole module exists to break.
+
+    **And whether the slot can be taken at all** (BDL-UX #354). A slot the tracker
+    shows held by a CLOSED bead refuses every ``acquire`` of the wave, and the bead
+    it names cannot be waited on: its release was made after its push and reached no
+    landed export. That fails the precondition whatever the instructions say, and the
+    detail names the one release that frees it. A hold by a bead still open or in
+    progress is a neighbour landing, and is not judged here.
     """
+    instructed = _check_landing_instructions(environment)
+    hold = environment.landing_slot
+    if hold is None or not hold.stale or hold.holder is None:
+        return instructed
+    return MediumCheck(
+        MEDIUM_LANDING_ORDER,
+        STATUS_FAILED,
+        f"the landing slot `{hold.slot}` is held by `{hold.holder}`, a bead the tracker "
+        f"lists as {hold.holder_status}, so this wave's first `{LOCK_COMMAND} acquire` is "
+        "refused naming a holder nobody can wait on — bd's refusal offers `--wait`, a "
+        "queue nothing drains. The one remedy, before the wave starts: "
+        f"`{release_command(hold.holder)}` (BDL-UX #354). As for the instructions: "
+        f"{instructed.detail}",
+    )
+
+
+def _check_landing_instructions(environment: WaveEnvironment) -> MediumCheck:
+    """Whether every place this flow instructs the lock instructs the form that grants it."""
     sites = environment.landing_lock_sites
     if sites is None:
         return MediumCheck(

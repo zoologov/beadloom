@@ -736,7 +736,7 @@ check — see below.
 |---|---|---|
 | `working-tree` | no path differs from `HEAD` that no bead in the plan owns | `git status` |
 | `commit-gate` | the installed pre-commit hook judges the paths a commit stages | `.git/hooks/pre-commit` |
-| `landing-order` | every instruction of the landing lock names its holder and asks for no queue | the composed flow artifacts |
+| `landing-order` | every instruction of the landing lock names its holder and asks for no queue, and the slot is not held by a bead the tracker lists as closed | the composed flow artifacts, and `bd list --all --json` for the slot |
 | `focus-document` | the document every route writes carries a row for each bead of the plan | the composed `/task-init` routing table and the work item's folder |
 | `graph-files` | the node population the graph files declare is the one the index resolved these scopes from | `.beadloom/_graph/*.yml` through `each_graph_file`, and `get_all_nodes` on the index |
 | `doc-baseline` | no doc pair is stale before the wave starts | the doc index |
@@ -821,6 +821,25 @@ from `.beadloom/flow` — so a tool added to the flow is covered by the same act
 The verdict states the size of the population it judged. A project that has never
 scaffolded a flow instructs the lock nowhere, and a pass over nothing says so
 rather than reading as a pass over something.
+
+**A slot held by a closed bead fails the medium** (BDL-083 S2g, BDL-UX #354, RFC
+D12). The slot is tracker state exported into `.beads/issues.jsonl`, so a release
+made after the push reaches no merged commit, and every later clone imports a slot
+held by a bead that is closed. Its `acquire` is then refused naming a holder nobody
+can wait on, and bd's refusal offers `--wait`, a queue nothing drains. The command
+reads who holds the slot from the same `bd list --all --json` answer its census
+reads (`landing_slot.slot_hold`, handed over as `WaveEnvironment.landing_slot`),
+and a holder the tracker lists as `closed` fails the check whatever the
+instructions say. The detail names the one remedy,
+`bd merge-slot release --holder <closed-bead>`, and then the instructions' own verdict. Measured on a copy of the
+monorepo fixture with bd 1.0.4: a second clone imported the slot held by
+`mono-tba`, and once that bead was closed `beadloom waves` exited 1 with
+``landing-order: failed — the landing slot `mono-merge-slot` is held by `mono-tba`,
+a bead the tracker lists as closed, ...``; the release it named let `acquire` exit
+0. A hold by a bead still open or in progress is a neighbour landing and is not
+judged, and a holder that names no bead the tracker lists has no status and is not
+called stale. When the tracker could not be read the slot is not observed and the
+check judges the instructions alone.
 
 **What this medium cannot check**, stated here rather than discovered later: it
 reads what an agent is TOLD, and cannot know what an agent DID. Nothing in a plan

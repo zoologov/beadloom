@@ -239,7 +239,15 @@ class TestTheTwoGateLegsShareOnePorcelainProtocol:
             for name, body in _TEMPLATES.items()
             for variable in _GREPPED_VERDICT.findall(body)
         }
-        assert found == {("warn", "lint"), ("block", "lint"), ("pre-push", "gate")}, found
+        # `landing` since BDL-083 S2g (`beadloom-89gm`): the pre-push hook greps the
+        # verdict `landing-check` leads its output with (BDL-UX #354).
+        expected = {
+            ("warn", "lint"),
+            ("block", "lint"),
+            ("pre-push", "gate"),
+            ("pre-push", "landing"),
+        }
+        assert found == expected, found
 
     def test_every_verdict_parse_strips_the_declared_marker(self) -> None:
         """No leg spells the marker for itself.

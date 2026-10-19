@@ -846,13 +846,24 @@ def jsonl_records(project_root: Path) -> list[Mapping[str, object]] | None:
     which must run in a fresh checkout with no tracker installed, reads this one
     and says so.
     """
-    import json
-
     path = project_root / ".beads" / "issues.jsonl"
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
+    return records_from_jsonl(text) or None
+
+
+def records_from_jsonl(text: str) -> list[Mapping[str, object]]:
+    """Every line of a tracker export *text* that reads as one JSON object.
+
+    A blank line, a line that is not JSON and a line that is JSON but not an object
+    are skipped, and the rest are read. One reader for the working-tree file above and
+    for the export inside a commit, which ``landing_slot`` reads at the pushed tip
+    (BDL-083 S2g), so the two cannot disagree about what a record is.
+    """
+    import json
+
     records: list[Mapping[str, object]] = []
     for line in text.splitlines():
         if not line.strip():
@@ -863,7 +874,7 @@ def jsonl_records(project_root: Path) -> list[Mapping[str, object]] | None:
             continue
         if isinstance(record, dict):
             records.append(record)
-    return records or None
+    return records
 
 
 @dataclass(frozen=True)

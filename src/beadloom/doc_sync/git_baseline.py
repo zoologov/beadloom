@@ -24,6 +24,8 @@ whose commits changed its files. BDL-083 S1d added the sixth, for the scope
 check's base: where this branch left the branch it was cut from — the merge-base
 of two refs, whether one commit is an ancestor of another, the branches the
 working copy knows, and what the reflog recorded when a branch was created.
+BDL-083 S2g added the seventh, for the landing check over a push: the commits any
+revision list selects, and the text of a path at a commit.
 
 What it deliberately does NOT do: judge freshness. That is
 :func:`~beadloom.doc_sync.engine.check_sync`'s job, which pairs this answer with
@@ -40,6 +42,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
 # Decoded exactly like every other side of a comparison in this domain: an
@@ -206,18 +209,42 @@ def commits_since(
     ``None`` means git could not answer — no work tree, no ``git``, an unknown
     ref — and callers must treat it as *not checked*, never as *no commits*.
     """
+    if _run_git(project_root, ["rev-parse", "--verify", "--quiet", ref]) is None:
+        return None
+    return commits_in(project_root, (f"{ref}..HEAD",), trailer=trailer)
+
+
+def commits_in(
+    project_root: Path, revisions: Sequence[str], *, trailer: str | None = None
+) -> tuple[BranchCommit, ...] | None:
+    """The commits *revisions* select, newest first, or ``None`` when git cannot answer.
+
+    *revisions* is what ``git log`` takes as its revision arguments, so a push's range
+    is said the way git says it: ``<old>..<new>`` for a branch the remote holds, or
+    ``<new> --not --remotes`` for one it does not (BDL-083 S2g reads the commits a push
+    carries this way). :func:`commits_since` is the case ``<ref>..HEAD``. Each record
+    is the one :func:`commits_since` documents.
+    """
     prefix = _run_git(project_root, ["rev-parse", "--show-prefix"])
     if prefix is None:
         return None
-    if _run_git(project_root, ["rev-parse", "--verify", "--quiet", ref]) is None:
-        return None
     raw = _run_git(
         project_root,
-        ["log", _commit_format(trailer), "--name-only", "-z", "--no-renames", f"{ref}..HEAD"],
+        ["log", _commit_format(trailer), "--name-only", "-z", "--no-renames", *revisions],
     )
     if raw is None:
         return None
     return tuple(_parse_commits(raw, prefix.strip()))
+
+
+def text_at(project_root: Path, ref: str, path: str) -> str | None:
+    """The text of the repository path *path* at the commit *ref*, or ``None``.
+
+    ``None`` when git cannot answer as well as when the commit holds no such path, so a
+    caller that must tell the two apart asks :func:`ref_exists` first. *path* is
+    relative to the repository's top, the way git names a path inside a commit.
+    """
+    return _run_git(project_root, ["show", f"{ref}:{path}"])
 
 
 def _commit_format(trailer: str | None) -> str:

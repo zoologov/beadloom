@@ -47,12 +47,20 @@ def tools(workdir: Path, *, beadloom: bool = False, shims: dict[str, str] | None
     return f"{bindir}:/usr/bin:/bin"
 
 
-def run_hook(root: Path, name: str, path: str) -> subprocess.CompletedProcess[str]:
-    """Run *root*'s installed hook *name* as git would, from the root, under *path*."""
+def run_hook(
+    root: Path, name: str, path: str, *, stdin: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Run *root*'s installed hook *name* as git would, from the root, under *path*.
+
+    *stdin* is what git writes to the hook: for pre-push, one line per ref pushed
+    (``<local ref> <local oid> <remote ref> <remote oid>``). It is always handed over,
+    empty by default, so no hook reads the terminal the suite happens to run under.
+    """
     return subprocess.run(  # noqa: S603 - the hook this test installed, run by sh
         ["/bin/sh", str(root / ".git" / "hooks" / name)],
         cwd=root,
         env={"PATH": path, "HOME": str(root)},
+        input=stdin,
         capture_output=True,
         encoding="utf-8",
         errors="replace",

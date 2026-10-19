@@ -8,11 +8,13 @@ which is a property of the artifacts and not of the tracker.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
+from beadloom.application.landing_slot import SlotHold
 from beadloom.application.waves import (
     GATE_COMMIT_SCOPED,
     MEDIUM_LANDING_ORDER,
@@ -107,6 +109,18 @@ def given_artifact_instructing_after(world: dict[str, Any], command: str) -> Non
     )
 
 
+@given(
+    parsers.parse(
+        'the landing slot is held by "{holder}", a bead the tracker lists as "{status}"'
+    )
+)
+def given_slot_held(world: dict[str, Any], holder: str, status: str) -> None:
+    world["environment"] = replace(
+        world["environment"],
+        landing_slot=SlotHold(slot="rig-merge-slot", holder=holder, holder_status=status),
+    )
+
+
 @given("no flow artifact instructs the landing lock at all")
 def given_no_artifact(world: dict[str, Any]) -> None:
     world["artifacts"] = []
@@ -121,12 +135,7 @@ def when_sites_derived(world: dict[str, Any]) -> None:
 def when_decided(world: dict[str, Any]) -> None:
     environment = world["environment"]
     if environment is not None:
-        environment = WaveEnvironment(
-            tree_changed_paths=environment.tree_changed_paths,
-            commit_gate=environment.commit_gate,
-            doc_baseline_stale_pairs=environment.doc_baseline_stale_pairs,
-            landing_lock_sites=_sites(world["artifacts"]),
-        )
+        environment = replace(environment, landing_lock_sites=_sites(world["artifacts"]))
     world["plan"] = plan_waves(
         world["beads"], conn=world["conn"], environment=environment
     )
@@ -188,6 +197,11 @@ def then_medium_passed(world: dict[str, Any], medium: str) -> None:
 @then("the landing-order verdict states that it read no instruction")
 def then_verdict_states_empty_population(world: dict[str, Any]) -> None:
     assert "no flow artifact" in _landing_check(world).detail
+
+
+@then(parsers.parse('the landing-order verdict names the release "{release}"'))
+def then_verdict_names_release(world: dict[str, Any], release: str) -> None:
+    assert f"`{release}`" in _landing_check(world).detail, _landing_check(world).detail
 
 
 @then("the plan is not clean")

@@ -64,6 +64,7 @@ import click
 from beadloom.services.commands._root import main
 
 if TYPE_CHECKING:
+    from beadloom.application.landing_slot import SlotHold
     from beadloom.application.waves import (
         BeadRecord,
         FocusDocument,
@@ -193,8 +194,8 @@ def _bead_ids(
     return tuple(sorted(set(beads) | set(derived)))
 
 
-def _tracker_census(project_root: Path) -> TrackerCensus:
-    """What the tracker holds beyond the beads this call names.
+def _tracker_census(project_root: Path) -> tuple[TrackerCensus, SlotHold | None]:
+    """What the tracker holds beyond the beads this call names, and who holds the slot.
 
     Two call forms and one purpose: the whole tracker, so a work item's
     population can be walked, and the ready list, so the population can be cut
@@ -210,6 +211,11 @@ def _tracker_census(project_root: Path) -> TrackerCensus:
     reporting that nothing was left out. A tracker that cannot answer must not
     stop a shape being decided — the population is a notice beside the plan, not
     an input to it.
+
+    The landing slot's holder is read from the same ``bd list --all`` answer, which
+    carries the slot's record and its holder's status alike (measured on bd 1.0.4):
+    a second call for it would be a second population of one fact (BDL-UX #354).
+    ``None`` when that answer could not be read.
     """
     from beadloom.application.waves import TrackerCensus
     from beadloom.services.bd_seam import BdUnavailableError, run_bd
@@ -219,16 +225,30 @@ def _tracker_census(project_root: Path) -> TrackerCensus:
         listed = run_bd(["list", "--all", "--json"], cwd=str(project_root))
         ready = run_bd(["ready", "--json", "--limit", "0"], cwd=str(project_root))
     except BdUnavailableError:
-        return TrackerCensus()
+        return TrackerCensus(), None
     beads = _census_beads(listed.stdout) if listed.ok else None
     ids = ready_ids(ready.stdout) if ready.ok else None
     coverage = coverage_of(("ready", "--json", "--limit", "0"), ready.stderr)
-    return TrackerCensus(
+    census = TrackerCensus(
         beads=beads,
         ready=ids,
         ready_whole=coverage.as_asked,
         ready_note=coverage.stated,
     )
+    return census, (_landing_slot(listed.stdout) if listed.ok else None)
+
+
+def _landing_slot(stdout: str) -> SlotHold | None:
+    """Who holds the landing slot in a ``bd list --json`` answer; ``None`` if unreadable."""
+    from beadloom.application.landing_slot import slot_hold
+
+    try:
+        rows = json.loads(stdout)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(rows, list):
+        return None
+    return slot_hold(row for row in rows if isinstance(row, dict))
 
 
 def _census_beads(stdout: str) -> tuple[TrackerBead, ...] | None:
@@ -433,7 +453,7 @@ def _relative(path: Path, project_root: Path) -> str:
 
 
 def _environment(
-    project_root: Path, db_path: Path, axes: WorkItemAxes
+    project_root: Path, db_path: Path, axes: WorkItemAxes, landing_slot: SlotHold | None
 ) -> WaveEnvironment:
     """Measure the media the graph cannot see, here at the services edge.
 
@@ -456,6 +476,7 @@ def _environment(
         landing_lock_sites=lock_sites(
             lock_invocations(text_invocations(flow_artifacts(project_root)))
         ),
+        landing_slot=landing_slot,
         focus_documents=_focus_documents(project_root, axes),
         graph_input=_graph_input(project_root, db_path),
     )
@@ -734,7 +755,7 @@ def waves(
         )
         sys.exit(_EXIT_UNDECIDABLE)
 
-    census = _tracker_census(project_root)
+    census, landing_slot = _tracker_census(project_root)
     try:
         asked = _bead_ids(beads, parent, census)
         overrides = load_overrides(project_root)
@@ -745,7 +766,7 @@ def waves(
     running = _running_records(census, asked, project_root)
 
     axes = work_item_axes(project_root)
-    environment = _environment(project_root, db_path, axes)
+    environment = _environment(project_root, db_path, axes, landing_slot)
     conn = open_db(db_path)
     try:
         plan = plan_waves(

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.doc_sync.git_baseline import commits_since
+from beadloom.doc_sync.git_baseline import commits_in, commits_since, text_at
 from tests.support.committed_project import commit_project, git
 
 if TYPE_CHECKING:
@@ -130,3 +130,45 @@ class TestATrailerIsReadAsGitParsesIt:
         root = _repository(tmp_path)
         with pytest.raises(ValueError, match="not a trailer key"):
             commits_since(root, "main", trailer="Bead)%H")
+
+
+class TestTheCommitsARevisionListSelects:
+    """BDL-083 S2g (``beadloom-89gm``): a push's range, said the way git says it."""
+
+    def test_a_range_selects_what_the_old_tip_lacks(self, tmp_path: Path) -> None:
+        root = _repository(tmp_path)
+        (root / "src" / "a.py").write_text("A = 2\n", encoding="utf-8")
+        _commit(root, "first\n\nBead: bd-1")
+        first = git(root, "rev-parse", "HEAD")
+        (root / "src" / "b.py").write_text("B = 2\n", encoding="utf-8")
+        _commit(root, "second\n\nBead: bd-2")
+
+        commits = commits_in(root, (f"{first}..HEAD",), trailer="Bead")
+
+        assert commits is not None
+        assert [c.trailer_values for c in commits] == [("bd-2",)]
+
+    def test_a_branch_no_remote_holds_is_read_with_not_remotes(self, tmp_path: Path) -> None:
+        root = _repository(tmp_path)
+        (root / "src" / "a.py").write_text("A = 3\n", encoding="utf-8")
+        _commit(root, "one more")
+        commits = commits_in(root, ("HEAD", "--not", "--remotes"))
+        assert commits is not None
+        assert len(commits) == 2
+
+    def test_a_revision_git_does_not_know_is_none(self, tmp_path: Path) -> None:
+        root = _repository(tmp_path)
+        assert commits_in(root, ("c" * 40,)) is None
+
+
+class TestTheTextOfAPathAtACommit:
+    """BDL-083 S2g (``beadloom-89gm``): the export a push would land."""
+
+    def test_the_committed_text_and_not_the_working_tree_s(self, tmp_path: Path) -> None:
+        root = _repository(tmp_path)
+        (root / "src" / "a.py").write_text("A = 9\n", encoding="utf-8")
+        assert text_at(root, "HEAD", "src/a.py") == "A = 1\n"
+
+    def test_a_path_the_commit_does_not_hold_is_none(self, tmp_path: Path) -> None:
+        root = _repository(tmp_path)
+        assert text_at(root, "HEAD", "src/absent.py") is None

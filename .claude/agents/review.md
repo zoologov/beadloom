@@ -206,12 +206,28 @@ the way this flow asked for it.
 - **Release with your holder.** A release that names no holder frees whoever holds the slot,
   including a live neighbour, and reports success. bd checks the holder only when you pass
   one.
+- **Release before you push, and land the release.** The slot is tracker state, exported
+  into `.beads/issues.jsonl`, and every other clone reads it from the export the trunk
+  carries. A release made after the push reaches no commit the trunk merges: the trunk then
+  exports the slot as held by a bead that is closed, and the next clone's `acquire` is
+  refused naming a holder nobody can wait on. So a landing runs acquire → commit → release
+  → export → the export landed → push, and the pre-push hook runs `beadloom landing-check`,
+  which refuses a push whose export still holds the slot for a bead the push carries.
+- **A slot held by a closed bead is freed by name.** Release it with
+  `bd merge-slot release --holder <closed-bead>`; waiting on it waits forever.
+  `beadloom waves` names that release on any plan made over such a slot.
 
 ```bash
 bd merge-slot acquire --holder <bead-id>   # exit 0 means you hold it; anything else means you do not
 # ... stage your own files by path; commit with `Bead: <bead-id>` in the last paragraph ...
 bd merge-slot release --holder <bead-id>   # the only release form bd verifies
+bd export -o .beads/issues.jsonl           # the release, in the file every other clone reads
+git commit -m "<subject>" -m "Bead: <bead-id>" -- .beads/issues.jsonl   # lands it, by path
+git push                                   # only now: the export it lands shows the slot free
 ```
+
+A neighbour who acquires between your release and your export appears in your export as the
+holder. That hold is theirs, and their own landing exports its release.
 
 **The trailer goes in the message's last paragraph.** Git reads trailers from the message's
 final paragraph only, so `Bead: <bead-id>` stands beside any other trailer (`Co-Authored-By`,
