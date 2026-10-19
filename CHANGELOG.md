@@ -416,7 +416,8 @@ probes measured below (the owner's ruling of 2026-10-11).
   passed on 65575 bytes with no verdict line. The report is now written through
   `console_streams.write_whole`, which sets the descriptor blocking for the write and retries an
   `EAGAIN`: the reader received all 230075 bytes, identical to the copy the same run wrote to a
-  file.
+  file. The wait for room is `poll`, which takes a descriptor of any number: the first version
+  waited with `select`, which raised `ValueError` on descriptor 4066 on Linux (`beadloom-tlgk`).
 - **A report derived after the Gate's steps that raises no longer takes the verdict with it
   (`beadloom-4m0w`, `beadloom-ba9w.17`).** The room census, the coverage report and the ownership
   report ran outside the step boundary, so an exception in one ended `ci` and the MCP

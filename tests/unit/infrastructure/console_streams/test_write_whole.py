@@ -10,8 +10,11 @@ retried once the descriptor can take more, so nothing is dropped or written twic
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import io
 import os
+import resource
 from typing import TYPE_CHECKING
 
 from beadloom.infrastructure import console_streams
@@ -19,6 +22,8 @@ from beadloom.infrastructure.console_streams import write_whole
 from tests.support.late_reader import read_late
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     import pytest
 
 #: The largest default pipe capacity among the rooms this suite runs in (Linux, 64 KiB).
@@ -26,6 +31,14 @@ _PIPE_CAPACITY = 64 * 1024
 
 #: A report several times the largest pipe capacity of the rooms this suite runs in.
 _REPORT = "\n".join(f"  - finding {n:05d}: " + "x" * 90 for n in range(6000))
+
+
+#: The first descriptor `select(2)` cannot take on Linux: `FD_SETSIZE` is 1024 there, and
+#: CPython refuses a descriptor at or above it with `ValueError` (the same on Darwin).
+_FD_SETSIZE = 1024
+
+#: Room above :data:`_FD_SETSIZE` for the soft descriptor limit, so a high descriptor fits.
+_LIMIT_HEADROOM = 64
 
 
 def _text_stream(write_end: int, *, encoding: str = "utf-8") -> io.TextIOWrapper:
@@ -67,7 +80,7 @@ def test_a_blocking_descriptor_stays_blocking() -> None:
 
 
 def _refuse_blocking_mode(monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    """Make every request to set a descriptor blocking a no-op; count ``select`` waits.
+    """Make every request to set a descriptor blocking a no-op; count the waits for room.
 
     Only the request for blocking mode is refused: the late reader's own request for
     non-blocking mode still lands, so the write end stays non-blocking for the whole
@@ -75,21 +88,19 @@ def _refuse_blocking_mode(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     both requests leaves the pipe blocking, and the retry is then never reached.
     """
     real_set_blocking = os.set_blocking
-    real_select = console_streams.select.select
+    real_wait = console_streams._wait_for_room
     waits: list[int] = []
 
     def _set_blocking(fd: int, blocking: bool) -> None:
         if not blocking:
             real_set_blocking(fd, blocking)
 
-    def _select(
-        rlist: list[int], wlist: list[int], xlist: list[int]
-    ) -> tuple[list[int], list[int], list[int]]:
-        waits.append(1)
-        return real_select(rlist, wlist, xlist)
+    def _wait_for_room(fd: int) -> None:
+        waits.append(fd)
+        real_wait(fd)
 
     monkeypatch.setattr(console_streams.os, "set_blocking", _set_blocking)
-    monkeypatch.setattr(console_streams.select, "select", _select)
+    monkeypatch.setattr(console_streams, "_wait_for_room", _wait_for_room)
     return waits
 
 
@@ -161,3 +172,68 @@ def test_a_stream_with_no_descriptor_gets_the_text_and_a_newline() -> None:
     stream = io.StringIO()
     write_whole("PASS — gate clean", stream)
     assert stream.getvalue() == "PASS — gate clean\n"
+
+
+@contextlib.contextmanager
+def _room_for_a_high_descriptor() -> Iterator[None]:
+    """The soft ``RLIMIT_NOFILE`` above :data:`_FD_SETSIZE` for the duration, then as found."""
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    wanted = _FD_SETSIZE + _LIMIT_HEADROOM
+    if soft >= wanted:
+        yield
+        return
+    resource.setrlimit(resource.RLIMIT_NOFILE, (wanted, hard))
+    try:
+        yield
+    finally:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+
+
+def test_a_descriptor_above_what_select_can_take_receives_the_whole_report(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A wait for room on a descriptor at or above 1024 does not raise (PR #106, Linux).
+
+    A long run holds many descriptors, so the one under ``sys.stdout`` can be numbered past
+    what ``select`` takes: CI handed the writer 4066. ``F_DUPFD`` takes the lowest free
+    descriptor at or above the floor, so the test never closes one somebody else holds,
+    as ``dup2`` to a fixed number could. The duplicate shares the pipe's description, so
+    the late reader's non-blocking mode is its mode, and refusing blocking mode makes the
+    write reach the wait.
+    """
+    _refuse_blocking_mode(monkeypatch)
+
+    def _write(write_end: int) -> None:
+        high = fcntl.fcntl(write_end, fcntl.F_DUPFD, _FD_SETSIZE)
+        try:
+            assert high >= _FD_SETSIZE
+            with _text_stream(high) as stream:
+                write_whole(_REPORT, stream)
+        finally:
+            os.close(high)
+
+    with _room_for_a_high_descriptor():
+        assert read_late(_write).text == _REPORT + "\n"
+
+
+def test_without_poll_the_writer_pauses_and_still_delivers_the_whole_report(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Windows has no ``poll`` and its ``select`` takes no pipe: a pause stands in for it."""
+    _refuse_blocking_mode(monkeypatch)
+    monkeypatch.delattr(console_streams.select, "poll")
+    real_sleep = console_streams.time.sleep
+    pauses: list[float] = []
+
+    def _sleep(seconds: float) -> None:
+        pauses.append(seconds)
+        real_sleep(seconds)
+
+    monkeypatch.setattr(console_streams.time, "sleep", _sleep)
+
+    def _write(write_end: int) -> None:
+        with _text_stream(write_end) as stream:
+            write_whole(_REPORT, stream)
+
+    assert read_late(_write).text == _REPORT + "\n"
+    assert pauses, "the write end never refused a write, so no pause was exercised"

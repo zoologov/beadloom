@@ -71,6 +71,7 @@ import contextlib
 import os
 import select
 import sys
+import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -161,6 +162,16 @@ def tolerate_unencodable_output(streams: Iterable[IO[str]] | None = None) -> tup
 # which is why an `EAGAIN` is still expected and retried. The retry is on raw `os.write`,
 # which reports how many bytes it took, so nothing is dropped and nothing is written twice;
 # a text stream that raises half-way through a write cannot say how much of it went out.
+#
+# The wait for room is `poll`, not `select`. `select(2)` takes no descriptor at or above
+# FD_SETSIZE (1024), and CPython raises `ValueError: filedescriptor out of range in
+# select()` for one: PR #106's CI (Linux, CPython 3.13) handed this writer descriptor 4066
+# after a long suite, and the writer that exists to survive the pipe raised instead.
+# `poll(2)` has no such limit. Windows has no `poll`, and its `select` takes sockets only,
+# so there the writer pauses for `_RETRY_PAUSE` and retries: the same bytes, a coarser wait.
+
+#: How long the writer pauses before retrying a refused write on a platform with no ``poll``.
+_RETRY_PAUSE = 0.01
 
 
 def _descriptor(stream: TextIO) -> int | None:
@@ -192,6 +203,21 @@ def _blocking(fd: int) -> Iterator[None]:
                 os.set_blocking(fd, False)
 
 
+def _wait_for_room(fd: int) -> None:
+    """Return once *fd* can take more bytes, or after :data:`_RETRY_PAUSE` without ``poll``.
+
+    A reader that has gone away also ends the wait (``POLLERR``/``POLLHUP``), and the retry
+    then raises ``BrokenPipeError`` rather than waiting forever.
+    """
+    poll = getattr(select, "poll", None)
+    if poll is None:
+        time.sleep(_RETRY_PAUSE)
+        return
+    poller = poll()
+    poller.register(fd, select.POLLOUT)
+    poller.poll()
+
+
 def _write_all(fd: int, payload: bytes) -> None:
     """Every byte of *payload* to *fd*, waiting for room whenever the pipe has none."""
     pending = memoryview(payload)
@@ -199,7 +225,7 @@ def _write_all(fd: int, payload: bytes) -> None:
         try:
             written = os.write(fd, pending)
         except BlockingIOError:
-            select.select([], [fd], [])
+            _wait_for_room(fd)
             continue
         pending = pending[written:]
 

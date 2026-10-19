@@ -154,10 +154,21 @@ Darwin arm64 · CPython 3.13.7 · commit 12c35cf3 · reader starts 2 s late
 The flag belongs to the open file description, which every holder of that end of the pipe
 shares, so a parent that chose non-blocking writes keeps its choice once the report is out.
 Another holder can set the flag again while the write is under way, so an `EAGAIN` is still
-expected: it is retried once `select` reports room. The retry is on raw `os.write`, which
+expected: it is retried once `poll` reports room. The retry is on raw `os.write`, which
 returns how many bytes it took, so nothing is dropped and nothing is written twice. A text
 stream that raises part-way through a write cannot say how much of it went out, which is why
 the retry does not go through one.
+
+The wait is `poll`, not `select`, because `select` takes no descriptor at or above
+`FD_SETSIZE`, which is 1024 on Linux and Darwin alike, and CPython raises `ValueError` for one.
+That was measured on PR #106 (`beadloom-tlgk`): the `tests (3.13)` leg on Linux handed the
+writer descriptor 4066 after a long suite, and two of its tests raised
+`ValueError: filedescriptor out of range in select()`. A process holding many files is an
+ordinary room for a CLI, so the limit was a defect of the writer and not of the suite. `poll`
+has no descriptor limit, and a reader that has gone away ends its wait, so the retry raises
+`BrokenPipeError` instead of waiting forever. Windows has no `poll`, and its `select` takes
+sockets only, so on a platform without `poll` the writer pauses for 10 ms and retries: the same
+bytes, a coarser wait. A test removes `poll` and reads the whole report through that path.
 
 The bytes are the stream's own codec and error handler applied to the text, so the handler
 policy above still decides what an unencodable glyph becomes. Text the stream had buffered is
