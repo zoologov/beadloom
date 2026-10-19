@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** S1R7 — `beadloom-mnln`, the review of fix 7 at `dca00751`; then S1W `beadloom-hfxv`
-**Goal:** the machine vocabulary of `unread_bead_lines` confirmed fixed
-**Done when:** `beadloom-mnln` closes OK; S1W ready
+**Bead:** S1W — `beadloom-hfxv` (tech-writer), then the Gate loop, push, PR (`beadloom-c5m5`)
+**Goal:** every document the S1 changes touched current; the CHANGELOG names the MAJOR with its measured moves
+**Done when:** `beadloom ci` rc 0 on the tree with the docs attested by ref; the PR open; merge on green
 
 ## Progress
 
@@ -44,8 +44,8 @@
 | `beadloom-g64s` | S1 fix 6 | done | `abf49721`; each `claims` entry of `ci --format json` and the MCP `owners` payload carries `unread_bead_lines` (rows of `{placement, count, commits}`, `[]` when none); `_liveness` returns a dataclass; `ci --help` points at the verdict; 6 tests added, 2 updated, red first; room 14664 passed + 1 of #311's class over 2950 files; tree 14711 passed / 0 failed, ruff, mypy, `ci` rc 0 |
 | `beadloom-sywb` | S1R6 | done | OK 2026-10-19 at `b70f900c`: 0 critical, 0 major, 2 minor (`placement` is a sentence, not a token; the `complete_bead` tool description's stale step list) → fix 7; 2 nitpicks; 1334 targeted tests on the tree, 12 red on the pre-fix source |
 | `beadloom-kdx7` | S1 fix 7 | done | `5ed74aac` + `dca00751`; `placement` takes `outside_final` / `unread_final`, the sentence beside it as `stated`, the vocabulary in `mcp.md` and the ci-gate docs; the `complete_bead` tool description points at the verdict; 8 tests red first; the DOC example fenced after `test_site_markdown_compiles` went red; room 14669 passed + 1 of #311's class over 2950 files; tree 14716 passed / 0 failed, ruff, mypy, `ci` rc 0 |
-| `beadloom-mnln` | S1R7 | ready | review of fix 7 launched 2026-10-19 on the bead id and `dca00751` |
-| `beadloom-hfxv` | S1W | blocked | blocked by the fix-7 review |
+| `beadloom-mnln` | S1R7 | done | OK 2026-10-19 at `6a6c7fc4`: 0 critical, 0 major, 2 minor (both docs → S1W: `mcp.md:362` mangled sentence; the Gate step-list copies incl. `mcp.md:351`), 3 nitpicks; 138 touched tests on the tree, 8 red on the pre-fix source |
+| `beadloom-hfxv` | S1W | ready | launched 2026-10-19 at `6a6c7fc4` with the doc list of the Notes |
 | `beadloom-c5m5` | S1P | blocked | blocked by S1W |
 
 ## Notes
@@ -71,4 +71,5 @@
 - S1R6 (2026-10-19, HEAD `b70f900c`): OK with two minors in code, both before S1W as fix 7 `beadloom-kdx7` + review `beadloom-mnln`: a returned value's vocabulary is a public contract (public-api.md items 3, 4), so `placement` becomes a token now rather than a MAJOR later; the tool description is what an agent reads in the tool list.
 - 2026-10-19: BDL-UX #353 (Windows: backslash paths in the index against POSIX `source:`; the surface ledger without a pair list) filed from the first outside adopter's teammate and taken into this epic by the owner as S2f, RFC D11; the bead is created when S2 starts (ruling 6).
 - Fix wave 6 (2026-10-19, HEAD `dca00751`, gate owner `beadloom-kdx7`): the tree 14716 passed, 0 failed, 145 skipped, 13 xfailed (eight foreground parts); ruff, mypy, `ci` rc 0. For S1W, in addition: the token vocabulary in `public-api.md` item 4 and `ci-setup.md`; a CHANGELOG line naming the tokens; `ci --help` says "every check this project declares" where "every step of the Gate" is exact. `mcp_server.py` and `test_mcp_process_tools.py` failed `ruff format` before S1 (left; a candidate for S3's rules area).
+- S1W doc list (consolidated 2026-10-19 from the review passes and the fix beads): the ci-gate SPEC (the hook's behaviour, `ERROR`, `room`/`not_run` as `{reason}`, `unread_bead_lines` tokens, the line still saying the base defaults to `trunk_ref`); the rule-engine SPEC (`nothing_to_ban` at info, the `looks unable to fire` headline); `docs/guides/ci-setup.md` (pre-push fails without `beadloom`, the verdict from the tee copy, pre-commit `lint --staged`, the ci JSON shape, line 145 statuses + `ERROR`); `docs/guides/public-api.md` item 4 (MCP keys `not_run_reason`, `room.reason`, `unread_bead_lines` + `placement` vocabulary) and item 5 (`info`, `nothing_to_ban`); CHANGELOG (MAJOR: the three measured moves + the `scope_base` move + D10 + the new keys + the liveness headline + the misplaced-line sentence; adopters re-run `install-hooks` and `setup-agentic-flow`); `docs/services/cli.md` (:3374; the ownership paragraph near :3040); `docs/services/mcp.md` (:351 step list, :362, the `complete_bead` paragraph); `docs/architecture.md`; the ten CLI-surface drift docs (`testing.md`, `bdd-scenarios.md`, `parallel-waves.md`, …); the declared surface re-recorded (815 → 826). Not for S1W (code): `ci --help` wording ("every step of the Gate"); the step list in the `ai_techwriter` workflow templates under `src/`; `ruff format` on the two MCP files — S3's rules area.
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.
