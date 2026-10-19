@@ -43,15 +43,19 @@ Feature: a rebuild reproduces the room it replaces, over the working tree's file
     And the room carried only "pyproject.toml"
     And the rebuild reused nothing
 
-  Scenario: A remembered file the working tree no longer holds refuses the rebuild
+  # Since BDL-083 S2d (BDL-UX #335) a remembered file that HEAD still holds is the bead's
+  # deletion and is deleted in the rebuilt room, which reports it; that case is in
+  # `clean_room_carries_a_deletion.feature`. A file neither the tree nor HEAD holds is the one
+  # a list cannot lose silently, and it still refuses.
+  Scenario: A remembered file neither the working tree nor HEAD holds refuses the rebuild
     Given a project at a commit
-    And the working tree changes "src/thing.py"
-    And bead "beadloom-x.1" has built its clean room carrying "src/thing.py"
-    And the working tree no longer holds "src/thing.py"
+    And the working tree changes "src/new.py"
+    And bead "beadloom-x.1" has built its clean room carrying "src/new.py"
+    And the working tree no longer holds "src/new.py"
     When bead "beadloom-x.1" rebuilds its clean room naming no files
     Then no room is built
     And the refusal is reported as "file_missing"
-    And the room still holds "src/thing.py"
+    And the room still holds "src/new.py"
 
   Scenario: A first build has no room to remember from
     Given a project at a commit

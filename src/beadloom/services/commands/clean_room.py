@@ -58,6 +58,11 @@ _REFUSAL_UNKNOWN_BEAD = "unknown_bead"
 #: The tracker status that means "this bead is mine right now".
 _CLAIMED = "in_progress"
 
+#: How many left-out differences the human shape lists before it counts the rest. The JSON
+#: shape lists every one; a shared tree can differ from HEAD in hundreds of files, and a
+#: room's report that scrolls its own path off the screen is read by nobody.
+_LEFT_OUT_SHOWN = 20
+
 
 def _claim(bead_id: str, project_root: Path) -> tuple[str | None, str | None]:
     """The bead's tracker status, and the finding that its absence produces.
@@ -96,6 +101,8 @@ def _payload(
     build: RoomBuild, status: str | None, findings: list[str], code: int
 ) -> dict[str, Any]:
     """The whole answer as data — the same facts the human shape prints."""
+    from beadloom.application.waves import difference_records
+
     return {
         "bead": build.bead_id,
         "room": str(build.path),
@@ -104,6 +111,8 @@ def _payload(
         "detail": build.detail,
         "commit": build.commit,
         "carried": list(build.carried),
+        "deleted": list(build.deleted),
+        "not_carried": difference_records(build.not_carried),
         "reused": list(build.reused),
         "invocation": list(build.invocation),
         "extras": build.extras,
@@ -158,6 +167,11 @@ def _render(build: RoomBuild, status: str | None, findings: list[str]) -> None:
     click.echo(f"  from commit {build.commit}, holder recorded as {build.bead_id}")
     carried = ", ".join(build.carried) if build.carried else "none"
     click.echo(f"  carried from the working tree: {carried}")
+    if build.deleted:
+        click.echo(
+            "  deleted in the room, because HEAD holds them and the working tree does not: "
+            + ", ".join(build.deleted)
+        )
     if build.reused:
         click.echo(
             "  taken from the record of the room this replaced: "
@@ -178,6 +192,7 @@ def _render(build: RoomBuild, status: str | None, findings: list[str]) -> None:
     if build.environment is not None:
         click.echo(f"  environment: {build.environment.detail}")
     click.echo(f"  tracker status: {status or 'not answered'}")
+    _render_left_out(build)
     click.echo("")
     click.echo("Measure in the room, not in the tree:")
     for line in build.invocation:
@@ -193,6 +208,29 @@ def _render(build: RoomBuild, status: str | None, findings: list[str]) -> None:
     )
     for finding in findings:
         click.echo(f"FINDING: {finding}", err=True)
+
+
+def _render_left_out(build: RoomBuild) -> None:
+    """Name the files where the tree differs from HEAD that the room does not carry."""
+    left_out = build.not_carried
+    if left_out is None:
+        click.echo(
+            "  the working tree's difference from HEAD: not read, git did not answer — "
+            "the room cannot say what its verdict leaves out"
+        )
+        return
+    if not left_out:
+        click.echo("  the working tree differs from HEAD in no file this room does not carry")
+        return
+    click.echo(
+        f"  the working tree differs from HEAD in {len(left_out)} file(s) this room does "
+        "not carry; the room holds HEAD's version of each, so its verdict leaves them out "
+        "(a neighbour's work, or a file of yours you did not name):"
+    )
+    for difference in left_out[:_LEFT_OUT_SHOWN]:
+        click.echo(f"    {difference.change:<9} {difference.path}")
+    if len(left_out) > _LEFT_OUT_SHOWN:
+        click.echo(f"    and {len(left_out) - _LEFT_OUT_SHOWN} more (--json lists every one)")
 
 
 # beadloom:domain=application

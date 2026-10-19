@@ -497,3 +497,110 @@ class TestTheListARebuildDoesNotAskFor:
         data = json.loads(result.stdout)
         assert data["carried"] == ["other.txt"]
         assert data["reused"] == []
+
+
+class TestDeletionsAndTheDifferencesLeftOut:
+    """BDL-083 S2d (``beadloom-flrc``), RFC D6, BDL-UX #335: what the two shapes print about
+    a carried deletion and about the files where the tree differs from HEAD that the room
+    does not carry. The build itself is covered by
+    ``tests/acceptance/application/wave-plan/clean_room_carries_a_deletion.feature``."""
+
+    def test_a_carried_deletion_builds_the_room_at_exit_zero_and_the_text_names_it(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+        (root / "src" / "thing.py").unlink()
+
+        result = _run(root, tmp_path / "rooms", "--carry", "src/thing.py")
+
+        assert result.exit_code == 0, result.output
+        assert (
+            "deleted in the room, because HEAD holds them and the working tree does not: "
+            "src/thing.py"
+        ) in result.output
+        assert not (tmp_path / "rooms" / room_for(BEAD) / "src").exists()
+
+    def test_the_json_keeps_a_deletion_apart_from_the_carried_files(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+        (root / "src" / "thing.py").rename(root / "src" / "other.py")
+
+        carry = ("--carry", "src/thing.py", "--carry", "src/other.py")
+        result = _run(root, tmp_path / "rooms", *carry, "--json")
+
+        data = json.loads(result.stdout)
+        assert data["carried"] == ["src/other.py"]
+        assert data["deleted"] == ["src/thing.py"]
+        assert data["not_carried"] == []
+        marker = json.loads(
+            (tmp_path / "rooms" / room_for(BEAD) / ROOM_MARKER).read_text(encoding="utf-8")
+        )
+        assert marker["deleted"] == ["src/thing.py"]
+        assert marker["request"]["carry"] == ["src/thing.py", "src/other.py"]
+
+    def test_the_text_lists_each_difference_the_room_leaves_out_with_its_kind(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+        (root / "src" / "thing.py").write_text("VALUE = 2\n", encoding="utf-8")
+        (root / "notes.txt").write_text("a neighbour's\n", encoding="utf-8")
+
+        result = _run(root, tmp_path / "rooms")
+
+        assert result.exit_code == 0, result.output
+        assert "the working tree differs from HEAD in 2 file(s) this room does not carry" in (
+            result.output
+        )
+        assert "    modified  src/thing.py" in result.output
+        assert "    untracked notes.txt" in result.output
+
+    def test_a_tree_with_no_difference_left_out_says_so(self, tmp_path: Path, bd: Any) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+        (root / "src" / "thing.py").write_text("VALUE = 2\n", encoding="utf-8")
+
+        result = _run(root, tmp_path / "rooms", "--carry", "src/thing.py")
+
+        assert "differs from HEAD in no file this room does not carry" in result.output
+
+    def test_a_long_list_is_cut_in_the_text_and_whole_in_the_json(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+        for number in range(25):
+            (root / f"n{number:02}.txt").write_text("x\n", encoding="utf-8")
+
+        human = _run(root, tmp_path / "rooms")
+        structured = _run(root, tmp_path / "rooms", "--rebuild", "--json")
+
+        assert "    and 5 more (--json lists every one)" in human.output
+        assert len(json.loads(structured.stdout)["not_carried"]) == 25
+
+    def test_a_difference_git_could_not_read_is_not_reported_as_none(
+        self, tmp_path: Path, bd: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+        monkeypatch.setattr(
+            "beadloom.application.waves.clean_room.tree_differences", lambda _root: None
+        )
+
+        human = _run(root, tmp_path / "rooms")
+        structured = _run(root, tmp_path / "rooms", "--rebuild", "--json")
+
+        assert "the working tree's difference from HEAD: not read" in human.output
+        assert json.loads(structured.stdout)["not_carried"] is None
+
+    def test_the_limits_name_a_shared_file_copied_whole(self, tmp_path: Path, bd: Any) -> None:
+        bd({BEAD: "in_progress"})
+        root = _project(tmp_path)
+
+        result = _run(root, tmp_path / "rooms")
+
+        cannot = result.output.split("What this room cannot answer:", 1)[1]
+        assert "an edit a neighbour made in the same file is in the room too" in cannot

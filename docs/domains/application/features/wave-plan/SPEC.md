@@ -524,6 +524,33 @@ that set holds the neighbour's work, which is #235 by a second route. A room
 under the project root is refused too — it would be untracked work in the tree
 it copies.
 
+#### A carried deletion, and the differences the room leaves out
+
+BDL-083 S2d, RFC D6, BDL-UX #335. Measured on the first outside adopter's monorepo: a room
+for a 51-file `git mv` change had to be finished by hand, twice. The room is built from
+`HEAD`, so the old side of a rename stayed in it — the old package importable, the old
+tests collected as a second set — and naming an old path in `--carry` refused the whole
+room with `file_missing`.
+
+So a carried path that `HEAD` holds as a file and the working tree does not is the bead's
+deletion: the room deletes it, together with every directory that deletion leaves empty,
+and reports it as `RoomBuild.deleted` (`deleted` in `--json` and in the marker, a
+`deleted in the room` line in the text), kept apart from `carried`, which names the files
+copied in. A path neither the tree nor `HEAD` holds is still refused as `file_missing`, and
+a directory `HEAD` holds that the tree does not is refused as `not_a_file`, so a list never
+shrinks without the caller being told. `room_tree.held_at_head` answers what `HEAD` holds
+each absent path as, before the room exists.
+
+The room also NAMES every file where the working tree differs from `HEAD` that it does not
+carry — modified, deleted, added or untracked, ignored files excepted — as
+`RoomBuild.not_carried` (`not_carried` in `--json` and the marker, a list of `{path,
+change}`; the text lists twenty and counts the rest). Those are the differences its verdict
+leaves out: a neighbour's work, or a file of the bead's own that nobody named. Git cannot
+say which, so the room names them instead of guessing. `None` means git could not answer
+and is printed as "not read", never as "no difference". A carried file is still copied
+whole, so a neighbour's edit inside a shared file reaches the room; that is the third entry
+of the room's limits, because the room cannot tell one bead's lines from another's.
+
 #### A rebuild reproduces the request, not the room
 
 Naming every file is the correct path and it was retyped on every rebuild:
@@ -547,8 +574,9 @@ keep that from reopening what it was built on:
 - **An option named beside `--rebuild` REPLACES its remembered counterpart** and
   never adds to it, so the remembered list cannot grow into the mode that
   deliberately does not exist. A remembered path the working tree no longer holds
-  refuses the rebuild by the same `file_missing` route a typed one would, and
-  refuses it while the room and its record are still there.
+  is treated as a typed one would be: deleted in the room and reported when `HEAD`
+  holds it, and refused by the `file_missing` route when it does not, while the
+  room and its record are still there.
 
 The request is recorded beside the outcome rather than read back out of it,
 because the two come apart: a room given no environment records no extras choice
@@ -723,7 +751,8 @@ printed under `What this room cannot answer:`. The first entry names the cost of
 missing `.git` to a suite, not only to a freshness check: on the adopter's monorepo the
 project's own test that reads a commit hash failed in a room that had named the
 freshness check alone, so the failure read as the bead's. The second is the claim's
-scope — these files, never the combined tree.
+scope — these files, never the combined tree. The third is that a carried file is copied
+whole, a neighbour's edits in it included (BDL-UX #335).
 
 ### What each medium is checked against
 
@@ -945,6 +974,12 @@ not tell them apart.
 | `RoomDistribution` | that project's directory, packaging, lock and the reason it was chosen |
 | `RoomBuild.distribution` | the project the room measures |
 | `RoomBuild.limits` | what a verdict taken in the room cannot answer, beginning with the missing `.git` |
+| `RoomBuild.deleted` | the carried paths `HEAD` holds and the tree does not, deleted in the room |
+| `RoomBuild.not_carried` | every file where the tree differs from `HEAD` that the room does not carry, or `None` when git could not say |
+| `held_at_head(root, paths)` | what `HEAD` holds each path as, a file or a directory, for the ones it holds |
+| `tree_differences(root)` | every file where the working tree differs from `HEAD`, and how, or `None` |
+| `differences_not_carried(differences, carried)` | the differences no carried path names |
+| `difference_records(differences)` | those differences as the `{path, change}` records the marker and `--json` carry |
 | `RoomBuild.extras` | the optional extras the room's interpreter has, or `None` when nothing could look |
 | `RoomBuild.environment` | the interpreter the room holds, or the reason it holds none |
 | `extras_a_room_installs(project_root, asked, *, distribution_root)` | what the caller named, or the union of every extra the legs install |
@@ -984,6 +1019,7 @@ every scenario runs without a `bd` binary on the machine.
 | `clean_room.py` | build the room a bead owns, and refuse a directory this run did not create |
 | `room_env.py` | the interpreter a room's verdict is taken under, and which extras it holds |
 | `room_distribution.py` | the Python project a room measures, and the hint that runs its suite there |
+| `room_tree.py` | what the working tree holds beyond `HEAD`, read before a room is built from `HEAD` |
 | `media_checks.py` | whether each medium's plan-time precondition holds |
 | `population.py` | the beads a plan could have been about, and which of them it was not asked about |
 | `running.py` | the work already running under a plan's work item, and which planned beads wait for it |
@@ -1020,6 +1056,10 @@ repository's own workflows do not use.
 monorepo fixture from its own `uv.lock` and runs the hint as printed, and
 `tests/unit/application/waves/test_room_distribution.py` covers the project choice, the install
 command each arrangement produces and the hint for layouts no scenario builds.
+`tests/acceptance/application/wave-plan/clean_room_carries_a_deletion.feature` builds rooms on the
+monorepo fixture over a rename, a deleted package and a neighbour's changes, and
+`tests/unit/application/waves/test_room_tree.py` covers each kind of difference git reports and
+what `HEAD` holds a path as.
 `tests/test_cli_clean_room.py` covers `beadloom clean-room`'s
 two output shapes and its three exit codes;
 `tests/acceptance/application/verdict-room/room_extras.feature` states that a room records the

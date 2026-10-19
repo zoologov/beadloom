@@ -1,6 +1,6 @@
 {
   "declared_docs": 141,
-  "declared_pairs": 840,
+  "declared_pairs": 841,
   "pairs": [
     ["architecture.md", "src/beadloom/__init__.py"],
     ["architecture.md", "src/beadloom/services/__init__.py"],
@@ -284,6 +284,7 @@
     ["domains/application/features/wave-plan/SPEC.md", "src/beadloom/application/waves/population.py"],
     ["domains/application/features/wave-plan/SPEC.md", "src/beadloom/application/waves/room_distribution.py"],
     ["domains/application/features/wave-plan/SPEC.md", "src/beadloom/application/waves/room_env.py"],
+    ["domains/application/features/wave-plan/SPEC.md", "src/beadloom/application/waves/room_tree.py"],
     ["domains/application/features/wave-plan/SPEC.md", "src/beadloom/application/waves/running.py"],
     ["domains/application/features/wave-plan/SPEC.md", "src/beadloom/application/waves/scope.py"],
     ["domains/context-oracle/README.md", "src/beadloom/context_oracle/builder.py"],
@@ -843,5 +844,5 @@
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/lib/queryState.js"],
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/model/useUrlState.js"]
   ],
-  "recorded_at": "2026-10-19T21:02:04.281111+00:00"
+  "recorded_at": "2026-10-19T22:39:39.880456+00:00"
 }

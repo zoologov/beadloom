@@ -177,6 +177,10 @@ from beadloom.application.waves.room_env import (
     room_python,
     site_packages,
 )
+from beadloom.application.waves.room_tree import (
+    TreeDifference,
+    difference_records,
+)
 from beadloom.application.waves.running import (
     FINDING_RUNNING_NOT_COMPARED,
     RUNNING_NO_WORK_ITEM,
@@ -296,6 +300,7 @@ __all__ = [
     "SharedMedium",
     "TrackerBead",
     "TrackerCensus",
+    "TreeDifference",
     "UnguardedAxis",
     "Wave",
     "WaveConfigError",
@@ -316,6 +321,7 @@ __all__ = [
     "defect_detail",
     "derivation_findings",
     "derive_population",
+    "difference_records",
     "extras_a_room_installs",
     "finding_for",
     "load_overrides",

@@ -238,7 +238,16 @@ on one code base (BDL-UX #235, #243, #181, #236). Since BDL-083 S2b the human sh
 the `measured project:` the room was built for, and the `Measure in the room` hint is that
 project's — its sources, its first package and its `testpaths` — rather than this repository's
 layout; `--json` carries it as `distribution`, and `environment.lock` / `environment.resolution`
-say whether the environment came from the project's `uv.lock`.
+say whether the environment came from the project's `uv.lock`. Since BDL-083 S2d (BDL-UX #335)
+a carried path that `HEAD` holds and the working tree does not is deleted in the room instead
+of refusing it with `file_missing`, so a rename is carried as its two sides: the human shape
+prints a `deleted in the room` line and `--json` a `deleted` list beside `carried`. Both shapes
+also name every file where the working tree differs from `HEAD` that the room does not carry —
+`not_carried` in `--json`, a list of `{path, change}` or `null` when git did not answer, and a
+block of at most twenty lines in the human shape — because those are what the room's verdict
+leaves out. A third limit says a carried file is copied whole, a neighbour's edits in it
+included. The exit codes do not move: a left-out difference is a report, not a finding, since
+every shared tree has one.
 
 Since BDL-UX #256 the command also gives the room the interpreter that verdict is taken
 under: `--extras` names the optional extras to install, the default being the union of every
