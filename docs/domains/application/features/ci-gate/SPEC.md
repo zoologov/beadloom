@@ -18,7 +18,8 @@ and a step that raises reads `ERROR` while the steps after it still run.
 
 ### Steps
 
-`run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex)` runs, in order:
+`run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex, performed_elsewhere=(),
+tracker=None)` runs, in order:
 
 1. **reindex** (unless `--no-reindex`) — rebuild the index, incrementally (`up to date` or
    `reindexed`). When the incremental run falls back to a full rebuild, as on a fresh checkout
@@ -539,6 +540,35 @@ report carries `error` on every step (`null` when the step returned) and a top-l
 list of step names. The GitHub format adds one `::notice::` with the same clause. The MCP
 `complete_bead` tool returns `FAIL` with the crashed step's finding among its findings.
 
+### The pre-push hook refuses a push it cannot judge
+
+`beadloom install-hooks` writes a pre-push hook that runs this gate, and until BDL-083 S1a it
+let through two pushes nobody judged (BDL-UX #326). Without `beadloom` on the `PATH` git runs
+the hook with, the hook exited 0 and printed nothing, measured at `fbc24284` with
+`PATH=/usr/bin:/bin`. And any non-zero exit of the gate was reported as stale documentation,
+a crash included. The hook text is `services/commands/hook_templates.HOOK_TEMPLATE_PRE_PUSH`.
+
+- Without `beadloom` on the `PATH`, the hook exits 1 with three sentences on stderr: the push
+  was not judged and is refused, how to put `beadloom` on that `PATH` or remove the hook, and
+  `git push --no-verify`.
+- The gate runs as `beadloom ci --format rich --tee <temporary file>`. `--format rich` because
+  it is the format that prints a verdict line whatever git's stdout is. The report goes to the
+  hook's output through `console_streams.write_whole` and a copy goes to the file, and the
+  verdict is read from the copy by `hook_templates.GATE_VERDICT_PATTERN`. A report the shell
+  captured and reprinted with `printf` was lost on a non-blocking pipe (BDL-UX #226): measured
+  at `12c35cf3` under `/bin/dash`, the reader got 65575 bytes, no verdict line and no sentence
+  from the hook.
+- A run whose copy holds no verdict line is reported as
+  `the Gate did not run: beadloom ci exited N without a verdict`, and the hook exits 1
+  whatever `N` was, a crash or a missing index included.
+- A red verdict exits 1 and names its fixes. A verdict that counts crashed steps adds that a
+  step that crashed checked nothing.
+
+An installed hook keeps the text it was written with, so an adopter re-runs
+`beadloom install-hooks` to get this behaviour. A hook written by an earlier version keeps
+working with this gate, because it does not pass `--tee`. A hook written by this version over an
+older `beadloom` reports `the Gate did not run`, because that `ci` refuses `--tee`.
+
 ### A report derived after the steps that raises states its reason
 
 The room census, the coverage statement and the ownership report are derived after the steps,
@@ -559,8 +589,9 @@ type already has a reason every surface prints.
 
 The rich format prints the sentence under the report's own heading (`Room: not stated`, `Not run
 by this gate:`, `Findings by owner:`), followed by `so this run makes no claim here` for the first
-two. `--format json` carries it as `reason` on the report's own key (`room`, `not_run`,
-`ownership`), and `--format github` as that report's `::notice::`. A report that was not asked for
+two. `--format json` carries it on the report's own key: `room` and `not_run` are
+`{"reason": "<the sentence>"}` in place of their objects, and `ownership` keeps its object with
+the sentence in `reason`. `--format github` prints it as that report's `::notice::`. A report that was not asked for
 — no tracker given, so no ownership — states nothing, which is a different answer from a report
 that raised.
 
@@ -678,7 +709,8 @@ Module `src/beadloom/application/gate_ownership.py`:
 
 - `derive_gate_ownership(project_root, *, findings, tracker, base=None) -> GateOwnership` —
   one verdict per finding, held against the files the claimed beads' commits changed on
-  `base..HEAD` (`None` takes `declared_scope.trunk_ref`).
+  `base..HEAD` (`None` takes `scope_base(project_root).ref`, the base the `scope-check` step
+  judges against, so both lines name one base).
 - `ownership_sentences(ownership) -> list[str]` — the sentences every surface prints, the
   rule first; `gate_ownership_lines(ownership)` is the rich block built from them.
 - `ownership_payload(ownership) -> dict` — the JSON report's `ownership`, and the MCP

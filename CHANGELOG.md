@@ -7,13 +7,170 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-**This release is minor by the [public-API guide](docs/guides/public-api.md#how-a-change-sets-the-version):
-it adds keys and values, and the only exit codes it moves are false findings removed on inputs
-9.0.0 read against the feature-sliced.design specification, with no input moving from passing
-to failing in the probes measured below (the owner's ruling of 2026-10-11).**
+**The next version is major (the owner's ruling of 2026-10-18, BDL-083 RFC D8): BDL-083 S1, the
+gates that lie, gives three commands a different exit code on an input 9.0.0 accepted.** The
+pre-push hook without `beadloom` on its `PATH` and `issue-number check` over a declared log the
+tree does not hold move from 0 to 1, and `lint --fail-on-warn` over an import rule with nothing
+to ban moves from 1 to 0. Beside them, the Gate's `scope-check` step judges a different set of
+files on a branch cut from an unmerged branch, the role files 9.0.0's templates composed drift,
+and the MCP `complete_bead` tool's ownership verdict loses the value `unowned`. Each is under
+*Breaking* with its measurement, taken on 2026-10-18 and 2026-10-19 on Darwin arm64 under CPython
+3.13.7, on the monorepo fixture under `tests/fixtures/` or on this repository. Every other S1 line
+adds a key, a value, an option or a sentence. Each line names its bead. The S1 pull request is to
+be opened.
+
+BDL-082, merged before it, is minor by the
+[public-API guide](docs/guides/public-api.md#how-a-change-sets-the-version): it adds keys and
+values, and the only exit codes it moves are false findings removed on inputs 9.0.0 read against
+the feature-sliced.design specification, with no input moving from passing to failing in the
+probes measured below (the owner's ruling of 2026-10-11).
+
+### Breaking
+
+- **The pre-push hook refuses a push it cannot judge (`beadloom-7i09`, BDL-UX #326, RFC D1).**
+  Without `beadloom` on the `PATH` git runs the hook with, the hook exits 1 with three sentences
+  on stderr: the push was not judged and is refused, how to put `beadloom` on that `PATH` or
+  remove the hook, and `git push --no-verify`. Measured with the hook `install-hooks` writes, run
+  as `/bin/sh .git/hooks/pre-push` with `PATH=/usr/bin:/bin`: rc 0 and nothing printed with the
+  9.0.0 template at `fbc24284`, rc 1 at `32197286`. A push to a bare remote from the monorepo
+  fixture, `env -i PATH=/usr/bin:/bin`: 9.0.0 pushed with rc 0, this release refuses with rc 1 and
+  the remote holds nothing (`beadloom-rupp`). A Gate run that prints no verdict line is now
+  refused too, whatever its exit code, with `the Gate did not run: beadloom ci exited N without a
+  verdict`, where every non-zero exit used to be reported as stale documentation. Held by
+  `tests/test_cli_hooks.py::TestInstallHooksPrePush::test_pre_push_without_beadloom_fails_with_a_sentence`,
+  red on 9.0.0 with 14 more tests of that file. *Upgrade:* step 1.
+- **`issue-number check` exits 1 on a declared log the tree does not hold (`beadloom-6xdt`,
+  BDL-UX #331, RFC D5).** The command takes its exit code from the Gate's own `issue-log` step,
+  so the two cannot disagree again. Measured over this repository's `.beadloom/config.yml` copied
+  to a scratch project with the log absent: 9.0.0 exits 0 with `The declared issue log is missing
+  or unreadable — no leg ran.` while the Gate's step on the same project fails. This release exits
+  1 with `The declared issue log could not be read — no leg ran.`, then the Gate's finding and its
+  remediation. Every other state keeps its exit code, and a project that declares no log is still
+  exit 0. The JSON payload is unchanged. Held by
+  `tests/test_issue_number_command.py::test_check_exits_1_on_a_declared_log_the_tree_does_not_hold`,
+  red on 9.0.0 by `assert 0 == 1`. *Upgrade:* step 4.
+- **An import rule with nothing to ban is stated at `info`, so `lint --fail-on-warn` exits 0 on it
+  (`beadloom-q8x6`, BDL-UX #328, RFC D2).** A `forbid_import` or `test_import_boundary` rule whose
+  `to:` glob can match an import path and matches none today was a `rule_liveness` warning saying
+  the rule cannot fire. It is now the rule type `nothing_to_ban` at the new severity `info`.
+  Measured on the monorepo fixture: 9.0.0 prints `[WARN] domain-no-io-imports-digest-os ...
+  cannot fire: its to glob os/** matches 0 of 16 indexed import paths`, and `--fail-on-warn`
+  exits 1. This release prints `[INFO] domain-no-io-imports-digest-os: 0 imports of os/** in the
+  project; the rule is live`, and `--fail-on-warn` exits 0. `--strict` exits 0 on both. Three imports
+  of `os` added to the fixture (`import os`, `from os import path`, `import os.path`) give 3
+  errors and exit 1. By the guide's second table this is a
+  false finding removed, and no input measured moved from passing to failing. It is listed here
+  because a pipeline that gated on `--fail-on-warn` passes where it failed. A glob whose only
+  reason to be unmatchable is a source root inferred from the index stays a warning. Held by
+  `tests/integration/graph/rules/test_a_rule_with_nothing_to_ban_fails_no_lint_on_warnings.py`,
+  red on 9.0.0 by `assert 1 == 0`. This repository's own lint finding set did not move.
+- **The Gate's `scope-check` step judges a branch against the branch it was cut from
+  (`beadloom-fgu8`, BDL-UX #330, RFC D4).** The base is the merge-base with the branch the working
+  branch was cut from, else the trunk (`origin/<trunk>`, else `<trunk>`), and the step's line
+  ends with it. Measured with `beadloom ci` on the monorepo fixture, `main` ← `features/W1`
+  (unmerged, editing two frontend files) ← `features/W2` (editing `backend/src/digest/sections.py`
+  inside its declared axes): 9.0.0 reports `2 path(s) outside the axes W2 declares ...; 3 judged`,
+  both of them `features/W1`'s files, with no base printed. This release reports `0 path(s)
+  outside ...; 1 judged ...; against a9d3e59 (the merge-base with features/W1, the branch this one
+  was cut from; 2 file(s) attributed to the parent branch)`. The step is warn only and passes on
+  both, so no exit code of `ci` moves. `scope-check --since REF` judges as before, and
+  `--base main` restores the two findings. In pull-request CI the branch is now read from
+  `GITHUB_HEAD_REF` or `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME` before the checkout's own name, so
+  the step runs on a detached checkout where it skipped (BDL-UX #300, measured on the fixture
+  only). Held by `tests/acceptance/application/declared-scope/scope_base.feature`, five scenarios
+  red on 9.0.0.
+- **Role files composed before this release drift, so `config-check` and the Gate exit 1 until
+  `setup-agentic-flow` runs (`beadloom-7kas`, `beadloom-ba9w.18`, RFC D10).** The composed commit
+  format carries the git trailer `Bead: <bead-id>` in the message's final paragraph, beside the
+  other trailers, and the landing fragments and the coordinator's commit line and checklist say
+  so. Measured on this repository's tree at `0f1cb9a3`, the branch point of BDL-083, whose role
+  files the templates of that commit composed: `config-check` exits 0 under that commit's code and
+  1 under this release's, with 7 drifted artifacts (`.claude/CLAUDE.md`, the five role files and
+  `.claude/commands/coordinator.md`), each `composed body is stale`. *Upgrade:* step 2.
+- **The MCP `complete_bead` tool's ownership verdict loses `unowned`, and `owned` changes its
+  meaning (`beadloom-b23f`, `beadloom-7kas`, BDL-UX #329, RFC D3 and D10).** In 9.0.0 a finding
+  was `owned` by every claimed bead whose `refs:` named a node covering it, and `unowned` when a
+  node was derived and no claim covered it. Now a finding is `owned` by a claimed bead whose
+  commits on `<base>..HEAD` changed a file the finding is about, and `unattributed` otherwise. A
+  commit is a bead's when its message carries `Bead: <bead-id>` in its final paragraph, and by
+  nothing else: a bead id mentioned elsewhere in the message binds no commit, and `refs:` attribute
+  no file. Measured on this branch's 24 commits at `996781dd`, over all 1285 tracker ids: 17
+  (bead, commit) bindings over 14 beads by any mention, 4 over 3 by the trailer. On this
+  repository, 9.0.0's code printed `unattributed — 659 finding(s): no node could be derived from
+  them` where this release names the rule and the base. `owners.findings[].verdict` takes `owned`
+  and `unattributed`. The same change reaches `beadloom ci`'s `ownership` block in all three
+  formats, which the guide does not declare. *Upgrade:* step 3.
+
+### Upgrading — what to check
+
+1. **Re-run `beadloom install-hooks`.** An installed hook keeps the text it was written with. The
+   new pre-push hook refuses a push without `beadloom` on its `PATH` and reads the verdict from
+   `beadloom ci --tee`, and the new pre-commit hook gains the architecture-lint leg
+   (`beadloom lint --staged --strict`) and a ruff leg that reads ruff's own exit code. A hook
+   written by 9.0.0 keeps working with this release, because it does not pass `--tee`. A hook
+   written by this release over an older `beadloom` reports `the Gate did not run`.
+2. **Re-run `beadloom setup-agentic-flow`** so the composed commit format carries the `Bead:`
+   trailer, then `beadloom config-check`.
+3. **End every commit message with the trailer block**: `Bead: <bead-id>` in the last paragraph,
+   beside `Co-Authored-By` and any other trailer, with no blank line between them and nothing
+   after them. `git log -1 --format='%(trailers:key=Bead,valueonly)'` prints the bead id when the
+   commit is bound and nothing when it is not. Commits without the trailer are `unattributed`.
+   Reading the trailer needs git 2.22 or later. An MCP client that matched `unowned` matches
+   `unattributed`.
+4. **If a script reads `issue-number check`'s exit code** over a project that declares
+   `issue_log:`, point `issue_log.path` at the log, or remove the declaration.
+5. **If a pipeline runs `lint --fail-on-warn`**, read the `[INFO]` lines it now passes over: each
+   is a rule that would fire on the first import its `to:` glob names.
 
 ### Added
 
+- **`scope-check --base [REF]` (`beadloom-fgu8`, BDL-083 S1d).** Bare `--base` judges the branch
+  against the derived base (RFC D4, under *Breaking*), and `--base REF` names it. `--since REF` is
+  kept as the same as `--base REF`. `scope-check --json` and `review-brief --json` gain `base`:
+  `{ref, kind, parent, parent_files, trunk}`, where `kind` takes `explicit`, `parent` or `trunk`.
+  `review-brief` prints a `Base:` line, and its default base is the same derived base.
+- **`lint --staged` (`beadloom-7i09`, BDL-083 S1a).** It keeps the findings of the nodes that own
+  a path the commit stages, by the most specific `source`, and the findings in a staged file, and
+  leads with `Lint over this commit: N node(s) own M of K staged path(s) (...)`, counting what it
+  left to the push gate. `--format json` gains `commit_scope`: `{staged, owned, nodes,
+  left_out}`. The pre-commit hook runs it as `lint --staged --strict`. Measured on this
+  repository: 1.17 s and 1.19 s warm, 4.54 s on a first run that reindexed.
+- **`ci --tee FILE` (`beadloom-jwfc`, BDL-083 S1e2).** It writes the rendered report to `FILE` as
+  well, in UTF-8, before the terminal. The pre-push hook reads its verdict from that copy.
+- **The step status `ERROR` (`beadloom-ba9w.13`, BDL-UX #318, RFC D1).** A Gate step that raises is
+  reported as `ERROR` with `<class>: <message>`, fails the gate, and the steps after it still run.
+  The verdict counts it inside its line, `FAIL — 1 step(s) crashed: docs-audit — gate blocked`,
+  and a `Crashed` block names each crashed step. `ci --format json` gains `error` on every step
+  (`null` unless it raised) and a top-level `crashed` list, and `--format github` adds one
+  `::notice::` with the same clause. Measured with the `docs-audit` step made to raise on the
+  monorepo fixture: 9.0.0 exits 1 with 32 lines of traceback and no step line. This release exits
+  1 with `[ERROR] docs-audit: crashed — RuntimeError: injected fault`, the seven steps after it
+  reported and the verdict above.
+- **Keys of the MCP `complete_bead` tool (`beadloom-ba9w.17`, `beadloom-b23f`, `beadloom-g64s`,
+  `beadloom-kdx7`).** `not_run_reason` on both verdicts: `null` when the coverage report was
+  derived, `the coverage report raised <class>: <message>` when it raised, with `not_run` empty
+  then. `room` is `{"reason": "the room census raised <class>: <message>"}` when the census
+  raised, where the call used to end in a traceback. On `FAIL`, `owners` is the `ownership`
+  payload of `ci --format json` and gains `rule`, `base` and `claims`, and each `owners.findings`
+  entry gains `where`, `files` and `uncommitted`. Each `claims` entry is `{bead, commits,
+  unread_bead_lines}`: `commits` counts the commits the `Bead:` trailer binds, and each row of
+  `unread_bead_lines` is `{placement, stated, count, commits}`, one per place a `Bead: <id>` line
+  stands where git reads no trailer, with the commit hashes newest first and `[]` when there is
+  none. `placement` takes the vocabulary `outside_final` (outside the message's final paragraph)
+  and `unread_final` (in a final paragraph git does not read as a trailer block), and `stated` is
+  the sentence the text report prints for it. The tool's description no longer lists the Gate's
+  steps: it says the verdict names every step that ran.
+- **The keys of `ci --format json` around the verdict (`beadloom-b23f`, `beadloom-4m0w`,
+  `beadloom-g64s`, `beadloom-kdx7`).** `ownership` carries `rule`, `base`, `claims` (the shape
+  above) and per finding `where`, `files` and `uncommitted`, and no longer carries
+  `unread_claims`. `room` and `not_run` are `{"reason": ...}` when the room census or the coverage
+  report raised. The command's JSON is not on the guide's list of public outputs.
+- **The lint severity `info` and the rule type `nothing_to_ban` (`beadloom-q8x6`).** In
+  `lint --format json`, the porcelain severity field, the `[INFO]` marker of the rich format and
+  `::notice` in `--format github`, and in the portal data file's `lint.nodeless[].severity`. A
+  statement at `info` counts in neither the errors nor the warnings, and the debt report counts it
+  in neither (`beadloom-ilrn`). The Gate's lint line adds `, N statement(s) at info` when there is
+  one (`beadloom-4m0w`).
 - **`init` and `reindex` name the code files they read no symbol from (`beadloom-6e2o`,
   BDL-082 S2a).** A code file under the scan paths whose language has no parser installed is
   counted by language and named on its own line, for instance `8 TypeScript files, no parser
@@ -46,6 +203,29 @@ to failing in the probes measured below (the owner's ruling of 2026-10-11).**
 
 ### Changed
 
+- **The Gate names the rule it attributed findings by, and a `Bead:` line git read no trailer from
+  (`beadloom-b23f`, `beadloom-7kas`, `beadloom-ba9w.18`).** Every format prints the rule before
+  the owners, ``attributed by the files the commits carrying `Bead: <id>` changed``, and the range,
+  `over <base>..HEAD`, where the base is the one `scope-check` judges against. A claimed bead
+  with no bound commit is told that no commit on the range carries its trailer. When a
+  `Bead: <id>` line stands where git reads no trailer, the report counts the commits that carry
+  it and says where it stands, outside the message's final paragraph or in a final paragraph git
+  does not read as a trailer block, instead of denying the line. A `doc-stale` or `doc-missing`
+  finding carries the pair's code file as a second location.
+- **The liveness headline of a glob made unmatchable by an inferred source root
+  (`beadloom-ba9w.18`).** A `forbid_import` or `test_import_boundary` finding whose only reason is a
+  source root inferred from the index reads `Rule 'x' looks unable to fire: ... and looks
+  unmatchable: ...`, where it read `cannot fire` and `can match none`, because an importable
+  package of that name would still fire it. The rule type, the level (`warn`) and the count of
+  inert rules are unchanged.
+- **The pre-commit hook's ruff leg reads ruff's own exit code (`beadloom-7i09`, BDL-UX #327).** It
+  passes the files as arguments rather than through `xargs`, which folded `command not found` into
+  the exit code of violations, shows ruff's or uv's standard error, and runs from the outermost
+  directory holding a `pyproject.toml` above each file, so ruff reads the nearest configuration.
+  Measured on the monorepo fixture with `uv` and no ruff on the `PATH`: 9.0.0 printed `Warning:
+  ruff lint violations in this commit`. This release prints uv's `Failed to spawn: ruff` and
+  `Ruff: NOT CHECKED in backend/ -- ruff did not run (exit 2)`. A leg that did not run never
+  blocks.
 - **The portal draws every title inside its box, routes every line between two top-level nodes
   itself, and names each colour of a line of several kinds in the legend (`beadloom-us5r.1`,
   BDL-082 S2c; the owner's two rulings of 2026-10-11).** A top-level box too small for its
@@ -135,9 +315,9 @@ to failing in the probes measured below (the owner's ruling of 2026-10-11).**
   the portal's layout of 9.0.0 fails 8 browser cases on `vue-fsd` and 1 on `rn-fsd`. With the
   portal change above (`beadloom-us5r.1`) both fixtures' browser suites pass, measured on
   2026-10-13 with Node 22.9.0, and the strict xfail marks are removed.
-- **Exit codes move only on inputs 9.0.0 read against the specification.** Measured by
-  `beadloom-wvzg` on 2026-10-11 on Darwin arm64, CPython 3.13, on scratch projects written from
-  feature-sliced.design's reference pages: each probe copied twice, `init --yes` then
+- **The FSD rules move exit codes only on inputs 9.0.0 read against the specification
+  (BDL-082).** Measured by `beadloom-wvzg` on 2026-10-11 on Darwin arm64, CPython 3.13, on
+  scratch projects written from feature-sliced.design's reference pages: each probe copied twice, `init --yes` then
   `lint --strict`, by 9.0.0 (installed with `[languages]`) and by this tree. `init --yes` moves
   with `lint --strict`, since it runs the same check.
   - The specification's `@x` example (`entities/artist` importing `entities/song/@x/artist`)
@@ -227,8 +407,34 @@ to failing in the probes measured below (the owner's ruling of 2026-10-11).**
   finding here when imported. `app/store` is a finding to Steiger and not here. The
   [rule-engine SPEC](docs/domains/graph/features/rule-engine/SPEC.md) keeps the table.
 
+### Fixed
+
+- **`beadloom ci` writes its whole report to a pipe that will not wait (`beadloom-jwfc`, BDL-UX
+  #226).** An agent's shell sets the write end of the pipe it reads non-blocking, and `ci` wrote
+  its report in one call. Measured at `12c35cf3` with the reader starting 2 s late: `ci` exited 1
+  with `BlockingIOError` after 83518 of 229492 bytes, and the pre-push hook under `/bin/dash`
+  passed on 65575 bytes with no verdict line. The report is now written through
+  `console_streams.write_whole`, which sets the descriptor blocking for the write and retries an
+  `EAGAIN`: the reader received all 230075 bytes, identical to the copy the same run wrote to a
+  file.
+- **A report derived after the Gate's steps that raises no longer takes the verdict with it
+  (`beadloom-4m0w`, `beadloom-ba9w.17`).** The room census, the coverage report and the ownership
+  report ran outside the step boundary, so an exception in one ended `ci` and the MCP
+  `complete_bead` tool in a traceback over steps that had all run. Each is derived through
+  `gate_boundary.derive_bounded` now. One that raises is absent, the sentence
+  `the <report> raised <class>: <message>` stands under its heading, and the steps' verdict and
+  exit code stand.
+
 ### Known limitations
 
+- **`review-brief` still names no scope for a review bead that declares none (BDL-UX #344, half
+  open).** The base half is closed above. The brief does not yet fall back to the work item's
+  declared axes and documents, and prints `DECLARED SCOPE: none declared` (S3 places it).
+- **The derived base reads the nearest branch.** A branch cut from the working branch at an older
+  commit reads as a parent as well. `--base REF` names the base when that is wrong.
+- **The pull-request branch resolution is measured on the fixture only.** No real GitHub Actions
+  or GitLab run has measured BDL-UX #300's fix yet. The first pull request after this lands is
+  that measurement.
 - **An alias that hides `@x` reads as an ordinary import.** Only an import whose specifier has
   an `@x` path segment is located for the edge fact, so a tsconfig `paths` entry
   (`"@song-x-artist"` → `entities/song/@x/artist`, or the prefix `"@song-api/*"` →

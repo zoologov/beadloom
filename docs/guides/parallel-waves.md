@@ -426,6 +426,11 @@ carrying the node that owns it). It does not hand over the bead's comments. Thos
 never printed: `N author comment(s) withheld`, with the reason, the release condition and a
 notice about the defeats the command cannot see.
 
+The change is measured against a base the brief prints on its `Base:` line, and as `base` in
+`--json`. `--since REF` names it. Without the option it is the merge-base with the branch this
+one was cut from, else the trunk: the base `scope-check` and the Gate's ownership report use
+(BDL-083 S1d, the base half of BDL-UX #344).
+
 **Its boundary is as sharp as its purpose, and both belong in the same paragraph.**
 
 **Enforced**, in code, with a test that bites: the command will not print the comments before a

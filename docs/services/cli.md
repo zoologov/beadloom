@@ -3010,7 +3010,7 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 6. `issue-log` — the issue log's numbers (BDL-068 S6): `duplicate-number`, `unwritten-claim` and `unclaimed-number` over a log declared under `issue_log:` in `.beadloom/config.yml`. Unlike its two document neighbours it BLOCKS, because a duplicate number is a reference that resolves to two entries and to neither rather than an opinion about prose. A project declaring no log is a NAMED skip. This step was missing from this list until BDL-069 S4 renumbered it.
 7. `readme-pair` — the document pairs declared under `document_pairs:` in `.beadloom/config.yml`, compared by SHAPE (BDL-069 S4). What is compared is the sequence of blocks each document is built from — heading, paragraph, code, list, table — with the heading levels and the row counts, never the text: the pair this repository declares is `README.ru.md` and `README.md`, and a text comparison over a translation is a check somebody has to switch off. It BLOCKS, on the `issue-log` terms rather than the `docs-quality` ones, and a declared path nothing could read fails too, because a declaration pointing at nothing would otherwise report `0 finding(s)` having compared no document at all. A project that declares no pair is a NAMED skip stating the key to add, so the upgrade shipping the step reddens nobody. The line states the population it held: `1 pair(s) held, 109 block(s) compared, 0 finding(s); README.ru.md <-> README.md (109 block(s))`, measured on this repository 2026-09-11, with `UNREADABLE:` naming each declared path nothing read and `NOT COMPARED:` counting the pairs read that hold no block between them — the second sets `not_verified`, so the step reports `WARN`.
 8. `doc-spaces` — the TO-BE → AS-IS relation over the project's documentation spaces (BDL-061 S5). Warn only, on the same terms as the step above, and a project with no TO-BE document is a NAMED skip stating the roots it looked under. FOUR states set `not_verified` and the step then reports `WARN`: no tracker was readable, no epic with closed beads declared a node, some epics declare none, and some epics the tracker does not name. The line states both WORKING populations apart — `N WORKING document(s) in the exempt space, M sync pair(s) excused` — because one word for two populations is how a reader takes the document count as the excused-pair count; the pair count is carried from the sync-check step that measured it, never recomputed here.
-9. `scope-check` — did this branch leave the axes its work item declared? Branch-scoped (`<trunk>...HEAD`, what the pull request contains) rather than tree-scoped, because the tree is shared by several agents and judging it would fail one agent's push on a neighbour's edit. Warn only, and `passed=True` unconditionally: one work item in 64 on this repository carries an `## Axes` section, so a check that blocked would meet a repository that cannot satisfy it. A run with no branch, no work item, no index or no section is SKIPPED with its reason, and a run over a branch whose changed paths no node owns is SKIPPED too, because a comparison over an empty population is not a pass. The report names each path and the axis it fell outside. It does not prevent the commit that made it.
+9. `scope-check` — did this branch leave the axes its work item declared? Branch-scoped (`<base>...HEAD`, what the pull request contains, where the base is the merge-base with the branch this one was cut from, else the trunk, and the line ends with it: `; against <ref> (<rule>; N file(s) attributed to the parent branch)`, BDL-083 S1d) rather than tree-scoped, because the tree is shared by several agents and judging it would fail one agent's push on a neighbour's edit. Warn only, and `passed=True` unconditionally: one work item in 64 on this repository carries an `## Axes` section, so a check that blocked would meet a repository that cannot satisfy it. A run with no branch, no work item, no index or no section is SKIPPED with its reason, and a run over a branch whose changed paths no node owns is SKIPPED too, because a comparison over an empty population is not a pass. The report names each path and the axis it fell outside. It does not prevent the commit that made it.
 10. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`. The SCORE half is not a gate step: it needs counters a runner wrote, and [`beadloom mutation`](#beadloom-mutation) is where they are read.
 11. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
 12. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
@@ -3038,23 +3038,36 @@ pipeline verifying under a name the vocabulary does not read (`pytest`; `ruff`/`
 `mypy`/`pyright`) is told the population is empty with the vocabulary named, never that nothing is
 left to run. Like the room, it is not a step: same verdict, same exit code, same findings.
 
-**And the verdict names who owns what it found (BDL-068 S6).** This project's own branch
-carried a red Gate across two waves — two stale docs owned by no bead in the running plan —
-and every gate owner in those waves had to be told by the coordinator, by hand, that the red
-was not theirs. `GateResult` carries a `GateOwnership`: one verdict per finding, held against
-the beads the tracker reports claimed while the run happened. `owned` names the beads;
-`unowned` says a node was derived and no claim covers it; `unattributed` says no node could be
-derived from the finding at all. A tracker that cannot answer, and a project with no index,
-are a reason on the whole report rather than a page of `unowned` — telling every gate owner
-"not yours" when nobody was asked would be the same false green in a new vocabulary. All three
-shapes print it: a `Findings by owner:` block under the rich verdict, an `ownership` object in
-`--format json` (`reason`, `claimed`, `none_owned`, `findings`, `unread_claims`) and one
-`::notice::` per owning bead in `--format github`, plus the headline `no finding of this run
-is owned by a bead claimed now`. The owner is a BEAD and never the work item: the work item's
-`## Axes` answer whether a change is inside the approval, which the `scope-check` step of the
-same run already asks and which every agent on one branch shares. Like the room and the
-coverage block, it is not a step — same verdict, same exit code, same findings — and the
-tracker is asked only when the run produced a finding, so a green run shells out to nothing.
+**And the verdict names who owns what it found (BDL-068 S6; the rule since BDL-083 S1c).**
+This project's own branch carried a red Gate across two waves — two stale docs owned by no bead
+in the running plan — and every gate owner in those waves had to be told by the coordinator, by
+hand, that the red was not theirs. `GateResult` carries a `GateOwnership`: one verdict per
+finding, held against the files the commits of the beads the tracker reports claimed changed on
+`<base>..HEAD`. A commit is a bead's when its message carries the git trailer `Bead: <bead-id>`
+in its final paragraph, and by nothing else (BDL-083 D10): a bead id mentioned anywhere else in
+the message binds no commit, and a bead's `refs:` attribute no file. `owned` names the beads
+whose commits changed a file the finding is about. `unattributed` says no claimed bead's commits
+did, or that the finding is about no file. Until BDL-083 a third verdict, `unowned`, said a
+node was derived and no claim covered it. Ownership by node attributed a finding to every bead
+whose node covered the directory, so it was removed (BDL-UX #329). The base is the one the
+`scope-check` step judges against (`scope_base`: the merge-base with the branch this one was cut
+from, else the trunk). A tracker that cannot answer, a project with no index and a git that
+cannot list the branch's commits are a reason on the whole report rather than a page of
+`unattributed`. When a claimed bead has no bound commit and a `Bead: <id>` line stands where git
+reads no trailer, the report says so instead of denying the line. It counts the commits on
+`<base>..HEAD` that carry the line and says where it stands: outside the message's final
+paragraph, where git reads no trailer, or in a final paragraph git does not read as a trailer
+block. All three shapes print it: a `Findings by owner:` block under the rich verdict, an
+`ownership` object in `--format json` (`reason`, `rule`, `base`, `claimed`, `none_owned`,
+`claims`, `findings`) and one `::notice::` per sentence in `--format github`, the rule first.
+Each `claims` entry is `{bead, commits, unread_bead_lines}`, and each row of
+`unread_bead_lines` is `{placement, stated, count, commits}`, where `placement` is the token
+`outside_final` or `unread_final` and `stated` is the sentence the text report prints for it.
+Each `findings` entry is `{rule, verdict, node, beads, where, files, uncommitted}`. The owner is a BEAD and never the work item: the work item's `## Axes` answer
+whether a change is inside the approval, which the `scope-check` step of the same run already
+asks and which every agent on one branch shares. Like the room and the coverage block, it is
+not a step — same verdict, same exit code, same findings — and the tracker is asked only when
+the run produced a finding, so a green run shells out to nothing.
 
 ### beadloom setup-mcp
 
@@ -3371,7 +3384,7 @@ Commands (re-exported from the package via the registration shell):
 - `setup_ai_techwriter` -- scaffold the AI tech-writer (vendored harness + recipe + chosen platform CI wrapper + getting-started guide) for one-command opt-in; delegates to `onboarding/ai_techwriter_setup.py:scaffold()`
 - `setup_agentic_flow` -- scaffold the packaged multi-agent dev flow (`.claude/agents/*` + `commands/*` vendored byte-identical + CLAUDE.md auto-regions per-project); idempotent, `--force` overwrites hand-edited flow files; delegates to `onboarding/agentic_flow_setup.py:scaffold()`
 - `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator; also drift-checks/restores the scaffolded agentic-flow files when the flow is present
-- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> docs-quality -> issue-log -> readme-pair -> doc-spaces -> scope-check -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the verdict carries the room it was taken in (`GateResult.room`), printed in all three formats and changing no step's status; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
+- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> docs-quality -> issue-log -> readme-pair -> doc-spaces -> scope-check -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the verdict carries the room it was taken in (`GateResult.room`), printed in all three formats and changing no step's status; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP/ERROR, where `ERROR` is a step that raised, fails the gate and lets the steps after it run (BDL-083 S1e); uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); `--tee FILE` writes a copy of the rendered report, the copy the pre-push hook reads its verdict from; the report is written whole to a pipe that will not wait (`console_streams.write_whole`, BDL-UX #226); delegates to `application/gate.py:run_ci_gate()`
 - `waves` -- decide which of the named beads may run at the same time, from the code-level independence of their declared node scopes; prints one named reason per serialised pair, the media a concurrent wave shares, one plan-time verdict per medium and each wave's `gate_owner` (`--json`; exit 0 clean / 1 findings / 2 undecidable); delegates to `application/waves/planner.py:plan_waves()`
 - `review_brief` -- assemble a reviewer's input (assignment, declared scope, specification documents, bound scenarios, changed files) while withholding the bead's own comments, and state what is REACHABLE per channel: bead comments (counted on that bead and on no other), the documents of the work item the branch names, the commit bodies of the reviewed range, and the launch prompt, which is named as a channel nothing here can inspect; `--release` prints the account once a verdict is recorded and reports whether that verdict's independence can be established (`--since`, `--json`; exit 0 clean / 1 findings / 2 unassemblable / 3 release refused); delegates to `application/review_brief/`
 - `mutation` -- the score a run produced over the declared `mutation.targets`, from the counters the project's own runner wrote (`--stats`/`--target`/`--only`/`--tool`/`--min-score`/`--json`); reads counters by NAME and reports one it did not find rather than as zero; folds the scope check in, so an empty population is a finding and not a 100%; exit 0 clean or nothing declared / 1 findings or under the floor / 2 counters named without the scope they cover; delegates to `application/mutation_scope/score.py:report_mutation_score()`

@@ -24,7 +24,8 @@ The system is organized into six DDD domain packages, an application (use-case o
 - `status.py` — the read-side of `beadloom status` (index/coverage/health/trend counts + context-bundle metrics)
 - `debt_report/` — architecture-debt aggregation, scoring, trend tracking, CI gating, a cohesion-split package
 - `watcher.py` — file watcher for auto-reindex on change
-- `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → docs audit → docs-quality → issue-log → readme-pair → doc-spaces → scope-check → config-check → doctor → optional federate)
+- `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → docs audit → docs-quality → issue-log → readme-pair → doc-spaces → scope-check → config-check → doctor → optional federate), with its per-step exception boundary in `gate_boundary.py` and the `issue-log` leg in `gate_issue_log.py` (BDL-083 S1)
+- `scope_base.py` — the base a branch is judged against: `--base` when named, else the merge-base with the branch this one was cut from, else the trunk. It is shared by `scope-check`, the Gate's ownership report and `review-brief` (BDL-083 S1d)
 - `guards/` — the flow-guard primitive behind `beadloom guard` (BDL-061 S1): a verdict per named guard, the `guards:` block of `.beadloom/flow.yml`, one invocation boundary, and the firing record `--liveness` reads
 - `waves/` — the wave decision behind `beadloom waves` (BDL-061 S6): resolve each bead's declared node scope, decide from the graph which beads may run at once with one named reason per serialised pair, and check the plan-time precondition of each of the seven media every wave shares whatever its width, and hold each bead's declaration against the `## Axes` section its work item recorded, and build the clean room each bead measures in — derived from that bead and created rather than entered — a cohesion-split package
 - `review_brief/` — the reviewer's input behind `beadloom review-brief` (BDL-061 S6): assemble the assignment, the declared scope, the specification documents, the bound scenarios and the changed files, and withhold the bead's own comments until a verdict is recorded
@@ -207,11 +208,15 @@ the [rule-engine SPEC](domains/graph/features/rule-engine/SPEC.md).
 - **Porcelain** — machine-readable, one TAB-separated line per violation
 - **GitHub** — GitHub Actions `::error` annotations
 
-**CLI:** `beadloom lint [--strict] [--fail-on-warn] [--format rich|json|porcelain|github] [--no-reindex]`
+**CLI:** `beadloom lint [--strict] [--fail-on-warn] [--format rich|json|porcelain|github] [--no-reindex] [--staged]`
 
 The `--strict` flag exits with code 1 on `error`-severity violations (for CI/CD), and
 `--fail-on-warn` exits 1 on any finding a rule decided, warnings included. Rules support `error`
-and `warn` severity levels.
+and `warn` severity levels. A third level, `info`, is a statement and not a verdict: a
+`forbid_import` or `test_import_boundary` rule whose `to:` glob can match an import path and
+matches none today reports `nothing_to_ban` at `info`, which neither `--strict` nor
+`--fail-on-warn` exits on (BDL-083 S1b). `--staged` keeps the findings of the nodes that own a
+path the commit stages, for the pre-commit hook (`graph/lint_scope.py`, BDL-083 S1a).
 
 > **`domain-size-limit`: 200 → 280 (BDL-059 S3) → 290 (BDL-060 S4) → 180 (BDL-UX #144).** The first two moves were threshold recalibrations under the OLD metric, where `max_symbols` counted every file under a node's path prefix — so an in-domain split changed nothing and the honest option was to raise the bar for legitimately large bounded contexts.
 >
@@ -319,11 +324,21 @@ Snapshots are stored in SQLite and enable architecture drift detection across re
 `application/gate.py` powers `beadloom ci` — the unified gate that composes the
 existing checkers into one verdict with a single exit code: **reindex → `lint
 --strict` → sync-check → docs audit → docs-quality → issue-log → readme-pair →
-doc-spaces → scope-check → config-check → doctor → (optional) federate landscape gate**. Every step's honest result is printed (PASS / WARN / FAIL / SKIP) —
+doc-spaces → scope-check → config-check → doctor → (optional) federate landscape gate**. Every step's honest result is printed (PASS / WARN / FAIL / SKIP / ERROR) —
 never a green that silently skipped a step. `--format rich|json|github` applies
 uniformly; `--hub <export>` arms the cross-service landscape gate. The same gate
 runs as the **pre-push Beadloom Gate** hook (`install-hooks --pre-push`) and in
-CI (`.github/workflows/ci.yml`).
+CI (`.github/workflows/ci.yml`). The hook refuses a push it cannot judge: without
+`beadloom` on its `PATH`, or with a run that printed no verdict line, it exits 1 with a
+sentence, and it reads the verdict from the copy `beadloom ci --tee` writes (BDL-083 S1a,
+S1e2).
+
+`ERROR` is a step that raised (BDL-083 S1e). Each step runs through
+`application/gate_boundary.run_bounded`, so an exception becomes that step's `ERROR`
+with the exception's class and message, the gate fails, and the steps after it still run.
+The verdict reads `FAIL — N step(s) crashed: <steps> — gate blocked`. The room census, the
+coverage report and the ownership report are derived after the steps through
+`derive_bounded`. One that raises is absent with its reason, and the steps' verdict stands.
 
 `WARN` is a fourth outcome, not a softer pass: a step sets `not_verified` when it ran,
 found nothing wrong, and could not establish that there was nothing to find. It does not

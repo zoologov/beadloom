@@ -65,6 +65,18 @@ makes it.
    cross-import API, and no `via` key otherwise. The export stays `schema_version` 2.
 4. **The MCP tools** the server lists, with their arguments and the keys of what they return. The
    reference is [`docs/services/mcp.md`](../services/mcp.md).
+   Changed after 9.0.0, in the next major release (BDL-083 S1, unreleased), all in what
+   `complete_bead` returns. Keys added: `not_run_reason` on both verdicts, `null` when the
+   coverage report was derived and the sentence `the coverage report raised <class>: <message>`
+   when it raised. `room` is `{"reason": ...}` when the room census raised. On `FAIL`, `owners`
+   gains `rule`, `base` and `claims`, and each entry of `owners.findings` gains `where`, `files`
+   and `uncommitted`. Each `claims` entry is `{bead, commits, unread_bead_lines}`, and each row of
+   `unread_bead_lines` is `{placement, stated, count, commits}`. `placement` takes the vocabulary
+   `outside_final`, `unread_final`. A value removed and a value whose meaning changed, both under
+   *Breaking* in the change log: `owners.findings[].verdict` no longer takes `unowned`, and
+   `owned` now means that a claimed bead's commits, bound by the `Bead: <bead-id>` trailer,
+   changed a file the finding is about, where 9.0.0 meant that the bead's `refs:` named a node
+   covering it.
 5. **The portal data file's schema**: the `schema_version` the generator writes and the keys under
    it. The reference is
    [`docs/services/vitepress-site/architecture-data.md`](../services/vitepress-site/architecture-data.md).
@@ -84,6 +96,10 @@ makes it.
    `warn`; it is omitted when lint did not run. And a node's `debt.inside`, the debt of the
    nodes inside a box without the box's own, `{nodes, score, by_reason}`, where `by_reason`
    is keyed by the debt report's reasons; it is present on a node another node is `part_of`.
+   Value added after 9.0.0, in the next major release (BDL-083 S1b, unreleased): `severity`
+   also takes `info`, carried by a `nothing_to_ban` statement, a `forbid_import` or
+   `test_import_boundary` rule that can match an import path and matches none today. A
+   statement at `info` counts in neither `lint.errors` nor `lint.warnings`.
    `dashboard.data.json` and `landscape.data.json` are not this file and are not on this list.
    The keys BDL-080 added to the first, `lint.nodes_with_findings`, `lint.nodeless` and the
    top-level `pages`, are described in
