@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** S1 fix 7 — `beadloom-kdx7` (the `placement` token; the tool description), then its review `beadloom-mnln`, then S1W `beadloom-hfxv`
-**Goal:** the machine vocabulary of `unread_bead_lines` fixed before the MAJOR release documents it
-**Done when:** fix 7 green on two levels, committed with the trailer; its review OK; S1W ready
+**Bead:** S1R7 — `beadloom-mnln`, the review of fix 7 at `dca00751`; then S1W `beadloom-hfxv`
+**Goal:** the machine vocabulary of `unread_bead_lines` confirmed fixed
+**Done when:** `beadloom-mnln` closes OK; S1W ready
 
 ## Progress
 
@@ -43,8 +43,8 @@
 | `beadloom-ba9w.18` | S1 fix 5 | done | `8600556e` + `f0427d09` + `5953af08`; the format puts the trailer in the final paragraph (template, both landing fragments, checklist; recomposed by `setup-agentic-flow`); the ownership report names a `Bead:` line git reads no trailer from (two wordings: outside the final paragraph; in a final paragraph git reads as no trailer block); the MCP verdict reads `gate.room`; liveness headline `looks unable to fire` for an inferred root; 2 scenarios + 21 tests red first; room 14658 passed + 1 of #311's class over 2949 files; tree 14705 passed / 0 failed, ruff, mypy, `config-check`, `ci` rc 0 |
 | `beadloom-g64s` | S1 fix 6 | done | `abf49721`; each `claims` entry of `ci --format json` and the MCP `owners` payload carries `unread_bead_lines` (rows of `{placement, count, commits}`, `[]` when none); `_liveness` returns a dataclass; `ci --help` points at the verdict; 6 tests added, 2 updated, red first; room 14664 passed + 1 of #311's class over 2950 files; tree 14711 passed / 0 failed, ruff, mypy, `ci` rc 0 |
 | `beadloom-sywb` | S1R6 | done | OK 2026-10-19 at `b70f900c`: 0 critical, 0 major, 2 minor (`placement` is a sentence, not a token; the `complete_bead` tool description's stale step list) → fix 7; 2 nitpicks; 1334 targeted tests on the tree, 12 red on the pre-fix source |
-| `beadloom-kdx7` | S1 fix 7 | in progress | `placement` a token (`outside_final` / `unread_final`) with `stated` beside it, the vocabulary documented; the `complete_bead` tool description points at the verdict |
-| `beadloom-mnln` | S1R7 | blocked | review of fix 7, bead id only; blocks S1W |
+| `beadloom-kdx7` | S1 fix 7 | done | `5ed74aac` + `dca00751`; `placement` takes `outside_final` / `unread_final`, the sentence beside it as `stated`, the vocabulary in `mcp.md` and the ci-gate docs; the `complete_bead` tool description points at the verdict; 8 tests red first; the DOC example fenced after `test_site_markdown_compiles` went red; room 14669 passed + 1 of #311's class over 2950 files; tree 14716 passed / 0 failed, ruff, mypy, `ci` rc 0 |
+| `beadloom-mnln` | S1R7 | ready | review of fix 7 launched 2026-10-19 on the bead id and `dca00751` |
 | `beadloom-hfxv` | S1W | blocked | blocked by the fix-7 review |
 | `beadloom-c5m5` | S1P | blocked | blocked by S1W |
 
@@ -70,4 +70,5 @@
 - Fix wave 5 (2026-10-19, HEAD `abf49721`, gate owner `beadloom-g64s`): the tree 14711 passed, 0 failed, 145 skipped, 13 xfailed (six foreground parts); ruff, mypy, `ci` rc 0 (32 advisory axes warnings, #316). For S1W, in addition: a CHANGELOG line for `unread_bead_lines`; `docs/guides/public-api.md` item 4 (MCP keys) and `docs/guides/ci-setup.md` (the ci JSON shape); the step list at `docs/services/mcp.md:351`; the stale step list in the `ai_techwriter` workflow templates; the ci-gate SPEC line that still says the base defaults to `trunk_ref` (stale since S1d). The dev subagents run on the opus model, so their `Co-Authored-By` names Opus 5.5 while the coordinator's names Fable 5.1; both are true of their author.
 - S1R6 (2026-10-19, HEAD `b70f900c`): OK with two minors in code, both before S1W as fix 7 `beadloom-kdx7` + review `beadloom-mnln`: a returned value's vocabulary is a public contract (public-api.md items 3, 4), so `placement` becomes a token now rather than a MAJOR later; the tool description is what an agent reads in the tool list.
 - 2026-10-19: BDL-UX #353 (Windows: backslash paths in the index against POSIX `source:`; the surface ledger without a pair list) filed from the first outside adopter's teammate and taken into this epic by the owner as S2f, RFC D11; the bead is created when S2 starts (ruling 6).
+- Fix wave 6 (2026-10-19, HEAD `dca00751`, gate owner `beadloom-kdx7`): the tree 14716 passed, 0 failed, 145 skipped, 13 xfailed (eight foreground parts); ruff, mypy, `ci` rc 0. For S1W, in addition: the token vocabulary in `public-api.md` item 4 and `ci-setup.md`; a CHANGELOG line naming the tokens; `ci --help` says "every check this project declares" where "every step of the Gate" is exact. `mcp_server.py` and `test_mcp_process_tools.py` failed `ruff format` before S1 (left; a candidate for S3's rules area).
 - The pre-push Gate crashed on a non-blocking pipe on 2026-10-18 while filing #326–#350 (evidence on `beadloom-jwfc`); pushes from the agent's shell redirect the hook's output to a file until S1e2 lands.
