@@ -38,28 +38,14 @@ from beadloom.infrastructure.repository import StaleCount
 from beadloom.services.commands._root import main
 
 # The hook text lives in `hook_templates` (BDL-083 S1a). This module writes the hooks and
-# its markdown report shares the re-attest wording, so those names are imported back; the
-# private ones are re-exported under their old names for the callers that import them here.
+# its markdown report shares the re-attest wording, so those names are imported back. They
+# are public there since S1 fix 3 (`beadloom-7kas`): a name a second module imports is not
+# private, and the callers import the hook text from `hook_templates` itself.
 from beadloom.services.commands.hook_templates import (
-    _HOOK_COMMIT_SCOPE as _HOOK_COMMIT_SCOPE,
-)
-from beadloom.services.commands.hook_templates import (
-    _HOOK_ENCODING,
-    _HOOK_TEMPLATE_PRE_PUSH,
-    _REATTEST_INSTRUCTION,
+    HOOK_ENCODING,
+    HOOK_TEMPLATE_PRE_PUSH,
+    REATTEST_INSTRUCTION,
     pre_commit_hook_body,
-)
-from beadloom.services.commands.hook_templates import (
-    _HOOK_SCOPE_MARKER as _HOOK_SCOPE_MARKER,
-)
-from beadloom.services.commands.hook_templates import (
-    _HOOK_TEMPLATE_BLOCK as _HOOK_TEMPLATE_BLOCK,
-)
-from beadloom.services.commands.hook_templates import (
-    _HOOK_TEMPLATE_WARN as _HOOK_TEMPLATE_WARN,
-)
-from beadloom.services.commands.hook_templates import (
-    _hook_type_check as _hook_type_check,
 )
 
 
@@ -492,7 +478,7 @@ def _stale_remedies(stale_pairs: list[dict[str, str]], since_ref: str | None) ->
     # re-attesting cannot clear is told what does, and the re-attest line is
     # printed only when some pair can be cleared by it.
     if any(attestation_clears(str(r.get("reason", ""))) for r in stale_pairs):
-        lines.extend([f"> {_REATTEST_INSTRUCTION.format(ref_id='<ref_id>')}", ""])
+        lines.extend([f"> {REATTEST_INSTRUCTION.format(ref_id='<ref_id>')}", ""])
     lines.extend(
         f"- `{r['ref_id']}` `{_pair_label(r)}`: {content_remedy(r)}"
         for r in stale_pairs
@@ -608,7 +594,7 @@ def install_hooks(
         _write_hook(hooks_dir / "pre-commit", template, stat)
         click.echo(f"Installed pre-commit hook (mode: {mode}).")
     if do_pre_push:
-        _write_hook(hooks_dir / "pre-push", _HOOK_TEMPLATE_PRE_PUSH, stat)
+        _write_hook(hooks_dir / "pre-push", HOOK_TEMPLATE_PRE_PUSH, stat)
         click.echo("Installed pre-push hook (Beadloom Gate, blocking).")
 
 
@@ -624,7 +610,7 @@ def _write_hook(hook_path: Path, template: str, stat_mod: ModuleType) -> None:
     file we generate for other programs to read, not prose in the operator's
     locale, so UTF-8 is its contract.
     """
-    hook_path.write_text(template, encoding=_HOOK_ENCODING)
+    hook_path.write_text(template, encoding=HOOK_ENCODING)
     hook_path.chmod(
         hook_path.stat().st_mode | stat_mod.S_IXUSR | stat_mod.S_IXGRP | stat_mod.S_IXOTH
     )

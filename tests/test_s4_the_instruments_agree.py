@@ -68,10 +68,10 @@ from beadloom.onboarding.guard_hooks import (
 from beadloom.onboarding.role_adapters import TOOL_AGENT_DIRS
 from beadloom.onboarding.role_duties import CARRIES_MARKER, duty_report
 from beadloom.services.cli import main
-from beadloom.services.commands.docsync import (
-    _HOOK_TEMPLATE_BLOCK,
-    _HOOK_TEMPLATE_PRE_PUSH,
-    _HOOK_TEMPLATE_WARN,
+from beadloom.services.commands.hook_templates import (
+    HOOK_TEMPLATE_BLOCK,
+    HOOK_TEMPLATE_PRE_PUSH,
+    HOOK_TEMPLATE_WARN,
 )
 
 if TYPE_CHECKING:
@@ -199,9 +199,9 @@ _GREPPED_VERDICT = re.compile(
 )
 
 _TEMPLATES = {
-    "warn": _HOOK_TEMPLATE_WARN,
-    "block": _HOOK_TEMPLATE_BLOCK,
-    "pre-push": _HOOK_TEMPLATE_PRE_PUSH,
+    "warn": HOOK_TEMPLATE_WARN,
+    "block": HOOK_TEMPLATE_BLOCK,
+    "pre-push": HOOK_TEMPLATE_PRE_PUSH,
 }
 
 

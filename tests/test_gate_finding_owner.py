@@ -134,12 +134,13 @@ def _project(tmp_path: Path) -> Path:
     return root
 
 
-def _commit(root: Path, path: str, message: str) -> None:
-    """Change *path* and commit it with *message*."""
+def _commit(root: Path, path: str, message: str, *, bead: str | None = None) -> None:
+    """Change *path* and commit it with *message*, bound to *bead* by its ``Bead:`` trailer."""
     target = root / path
     target.write_text(target.read_text(encoding="utf-8") + "# changed\n", encoding="utf-8")
     git(root, "add", path)
-    git(root, *_IDENTITY, "commit", "-q", "-m", message)
+    trailer = () if bead is None else ("-m", f"Bead: {bead}")
+    git(root, *_IDENTITY, "commit", "-q", "-m", message, *trailer)
 
 
 def _bead(bead_id: str, refs: str = "beta") -> ClaimedBead:
@@ -166,7 +167,7 @@ def _on(path: str) -> Finding:
 class TestWhoOwnsAFinding:
     def test_the_bead_whose_commit_changed_the_file_owns_the_finding(self, tmp_path: Path) -> None:
         root = _project(tmp_path)
-        _commit(root, "src/beta/beta.py", "beta moves (bd-1)")
+        _commit(root, "src/beta/beta.py", "beta moves", bead="bd-1")
         ownership = derive_gate_ownership(
             root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
         )
@@ -179,7 +180,7 @@ class TestWhoOwnsAFinding:
     ) -> None:
         """The #329 shape: the node covers the directory, the commits are elsewhere."""
         root = _project(tmp_path)
-        _commit(root, "src/alpha/alpha.py", "alpha moves (bd-1)")
+        _commit(root, "src/alpha/alpha.py", "alpha moves", bead="bd-1")
         ownership = derive_gate_ownership(
             root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1", "beta"))
         )
@@ -191,7 +192,7 @@ class TestWhoOwnsAFinding:
         self, tmp_path: Path
     ) -> None:
         root = _project(tmp_path)
-        _commit(root, "src/beta/beta.py", "beta moves (bd-a)")
+        _commit(root, "src/beta/beta.py", "beta moves", bead="bd-a")
         ownership = derive_gate_ownership(
             root,
             findings=[_on("src/beta/beta.py")],
@@ -204,7 +205,7 @@ class TestWhoOwnsAFinding:
         self, tmp_path: Path
     ) -> None:
         root = _project(tmp_path)
-        _commit(root, "src/alpha/alpha.py", "alpha moves (bd-1)")
+        _commit(root, "src/alpha/alpha.py", "alpha moves", bead="bd-1")
         ownership = derive_gate_ownership(
             root, findings=[_finding(node="alpha")], tracker=_Tracker(_bead("bd-1", "root"))
         )
@@ -214,7 +215,7 @@ class TestWhoOwnsAFinding:
         self, tmp_path: Path
     ) -> None:
         root = _project(tmp_path)
-        _commit(root, "src/alpha/inner.py", "inner moves (bd-1)")
+        _commit(root, "src/alpha/inner.py", "inner moves", bead="bd-1")
         ownership = derive_gate_ownership(
             root, findings=[_finding(node="alpha")], tracker=_Tracker(_bead("bd-1", "alpha"))
         )
@@ -228,7 +229,7 @@ class TestWhoOwnsAFinding:
     ) -> None:
         """The sync steps locate a document as the ``docs`` table stores it."""
         root = _project(tmp_path)
-        _commit(root, "docs/beta.md", "the beta document (bd-1)")
+        _commit(root, "docs/beta.md", "the beta document", bead="bd-1")
         ownership = derive_gate_ownership(
             root, findings=[_on("beta.md")], tracker=_Tracker(_bead("bd-1"))
         )
@@ -241,7 +242,7 @@ class TestWhoOwnsAFinding:
         from beadloom.application.gate import _sync_finding
 
         root = _project(tmp_path)
-        _commit(root, "src/beta/beta.py", "beta moves (bd-1)")
+        _commit(root, "src/beta/beta.py", "beta moves", bead="bd-1")
         stale = _sync_finding(
             {
                 "doc_path": "beta.md",
@@ -254,9 +255,9 @@ class TestWhoOwnsAFinding:
         ownership = derive_gate_ownership(root, findings=[stale], tracker=_Tracker(_bead("bd-1")))
         assert ownership.owners[0].verdict == OWNED
 
-    def test_a_commit_names_a_bead_only_by_its_whole_id(self, tmp_path: Path) -> None:
+    def test_a_trailer_names_a_bead_only_by_its_whole_id(self, tmp_path: Path) -> None:
         root = _project(tmp_path)
-        _commit(root, "src/beta/beta.py", "the neighbours (bd-10, bd-1.2)")
+        _commit(root, "src/beta/beta.py", "the neighbours\n\nBead: bd-10\nBead: bd-1.2")
         ownership = derive_gate_ownership(
             root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
         )
@@ -266,34 +267,16 @@ class TestWhoOwnsAFinding:
     def test_a_commit_naming_no_claimed_bead_attributes_nothing(self, tmp_path: Path) -> None:
         """An older commit of the branch, made under a bead that is closed now."""
         root = _project(tmp_path)
-        _commit(root, "src/beta/beta.py", "the first work item (bd-0)")
+        _commit(root, "src/beta/beta.py", "the first work item", bead="bd-0")
         ownership = derive_gate_ownership(
             root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
         )
         assert ownership.owners[0].verdict == UNATTRIBUTED
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-083 S1c (beadloom-b23f), for the S1 review: RFC D3 attributes "
-            "by the paths a bead's commits changed AND the paths its refs: name as "
-            "files, and the declaration parser reads node ids only, so a file named in "
-            "refs: attributes nothing. Measured 2026-10-18 on 8ff8154a: unattributed"
-        ),
-    )
-    def test_a_file_the_bead_s_refs_name_is_owned_by_that_bead(self, tmp_path: Path) -> None:
-        root = _project(tmp_path)
-        ownership = derive_gate_ownership(
-            root,
-            findings=[_on("src/beta/beta.py")],
-            tracker=_Tracker(_bead("bd-1", "src/beta/beta.py")),
-        )
-        assert [owner.verdict for owner in ownership.owners] == [OWNED]
-
     def test_a_file_the_bead_s_refs_name_is_unattributed_without_a_commit(
         self, tmp_path: Path
     ) -> None:
-        """The red above is red for the reason it states: the refs: path is not read."""
+        """RFC D3 as amended on 2026-10-19: a path named in ``refs:`` attributes nothing."""
         root = _project(tmp_path)
         ownership = derive_gate_ownership(
             root,
@@ -308,7 +291,7 @@ class TestWhoOwnsAFinding:
     ) -> None:
         root = _project(tmp_path)
         git(root, "switch", "-q", "main")
-        _commit(root, "src/beta/beta.py", "landed (bd-1)")
+        _commit(root, "src/beta/beta.py", "landed", bead="bd-1")
         git(root, "switch", "-q", "-c", "features/Y")
         ownership = derive_gate_ownership(
             root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
@@ -341,12 +324,58 @@ class TestWhoOwnsAFinding:
         assert "1 on files the working tree changes and no commit holds yet" in text
 
 
+class TestACommitIsABeadsByItsTrailer:
+    """RFC D10 (the owner's ruling of 2026-10-19; S1R Minor 3; ``beadloom-7kas``)."""
+
+    def test_the_bead_trailer_binds_the_commit(self, tmp_path: Path) -> None:
+        root = _project(tmp_path)
+        _commit(root, "src/beta/beta.py", "[X-1] fix: beta moves", bead="bd-1")
+        ownership = derive_gate_ownership(
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
+        )
+        assert ownership.owners[0].beads == ("bd-1",)
+        assert ownership.claims[0].commits == 1
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "beta moves (bd-1)",
+            "[X-1] chore: the merge slot released from bd-1",
+            "[X-1] test: the entries re-measured\n\nMeasured for bd-1 and bd-2.",
+            "subject\n\nBead: bd-1\n\na trailer-shaped line above a closing paragraph",
+            "subject\n\nRefs: bd-1",
+        ],
+        ids=["subject", "landing-note", "body", "not-the-last-paragraph", "another-key"],
+    )
+    def test_a_mention_anywhere_else_binds_nothing(self, tmp_path: Path, message: str) -> None:
+        root = _project(tmp_path)
+        _commit(root, "src/beta/beta.py", message)
+        ownership = derive_gate_ownership(
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
+        )
+        assert [owner.verdict for owner in ownership.owners] == [UNATTRIBUTED]
+        assert ownership.claims[0].commits == 0
+
+    def test_the_trailer_key_is_read_as_git_reads_it_whatever_its_case(
+        self, tmp_path: Path
+    ) -> None:
+        root = _project(tmp_path)
+        _commit(root, "src/beta/beta.py", "beta moves\n\nbead: bd-1")
+        ownership = derive_gate_ownership(
+            root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-1"))
+        )
+        assert ownership.owners[0].verdict == OWNED
+
+    def test_the_printed_rule_names_the_trailer(self) -> None:
+        assert ATTRIBUTION_RULE == "by the files the commits carrying `Bead: <id>` changed"
+
+
 class TestTheLinesNameTheRule:
     def test_the_block_names_the_rule_the_base_and_each_owner_s_clause(
         self, tmp_path: Path
     ) -> None:
         root = _project(tmp_path)
-        _commit(root, "src/beta/beta.py", "beta moves (bd-a)")
+        _commit(root, "src/beta/beta.py", "beta moves", bead="bd-a")
         ownership = derive_gate_ownership(
             root,
             findings=[_on("src/beta/beta.py")],
@@ -356,13 +385,13 @@ class TestTheLinesNameTheRule:
         assert lines[0] == "Findings by owner:"
         assert lines[1] == f"  attributed {ATTRIBUTION_RULE}, over main..HEAD"
         assert "  owned by bd-a: 1 finding(s), by the files its commits changed" in lines
-        assert "  bd-b owns no finding: no commit on main..HEAD names its id" in lines
+        assert "  bd-b owns no finding: no commit on main..HEAD carries `Bead: bd-b`" in lines
 
     def test_a_bead_whose_commits_explain_nothing_is_told_so_in_its_own_words(
         self, tmp_path: Path
     ) -> None:
         root = _project(tmp_path)
-        _commit(root, "src/alpha/alpha.py", "alpha moves (bd-b)")
+        _commit(root, "src/alpha/alpha.py", "alpha moves", bead="bd-b")
         ownership = derive_gate_ownership(
             root, findings=[_on("src/beta/beta.py")], tracker=_Tracker(_bead("bd-b"))
         )
@@ -421,7 +450,7 @@ class TestTheVerdictIsUnchanged:
         self, tmp_path: Path
     ) -> None:
         root = _project(tmp_path)
-        _commit(root, "src/beta/beta.py", "beta moves (bd-1)")
+        _commit(root, "src/beta/beta.py", "beta moves", bead="bd-1")
         without = run_ci_gate(root, fail_on=None, hub_exports=[], no_reindex=True)
         with_owner = run_ci_gate(
             root,

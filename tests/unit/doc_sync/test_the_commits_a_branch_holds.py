@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from beadloom.doc_sync.git_baseline import commits_since
 from tests.support.committed_project import commit_project, git
 
@@ -88,3 +90,43 @@ def test_paths_are_relative_to_a_project_below_the_git_root(tmp_path: Path) -> N
 
     assert commits is not None
     assert commits[0].paths == frozenset({"x.py"})
+
+
+class TestATrailerIsReadAsGitParsesIt:
+    """BDL-083 S1 fix 3 (``beadloom-7kas``; RFC D10): a commit names its bead in a trailer."""
+
+    def test_the_values_of_the_named_trailer_are_read(self, tmp_path: Path) -> None:
+        root = _repository(tmp_path)
+        (root / "src" / "a.py").write_text("A = 2\n", encoding="utf-8")
+        _commit(root, "two beads\n\nBead: bd-1\nBead: bd-2\nCo-Authored-By: someone")
+
+        commits = commits_since(root, "main", trailer="Bead")
+
+        assert commits is not None
+        assert commits[0].trailer_values == ("bd-1", "bd-2")
+
+    def test_a_trailer_shaped_line_inside_the_body_is_not_a_trailer(self, tmp_path: Path) -> None:
+        """Git reads trailers from the last paragraph only, and so does the reader."""
+        root = _repository(tmp_path)
+        (root / "src" / "a.py").write_text("A = 2\n", encoding="utf-8")
+        _commit(root, "subject\n\nBead: bd-1\n\nthe slot released after bd-1, then more prose")
+
+        commits = commits_since(root, "main", trailer="Bead")
+
+        assert commits is not None
+        assert commits[0].trailer_values == ()
+
+    def test_no_trailer_asked_for_reads_none(self, tmp_path: Path) -> None:
+        root = _repository(tmp_path)
+        (root / "src" / "a.py").write_text("A = 2\n", encoding="utf-8")
+        _commit(root, "subject\n\nBead: bd-1")
+
+        commits = commits_since(root, "main")
+
+        assert commits is not None
+        assert commits[0].trailer_values == ()
+
+    def test_a_key_that_could_close_the_placeholder_is_refused(self, tmp_path: Path) -> None:
+        root = _repository(tmp_path)
+        with pytest.raises(ValueError, match="not a trailer key"):
+            commits_since(root, "main", trailer="Bead)%H")

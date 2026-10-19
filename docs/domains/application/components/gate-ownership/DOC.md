@@ -45,9 +45,14 @@ a directory says what a bead may touch, never what it touched.
 So since BDL-083 S1c a finding is owned by a **bead the tracker reports `in_progress` right
 now** whose **commits on the branch changed a file the finding is about**:
 
-- A commit is a bead's when its message names the bead's id as a whole word — the link bd
-  itself reads between a commit and an issue (`bd orphans`). `bd-1` is not read inside `bd-10`
-  or `bd-1.2`.
+- A commit is a bead's when its message carries the git trailer `Bead: <bead-id>`, and only
+  then (RFC D10, the owner's ruling of 2026-10-19). The trailer is read as git reads one
+  (`%(trailers:key=Bead,valueonly)`, through `commits_since(..., trailer="Bead")`): from the
+  message's final paragraph, the key in any case, the value compared whole. A bead id
+  mentioned anywhere else binds nothing. Before the ruling any mention did, and on BDL-083's
+  own branch at `996781dd` that bound 17 (bead, commit) pairs over 14 beads where the
+  trailers declare 4 over 3: a landing-lock note and a test bead naming what it measured each
+  made their files another bead's. A commit with no trailer is nobody's.
 - The commits are those `HEAD` holds against the base `scope-check` compares against
   (`scope_base.scope_base`, since BDL-083 S1d: the merge-base with the branch this one was
   cut from, else the trunk), listed by `doc_sync.git_baseline.commits_since`. A commit
@@ -83,8 +88,8 @@ Everything is read **through the index**, never by opening a graph file by name.
 directory". Two qualifications are counted beside it, because a reader acts on them: how many
 of those findings sit on files the working tree changes and no commit holds yet, and how many
 are about no file a commit could have changed. A claimed bead that owns nothing is named with
-its reason: no commit on the branch names its id, or its commits changed none of the files the
-findings are about.
+its reason: no commit on the branch carries `Bead: <its id>`, or its commits changed none of
+the files the findings are about.
 
 A tracker that cannot answer, a project with no index, and a git that cannot list the branch's
 commits against the base are a `reason` on the whole report rather than a page of

@@ -250,7 +250,7 @@ the way this flow asked for it.
 
 ```bash
 bd merge-slot acquire --holder <bead-id>   # exit 0 means you hold it; anything else means you do not
-# ... stage your own files by path, then commit ...
+# ... stage your own files by path, then commit with `Bead: <bead-id>` in the trailer block ...
 bd merge-slot release --holder <bead-id>   # the only release form bd verifies
 ```
 

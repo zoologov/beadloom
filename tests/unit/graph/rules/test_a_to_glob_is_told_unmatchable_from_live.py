@@ -62,6 +62,19 @@ class TestAGlobThatCannotMatch:
         assert reach.unmatchable is not None
         assert "begins with 'src'" in reach.unmatchable
 
+    def test_the_source_root_reason_says_it_is_inferred_from_the_index(self) -> None:
+        """S1R Minor 4 (``beadloom-7kas``): a source root is an inference, and says so.
+
+        A directory no indexed import begins with can still be an importable package —
+        ``tests`` on a project that scans it and imports nothing from it — so the sentence
+        names what it rests on and the one import that would prove it wrong.
+        """
+        reach = to_glob_reach("tests/**", source_roots=frozenset({"tests"}))
+
+        assert reach.unmatchable is not None
+        assert "inferred from the index" in reach.unmatchable
+        assert "an importable package named 'tests' would still fire it" in reach.unmatchable
+
     def test_a_glob_that_is_the_source_root_itself_names_it(self) -> None:
         reach = to_glob_reach("backend", source_roots=frozenset({"backend"}))
 

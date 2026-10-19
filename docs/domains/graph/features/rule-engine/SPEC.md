@@ -274,7 +274,10 @@ A glob can match none when:
 
 The source roots are inferred from the index. For `test_import_boundary` they are read from
 the code's import index, where the source files are, beside the test imports' targets. A flat
-project whose top-level package nothing imports would read that package as a source root.
+project whose top-level package nothing imports would read that package as a source root, and
+so would a scanned `tests` directory nothing imports. So the finding says so in its own
+words: the reason reads "… that no indexed import begins with — inferred from the index, so an
+importable package named 'tests' would still fire it" (BDL-083 S1R Minor 4, `beadloom-7kas`).
 
 The `nothing_to_ban` statement is an advisory. `--fail-on-warn` does not exit on it, and it
 counts as neither an error nor a warning. The text rendering marks it `[INFO]`, and

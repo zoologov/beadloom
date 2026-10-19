@@ -262,7 +262,11 @@ standard output.
 
 `hook_templates.py` holds the hook TEMPLATES, lifted out of `docsync.py` in BDL-083 S1a
 (`beadloom-7i09`), where they were about 400 of its 2020 lines; `docsync.py` keeps the command
-that writes them and re-exports the template names its callers import from it. Since BDL-068
+that writes them. Since S1 fix 3 (`beadloom-7kas`) every name another module imports from it
+is public — `HOOK_ENCODING`, `HOOK_SCOPE_MARKER`, `HOOK_COMMIT_SCOPE`, `REATTEST_INSTRUCTION`,
+`HOOK_TEMPLATE_WARN`, `HOOK_TEMPLATE_BLOCK`, `HOOK_TEMPLATE_PRE_PUSH` and `hook_type_check` —
+and the callers import them from `hook_templates.py`, not through a re-export in `docsync.py`:
+a private name imported by a second module is no longer private. Since BDL-068
 S5 the coherence block in them takes no staging decision for the committer. `active-sync --stage` re-stages the corrected
 content of the paths a commit already carries and prints the ones it withheld; the block runs no
 `git add` of its own and selects those lines with `grep`, deliberately not with the
@@ -322,7 +326,7 @@ format: as is in `rich`, marked `# ` in `porcelain`, as a `::notice::` in `githu
 `commit_scope` object in `json`.
 
 The instructions `docsync.py` prints come from the doc-sync engine's vocabulary, not from a
-list kept here (BDL-069, BDL-UX #282). `_REATTEST_INSTRUCTION` names the reasons in
+list kept here (BDL-069, BDL-UX #282). `REATTEST_INSTRUCTION` names the reasons in
 `REASONS_ATTESTATION_CLEARS`, and both the hook's closing line (`_HOOK_REMEDIATION`, with
 backticks turned into quotes because the hook echoes it inside double quotes) and the
 `sync-check --report` footer print it only as far as it is true; every other stale pair gets

@@ -1,4 +1,5 @@
-# BDL-083 S1c, beadloom-b23f (BDL-UX #329; RFC D3).
+# BDL-083 S1c, beadloom-b23f (BDL-UX #329; RFC D3). The commit-to-bead binding is the
+# `Bead:` trailer since S1 fix 3, beadloom-7kas (RFC D10, the owner's ruling of 2026-10-19).
 #
 # Measured on 9.0.0 on 2026-10-16 on an outside monorepo. A wave of two beads: each was
 # told it owned 9 findings, and all nine were of the first bead's work. A second work
@@ -12,10 +13,11 @@ Feature: a gate finding is owned by the bead whose commits changed its files
   A report that tells an agent it owns findings it did not cause sends the fix to the
   wrong agent, and teaches the right one that its red is somebody else's. A node that
   covers a directory says what a bead may touch, not what it touched, so ownership is
-  read from the commits: a commit is a bead's when its message names the bead's id,
-  which is the link bd itself reads between a commit and an issue. A finding no
-  claimed bead's commits explain is unattributed, and the report says by which rule
-  it attributed what it did.
+  read from the commits: a commit is a bead's when its message carries the git trailer
+  `Bead: <bead-id>`, and only then (RFC D10). A bead id mentioned anywhere else in a
+  message — a landing-lock note, a test bead naming what it measured — binds nothing.
+  A finding no claimed bead's commits explain is unattributed, and the report says by
+  which rule it attributed what it did.
 
   Scenario: of two beads in flight, only the one whose commits changed the files owns the findings
     Given the monorepo fixture on a working branch cut from the trunk
@@ -42,3 +44,12 @@ Feature: a gate finding is owned by the bead whose commits changed its files
     Then the human report names the rule and the base it attributed by
     And the GitHub notices name the rule beside each owner
     And the JSON report carries the rule and the base
+
+  @bead:beadloom-7kas
+  Scenario: a commit that only mentions a bead's id is not that bead's
+    Given the monorepo fixture on a working branch cut from the trunk
+    And a commit that makes a widget import the app layer names bead M in its subject and carries no trailer
+    And bead M is claimed alone
+    When the gate reports on the checkout
+    Then the layer finding is unattributed
+    And it says M owns no finding because no commit carries its trailer

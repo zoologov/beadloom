@@ -1,6 +1,7 @@
 """Step implementations for `application/gate-ownership/ownership_by_changed_files.feature`.
 
-BDL-083 S1c (``beadloom-b23f``). Thin: each step commits onto a real checkout of the
+BDL-083 S1c (``beadloom-b23f``); the trailer binding since S1 fix 3 (``beadloom-7kas``,
+RFC D10). Thin: each step commits onto a real checkout of the
 monorepo fixture and runs the real ``beadloom ci`` over it, because the finding is about
 what one command's output says. The one double is the tracker adapter
 (``BdWorkTracker``): a scenario must not need a beads database in a temporary
@@ -48,12 +49,13 @@ def world(tmp_path: Path) -> dict[str, Any]:
     return {"workdir": tmp_path, "root": None, "claimed": [], "outputs": {}}
 
 
-def _commit(root: Path, path: str, text: str, message: str) -> None:
-    """Prepend *text* to *path* and commit it with *message*."""
+def _commit(root: Path, path: str, text: str, message: str, *, bead: str | None = None) -> None:
+    """Prepend *text* to *path* and commit it with *message*, bound to *bead* by its trailer."""
     target = root / path
     target.write_text(text + target.read_text(encoding="utf-8"), encoding="utf-8")
     git(root, "add", path)
-    git(root, *_IDENTITY, "commit", "-q", "-m", message)
+    trailer = () if bead is None else ("-m", f"Bead: {bead}")
+    git(root, *_IDENTITY, "commit", "-q", "-m", message, *trailer)
 
 
 def _claim(monkeypatch: pytest.MonkeyPatch, world: dict[str, Any], bead: ClaimedBead) -> None:
@@ -87,7 +89,7 @@ def _the_monorepo(world: dict[str, Any]) -> None:
 
 @given("bead A's commit makes a widget import the app layer")
 def _bead_a_breaks_the_layers(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-    _commit(world["root"], _WIDGET, _APP_IMPORT, "the widget reads the app styles (bd-a)")
+    _commit(world["root"], _WIDGET, _APP_IMPORT, "the widget reads the app styles", bead="bd-a")
     _claim(
         monkeypatch,
         world,
@@ -102,7 +104,7 @@ def _bead_b_beside(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> No
 
 @given("an older commit of the branch makes a widget import the app layer")
 def _an_older_commit(world: dict[str, Any]) -> None:
-    _commit(world["root"], _WIDGET, _APP_IMPORT, "the first work item's widget (bd-f1)")
+    _commit(world["root"], _WIDGET, _APP_IMPORT, "the first work item's widget", bead="bd-f1")
 
 
 @given("bead F2, whose refs name the node that covers the whole frontend, is claimed alone")
@@ -114,7 +116,24 @@ def _bead_f2_alone(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> No
 
 @given("F2's commit changes a file of the shared layer")
 def _f2_commits(world: dict[str, Any]) -> None:
-    _commit(world["root"], _SHARED_FILE, "// rounded down\n", "the shared ratio (bd-f2)")
+    _commit(world["root"], _SHARED_FILE, "// rounded down\n", "the shared ratio", bead="bd-f2")
+
+
+@given(
+    "a commit that makes a widget import the app layer names bead M in its subject "
+    "and carries no trailer"
+)
+def _a_mention(world: dict[str, Any]) -> None:
+    _commit(world["root"], _WIDGET, _APP_IMPORT, "the widget, landed after bd-m released the slot")
+
+
+@given("bead M is claimed alone")
+def _bead_m_alone(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    _claim(
+        monkeypatch,
+        world,
+        ClaimedBead(id="bd-m", title="bd-m", declaration="refs: widgets-kpi-panel"),
+    )
 
 
 @when("the gate reports on the checkout")
@@ -161,6 +180,15 @@ def _layer_unattributed(world: dict[str, Any]) -> None:
     layer = _rows(world, rule=_LAYER_RULE, node=_WIDGET_NODE)
     assert layer, _ownership(world)
     assert {row["verdict"] for row in layer} == {"unattributed"}
+
+
+@then("it says M owns no finding because no commit carries its trailer")
+def _m_owns_nothing(world: dict[str, Any]) -> None:
+    assert all("bd-m" not in row["beads"] for row in _ownership(world)["findings"])
+    assert _ownership(world)["claims"] == [{"bead": "bd-m", "commits": 0}]
+    assert "bd-m owns no finding: no commit on main..HEAD carries `Bead: bd-m`" in (
+        world["outputs"]["rich"]
+    )
 
 
 @then("no finding about the widget is owned by F2")

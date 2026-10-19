@@ -597,7 +597,12 @@ that.
   message, paths)` with the project-relative paths it added, modified or deleted
   (`--no-renames`, so a rename changes both of its paths). Added by BDL-083 S1c for the
   Gate's ownership report, which attributes a finding to the bead whose commits changed its
-  files. `None` means git could not answer, never *no commits*.
+  files. `None` means git could not answer, never *no commits*. Since BDL-083 S1 fix 3
+  (`beadloom-7kas`, RFC D10) it takes `trailer=`, a trailer key whose values each commit
+  carries as `BranchCommit.trailer_values`, read by git itself
+  (`%(trailers:key=<key>,valueonly)`): the message's final paragraph only, the key in any
+  case. The ownership report asks for `Bead`, because a commit is a bead's by its `Bead:`
+  trailer and by nothing else. A key that could close the placeholder is a `ValueError`.
 - `merge_base(project_root, first, second) -> str | None`, `is_ancestor(project_root,
   ancestor, descendant) -> bool`, `short_commit(project_root, ref) -> str | None`,
   `commit_distance(project_root, ancestor, descendant) -> int | None`,

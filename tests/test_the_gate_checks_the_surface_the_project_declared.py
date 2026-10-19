@@ -25,11 +25,11 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.application.typed_surface import TypedSurface, declared_typed_surface
-from beadloom.services.commands.docsync import (
-    _HOOK_ENCODING,
-    _HOOK_TEMPLATE_BLOCK,
-    _HOOK_TEMPLATE_WARN,
-    _hook_type_check,
+from beadloom.services.commands.hook_templates import (
+    HOOK_ENCODING,
+    HOOK_TEMPLATE_BLOCK,
+    HOOK_TEMPLATE_WARN,
+    hook_type_check,
 )
 from tests.support.ambient_codec import AMBIENT_CODECS, under_ambient_codec
 
@@ -291,7 +291,7 @@ class TestTheHookTemplatesAskRatherThanList:
 
     @pytest.mark.parametrize(
         ("name", "template"),
-        [("warn", _HOOK_TEMPLATE_WARN), ("block", _HOOK_TEMPLATE_BLOCK)],
+        [("warn", HOOK_TEMPLATE_WARN), ("block", HOOK_TEMPLATE_BLOCK)],
         ids=("warn", "block"),
     )
     def test_the_template_derives_the_surface(self, name: str, template: str) -> None:
@@ -299,7 +299,7 @@ class TestTheHookTemplatesAskRatherThanList:
 
     @pytest.mark.parametrize(
         ("name", "template"),
-        [("warn", _HOOK_TEMPLATE_WARN), ("block", _HOOK_TEMPLATE_BLOCK)],
+        [("warn", HOOK_TEMPLATE_WARN), ("block", HOOK_TEMPLATE_BLOCK)],
         ids=("warn", "block"),
     )
     def test_the_template_hands_mypy_only_the_filtered_paths(
@@ -310,15 +310,15 @@ class TestTheHookTemplatesAskRatherThanList:
 
     @pytest.mark.parametrize(
         ("name", "template"),
-        [("warn", _HOOK_TEMPLATE_WARN), ("block", _HOOK_TEMPLATE_BLOCK)],
+        [("warn", HOOK_TEMPLATE_WARN), ("block", HOOK_TEMPLATE_BLOCK)],
         ids=("warn", "block"),
     )
     def test_the_template_prints_what_mypy_said(self, name: str, template: str) -> None:
         assert 'echo "$mypy_out"' in template
 
     def test_only_the_verdict_line_differs_between_the_modes(self) -> None:
-        warn = _hook_type_check(blocking=False).splitlines()
-        block = _hook_type_check(blocking=True).splitlines()
+        warn = hook_type_check(blocking=False).splitlines()
+        block = hook_type_check(blocking=True).splitlines()
         differing = [line for line in block if line not in warn]
         assert differing == [
             '        echo "Error: mypy type errors in this commit — commit blocked"',
@@ -326,12 +326,12 @@ class TestTheHookTemplatesAskRatherThanList:
         ]
 
     def test_the_blocking_mode_blocks_and_the_warn_mode_does_not(self) -> None:
-        assert "failed=1" in _hook_type_check(blocking=True)
-        assert "failed=1" not in _hook_type_check(blocking=False)
+        assert "failed=1" in hook_type_check(blocking=True)
+        assert "failed=1" not in hook_type_check(blocking=False)
 
     def test_a_surface_that_could_not_be_derived_never_blocks(self) -> None:
         """A check that did not happen must not turn into a refused commit."""
-        block = _hook_type_check(blocking=True)
+        block = hook_type_check(blocking=True)
         not_checked = block[block.index("NOT CHECKED") : block.index("echo \"$typed_verdict\"")]
         assert "failed=1" not in not_checked
 
@@ -522,14 +522,14 @@ def _run_hook(
     # `locale.getpreferredencoding(False)`, and the hook carries an em dash in
     # every blocking verdict: `tests-locale (C)` on PR #61 raised
     # `UnicodeDecodeError: 'ascii' codec can't decode byte 0xe2 in position 288`
-    # on 33 rows of this file. `_HOOK_ENCODING` is imported rather than spelled
+    # on 33 rows of this file. `HOOK_ENCODING` is imported rather than spelled
     # so the reader cannot drift from the writer, and `errors` stays strict
     # because a mangled verdict is the failure this reader exists to catch.
     return subprocess.run(  # noqa: S603
         ["/bin/sh", str(hook)],
         cwd=project,
         capture_output=True,
-        encoding=_HOOK_ENCODING,
+        encoding=HOOK_ENCODING,
         errors="strict",
         env=env,
         check=False,
@@ -543,7 +543,7 @@ class TestWhatACommitterActuallySees:
         self, tmp_path: Path
     ) -> None:
         project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
-        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        out = _run_hook(project, bindir, HOOK_TEMPLATE_WARN).stdout
         assert (
             "Typed surface (src/demo): 2 of 3 staged Python file(s) inside it, "
             "1 outside." in out
@@ -558,7 +558,7 @@ class TestWhatACommitterActuallySees:
             check=True,
             capture_output=True,
         )
-        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        out = _run_hook(project, bindir, HOOK_TEMPLATE_WARN).stdout
         assert "NOTHING TO CHECK" in out
         assert "0 of 1 staged Python file(s) are inside it" in out
 
@@ -566,18 +566,18 @@ class TestWhatACommitterActuallySees:
         self, tmp_path: Path
     ) -> None:
         project, bindir = _hook_project(tmp_path, UNDECLARED_LAYOUT)
-        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        out = _run_hook(project, bindir, HOOK_TEMPLATE_WARN).stdout
         assert "Typed surface: NOT CHECKED -- pyproject.toml declares no" in out
 
     def test_beadloom_absent_from_path_reads_as_not_checked(self, tmp_path: Path) -> None:
         project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
-        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN, on_path=False).stdout
+        out = _run_hook(project, bindir, HOOK_TEMPLATE_WARN, on_path=False).stdout
         assert "Typed surface: NOT CHECKED -- uv or beadloom is not on PATH here" in out
 
     def test_a_real_error_arrives_in_mypys_own_words(self, tmp_path: Path) -> None:
         project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
         result = _run_hook(
-            project, bindir, _HOOK_TEMPLATE_WARN, reject="src/demo/alpha.py"
+            project, bindir, HOOK_TEMPLATE_WARN, reject="src/demo/alpha.py"
         )
         assert "src/demo/alpha.py:1: error: Incompatible return value type" in result.stdout
         assert "Warning: mypy type errors in this commit" in result.stdout
@@ -587,10 +587,10 @@ class TestWhatACommitterActuallySees:
         self, tmp_path: Path
     ) -> None:
         project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
-        clean = _run_hook(project, bindir, _HOOK_TEMPLATE_BLOCK)
+        clean = _run_hook(project, bindir, HOOK_TEMPLATE_BLOCK)
         assert clean.returncode == 0, clean.stdout
         red = _run_hook(
-            project, bindir, _HOOK_TEMPLATE_BLOCK, reject="src/demo/alpha.py"
+            project, bindir, HOOK_TEMPLATE_BLOCK, reject="src/demo/alpha.py"
         )
         assert red.returncode == 1
         assert "commit blocked" in red.stdout
@@ -601,7 +601,7 @@ class TestWhatACommitterActuallySees:
         """The 970: the old block handed these over and went red on every one."""
         project, bindir = _hook_project(tmp_path, SRC_LAYOUT)
         result = _run_hook(
-            project, bindir, _HOOK_TEMPLATE_BLOCK, reject="tests/test_alpha.py"
+            project, bindir, HOOK_TEMPLATE_BLOCK, reject="tests/test_alpha.py"
         )
         assert result.returncode == 0, result.stdout
         assert "mypy type errors" not in result.stdout
@@ -636,7 +636,7 @@ class TestTheTypedLegSpeaksOnEveryLayout:
         self, layout: HookLayout, tmp_path: Path
     ) -> None:
         project, bindir = _hook_project(tmp_path, layout)
-        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        out = _run_hook(project, bindir, HOOK_TEMPLATE_WARN).stdout
         assert _typed_line(out) is not None, out
 
     @pytest.mark.parametrize("layout", EVERY_LAYOUT, ids=_LAYOUT_IDS)
@@ -645,7 +645,7 @@ class TestTheTypedLegSpeaksOnEveryLayout:
     ) -> None:
         """The denominator is the commit's Python, not the part of it under `src/`."""
         project, bindir = _hook_project(tmp_path, layout)
-        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        out = _run_hook(project, bindir, HOOK_TEMPLATE_WARN).stdout
         line = _typed_line(out)
         assert line is not None, out
         total = len(layout.staged_python)
@@ -665,7 +665,7 @@ class TestTheTypedLegSpeaksOnEveryLayout:
         string written here, so a change to the vocabulary moves both or fails.
         """
         project, bindir = _hook_project(tmp_path, layout)
-        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        out = _run_hook(project, bindir, HOOK_TEMPLATE_WARN).stdout
         expected = declared_typed_surface(project).partition(layout.staged_python)
         assert _typed_line(out) == expected.describe(), out
 
@@ -676,7 +676,7 @@ class TestTheTypedLegSpeaksOnEveryLayout:
         """A rejection inside the surface reaches the committer wherever it lives."""
         project, bindir = _hook_project(tmp_path, layout)
         target = layout.inside[0]
-        result = _run_hook(project, bindir, _HOOK_TEMPLATE_BLOCK, reject=target)
+        result = _run_hook(project, bindir, HOOK_TEMPLATE_BLOCK, reject=target)
         assert f"{target}:1: error:" in result.stdout, result.stdout
         assert result.returncode == 1, result.stdout
 
@@ -693,7 +693,7 @@ class TestTheTypedLegSpeaksOnEveryLayout:
         assertion this replaces.
         """
         project, bindir = _hook_project(tmp_path, layout)
-        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        out = _run_hook(project, bindir, HOOK_TEMPLATE_WARN).stdout
         assert "Running ruff check on the staged Python file(s)..." in out, out
         handed = next(
             (ln for ln in out.splitlines() if ln.startswith("ruff was handed: ")), None
@@ -713,7 +713,7 @@ class TestTheTypedLegSpeaksOnEveryLayout:
         `tests/` and no `[tool.mypy]` printed neither its verdict nor its reason.
         """
         project, bindir = _hook_project(tmp_path, UNDECLARED_LAYOUT)
-        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        out = _run_hook(project, bindir, HOOK_TEMPLATE_WARN).stdout
         assert "Typed surface: NOT CHECKED -- pyproject.toml declares no" in out, out
 
     def test_a_commit_staging_no_python_stays_silent(self, tmp_path: Path) -> None:
@@ -739,7 +739,7 @@ class TestTheTypedLegSpeaksOnEveryLayout:
             check=True,
             capture_output=True,
         )
-        out = _run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout
+        out = _run_hook(project, bindir, HOOK_TEMPLATE_WARN).stdout
         assert _typed_line(out) is None, out
         assert "Running ruff check" not in out, out
 
@@ -781,7 +781,7 @@ class TestTheRoomTheMatrixAboveDidNotVary:
     and the controls at the foot of this class are what that distinction cost.
 
     The WRITER was measured before the reader was changed, because the two answers
-    have different owners: ``install-hooks`` pins ``_HOOK_ENCODING`` at its own
+    have different owners: ``install-hooks`` pins ``HOOK_ENCODING`` at its own
     call site, exits 0 under that environment and writes three well-formed
     ``e2 80 94`` sequences, and the hook's own ``echo`` is ``/bin/sh`` moving those
     bytes with no encoder in the path. The defect is the reader's alone.
@@ -825,7 +825,7 @@ class TestTheRoomTheMatrixAboveDidNotVary:
         under_ambient_codec(monkeypatch, self._reader_module(), ambient)
 
         out = _run_hook(
-            project, bindir, _HOOK_TEMPLATE_BLOCK, reject="src/demo/alpha.py"
+            project, bindir, HOOK_TEMPLATE_BLOCK, reject="src/demo/alpha.py"
         ).stdout
 
         assert "\u2014 commit blocked" in out, (ambient, out)
@@ -839,7 +839,7 @@ class TestTheRoomTheMatrixAboveDidNotVary:
         project, bindir = _hook_project(tmp_path, layout)
         under_ambient_codec(monkeypatch, self._reader_module(), ambient)
 
-        line = _typed_line(_run_hook(project, bindir, _HOOK_TEMPLATE_WARN).stdout)
+        line = _typed_line(_run_hook(project, bindir, HOOK_TEMPLATE_WARN).stdout)
 
         assert line is not None, (layout.name, ambient)
         assert f"{len(layout.staged_python)} staged Python file(s)" in line
@@ -941,7 +941,7 @@ class TestNoLegNamesADirectory:
 
     @pytest.mark.parametrize(
         ("name", "template"),
-        [("warn", _HOOK_TEMPLATE_WARN), ("block", _HOOK_TEMPLATE_BLOCK)],
+        [("warn", HOOK_TEMPLATE_WARN), ("block", HOOK_TEMPLATE_BLOCK)],
         ids=("warn", "block"),
     )
     def test_the_population_is_selected_by_suffix_and_not_by_directory(
@@ -952,7 +952,7 @@ class TestNoLegNamesADirectory:
 
     @pytest.mark.parametrize(
         ("name", "template"),
-        [("warn", _HOOK_TEMPLATE_WARN), ("block", _HOOK_TEMPLATE_BLOCK)],
+        [("warn", HOOK_TEMPLATE_WARN), ("block", HOOK_TEMPLATE_BLOCK)],
         ids=("warn", "block"),
     )
     def test_the_pattern_still_selects_python(self, name: str, template: str) -> None:

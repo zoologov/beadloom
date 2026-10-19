@@ -212,7 +212,7 @@ def _install_hook(
     staged: tuple[str, ...],
     rejected: str,
 ) -> None:
-    from beadloom.services.commands.docsync import _HOOK_TEMPLATE_WARN
+    from beadloom.services.commands.hook_templates import HOOK_TEMPLATE_WARN
 
     project = _project(tmp_path, pyproject, staged)
     state["project"] = project
@@ -229,7 +229,7 @@ def _install_hook(
     )
     (bindir / "beadloom").chmod(0o755)
     hook = tmp_path / "pre-commit"
-    hook.write_text(_HOOK_TEMPLATE_WARN, encoding="utf-8")
+    hook.write_text(HOOK_TEMPLATE_WARN, encoding="utf-8")
     hook.chmod(0o755)
     state["hook"] = hook
     state["bindir"] = bindir

@@ -27,9 +27,9 @@ Feature: an import rule with nothing to ban is told from a rule that cannot fire
     And the strict lint fails
 
   Scenario: a glob that names a source root cannot fire
-    Given the monorepo fixture, whose digest domain bans every import of "backend/src/file_history/**"
+    Given the monorepo fixture, whose digest domain's rule "digest-no-backend-src-file-history" bans every import of "backend/src/file_history/**"
     When the project is linted
-    Then "domain-no-io-imports-digest-os" cannot fire, at warn, because its glob begins with "backend"
+    Then "digest-no-backend-src-file-history" cannot fire, at warn, because its glob begins with "backend"
 
   Scenario: a test boundary with nothing to ban is live too
     Given the monorepo fixture, whose backend unit tests ban every import of "os/**"

@@ -498,7 +498,7 @@ real against a background that already holds one.
 `GateResult` therefore carries a `GateOwnership` beside its room census and its coverage
 statement: one verdict per finding, held against the commits of the beads the tracker reports
 claimed while the run happened. Since BDL-083 S1c (BDL-UX #329) `owned` names the claimed
-beads whose commits on the branch — a commit naming the bead's id in its message — changed a
+beads whose commits on the branch — a commit carrying the trailer `Bead: <bead-id>` (D10) — changed a
 file the finding is about, and `unattributed` says no claimed bead's commits did, or that the
 finding is about no file. A bead whose `refs:` name a node covering a directory owns nothing
 it did not commit to. A tracker that cannot answer, a project with no index and a git that

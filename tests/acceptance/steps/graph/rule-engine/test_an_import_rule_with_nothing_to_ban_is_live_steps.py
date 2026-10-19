@@ -34,8 +34,10 @@ if TYPE_CHECKING:
 
 scenarios("../../../graph/rule-engine/an_import_rule_with_nothing_to_ban_is_live.feature")
 
-#: The fixture's rule, as the adopter wrote it; the steps rewrite only its `to:` glob.
+#: The fixture's rule, as the adopter wrote it; the steps rewrite its `to:` glob, and its
+#: name when the new glob bans something the name does not say.
 _FIXTURE_TO = 'to: "os/**"'
+_FIXTURE_NAME = "name: domain-no-io-imports-digest-os"
 
 #: A test boundary over the backend's unit tests, appended by the scenario that needs it.
 _TEST_RULE = """
@@ -72,6 +74,21 @@ def _digest_bans(world: dict[str, Any], glob: str) -> None:
     text = rules.read_text(encoding="utf-8")
     assert _FIXTURE_TO in text, "the fixture's rule is the measurement; it must be present"
     rules.write_text(text.replace(_FIXTURE_TO, f'to: "{glob}"'), encoding="utf-8")
+
+
+@given(
+    parsers.parse(
+        "the monorepo fixture, whose digest domain's rule \"{name}\" bans every import of "
+        '"{glob}"'
+    )
+)
+def _digest_rule_bans(world: dict[str, Any], name: str, glob: str) -> None:
+    """The fixture's rule renamed with its glob, so the scenario's name says what it bans."""
+    _digest_bans(world, glob)
+    rules = _rules_file(world)
+    text = rules.read_text(encoding="utf-8")
+    assert _FIXTURE_NAME in text, "the fixture's rule is the measurement; it must be present"
+    rules.write_text(text.replace(_FIXTURE_NAME, f"name: {name}"), encoding="utf-8")
 
 
 @given(

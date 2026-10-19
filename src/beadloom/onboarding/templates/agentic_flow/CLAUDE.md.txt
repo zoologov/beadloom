@@ -324,11 +324,21 @@ Trunk-based flow:
 Commit format:
 [{ISSUE-KEY}] <type>: <description>
 
+<body>
+
+Bead: <bead-id>
+
 Types: feat, fix, refactor, docs, test, chore
 
 Example:
 [MCP-001] feat: add health endpoint
+
+Bead: bd-a1b2
 ```
+
+The `Bead: <bead-id>` trailer is what binds a commit to its bead: the Gate's ownership
+report reads that trailer and nothing else, so a bead id mentioned anywhere else in the
+message leaves the commit unattributed.
 
 One-time per repo: `beadloom setup-branch-protection` configures `main` protection
 (PR required, `beadloom ci` a required check, `enforce_admins: true` — strict

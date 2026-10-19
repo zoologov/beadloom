@@ -29,8 +29,12 @@ of the glob is what disagreed with the matcher on the appended "/" in #328, so t
 
 **The limit, stated.** A source root is inferred from the index: a directory is one when
 files sit under it and no import path begins with its name. A flat project whose top-level
-package nothing imports would read that package as a source root. A package any module
-imports is not one, which is the case for every multi-module project this was measured on.
+package nothing imports would read that package as a source root, and so would a scanned
+``tests`` directory nothing imports, where ``import tests.x`` fires a ``to: tests/**`` rule.
+A package any module imports is not one, which is the case for every multi-module project
+this was measured on. The sentence a reader sees says it is an inference and names the one
+import that would prove it wrong (S1R Minor 4), because the docstring is not where a user
+reads the limit.
 """
 
 from __future__ import annotations
@@ -139,7 +143,9 @@ def to_glob_reach(glob: str, *, source_roots: frozenset[str]) -> GlobReach:
             example=None,
             unmatchable=(
                 f"it begins with '{segment}', a directory of the project's source files "
-                "that no import path begins with — `to:` names modules, never files"
+                "that no indexed import begins with — inferred from the index, so an "
+                f"importable package named '{segment}' would still fire it; `to:` names "
+                "modules, never files"
             ),
         )
     if any(kind == _LITERAL and text == "." for kind, text in tokens):

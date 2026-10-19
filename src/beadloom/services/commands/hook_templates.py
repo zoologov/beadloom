@@ -18,7 +18,7 @@ from beadloom.graph.lint_scope import COMMIT_SCOPE_LEAD
 #: image's decision instead, which is a wrong answer in both directions
 #: (BDL-061.42: 30 of the 108 measured ASCII-leg failures came from this one
 #: call site).
-_HOOK_ENCODING = "utf-8"
+HOOK_ENCODING = "utf-8"
 
 #: The header both pre-commit templates open with, and the whole of the #118
 #: repair in one place. The hook judges THE COMMIT: it reads what git says this
@@ -26,10 +26,10 @@ _HOOK_ENCODING = "utf-8"
 #: *who* commits does not help — the merge slot orders the commits and leaves the
 #: tree exactly as shared as it was — so the boundary has to be what each check
 #: is asked about.
-_HOOK_SCOPE_MARKER = "# beadloom-hook-scope: commit"
+HOOK_SCOPE_MARKER = "# beadloom-hook-scope: commit"
 
-_HOOK_COMMIT_SCOPE = (
-    _HOOK_SCOPE_MARKER
+HOOK_COMMIT_SCOPE = (
+    HOOK_SCOPE_MARKER
     + """
 # The line above is a MARKER, not a comment: an installed hook keeps its old
 # behaviour until `beadloom install-hooks` is re-run, and nothing tells a
@@ -204,7 +204,7 @@ echo "$axes_verdict"
 #: NOT CHECKED never blocks, in either mode. A surface that could not be derived
 #: is a check that did not happen, and turning a missing PATH entry into a
 #: refused commit is how a gate gets answered with `--no-verify`.
-def _hook_type_check(*, blocking: bool) -> str:
+def hook_type_check(*, blocking: bool) -> str:
     """The mypy block for one hook mode, scoped to the declared typed surface."""
     on_error = (
         '        echo "Error: mypy type errors in this commit \u2014 commit blocked"\n'
@@ -257,7 +257,7 @@ fi
 #: The re-attest instruction, scoped to the reasons re-attesting clears. One
 #: wording for the hook and the markdown report, and the scope is read from the
 #: engine's allow-list rather than from a list typed here.
-_REATTEST_INSTRUCTION = (
+REATTEST_INSTRUCTION = (
     "Run `beadloom sync-update {ref_id}` to review and re-attest a pair stale on "
     + ", ".join(sorted(REASONS_ATTESTATION_CLEARS))
 )
@@ -269,7 +269,7 @@ _REATTEST_INSTRUCTION = (
 #: clear (BDL-UX #282). Backticks become quotes because the line is echoed inside
 #: double quotes, where a backtick is command substitution.
 _HOOK_REMEDIATION = (
-    _REATTEST_INSTRUCTION.format(ref_id="<ref_id>").replace("`", "'")
+    REATTEST_INSTRUCTION.format(ref_id="<ref_id>").replace("`", "'")
     + "; any other reason is cleared by revising the document, which re-attesting cannot do"
 )
 
@@ -419,10 +419,10 @@ fi
 """
 
 
-_HOOK_TEMPLATE_WARN = """\
+HOOK_TEMPLATE_WARN = """\
 #!/bin/sh
 # pre-commit hook managed by beadloom
-""" + _HOOK_COMMIT_SCOPE + _hook_ruff_check(blocking=False) + _hook_type_check(
+""" + HOOK_COMMIT_SCOPE + _hook_ruff_check(blocking=False) + hook_type_check(
     blocking=False
 ) + _hook_architecture_lint(blocking=False) + """
 # --- Doc sync check, over the pairs this commit stages ---
@@ -447,11 +447,11 @@ echo "the pre-push Gate (beadloom ci) judges the whole tree."
 """ + _HOOK_COHERENCE
 
 
-_HOOK_TEMPLATE_BLOCK = """\
+HOOK_TEMPLATE_BLOCK = """\
 #!/bin/sh
 # pre-commit hook managed by beadloom
 failed=0
-""" + _HOOK_COMMIT_SCOPE + _hook_ruff_check(blocking=True) + _hook_type_check(
+""" + HOOK_COMMIT_SCOPE + _hook_ruff_check(blocking=True) + hook_type_check(
     blocking=True
 ) + _hook_architecture_lint(blocking=True) + """
 # --- Doc sync check, over the pairs this commit stages ---
@@ -489,7 +489,7 @@ GATE_VERDICT_PATTERN = "^(PASS|FAIL) .*gate (clean|blocked)$"
 #: `beadloom ci` and exits non-zero to block the push on red. Idempotent: re-running
 #: `install-hooks` overwrites it. `--no-verify` is the documented escape hatch. The
 #: pre-commit hook judges the commit; the whole tree is judged here, once per push.
-_HOOK_TEMPLATE_PRE_PUSH = r"""#!/bin/sh
+HOOK_TEMPLATE_PRE_PUSH = r"""#!/bin/sh
 # pre-push hook managed by beadloom -- the blocking Beadloom Gate.
 
 # Without `beadloom` on the PATH git runs this hook with, the Gate cannot run, and a
@@ -573,4 +573,4 @@ def pre_commit_hook_body(*, blocking: bool) -> str:
     actually written, not over a copy of it: a test that reads a duplicate of the
     template is a test of the duplicate (BDL-UX #207).
     """
-    return _HOOK_TEMPLATE_BLOCK if blocking else _HOOK_TEMPLATE_WARN
+    return HOOK_TEMPLATE_BLOCK if blocking else HOOK_TEMPLATE_WARN

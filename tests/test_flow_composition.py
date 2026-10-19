@@ -380,3 +380,36 @@ class TestShippedTemplatesCarryNoProjectLocalFacts:
             "a project-local bead id reached a shipped template — the #177 "
             f"failure: {offenders}"
         )
+
+
+class TestTheCommitFormatCarriesTheBeadTrailer:
+    """RFC D10 of BDL-083 (``beadloom-7kas``): the composed flow tells every committer the trailer.
+
+    The Gate's ownership report binds a commit to a bead by its ``Bead:`` trailer and by
+    nothing else, so a flow that does not ask for the trailer produces branches whose every
+    commit is unattributed. The key is read from the module that binds by it, so the two
+    cannot drift apart.
+    """
+
+    def test_the_composed_claude_md_asks_for_the_trailer_and_says_why(
+        self, tmp_path: Path
+    ) -> None:
+        from beadloom.application.gate_ownership import BEAD_TRAILER
+
+        text = (_make_project(tmp_path) / ".claude" / "CLAUDE.md").read_text(encoding="utf-8")
+        section = text[text.index("Commit format:") : text.index("One-time per repo")]
+        assert f"\n{BEAD_TRAILER}: <bead-id>\n" in section
+        assert "the Gate's ownership\nreport reads that trailer and nothing else" in section
+
+    @pytest.mark.parametrize("language", ["en", "ru"])
+    @pytest.mark.parametrize("role", ["dev", "test", "review", "tech-writer", "explore"])
+    def test_every_role_s_landing_instruction_names_the_trailer(
+        self, role: str, language: str
+    ) -> None:
+        from beadloom.application.gate_ownership import BEAD_TRAILER
+        from beadloom.onboarding.role_composer import compose_role
+
+        text = compose_role(role, architecture="ddd", stack=("python",), language=language)
+        landing = [line for line in text.splitlines() if line.startswith("# ... ")]
+        assert landing, "the landing fragment's commit line is the instruction under test"
+        assert all(f"`{BEAD_TRAILER}: <bead-id>`" in line for line in landing)

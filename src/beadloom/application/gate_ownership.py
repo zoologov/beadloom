@@ -14,11 +14,18 @@ its ``refs:`` named the node that covers the frontend's source whole. A node tha
 covers a directory says what a bead may touch, never what it touched.
 
 **So ownership is read from the commits (RFC D3).** A finding is owned by a bead
-claimed now whose commits on the branch changed a file the finding is about. A
-commit is a bead's when its message names the bead's id — the link bd itself reads
-between a commit and an issue (``bd orphans``). The commits are the ones ``HEAD``
-holds against the base the scope check compares against, so a commit already on
-the trunk is nobody's work in flight.
+claimed now whose commits on the branch changed a file the finding is about. The
+commits are the ones ``HEAD`` holds against the base the scope check compares
+against, so a commit already on the trunk is nobody's work in flight.
+
+**A commit is a bead's by its trailer, and by nothing else (RFC D10).** It belongs to
+a bead when its message carries the git trailer ``Bead: <bead-id>``, read as git
+reads trailers: the message's final paragraph only, the key in any case. Until the
+owner's ruling of 2026-10-19 any mention of the id bound the commit, and on
+BDL-083's own branch at 996781dd that bound 17 (bead, commit) pairs where 4 were declared: a
+landing-lock note ("released from beadloom-7pd6") and a test bead naming what it
+measured each made their files another bead's. A commit with no trailer is
+nobody's, which is the honest reading of a branch written before the rule.
 
 **The files a finding is about.** The files its locations name, with a document
 named in the documentation root's frame re-rooted onto the project's; a stale or
@@ -42,7 +49,6 @@ It is not a step: it has no status, and the exit code is the one the steps produ
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -69,12 +75,12 @@ OWNED = "owned"
 #: No claimed bead's commits changed a file the finding is about, or it is about none.
 UNATTRIBUTED = "unattributed"
 
+#: The git trailer that binds a commit to a bead (RFC D10): ``Bead: <bead-id>``.
+BEAD_TRAILER = "Bead"
+
 #: The rule every surface prints beside the owners, so a reader can tell what an
 #: attribution is a claim about.
-ATTRIBUTION_RULE = (
-    "by the files each claimed bead's commits changed, a commit being a bead's "
-    "when its message names the bead's id"
-)
+ATTRIBUTION_RULE = f"by the files the commits carrying `{BEAD_TRAILER}: <id>` changed"
 
 #: The clause beside each owner, RFC D3's wording.
 OWNED_CLAUSE = "by the files its commits changed"
@@ -102,9 +108,6 @@ _NO_FILE = "it locates no file and names no node"
 #: How many beads a line spells out before it counts the rest.
 _NAMED_LIMIT = 5
 
-#: Characters that continue an id, so ``bd-1`` is not read inside ``bd-10``.
-_ID_CHARACTER = r"[A-Za-z0-9_-]"
-
 
 @dataclass(frozen=True)
 class FindingOwner:
@@ -126,7 +129,7 @@ class FindingOwner:
 
 @dataclass(frozen=True)
 class BeadCommits:
-    """A claimed bead, how many commits on the branch name it, and the paths they changed."""
+    """A claimed bead, how many commits on the branch carry it, and the paths they changed."""
 
     bead_id: str
     commits: int
@@ -216,7 +219,7 @@ def derive_gate_ownership(
     except FileNotFoundError:
         return GateOwnership(claimed=claimed, base=base, reason=NO_INDEX)
     try:
-        commits = commits_since(project_root, base)
+        commits = commits_since(project_root, base, trailer=BEAD_TRAILER)
         if commits is None:
             return GateOwnership(claimed=claimed, base=base, reason=NO_HISTORY.format(base=base))
         claims = tuple(_commits_of(bead, commits) for bead in sorted(beads, key=_id))
@@ -233,11 +236,8 @@ def _id(bead: ClaimedBead) -> str:
 
 
 def _commits_of(bead: ClaimedBead, commits: Sequence[BranchCommit]) -> BeadCommits:
-    """The commits whose message names *bead*'s id as a whole word, and their paths."""
-    named = re.compile(
-        rf"(?<!{_ID_CHARACTER}){re.escape(bead.id)}(?!{_ID_CHARACTER}|\.[A-Za-z0-9])"
-    )
-    own = [commit for commit in commits if named.search(commit.message)]
+    """The commits whose ``Bead:`` trailer names *bead*, and the paths they changed."""
+    own = [commit for commit in commits if bead.id in commit.trailer_values]
     paths = frozenset(path for commit in own for path in commit.paths)
     return BeadCommits(bead_id=bead.id, commits=len(own), paths=paths)
 
@@ -395,9 +395,12 @@ def ownership_payload(ownership: GateOwnership) -> dict[str, object]:
 
 
 def _owning_nothing(claim: BeadCommits, ownership: GateOwnership) -> str:
-    """Why a claimed bead owns nothing: no commit names it, or its commits explain none."""
+    """Why a claimed bead owns nothing: no commit carries it, or its commits explain none."""
     if claim.commits == 0:
-        return f"{claim.bead_id} owns no finding: no commit on {ownership.base}..HEAD names its id"
+        return (
+            f"{claim.bead_id} owns no finding: no commit on {ownership.base}..HEAD carries "
+            f"`{BEAD_TRAILER}: {claim.bead_id}`"
+        )
     return (
         f"{claim.bead_id} owns no finding: its {claim.commits} commit(s) changed none "
         "of the files these findings are about"

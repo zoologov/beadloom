@@ -283,7 +283,7 @@ def _commit_gate(project_root: Path) -> str | None:
     text — and it is reported as unmeasured rather than as a missing gate.
     """
     from beadloom.application.waves import GATE_ABSENT, GATE_COMMIT_SCOPED, GATE_WHOLE_TREE
-    from beadloom.services.commands.docsync import _HOOK_SCOPE_MARKER
+    from beadloom.services.commands.hook_templates import HOOK_SCOPE_MARKER
 
     hooks_dir = project_root / ".git" / "hooks"
     if not hooks_dir.is_dir():
@@ -297,7 +297,7 @@ def _commit_gate(project_root: Path) -> str | None:
         # An unreadable hook is not an absent one and not a scoped one. Naming
         # the third answer is the whole reason `unmeasured` is a status.
         return None
-    return GATE_COMMIT_SCOPED if _HOOK_SCOPE_MARKER in content else GATE_WHOLE_TREE
+    return GATE_COMMIT_SCOPED if HOOK_SCOPE_MARKER in content else GATE_WHOLE_TREE
 
 
 def _stale_pairs(db_path: Path, project_root: Path) -> int | None:

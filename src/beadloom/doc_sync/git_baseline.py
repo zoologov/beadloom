@@ -34,6 +34,7 @@ a clean one is the defect this module was written for.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -51,15 +52,18 @@ _TEXT_ERRORS = "surrogateescape"
 #: NUL-separated field, and both endpoints count as changed.
 _RENAME_STATUS = frozenset("RC")
 
-#: Separators of one ``git log`` record: before each commit, and after its hash and
-#: its message. Neither byte occurs in a hash, and a commit message that holds one
-#: is not a message any tool writes.
+#: Separators of one ``git log`` record: before each commit, and after its hash, its
+#: message and its trailer values. Neither byte occurs in a hash, and a commit message
+#: that holds one is not a message any tool writes.
 _COMMIT_START = "\x1e"
 _COMMIT_FIELD = "\x1f"
-_COMMIT_FORMAT = f"--format={_COMMIT_START}%H{_COMMIT_FIELD}%B{_COMMIT_FIELD}"
 
-#: The fields of one record: the hash, the message, and the NUL-separated paths.
-_COMMIT_FIELDS = 3
+#: The fields of one record: the hash, the message, the trailer values, the paths.
+_COMMIT_FIELDS = 4
+
+#: What a trailer key may hold to be spliced into a ``--format`` placeholder: the
+#: characters git's own keys use, so no key can close the placeholder it sits in.
+_TRAILER_KEY = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*")
 
 #: The shortest possible porcelain record is ``XY p`` — two status letters, a
 #: space, and a one-character path.
@@ -176,9 +180,22 @@ class BranchCommit:
     paths: frozenset[str]
     """Project-relative paths the commit added, modified or deleted."""
 
+    trailer_values: tuple[str, ...] = ()
+    """The values of the trailer :func:`commits_since` was asked for, in message order.
 
-def commits_since(project_root: Path, ref: str) -> tuple[BranchCommit, ...] | None:
+    Read by git (``%(trailers:key=...,valueonly)``), so only the message's final
+    paragraph counts and the key matches whatever its case; empty when none was asked.
+    """
+
+
+def commits_since(
+    project_root: Path, ref: str, *, trailer: str | None = None
+) -> tuple[BranchCommit, ...] | None:
     """The commits ``HEAD`` holds that *ref* does not, newest first, or ``None``.
+
+    *trailer* names a trailer key (``Bead``) whose values each commit carries as
+    :attr:`BranchCommit.trailer_values`; git decides what a trailer is, which is the
+    whole reason to ask it rather than search the message.
 
     ``ref..HEAD`` is the set ``ref...HEAD`` diffs — the commits made since the
     branch left *ref* — listed one by one instead of folded into one diff,
@@ -196,21 +213,29 @@ def commits_since(project_root: Path, ref: str) -> tuple[BranchCommit, ...] | No
         return None
     raw = _run_git(
         project_root,
-        ["log", _COMMIT_FORMAT, "--name-only", "-z", "--no-renames", f"{ref}..HEAD"],
+        ["log", _commit_format(trailer), "--name-only", "-z", "--no-renames", f"{ref}..HEAD"],
     )
     if raw is None:
         return None
     return tuple(_parse_commits(raw, prefix.strip()))
 
 
+def _commit_format(trailer: str | None) -> str:
+    """The ``--format`` of one record, reading *trailer*'s values when one is named."""
+    if trailer is not None and not _TRAILER_KEY.fullmatch(trailer):
+        raise ValueError(f"not a trailer key: {trailer!r}")
+    values = "" if trailer is None else f"%(trailers:key={trailer},valueonly)"
+    return f"--format={_COMMIT_START}%H{_COMMIT_FIELD}%B{_COMMIT_FIELD}{values}{_COMMIT_FIELD}"
+
+
 def _parse_commits(raw: str, prefix: str) -> list[BranchCommit]:
-    """Records of ``git log`` in :data:`_COMMIT_FORMAT` with ``--name-only -z``."""
+    """Records of ``git log`` in :func:`_commit_format` with ``--name-only -z``."""
     commits: list[BranchCommit] = []
     for record in raw.split(_COMMIT_START):
         fields = record.split(_COMMIT_FIELD)
         if len(fields) != _COMMIT_FIELDS:
             continue
-        sha, message, names = fields
+        sha, message, values, names = fields
         # `-z` ends the format with a NUL, and git separates it from the path list
         # with a newline; neither is part of a path.
         paths = [name.lstrip("\n") for name in names.split("\0")]
@@ -219,6 +244,7 @@ def _parse_commits(raw: str, prefix: str) -> list[BranchCommit]:
                 sha=sha.strip(),
                 message=message,
                 paths=frozenset(_project_relative([p for p in paths if p], prefix)),
+                trailer_values=tuple(v.strip() for v in values.splitlines() if v.strip()),
             )
         )
     return commits

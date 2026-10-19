@@ -576,12 +576,12 @@ class TestThePrePushVerdictIsReadFromTheGatesOwnLine:
 
     def test_the_hook_carries_that_pattern_and_forces_the_format_that_prints_it(self) -> None:
         from beadloom.services.commands.hook_templates import (
-            _HOOK_TEMPLATE_PRE_PUSH,
             GATE_VERDICT_PATTERN,
+            HOOK_TEMPLATE_PRE_PUSH,
         )
 
-        assert f"grep -E '{GATE_VERDICT_PATTERN}'" in _HOOK_TEMPLATE_PRE_PUSH
-        assert "beadloom ci --format rich" in _HOOK_TEMPLATE_PRE_PUSH
+        assert f"grep -E '{GATE_VERDICT_PATTERN}'" in HOOK_TEMPLATE_PRE_PUSH
+        assert "beadloom ci --format rich" in HOOK_TEMPLATE_PRE_PUSH
 
 
 class TestThePrePushHookWritesNothingTheShellCouldDrop:
@@ -593,11 +593,11 @@ class TestThePrePushHookWritesNothingTheShellCouldDrop:
     """
 
     def test_the_report_is_not_captured_for_the_shell_to_print(self) -> None:
-        from beadloom.services.commands.hook_templates import _HOOK_TEMPLATE_PRE_PUSH
+        from beadloom.services.commands.hook_templates import HOOK_TEMPLATE_PRE_PUSH
 
-        assert "$(beadloom ci" not in _HOOK_TEMPLATE_PRE_PUSH
-        assert '\nbeadloom ci --format rich --tee "$gate_copy"\n' in _HOOK_TEMPLATE_PRE_PUSH
-        assert "\"$gate_copy\" | tail -n 1" in _HOOK_TEMPLATE_PRE_PUSH
+        assert "$(beadloom ci" not in HOOK_TEMPLATE_PRE_PUSH
+        assert '\nbeadloom ci --format rich --tee "$gate_copy"\n' in HOOK_TEMPLATE_PRE_PUSH
+        assert "\"$gate_copy\" | tail -n 1" in HOOK_TEMPLATE_PRE_PUSH
 
     def test_the_hook_s_sentences_fit_a_write_that_lands_whole(self) -> None:
         """A pipe write of PIPE_BUF bytes or fewer lands whole or not at all.
@@ -608,9 +608,9 @@ class TestThePrePushHookWritesNothingTheShellCouldDrop:
         """
         import re
 
-        from beadloom.services.commands.hook_templates import _HOOK_TEMPLATE_PRE_PUSH
+        from beadloom.services.commands.hook_templates import HOOK_TEMPLATE_PRE_PUSH
 
-        sentences = re.findall(r'^\s*say ((?:"[^"]*"\s*\\?\s*)+)$', _HOOK_TEMPLATE_PRE_PUSH, re.M)
+        sentences = re.findall(r'^\s*say ((?:"[^"]*"\s*\\?\s*)+)$', HOOK_TEMPLATE_PRE_PUSH, re.M)
         assert len(sentences) >= 8, sentences
         for sentence in sentences:
             assert len(sentence.encode("utf-8")) < 512 - 200, sentence
@@ -618,10 +618,10 @@ class TestThePrePushHookWritesNothingTheShellCouldDrop:
     def test_the_crash_the_hook_names_is_the_clause_the_gate_prints(self) -> None:
         from beadloom.application.gate_boundary import crashed_clause
         from beadloom.application.gate_step import GateStep
-        from beadloom.services.commands.hook_templates import _HOOK_TEMPLATE_PRE_PUSH
+        from beadloom.services.commands.hook_templates import HOOK_TEMPLATE_PRE_PUSH
 
         clause = crashed_clause([GateStep(name="docs-audit", passed=False, error="E")])
-        assert '*"step(s) crashed"*)' in _HOOK_TEMPLATE_PRE_PUSH
+        assert '*"step(s) crashed"*)' in HOOK_TEMPLATE_PRE_PUSH
         assert "step(s) crashed" in clause
 
 
