@@ -128,7 +128,7 @@ Module `src/beadloom/application/import_aliases.py`:
 Module `src/beadloom/application/doctor.py`:
 - `Severity` — enum: `OK`, `INFO`, `WARNING`, `ERROR`
 - `Check` — dataclass: `name`, `severity`, `description`
-- `run_checks(conn, *, project_root=None)` -> `list[Check]` — runs DB validation checks plus optional agent instructions freshness check when `project_root` is provided
+- `run_checks(conn, *, project_root=None)` -> `list[Check]` — runs DB validation checks plus optional agent instructions freshness check when `project_root` is provided. Since BDL-083 S2f one of the DB checks, `index_separator`, warns per index table that holds a path written with a backslash and names `beadloom reindex --full`, because an index an older version built on Windows matches no `source:`
 
 Module `src/beadloom/application/status.py`:
 - `StatusData` — frozen dataclass: version/last-reindex, node/edge/doc/chunk/symbol counts, stale/isolated/empty-summary counts, coverage, per-kind breakdown, trends, and `context_metrics`

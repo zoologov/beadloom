@@ -258,11 +258,11 @@ In `warn` mode, violations print warnings but do not block the commit. In `block
 
 ### Module `src/beadloom/doc_sync/surface_ledger.py`
 
-- `SurfaceLedger(declared_pairs, declared_docs, recorded_at)` / `SurfaceVerdict(recorded, shrank, message, headline)` -- `headline` is the same fact in a few words for a one-line step summary, `message` the actionable form for a finding; both, so a summary never has to elide the numbers.
+- `SurfaceLedger(declared_pairs, declared_docs, recorded_at, pairs)` / `SurfaceVerdict(recorded, shrank, message, headline, dropped)` -- `headline` is the same fact in a few words for a one-line step summary, `message` the actionable form for a finding; both, so a summary never has to elide the numbers. `pairs` is the sorted `(doc, file)` list the ledger counted (`()` for a ledger recorded before BDL-083 S2f), and `dropped` the recorded pairs the current run no longer declares.
 - `ledger_path(project_root) -> Path` -- `.beadloom/sync-surface.json` (committed).
 - `read_ledger(project_root) -> SurfaceLedger | None` -- `None` when absent or malformed; the caller reports "not recorded" rather than crashing a gate over two integers.
-- `write_ledger(project_root, *, declared_pairs, declared_docs, recorded_at="") -> Path` -- Record the surface. `recorded_at` is injected by the caller, never `now()` here, so the file is byte-stable for a fixed input.
-- `compare_surface(ledger, *, declared_pairs, declared_docs) -> SurfaceVerdict` -- Three outcomes and only one is silence: *not recorded*, *shrank* (both numbers named), or grew/unchanged.
+- `write_ledger(project_root, *, declared_pairs, declared_docs, recorded_at="", pairs=()) -> Path` -- Record the surface. `recorded_at` is injected by the caller, never `now()` here, so the file is byte-stable for a fixed input. The pairs are written sorted and distinct, one per line, so a dropped pair is one removed line in a diff.
+- `compare_surface(ledger, *, declared_pairs, declared_docs, pairs=None) -> SurfaceVerdict` -- Three outcomes and only one is silence: *not recorded*, *shrank* (both numbers named), or grew/unchanged. Given the current run's pairs and a ledger that records its own, a shrunken surface's message names the dropped pairs (ten, then `and N more`); a ledger without a pair list says it cannot name them and how to re-record it (BDL-083 S2f, BDL-UX #353).
 
 ### Module `src/beadloom/doc_sync/surface.py`
 
@@ -303,7 +303,7 @@ beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--since GI
 | `--report` | Markdown report for CI posting |
 | `--ref` | Filter results by ref_id |
 | `--since` | Baseline = code state at this git ref (e.g. the push's parent) instead of the stored `sync_state`; reports pairs whose code drifted since the ref while the doc was not correspondingly updated. Delegates to `check_sync_since`; invalid/zero refs are rejected via `_validate_git_ref`. |
-| `--record-surface` | Record the declared surface (pair + declared-doc counts) to the committed `.beadloom/sync-surface.json`, so a later run can tell when it SHRANK. A deliberate act: no ordinary run rewrites it. |
+| `--record-surface` | Record the declared surface (pair + declared-doc counts, and the `(doc, file)` pair list) to the committed `.beadloom/sync-surface.json`, so a later run can tell when it SHRANK and name the pairs it dropped. A deliberate act: no ordinary run rewrites it. |
 | `--project` | Project root (default: current directory) |
 
 Exit codes: `0` = all ok, `1` = error, `2` = a pair is stale **or missing**.

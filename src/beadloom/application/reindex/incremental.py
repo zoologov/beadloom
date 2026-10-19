@@ -193,7 +193,7 @@ def incremental_reindex(
     for path in deleted:
         kind = stored_files[path][1]
         if kind == "doc":
-            doc_rel = str(type(docs_dir_rel)(path).relative_to(docs_dir_rel))
+            doc_rel = type(docs_dir_rel)(path).relative_to(docs_dir_rel).as_posix()
             conn.execute(
                 "DELETE FROM sync_state WHERE doc_path = ?",
                 (doc_rel,),
@@ -213,7 +213,7 @@ def incremental_reindex(
     for path in changed:
         kind = current_files[path][1]
         if kind == "doc":
-            doc_rel = str(type(docs_dir_rel)(path).relative_to(docs_dir_rel))
+            doc_rel = type(docs_dir_rel)(path).relative_to(docs_dir_rel).as_posix()
             conn.execute("DELETE FROM docs WHERE path = ?", (doc_rel,))
             conn.execute(
                 "DELETE FROM sync_state WHERE doc_path = ?",

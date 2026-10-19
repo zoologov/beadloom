@@ -9,11 +9,11 @@ import importlib.metadata
 import json
 import logging
 import re
+import sqlite3
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import sqlite3
     from pathlib import Path
 
 from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
@@ -264,6 +264,48 @@ def _check_stale_sync(conn: sqlite3.Connection) -> list[Check]:
         )
         for r in rows
     ]
+
+
+#: The index's path columns a ``source:`` match reads, by table (RFC D11 of BDL-083).
+_INDEX_PATH_COLUMNS = (
+    ("file_index", "path"),
+    ("code_symbols", "file_path"),
+    ("code_imports", "file_path"),
+    ("docs", "path"),
+)
+
+
+def _check_index_separator(conn: sqlite3.Connection) -> list[Check]:
+    """Name an index whose paths carry a backslash as one to rebuild.
+
+    The index is written with forward slashes on every platform since BDL-083 S2f. An index
+    an older version built on a Windows checkout holds backslashes, which no ``source:``
+    matches: every directory node reads "no indexed code" and the declared surface shrinks,
+    with nothing on the screen that says why (BDL-UX #353). One line per table, with the
+    count and the command that rebuilds the index.
+    """
+    findings: list[Check] = []
+    for table, column in _INDEX_PATH_COLUMNS:
+        try:
+            row = conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE instr({column}, ?) > 0",  # noqa: S608
+                ("\\",),
+            ).fetchone()
+        except sqlite3.OperationalError:  # a table an older schema does not hold
+            continue
+        count = int(row[0]) if row is not None else 0
+        if count:
+            findings.append(
+                Check(
+                    "index_separator",
+                    Severity.WARNING,
+                    f"Index table '{table}' holds {count} path(s) written with a backslash, "
+                    "which no source: matches — rebuild it with `beadloom reindex --full`.",
+                )
+            )
+    if not findings:
+        return [Check("index_separator", Severity.OK, "Every indexed path is POSIX.")]
+    return findings
 
 
 def _check_source_coverage(conn: sqlite3.Connection) -> list[Check]:
@@ -674,6 +716,7 @@ def run_checks(
     results.extend(_check_isolated_nodes(conn))
     results.extend(_check_symbol_drift(conn))
     results.extend(_check_stale_sync(conn))
+    results.extend(_check_index_separator(conn))
     results.extend(_check_source_coverage(conn))
     if project_root is not None:
         results.extend(_check_agent_instructions(project_root))

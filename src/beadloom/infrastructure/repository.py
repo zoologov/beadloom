@@ -345,6 +345,19 @@ def get_symbols_for_source(
 _FACADE_FILENAME = "__init__.py"
 
 
+def posix_spelling(path: str) -> str:
+    """*path* with every backslash written as a forward slash: the one spelling the index holds.
+
+    The index stores a file's path as ``relative_to(root).as_posix()`` on every platform, and
+    the graph's ``source:`` is written by hand, so a declaration typed on Windows may carry a
+    backslash. Every site that matches a ``source:`` against an indexed path reads both through
+    this function first (RFC D11 of BDL-083, BDL-UX #353): before it, a Windows checkout's index
+    held ``backend\\src\\access\\...`` while the graph declared ``backend/src/access/``, and a
+    raw string compare matched nothing.
+    """
+    return path.replace("\\", "/")
+
+
 def covering_prefix(source: str) -> str:
     """The path prefix a node *source* covers, normalised to end with ``/``.
 
@@ -352,25 +365,32 @@ def covering_prefix(source: str) -> str:
     (``pkg/__init__.py``) covers its PACKAGE: the façade only re-exports, so
     treating it as a lone file reports an empty node for a package full of code
     (BDL-UX #157). Any other file source covers only itself, which
-    :func:`source_covers` handles separately.
+    :func:`source_covers` handles separately. The prefix is in its POSIX spelling
+    (:func:`posix_spelling`), the spelling the index holds, whatever separator the
+    declaration was typed with.
 
     Public since BDL-061.50: ownership is the rule by which the linter now
     attributes an imported-FROM file to a node, so the two must not each keep
     their own copy of it.
     """
-    if source.endswith("/"):
-        return source
-    if source.endswith(f"/{_FACADE_FILENAME}"):
-        return source[: -len(_FACADE_FILENAME)]
-    return source
+    posix = posix_spelling(source)
+    if posix.endswith("/"):
+        return posix
+    if posix.endswith(f"/{_FACADE_FILENAME}"):
+        return posix[: -len(_FACADE_FILENAME)]
+    return posix
 
 
 def source_covers(source: str, file_path: str) -> bool:
-    """Whether a node *source* covers *file_path* at all (ignoring specificity)."""
+    """Whether a node *source* covers *file_path* at all (ignoring specificity).
+
+    Both sides are compared in their POSIX spelling (:func:`posix_spelling`).
+    """
     prefix = covering_prefix(source)
+    path = posix_spelling(file_path)
     if prefix.endswith("/"):
-        return file_path.startswith(prefix)
-    return file_path == source
+        return path.startswith(prefix)
+    return path == prefix
 
 
 def most_specific_owner(
@@ -615,7 +635,7 @@ def _owned_file_clause(
         params: list[str] = [f"{prefix}%"]
     else:
         clause = "file_path = ?"
-        params = [source]
+        params = [prefix]
 
     rows = conn.execute(
         "SELECT source FROM nodes WHERE source IS NOT NULL AND source != ''"
@@ -633,7 +653,7 @@ def _owned_file_clause(
             params.append(f"{other_prefix}%")
         else:
             clause += " AND file_path != ?"
-            params.append(other)
+            params.append(other_prefix)
     return clause, tuple(params)
 
 

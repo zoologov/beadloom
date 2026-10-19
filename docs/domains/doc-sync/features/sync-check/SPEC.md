@@ -345,7 +345,11 @@ Two baselines live outside it, and both are committed:
    fabricated baseline does not become earned by being copied.
 2. **Surface size — `.beadloom/sync-surface.json`**, committed. It records how
    many pairs and declared docs there were, so a run whose count FELL can say so
-   instead of printing a smaller number. Written only by
+   instead of printing a smaller number. Since BDL-083 S2f it also records the
+   `(doc, file)` pairs it counted, one per line, and a run whose count fell names
+   the recorded pairs it no longer declares (BDL-UX #353: a Windows checkout
+   counted 167 pairs where the macOS checkout of the same commit counted 347).
+   Written only by
    `sync-check --record-surface`: a check that silently re-records the number it
    is checking against re-attests without evidence (BDL-UX #163).
 
@@ -617,10 +621,12 @@ that.
 Module `src/beadloom/doc_sync/surface_ledger.py` — the committed surface record:
 
 - `read_ledger(project_root) -> SurfaceLedger | None`
-- `write_ledger(project_root, *, declared_pairs, declared_docs, recorded_at="")`
-- `compare_surface(ledger, *, declared_pairs, declared_docs) -> SurfaceVerdict`
-  — `recorded` / `shrank` / `message` / `headline`; an absent ledger says "not
-  recorded". The headline rides on the gate's sync-check line even when the step
+- `write_ledger(project_root, *, declared_pairs, declared_docs, recorded_at="", pairs=())`
+- `compare_surface(ledger, *, declared_pairs, declared_docs, pairs=None) -> SurfaceVerdict`
+  — `recorded` / `shrank` / `message` / `headline` / `dropped`; an absent ledger says "not
+  recorded". `dropped` is the recorded pairs the current run does not declare; a
+  shrunken surface's message names them, and `sync-check --json` carries them as
+  `declared_surface.dropped`. The headline rides on the gate's sync-check line even when the step
   FAILS, because the run that deleted a doc is the run whose count fell.
 
 Module `src/beadloom/doc_sync/surface.py`:

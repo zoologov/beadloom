@@ -1467,7 +1467,7 @@ def _index_one_file(file_path: Path, tree: _ImportTree, conn: sqlite3.Connection
         return 0
 
     file_hash = hashlib.sha256(content.encode()).hexdigest()
-    rel_path = str(file_path.relative_to(tree.project_root))
+    rel_path = file_path.relative_to(tree.project_root).as_posix()
 
     for imp in imports:
         resolved = _resolve_import(tree, conn, rel_path, imp.import_path)

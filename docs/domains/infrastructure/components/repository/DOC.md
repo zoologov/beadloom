@@ -102,6 +102,12 @@ full of code (BDL-UX #157).
 - `covering_prefix(source)` / `source_covers(source, file_path)` — the ownership
   rule itself, public since BDL-061.50 because the linter's file attribution now
   applies the same rule and the two must not each keep a copy
+- `posix_spelling(path)` -> `str` — *path* with every backslash written as a
+  forward slash. The index stores POSIX paths on every platform, and since
+  BDL-083 S2f (RFC D11, BDL-UX #353) every match of a `source:` against it —
+  `covering_prefix`, `source_covers`, the owned-file clause, and the doc-sync
+  engine's reason for an unpaired node — reads the declaration through this
+  first, so a `source:` typed with backslashes covers the same files
 
 `get_owned_code_files` reads **`file_index`**, not `code_symbols` (BDL-061.50):
 keyed on symbols it could not see a module holding no top-level `def`/`class` —

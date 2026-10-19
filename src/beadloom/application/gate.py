@@ -431,6 +431,7 @@ def _step_sync_check(project_root: Path) -> GateStep:
         read_ledger(project_root),
         declared_pairs=len(pairs),
         declared_docs=declared_docs,
+        pairs=[(str(r["doc_path"]), str(r["code_path"])) for r in pairs],
     )
 
     findings = [_sync_finding(r) for r in blocking]

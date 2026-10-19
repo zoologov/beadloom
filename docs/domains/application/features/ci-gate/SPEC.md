@@ -396,7 +396,8 @@ as the code's health (BDL-UX #174/#175):
   `unverified`: the step stays passed but prints `WARN` with the count, because
   a project that cannot supply a baseline is not broken and must not read green
   either. When the committed declared-surface ledger records a larger surface
-  than the run found, that is named too. And a pair a WORKING declaration
+  than the run found, that is named too, and since BDL-083 S2f the finding names
+  the recorded pairs the run dropped, read from the pair list the ledger keeps. And a pair a WORKING declaration
   excused is counted and its reason stated: the `exempt` verdict was added after
   this summary was rewritten and reintroduced the same shape, printing
   `326 pair(s) fresh` where the same tree without the declaration printed 326 of

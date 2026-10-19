@@ -167,7 +167,8 @@ def sync_check(
     # project declared less. Counted after the filter, `--ref sync-check` read
     # "declared surface SHRANK: 322 -> 6 pair(s)", and `--record-surface` would
     # have written that 6 into the committed ledger (BDL-061 S6).
-    declared_pairs = len([r for r in results if r.get("code_path")])
+    declared = [(str(r["doc_path"]), str(r["code_path"])) for r in results if r.get("code_path")]
+    declared_pairs = len(declared)
 
     if ref_filter:
         results = [r for r in results if r["ref_id"] == ref_filter]
@@ -199,6 +200,7 @@ def sync_check(
             declared_pairs=pair_count,
             declared_docs=declared_docs,
             recorded_at=datetime.now(tz=timezone.utc).isoformat(),
+            pairs=declared,
         )
         click.echo(
             f"Recorded declared surface: {pair_count} pair(s), "
@@ -208,6 +210,7 @@ def sync_check(
         read_ledger(project_root),
         declared_pairs=pair_count,
         declared_docs=declared_docs,
+        pairs=declared,
     )
 
     if output_json:
@@ -272,6 +275,7 @@ def sync_check(
                 "recorded": surface.recorded,
                 "shrank": surface.shrank,
                 "message": surface.message,
+                "dropped": [list(pair) for pair in surface.dropped],
             }
             data["references"] = [
                 {
