@@ -737,6 +737,9 @@ with no COMPLETED measurement — are a behaviour rule agreed with the owner bef
 - `clean-room --carry <path>` where HEAD holds the path and the tree does not builds the room with
   the path deleted (2 → 0/1, also for a path `--rebuild` remembers; D6); `--json` gains `deleted`,
   `not_carried` and a third `limits` entry (additive; added 2026-10-20 from S2d).
+- `clean-room` on a distribution below the root (`backend/pyproject.toml` + `uv.lock`) builds the
+  room's environment and exits 0 where 9.0.0 exited 1 (an exit-code move, D6; #333, S2b; added
+  2026-10-20 from S2W).
 - `config-check` and `ci` in a worktree or a room exit 0 instead of 1 on a project whose root
   manifest does not name it (an exit-code move, D7); `config.yml` gains `project_name:` (additive);
   the verdict names the composed-from and compared-against files (additive text; added 2026-10-20
