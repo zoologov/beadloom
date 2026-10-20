@@ -1,15 +1,15 @@
 # ACTIVE: BDL-083 — Debt to zero
 
 > **Last updated:** 2026-10-20
-> **Phase:** Development — S2 the monorepo on GitLab (S1 merged 2026-10-19 as `ab174d34`)
+> **Phase:** Development — S3 the re-measurement, to be planned (S1 merged 2026-10-19 as `ab174d34`, S2 merged 2026-10-20 as `41245dc7`)
 
 ---
 
 ## Current Bead
 
-**Bead:** S2 PR — `beadloom-6svu` (S2P: the Gate loop, the coordinator's combined-tree measurement, the landing check, push, PR, merge on green)
-**Goal:** S2 on `main` through one PR, every check green
-**Done when:** the PR merged; then the S3 beads
+**Bead:** none — S2 shipped; the S3 PLAN section is put to the owner next
+**Goal:** S3 the re-measurement: every open entry re-run by its own Command on the S2 version (D9), the S3 leftovers placed
+**Done when:** the S3 section approved and its beads created
 
 ## Progress
 
@@ -17,7 +17,7 @@
 - [x] Step 2: S1 beads created as one plan; `beadloom-ba9w.13` and `beadloom-jwfc` wired in as S1e and S1e2
 - [x] Step 3: S1 — the fixture landed (`14d89ecb`, 2026-10-18); the seven dev beads in the six waves `beadloom waves` derived: S1f → S1a → S1c → S1e + S1b → S1d → S1e2, all landed 2026-10-18 (`ba8ce1f4`, `32197286`, `9780e302`, `c275db19`, `fedf52e9`, `dea426eb`, `d1b7e520`)
 - [x] Step 4: S1 — test `546a1c70`; review in three passes with eight fix beads; docs `a883cccb`; PR #106 merged into `main` as `ab174d34` on 2026-10-19
-- [ ] Step 5: S2 beads created; S2 — the monorepo on GitLab
+- [x] Step 5: S2 — nine dev beads in nine waves of one (S2f, S2a, S2b, S2e, S2F1, S2h, S2g, S2d, S2c), test `a01b0d92`, review in two passes with one fix bead, docs `9324283b` + `fea70af9`; PR #107 merged into `main` as `41245dc7` on 2026-10-20
 - [ ] Step 6: S3 beads created; S3 — the re-measurement; the S4–S7 sections put to the owner
 - [ ] Step 7: S4–S7, one PR each
 - [ ] Step 8: close-out — documents `Done`, ROADMAP re-ranked, the version MAJOR
@@ -62,7 +62,7 @@
 | `beadloom-x94h` | S2R | done | pass 1 ISSUES 2026-10-20 at `b7d46e27`: 0 critical, 1 major (the Cursor rule's rendered project-info section compared whole: a version bump reddens `config-check` by a wrong reason, `setup-rules --refresh` repairs CLAUDE.md only → S2F2), 3 minor (the RFC Public API list missing S2's moves → added by the coordinator; `config_sync.py` 1300 → 1517 lines → `beadloom-ba9w.25` for S3; the census reads `config.yml` three to five times → noted on `beadloom-ba9w.21`), 1 nitpick; measured on the tree (15007 passed, ruff, mypy, `ci` rc 0); pass 2 OK 2026-10-20 at `daf933fb`: 0 critical, 0 major, 2 minor (an orphan `.cursor/rules/` file after `tools:` drops cursor → `beadloom-ba9w.26` for S3; the `doctor` ruling before the CHANGELOG), 2 nitpicks (the CLAUDE.md path spelled three ways in `config_sync.py`, two docstrings); the fix re-measured on a fresh probe; 2158 targeted tests, ruff, mypy, `ci` rc 0 on the tree |
 | `beadloom-ba9w.24` | S2F2 | done | `6a35a284` + `aa061a0f`; new `onboarding/composed_core.py` (node `composed-core`): one comparison with the rendered sections blanked on every side, one digest, one refresh over both files; a version bump on a both-tools project now gives both files one finding (`auto-managed section(s) stale: project-info`) and one `setup-rules --refresh` repairs both, the rule's body equal to CLAUDE.md byte for byte; 8 of 11 new tests red first by assertion; room 14981 passed over 21 files, tree `ci` rc 0, `sync-check` 845 pairs, mypy 3.10–3.13; suite at `6a35a284` 15026 passed / 1 failed — `test_bead14_s4_binding::...skips_none` (its subprocess over `tests/acceptance` exited 1), did not reproduce alone or over its directories, read as a flake for S2R pass 2 |
 | `beadloom-sc9d` | S2W | done | `9324283b` + `fea70af9` (the eight inline-code spans the site self-check named rewrapped or fenced); 10 files: CHANGELOG (Breaking: the nine S2 exit-code moves with their measurements and a red-on-9.0.0 test each, `doctor` written as the accepted move; Added, Changed, Fixed, eight Known limitations; upgrade steps 6–11), `public-api.md`, `cli.md` (clean-room, config-check, waves, rooms, doctor, init, `sync-check --since`), the ci-gate SPEC, `parallel-waves.md`, `ci-setup.md`, `bdd-scenarios.md`, `getting-started.md` (the monorepo paragraph), `architecture.md`; surface drift 11 → 0, all attested one at a time by path (six edited, five read and attested unedited); 849 pairs; `docs audit` rc 0; `ci` rc 0; the full suite not run |
-| `beadloom-6svu` | S2P | in progress | the coordinator's combined-tree measurement 2026-10-20: `ci` rc 0 at `4127ca38` and `fea70af9` (0 of 33 rooms entered, the #316 advisory axes warnings); the full suite in five foreground parts — unit 3216, integration 6146, acceptance 893 at `4127ca38`; self-check 1099 and the top-level files 3673 at `fea70af9` after the docs-only fix — 15027 passed, 0 failed; ruff rc 0, mypy 382 files rc 0, `sync-check` rc 0; `landing-check` clean; push and PR next |
+| `beadloom-6svu` | S2P | done | the coordinator's combined-tree measurement 2026-10-20: `ci` rc 0 at `4127ca38` and `fea70af9` (0 of 33 rooms entered, the #316 advisory axes warnings); the full suite in five foreground parts — unit 3216, integration 6146, acceptance 893 at `4127ca38`; self-check 1099 and the top-level files 3673 at `fea70af9` after the docs-only fix — 15027 passed, 0 failed; ruff rc 0, mypy 382 files rc 0, `sync-check` rc 0; `landing-check` clean; PR #107 squash-merged into `main` as `41245dc7` on 2026-10-20, nine required checks green, site-e2e advisory still running |
 
 ## Notes
 
