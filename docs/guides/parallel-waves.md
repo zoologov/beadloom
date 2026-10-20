@@ -228,7 +228,7 @@ each with a plan-time precondition that is actually checked:
 | `graph-files` | the node population the graph files declare is the one the index resolved the scopes from | the graph files and the index | BDL-UX #261 |
 | `working-tree` | no path differs from `HEAD` that no bead in the plan owns | `git status` | BDL-UX #181, #235 |
 | `commit-gate` | the installed pre-commit hook judges the paths a commit stages | `.git/hooks/pre-commit` | BDL-UX #118 |
-| `landing-order` | every instruction of the landing lock names its holder and asks for no queue | the composed flow artifacts | BDL-UX #194, #237 |
+| `landing-order` | every instruction of the landing lock names its holder and asks for no queue, and no bead the tracker lists as closed holds the slot | the composed flow artifacts and `bd list --all` | BDL-UX #194, #237, #354 |
 | `focus-document` | the document every route writes carries a row for each bead of the plan | the composed `/task-init` routing table and the work item's folder | BDL-UX #257 |
 | `doc-baseline` | no doc pair is stale before the wave starts | the doc index | BDL-UX #182, #133 |
 | `tracker-ids` | every bead's title numbers it the way the tracker did | the bead records | BDL-UX #171 |
@@ -307,6 +307,30 @@ wrong was this project's call form, and the correction is what the medium now ch
 - **`--wait` does not wait.** It appends the caller to a queue nothing drains and returns at
   once, and nothing removes a waiter, so the queue accumulates identities from sessions that
   ended weeks ago.
+- **Release before you push, and land the release (BDL-083 S2g, BDL-UX #354, RFC D12).** The
+  slot is tracker state, exported into `.beads/issues.jsonl`, and every other clone reads it
+  from the export the trunk carries. A release made after the push reaches no merged commit:
+  the trunk exports the slot as held by a bead that is closed by then, and the next clone's
+  `acquire` is refused naming a holder nobody can wait on. Measured on a copy of the monorepo
+  fixture with bd 1.0.4: after the 9.0.0 order (acquire, commit with the export, push, release),
+  a second clone's `acquire` exited 1 with `Slot held by: <bead>`. A landing therefore runs
+  acquire → commit → release → `bd export` → the export landed → push:
+
+  ```bash
+  bd merge-slot acquire --holder <bead-id>   # exit 0 means you hold it
+  # ... commit your own files by path, with `Bead: <bead-id>` in the last paragraph ...
+  bd merge-slot release --holder <bead-id>
+  bd export -o .beads/issues.jsonl
+  git commit -m "<subject>" -m "Bead: <bead-id>" -- .beads/issues.jsonl
+  git push
+  ```
+
+  The pre-push hook runs [`beadloom landing-check`](../services/cli.md#beadloom-landing-check)
+  before the Gate and refuses (exit 1) a push whose export still holds the slot for a bead the
+  push carries, naming those four commands. 9.0.0 pushed it with exit 0. A hold by a bead the
+  push does not carry is a neighbour's and reads clean. A slot already held by a closed bead
+  fails this medium, and the plan names the one remedy, `bd merge-slot release --holder
+  <closed-bead>`: waiting on it waits forever, because bd's refusal offers `--wait`.
 
 The check reads the composed flow artifacts an agent is HANDED, never the templates they were
 composed from: a template fixed and never recomposed leaves the instruction wrong on disk, and
@@ -367,6 +391,27 @@ decided by what the machine happened to hold; `--no-environment` declines that a
 part of the request a rebuild does NOT remember, because a remembered decline would quietly
 hand back the weaker room.
 
+**The environment is the measured project's, installed from its lock (BDL-083 S2b, RFC D6).**
+The room measures the Python project that owns the carried files: the deepest `pyproject.toml`
+under the scan paths that holds one, named on the line `measured project: <packaging> (<why>)`.
+In a monorepo that is `backend/pyproject.toml`, not the root. A project with a `uv.lock` is
+installed with `uv sync --frozen`, so the room holds the versions the lock pins and CI installs.
+Without a lock or without `uv` the environment is resolved afresh, and the environment line
+says so. Measured on the monorepo fixture: 9.0.0 built no environment and exited 1; this
+release installs from `backend/uv.lock` and exits 0. On this repository the rooms built before
+the change held a newer gherkin-official than the lock pins, and one test failed for that
+reason alone (BDL-UX #311).
+
+**A rename is carried whole (BDL-083 S2d, BDL-UX #335).** Name both sides in `--carry`: a path
+HEAD holds as a file and the working tree does not is deleted in the room, so the old module is
+not imported and its tests are not collected a second time. Measured after a `git mv` on the
+monorepo fixture: 9.0.0 refused the old path with `file_missing` (exit 2), this release builds
+the room (exit 0) and names the path under `deleted in the room`. A path neither the tree nor
+HEAD holds is still `file_missing`. The room also lists every file where the working tree
+differs from HEAD that it does not carry, because its verdict leaves each one out. Git cannot
+say whether that is a neighbour's work or a file of yours you did not name, so read the list
+before you report the room. It moves no exit code.
+
 Exit `0` = built, and the tracker says the bead is `in_progress`. Exit `1` = built, and its
 ownership is unconfirmed. Exit `2` = no room was built, under a named refusal
 (`already_exists`, `not_a_room`, `inside_the_project`, `no_commit`, `file_missing`,
@@ -375,8 +420,11 @@ ownership is unconfirmed. Exit `2` = no room was built, under a named refusal
 The command hands back the invocation to run in the room, and the invocation is not a
 formality: with an editable install, running the suite from inside the room under the project's
 environment imports the **tree's** source, and the first run that did it was caught from a
-warning path rather than from a failure. `PYTHONPATH` pointing at the room's own `src` is the
-fix, and the `import beadloom` line printing a path under the room is the check.
+warning path rather than from a failure. `PYTHONPATH` pointing at the room's own sources is the
+fix, and the import line printing a path under the room is the check. Both lines are derived
+from the measured project: its `src/` or its directory, its first package (`import beadloom`
+on this repository only), its pytest `testpaths`. A project with no importable package gets
+the suite line alone.
 
 ## Overriding the shape
 

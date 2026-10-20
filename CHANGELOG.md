@@ -13,11 +13,22 @@ pre-push hook without `beadloom` on its `PATH` and `issue-number check` over a d
 tree does not hold move from 0 to 1, and `lint --fail-on-warn` over an import rule with nothing
 to ban moves from 1 to 0. Beside them, the Gate's `scope-check` step judges a different set of
 files on a branch cut from an unmerged branch, the role files 9.0.0's templates composed drift,
-and the MCP `complete_bead` tool's ownership verdict loses the value `unowned`. Each is under
-*Breaking* with its measurement, taken on 2026-10-18 and 2026-10-19 on Darwin arm64 under CPython
-3.13.7, on the monorepo fixture under `tests/fixtures/` or on this repository. Every other S1 line
-adds a key, a value, an option or a sentence. Each line names its bead. The S1 pull request is to
-be opened.
+and the MCP `complete_bead` tool's ownership verdict loses the value `unowned`. S1 merged into
+`main` as `ab174d34` (PR #106).
+
+**BDL-083 S2, the monorepo on GitLab, moves the exit code of the pre-push hook and of seven
+commands on inputs 9.0.0 accepted.** The pre-push hook refuses a push whose export holds the landing slot for its own
+bead (0 → 1). `waves` fails on a slot held by a closed bead (0 → 1). `clean-room` builds a room
+for a carried deletion (2 → 0) and an environment for a monorepo's Python project (1 → 0).
+`config-check` and `ci` give a worktree and a room the checkout's verdict (1 → 0). `init`,
+`doctor` and `sync-check --since` refuse a project root below the git root (0 → 1), and
+`doctor` exits 1 on any `ERROR` row. `config-check` exits 1 on a tool that lacks a composed
+layer and on files composed before this release. Each is under *Breaking* with its
+measurement, taken on 2026-10-19 and 2026-10-20 on Darwin arm64 under CPython 3.13.7 (the 9.0.0
+side by `beadloom-w2v6` under 3.12.12, the interpreter uv chose for that worktree), on the
+monorepo fixture under `tests/fixtures/` or on this repository. Every other line adds a
+command, a key, a value, a file or a sentence, and each names its bead. The S2 pull request is
+to be opened.
 
 BDL-082, merged before it, is minor by the
 [public-API guide](docs/guides/public-api.md#how-a-change-sets-the-version): it adds keys and
@@ -101,6 +112,97 @@ probes measured below (the owner's ruling of 2026-10-11).
   and `unattributed`. The same change reaches `beadloom ci`'s `ownership` block in all three
   formats, which the guide does not declare. *Upgrade:* step 3.
 
+- **The pre-push hook refuses a push whose export still holds the landing slot for a bead the
+  push carries (`beadloom-89gm`, BDL-UX #354, RFC D12).** The merge slot is tracker state
+  exported into `.beads/issues.jsonl`, so the trunk says what the last landed export says. The
+  hook runs `beadloom landing-check --stdin` before the Gate. A push whose export at the pushed
+  commit holds the slot for a bead whose `Bead:` trailer the pushed commits carry exits 1 with
+  `Landing lock: REFUSED -- ...` and the four commands that land the release. Measured on a copy
+  of the monorepo fixture with a bare remote, `install-hooks --mode block` and bd 1.0.4, in the
+  9.0.0 order (acquire, commit with the export, push, release): 9.0.0 pushed with exit 0, and a
+  second clone's `bd merge-slot acquire` exited 1 with `Slot held by: <bead>`. This release
+  refuses the push with exit 1 and the remote receives nothing. After release, `bd export` and a
+  commit of the export, the push reads `Landing lock: clean -- the export at <commit> shows the
+  merge slot free`, and the second clone's `acquire` exits 0. A hold by a bead the push does not
+  carry reads `clean`, and a check that could not judge the push reads `NOT CHECKED` and never
+  blocks. Held by
+  `tests/integration/services/commands/test_a_push_landing_its_own_slot_hold_is_refused_by_git.py`,
+  red on 9.0.0 by the push's exit 0. *Upgrade:* steps 6 and 7.
+- **`waves` exits 1 when the merge slot is held by a bead the tracker lists as closed
+  (`beadloom-89gm`, BDL-UX #354, RFC D12).** The `landing-order` precondition reads the slot's
+  hold from the tracker answer the plan already takes. Such a holder cannot be waited on, so the
+  line reads `failed`, names the slot and the holder, and gives the one remedy, `bd merge-slot
+  release --holder <closed-bead>`. Measured on a copy of the monorepo fixture: `landing-order:
+  passed` on 9.0.0, `failed — the landing slot mono-merge-slot is held by mono-tba, a bead the
+  tracker lists as closed` now. A hold by an open or in-progress bead is not judged. Held by
+  `tests/test_cli_waves.py::TestALandingSlotHeldByAClosedBead`, red on 9.0.0 by `assert 0 == 1`
+  on an otherwise clean plan.
+- **`clean-room --carry <path>`, where HEAD holds the path and the working tree does not, builds
+  the room (`beadloom-flrc`, BDL-UX #335, RFC D6).** The path is deleted in the room and named
+  under `deleted in the room, because HEAD holds them and the working tree does not`, so the old
+  side of a rename is neither imported nor collected. The rule holds for a path `--rebuild`
+  remembers too. Measured on the monorepo fixture after `git mv` of
+  `backend/src/digest/sections.py`, carrying both sides: 9.0.0 exits 2 with `file_missing`, this
+  release exits 0. A path neither the tree nor HEAD holds is still `file_missing` (exit 2), and a
+  directory HEAD holds and the tree does not is `not_a_file`. Held by
+  `tests/test_cli_clean_room.py::TestDeletionsAndTheDifferencesLeftOut::test_a_carried_deletion_builds_the_room_at_exit_zero_and_the_text_names_it`,
+  red on 9.0.0 by `assert 2 == 0`.
+- **`clean-room` builds an environment for the Python project that owns the carried files
+  (`beadloom-cptm`, BDL-UX #333, RFC D6).** In a monorepo whose root is not a Python project,
+  9.0.0 built no interpreter and exited 1 with `no environment was built: no leg of this
+  project's workflows installs it`. Measured on the monorepo fixture carrying
+  `backend/src/digest/sections.py`: this release reads `measured project:
+  backend/pyproject.toml`, installs it from `backend/uv.lock` with `uv sync --frozen` and exits 0,
+  and the hint it prints runs as printed (1 passed). Held by
+  `tests/integration/application/waves/test_a_room_of_the_monorepo_builds_the_backend_environment.py`,
+  red on 9.0.0 by `assert 1 == 0`. *Added* has the rule.
+- **`config-check` and `ci` give a `git worktree` and a clean room the checkout's verdict
+  (`beadloom-ixbd`, BDL-UX #334, RFC D7).** The composed `CLAUDE.md` takes the project's name
+  from what the project declares, never from the directory it sits in. Measured on a copy of
+  the monorepo fixture, which names itself in no root manifest: 9.0.0 exits 0 in the checkout and
+  1 in a worktree and in a room, for both commands, with `.claude/CLAUDE.md: composed body is
+  stale`. This release exits 0 in all three. On this repository nothing moved, because
+  `pyproject.toml` names it. Held by
+  `tests/integration/onboarding/config_sync/test_config_check_and_ci_give_the_checkouts_verdict_in_a_worktree.py`
+  and
+  `test_the_verdict_names_what_it_compared.py::test_a_room_of_the_checkout_exits_0_and_names_both_files`,
+  red on 9.0.0 by `assert 1 == 0`.
+- **`init`, `doctor` and `sync-check --since` exit 1 on a project root below the git root
+  (`beadloom-7pd6`, BDL-UX #325).** Git answers in paths relative to its own root, so below it
+  `--since` compared two empty sides. Measured on the monorepo fixture committed one folder
+  below its git root: `sync-check --since HEAD` after a change to
+  `backend/src/application/__init__.py` exited 0 with every pair `[ok]`, `doctor` exited 0 with
+  no word and `init --yes` exited 0 and wrote `.beadloom/`. This release exits 1, 1 and 1, each
+  naming both roots, and `init` writes nothing in any mode. At the git root the same change
+  reads `[stale]` and `doctor` exits 0. Through the doctor step, `ci` and the pre-push hook exit 1
+  in that layout. Held by
+  `tests/acceptance/infrastructure/git-root/a_project_root_below_the_git_root_is_refused.feature`
+  and the `init`, `doctor` and `sync-check --since` integration tests, red on 9.0.0 by
+  `assert 0 == 1`.
+- **`doctor` exits 1 on any `ERROR` row, not only the git-root one (`beadloom-7pd6`).** That is
+  the rule the Gate's doctor step already applied to the same rows. No built-in row emitted
+  `ERROR` before this release, so the git-root row is the only input that moves the exit code
+  today. Measured on the nested fixture above: exit 0 with 9.0.0, exit 1 with `[ERR] Project root
+  refused: the git root is above the project root`. Held by
+  `tests/integration/application/doctor/test_doctor_refuses_a_project_root_below_the_git_root.py`,
+  red on 9.0.0 by `assert 0 == 1`.
+- **`config-check` exits 1 on a tool that lacks a layer another declared tool reads
+  (`beadloom-ybxm`, BDL-UX #356, RFC D13).** Measured on the monorepo fixture composed by 9.0.0
+  for `claude` and `cursor`: 9.0.0 exits 0, this release exits 1 with `` `cursor` lacks 8 layer(s)
+  `claude` reads: core (5 fragment(s)), architecture:ddd (1), stack:python (2) `` on `.cursor`,
+  and exits 0 after `setup-agentic-flow` recomposes the project. Held by
+  `tests/integration/onboarding/config_sync/test_config_check_exits_1_on_a_tool_lacking_a_layer.py`,
+  red on 9.0.0 by `assert 0 == 1`. *Upgrade:* step 7.
+- **Files composed before this release drift again, so `config-check` and the Gate exit 1 until
+  `setup-agentic-flow` runs (`beadloom-7pd6`, `beadloom-89gm`, `beadloom-ybxm`).** The composed
+  core gains "The project root is the git root" and the landing sequence acquire → commit →
+  release → export → the export landed → push. The landing fragments and the coordinator
+  checklist gain the sequence, and `task-init` writes its plan file under `$(mktemp -d)`.
+  Measured on a worktree of `ab174d34`, the tree S1's merge left composed, with this release's
+  code: exit 1 with 8 drifted artifacts (`.claude/CLAUDE.md`, the five role files,
+  `.claude/commands/coordinator.md` and `.claude/commands/task-init.md`), each `composed body is
+  stale`. *Upgrade:* step 7.
+
 ### Upgrading — what to check
 
 1. **Re-run `beadloom install-hooks`.** An installed hook keeps the text it was written with. The
@@ -121,9 +223,104 @@ probes measured below (the owner's ruling of 2026-10-11).
    `issue_log:`, point `issue_log.path` at the log, or remove the declaration.
 5. **If a pipeline runs `lint --fail-on-warn`**, read the `[INFO]` lines it now passes over: each
    is a rule that would fire on the first import its `to:` glob names.
+6. **Re-run `beadloom install-hooks`** so the pre-push hook runs `beadloom landing-check`, and
+   land every release of the slot before the push: acquire → commit → `bd merge-slot release
+   --holder <bead>` → `bd export -o .beads/issues.jsonl` → commit the export by path → push. A
+   slot a closed bead still holds on the trunk is freed by `bd merge-slot release --holder
+   <closed-bead>`. On a repository `bd init` set up, check `git config core.hooksPath`: bd 1.0.4
+   points it at `.beads/hooks`, where `install-hooks` does not write (known limitation below).
+7. **Re-run `beadloom setup-agentic-flow`**, then `beadloom config-check`. A project that declares
+   `cursor` gets the `.cursor/rules/*.mdc` rules in place of the pointer
+   `.cursor/rules/beadloom-flow.md`, which is listed as an older layout's file and kept: remove it
+   with the `rm -f` line the command prints.
+8. **A project that names itself in no root manifest** sets `project_name:` in
+   `.beadloom/config.yml`, then re-runs `setup-agentic-flow` once: the first `config-check` after
+   adding the key reads `composed body is stale`.
+9. **A project that holds both `.github/workflows/` and `.gitlab-ci.yml`** declares
+   `rooms.pipelines` if one of them is a mirror no run takes; without it the census reads both.
+10. **Put `.beadloom/` at the git root.** A project root below it is refused by `init`, `doctor`,
+    `sync-check --since` and, through `doctor`, by `ci` and the pre-push hook.
+11. **On Windows, run `beadloom reindex --full` once**, so the index is rebuilt with POSIX paths;
+    `doctor` names an index that still carries a backslash.
 
 ### Added
 
+- **`beadloom landing-check [--stdin] [--project DIR]` (`beadloom-89gm`, BDL-083 S2g).** It reads
+  the export at the pushed commit (`git show <commit>:.beads/issues.jsonl`, never the working
+  file) and the `Bead:` trailers of the commits the push carries. The first line is the verdict,
+  `Landing lock: clean`, `REFUSED` or `NOT CHECKED`, and the exit code is 0, 1 or 2. `--stdin`
+  reads the refs as git hands them to a pre-push hook. The pre-push hook runs it (*Breaking*).
+- **`rooms.pipelines` in `.beadloom/config.yml` (`beadloom-ba9w.22`, RFC D6 as amended by the
+  owner's ruling of 2026-10-19).** A list of `github` and/or `gitlab`, naming the pipeline files
+  the room census and the Gate's coverage statement read. Unset, every file present is read. A
+  present file the key leaves out, and a named pipeline with no file, are `Unresolved` entries
+  naming the key, never errors. A name outside the vocabulary, a value that is not a list and an
+  unknown key under `rooms:` are `Unresolved` entries too. This repository declares `[github]`,
+  because its `.gitlab-ci.yml` is a mirror no run takes: 33 rooms, 36 without the key.
+- **A GitLab pipeline is a source of rooms (`beadloom-3618`, BDL-UX #332, RFC D6).** Each job of
+  `.gitlab-ci.yml` is a leg with the dimension `image` (and `python` from an official
+  `python:X.Y` tag) and the extras its `script:` lines install. A run on the host never enters
+  an image. `include:`, `extends:` and `parallel: matrix` are named and not expanded. Every room
+  carries its `source`, for instance `.gitlab-ci.yml: backend-tests`. Measured on the monorepo
+  fixture: 0 rooms and `0 of 0 declared room(s)` on 9.0.0, 2 rooms and `0 of 2` now. Python
+  projects are found as every `pyproject.toml` under a scan path or between the root and one.
+- **`not_derived` in `rooms --json` and in the `room` of `ci --format json` (`beadloom-3618`).**
+  `null`, or the reason the census derived no room. The text surfaces print `rooms: not derived —
+  <reason>` (see *Changed*).
+- **`project_name:` in `.beadloom/config.yml` (`beadloom-ixbd`, RFC D7).** The name the composed
+  `CLAUDE.md` heading takes, read before a root manifest. A project that declares neither keeps
+  the name its last composition wrote, and `config-check` reports that name as not compared. The
+  directory's name serves the first composition only (the owner's ruling of 2026-10-20).
+- **The Cursor composition under `.cursor/rules/` (`beadloom-ybxm`, BDL-UX #356, RFC D13).**
+  `setup-agentic-flow` on a flow declaring `cursor` writes `beadloom-flow.mdc`, the composed
+  core, and `beadloom-{coordinator,task-init,checkpoint,templates}.mdc`, the four commands, each
+  an `alwaysApply` rule whose body is byte-identical to the file Claude reads, and prints `Wrote
+  <rule> (cursor)`. It replaces the 17-line pointer `.cursor/rules/beadloom-flow.md`, which 9.0.0
+  wrote. Measured on a project composed for Cursor alone: the rules are 444, 486, 301, 194 and
+  450 lines. `.beadloom/flow/claude/CLAUDE.md` reaches the core of both tools and the new
+  `.beadloom/flow/cursor/CLAUDE.md` reaches Cursor's alone (the owner's ruling of 2026-10-20).
+- **The room's environment from the measured project's `uv.lock` (`beadloom-cptm`, BDL-UX #311,
+  #333, RFC D6).** The room measures the deepest `pyproject.toml` under the scan paths that
+  holds a carried file (several: the one holding most, the others on `note:` lines; none: the
+  project the census reads) and names it on `measured project: <packaging> (<why>)`. A project
+  with a `uv.lock` is installed with `uv sync --frozen` and the chosen extras, in its own
+  directory. Without a lock or `uv` the environment is resolved afresh, and the line says so. On
+  this repository the rooms built before held gherkin-official 42.0.1 and mypy 2.4.0 where
+  `uv.lock` pins 29.0.0 and 2.3.1, and one test failed for that reason alone. The room built now
+  holds the pinned versions and that failure is gone. `clean-room --json` and the room's
+  `.beadloom-room.json` gain `distribution` (`{directory, packaging, lock, why, notes}`) and
+  `limits`, and `environment` gains `lock` and `resolution`.
+- **`deleted` and `not_carried` in `clean-room --json` and `.beadloom-room.json`
+  (`beadloom-flrc`, BDL-UX #335).** `deleted` lists the carried paths deleted in the room.
+  `not_carried` lists every file where the working tree differs from HEAD that the room does not
+  carry, as `{path, change}` with `change` taking `modified`, `deleted`, `added`, `untracked` or
+  `unmerged`, or is `null` when git did not answer. `carried` now names only the files copied in,
+  which is unchanged for every input 9.0.0 accepted. The text names up to 20 such files, and
+  `limits` gains a third sentence: a carried file is copied whole, a neighbour's edits included.
+- **POSIX paths in the index on every platform (`beadloom-27br`, BDL-UX #353, RFC D11).** Every
+  index write site stores `relative_to(root).as_posix()`, and every site that matches a node's
+  `source:` normalises it the same way. Nothing moves on POSIX. On Windows a directory `source:`
+  now covers its files, where the first outside adopter's teammate measured 167 declared pairs
+  against 347 for one commit. Windows was not measured here: the separator is simulated on
+  Darwin by `tests/support/windows_separator.py`, which gave 0 declared pairs before and the
+  POSIX checkout's set after on the monorepo fixture. `doctor` gains the check `index_separator`,
+  which warns per index table holding a backslash and names `beadloom reindex --full`.
+- **The pair list in `.beadloom/sync-surface.json` (`beadloom-27br`, RFC D11).** `sync-check
+  --record-surface` writes the `(doc, file)` pairs beside `declared_pairs`, one per line, and a
+  shrunken surface names the pairs it dropped, ten by name and then `and N more`. `sync-check
+  --json` gains `declared_surface.dropped`. A ledger recorded before this release has no list,
+  and the message says so. This repository's ledger holds 845 pairs.
+- **The portable MCP command (`beadloom-ybxm`, BDL-UX #356).** `setup-mcp` (every `--tool`) and
+  `init --bootstrap` write `"command": "beadloom"`, resolved on each clone's own `PATH`, where
+  9.0.0 wrote `shutil.which`'s absolute path of the machine that ran them. `setup-mcp` says on
+  stderr when `beadloom` is not on that `PATH`, and writes the same file.
+- **The `composed-core` component (`beadloom-ba9w.24`).** `onboarding/composed_core.py` names
+  the files that carry the composed core, `.claude/CLAUDE.md` and the Cursor core rule, and
+  compares and refreshes them as one text, so the two tools cannot carry two texts after a
+  release. The behaviour is under *Changed*.
+- **The components `git-root`, `project-name`, `landing-slot` and `tool-reach`** hold the rules
+  above: `infrastructure/git_root.py`, `onboarding/project_name.py`,
+  `application/landing_slot.py` and `onboarding/tool_reach.py`.
 - **`scope-check --base [REF]` (`beadloom-fgu8`, BDL-083 S1d).** Bare `--base` judges the branch
   against the derived base (RFC D4, under *Breaking*), and `--base REF` names it. `--since REF` is
   kept as the same as `--base REF`. `scope-check --json` and `review-brief --json` gain `base`:
@@ -203,6 +400,51 @@ probes measured below (the owner's ruling of 2026-10-11).
 
 ### Changed
 
+- **A project holding both `.github/workflows/` and `.gitlab-ci.yml` gains the GitLab rooms
+  (`beadloom-3618`, `beadloom-ba9w.22`, RFC D6 as amended).** With no `rooms.pipelines` the
+  census reads both files: on this repository that is 36 rooms against 33. The ordering S2a
+  shipped first, GitHub read and GitLab set aside, was withdrawn by the owner's ruling of
+  2026-10-19 before any release. The census is a report and moves no exit code. An `Unresolved`
+  entry about the packaging names the file it read (`backend/pyproject.toml`).
+- **A census that derives no room says why (`beadloom-3618`).** `rooms` and the three formats of
+  `ci` print `rooms: not derived — <reason>` where they printed `0 of 0 declared room(s)` or
+  `This project declares no room`. The reason names the files looked for, a pipeline this census
+  does not read (a `Jenkinsfile`, `.circleci/config.yml` and five more), or the key that left
+  every file unread. The Gate's coverage statement names a file the key left unread instead of
+  saying the project declares no pipeline. `rooms --dimension` on such a census still exits 2.
+- **The clean room's hint is derived from the project it measures (`beadloom-cptm`).** The
+  sources are its `src/` or its directory, the import line names its first package, and the
+  suite line runs its pytest `testpaths`, where 9.0.0 printed `<room>/src`, `<room>/tests` and
+  `import beadloom` on every project. A project with no importable package gets the suite line
+  alone. `What this room cannot answer` is a list of three sentences, and the first now names
+  the tests and tools that read git.
+- **`config-check` names what it compared (`beadloom-ixbd`, RFC D7).** Every run that compares
+  the `CLAUDE.md` body prints `CLAUDE.md: compared .claude/CLAUDE.md against its composition
+  from .beadloom/flow.yml, layers ..., with the project name '<name>' from <source>` on stderr.
+  The body finding's reason and the Gate's `config-check` summary, in text and in JSON, end with
+  the same clause.
+- **`config-check`'s file set follows `tools:` (`beadloom-ybxm`).** A project composed for
+  Cursor alone no longer reads five `.claude/agents/<role>.md missing` warnings. A project
+  declaring `cursor` is told when `.cursor/agents/*` or `.cursor/rules/*.mdc` are missing, so a
+  Cursor-only project composed by 9.0.0 reads five `missing` warnings on the rules, at exit 0,
+  until `setup-agentic-flow` writes them.
+- **A release moves the rendered section of both tools' core alike (`beadloom-ba9w.24`).** On a
+  project composed for `claude` and `cursor`, a version bump reports one finding per file with
+  one reason, `auto-managed section(s) stale: project-info`, and one `setup-rules --refresh`
+  repairs both, printing a line for each file. Measured on a scratch project composed clean,
+  then moved from version 1.0.0 to 2.0.0 with a dependency added: before, the Cursor rule read
+  `composed body is stale vs CORE + the flow.yml overlays + the project layer` and the refresh
+  left it stale (exit 1). Now the refresh is followed by `config-check` exit 0, and the rule's
+  body equals `CLAUDE.md` byte for byte. A hand edit inside the rule's rendered section reads
+  `section(s) stale`, where it read `hand-edited`. The exit code is 1 before the refresh in both
+  versions, as on a project composed for `claude` alone.
+- **The composed landing instructions give the order that lands the release (`beadloom-89gm`,
+  RFC D12).** The landing fragments in both languages, the coordinator checklist and the core's
+  merge-slot line read acquire → commit → release → `bd export` → the export landed → push, and
+  name `beadloom landing-check`. The export is landed by one more commit by path.
+- **`doctor` prints `No git root above the project root.` and `Every indexed path is POSIX.` on
+  every project (`beadloom-7pd6`, `beadloom-27br`).** This repository's doctor step reads 15
+  checks, where the tree S1 merged read 13.
 - **The Gate names the rule it attributed findings by, and a `Bead:` line git read no trailer from
   (`beadloom-b23f`, `beadloom-7kas`, `beadloom-ba9w.18`).** Every format prints the rule before
   the owners, ``attributed by the files the commits carrying `Bead: <id>` changed``, and the range,
@@ -409,6 +651,9 @@ probes measured below (the owner's ruling of 2026-10-11).
 
 ### Fixed
 
+- **`init` no longer raises on a `package.json` it cannot decode (`beadloom-ixbd`).** Reading the
+  project's name from a non-UTF-8 or unreadable `package.json` raised `UnicodeDecodeError` or
+  `OSError` out of `init`. Such a file is now skipped, and the next manifest is read.
 - **`beadloom ci` writes its whole report to a pipe that will not wait (`beadloom-jwfc`, BDL-UX
   #226).** An agent's shell sets the write end of the pipe it reads non-blocking, and `ci` wrote
   its report in one call. Measured at `12c35cf3` with the reader starting 2 s late: `ci` exited 1
@@ -428,6 +673,31 @@ probes measured below (the owner's ruling of 2026-10-11).
 
 ### Known limitations
 
+- **On a repository `bd init` set up, the hooks `install-hooks` writes do not run (BDL-UX #357,
+  `beadloom-ba9w.23`).** bd 1.0.4 sets `core.hooksPath=.beads/hooks`, and `install-hooks` writes
+  `.git/hooks`. Measured on a copy of the monorepo fixture: the push went through with the hook
+  installed until `core.hooksPath` pointed at `.git/hooks`. S3 places the fix.
+- **Below the git root, `install-hooks`, `diff --since`, `review-brief` and `export` are not yet
+  refused** (BDL-UX #325, S3's re-measurement).
+- **The landing check reads the export at the pushed tip only**, not at each pushed commit. A
+  neighbour's hold that lands between a release and its export reads `clean`, by design. In a
+  fresh clone that imported a trunk export taken before the holder's close landed, the holder
+  reads `in_progress`, so `waves` does not report it there.
+- **Windows was not measured.** The POSIX index is held by two tests under a simulated separator,
+  which covers relative paths only: absolute paths, drive letters and `os.sep` are not
+  simulated. The Windows CI leg stays withdrawn (the owner's decision of BDL-074).
+- **A carried file shared with a neighbour bead is copied whole.** The room names the limit and
+  does not split one file's lines between beads. When the carried files span several Python
+  projects, the room builds one environment, for the project holding most of them.
+- **`config-check` does not validate `rooms.pipelines`.** An unusable value is named only by the
+  census, in `rooms` and in the `unresolved` list of `ci --format json`. The coverage statement's
+  unread pipeline files are not in the `not_run` payload of `ci --format json` or the MCP
+  `complete_bead` tool, and the MCP tool's `room` carries no `not_derived` reason.
+- **`.cursor/rules/*.mdc` files are not reported as orphans when `cursor` leaves `tools:`**
+  (`beadloom-ba9w.26`). The `.claude/` core and commands are still written for a project
+  composed for Cursor alone, and the guard hooks stay Claude-only.
+- **`config-check`'s closing line offers `setup-rules --refresh` under a layer-gap error**, which
+  only `config-check --fix` or `setup-agentic-flow` repairs.
 - **`review-brief` still names no scope for a review bead that declares none (BDL-UX #344, half
   open).** The base half is closed above. The brief does not yet fall back to the work item's
   declared axes and documents, and prints `DECLARED SCOPE: none declared` (S3 places it).

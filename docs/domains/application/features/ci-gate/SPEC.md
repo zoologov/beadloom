@@ -347,7 +347,10 @@ tracker=None)` runs, in order:
    The name is the declared one, so the main checkout, a `git worktree` and a clean room of
    the same files give one verdict. Measured on a copy of the monorepo fixture at
    `f3d6f293`: the step was PASS, FAIL and FAIL in the three places before.
-11. **doctor** — graph integrity.
+11. **doctor** — graph integrity. The step fails on any `ERROR` row, the rule `beadloom doctor`
+    itself applies since BDL-083 S2e. A project root below the git root is such a row (BDL-UX
+    #325), so the step, `beadloom ci` and the pre-push hook exit 1 in that layout. On this
+    repository the step reads 15 checks; S2f added `index_separator` and S2e `git_root`.
 12. **federate** — `federate --fail-on` when hub exports are supplied.
 
 The **docs-audit** step (BDL-057 Layer 1) reuses
@@ -464,6 +467,13 @@ Ubuntu, with the tenth measurement red on six of them, being the loudest. Since 
 this run did not enter. All three formats print it — under the verdict in `rich`, as a `room`
 object in `--format json`, and as one `::notice::room` in `--format github`.
 
+Since BDL-083 S2a and S2F1 (RFC D6, BDL-UX #332) the legs come from `.github/workflows/*.yml`
+and `.gitlab-ci.yml`, as the project's `config.yml` `rooms.pipelines` declares (unset: every
+file present), and each room carries its source. A census that derives no room prints `rooms:
+not derived — <reason>` in all three formats instead of `0 of 0 declared room(s)`, and the
+JSON `room` carries it as `not_derived`. The coverage statement reads the same pipeline files
+and names a file the key left unread rather than saying the project declares no pipeline.
+
 **It is not a step, and naming it changes nothing.** A step has a status, and the room makes no
 claim that can pass or fail: the same `ok`, the same exit code, the same findings. What it
 changes is that a green is answerable — a reader can see which of the declared rooms it covers.
@@ -559,6 +569,13 @@ a crash included. The hook text is `services/commands/hook_templates.HOOK_TEMPLA
 - Without `beadloom` on the `PATH`, the hook exits 1 with three sentences on stderr: the push
   was not judged and is refused, how to put `beadloom` on that `PATH` or remove the hook, and
   `git push --no-verify`.
+- Before the gate, the hook runs `beadloom landing-check --stdin` over the refs git hands it
+  (BDL-083 S2g, BDL-UX #354, RFC D12). A push whose exported `.beads/issues.jsonl` at the
+  pushed commit holds the merge slot for a bead the pushed commits carry by their `Bead:`
+  trailer exits 1 with `Landing lock: REFUSED -- ...` and the landing sequence, and the gate
+  does not run for that push. 9.0.0 pushed it with exit 0. Any other verdict, `NOT CHECKED`
+  included, is printed and never blocks. The reading rule is the
+  [Landing Slot DOC](../../components/landing-slot/DOC.md).
 - The gate runs as `beadloom ci --format rich --tee <temporary file>`. `--format rich` because
   it is the format that prints a verdict line whatever git's stdout is. The report goes to the
   hook's output through `console_streams.write_whole` and a copy goes to the file, and the
