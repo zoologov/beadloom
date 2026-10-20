@@ -17,10 +17,11 @@ composition they sit in does not.
 Before this component the two files were handled by two copies of the logic. The `CLAUDE.md`
 checks blanked the regions before comparing the body and refreshed them separately. The
 Cursor rule's check compared the whole body, and nothing refreshed its regions. Measured at
-`b7d46e27` on a project composed for both tools: after the version went from 1.0.0 to 2.0.0
-and a dependency was added, `config-check` exited 1 and blamed the Cursor rule on "CORE + the
+`b7d46e27` on a project composed for both tools: after a major release that also added a
+dependency, `config-check` exited 1 and blamed the Cursor rule on "CORE + the
 flow.yml overlays + the project layer", none of which had moved, and `setup-rules --refresh`
-repaired `CLAUDE.md` and left the rule stale (BDL-083 S2R pass 1 Major 1).
+repaired `CLAUDE.md` and left the rule stale (BDL-083 S2R pass 1 Major 1). The measurement
+with its numbers is in the [config-check SPEC](../../features/config-check/SPEC.md).
 
 ## Behaviour
 
