@@ -428,7 +428,7 @@ both documents stale:
 
 - `mcp_serve(*, project)` -- launch the MCP server over stdio; exits 1 with `Run `beadloom reindex` first` when the index is absent
 - `setup_mcp(*, remove, tool_name, project)` -- create, update or remove the MCP config for a supported editor
-- `setup_rules(*, tool_name, project, refresh, dry_run)` -- generate IDE adapter files; `--refresh` re-renders the `CLAUDE.md` auto-regions and `--dry-run` previews without writing
+- `setup_rules(*, tool_name, project, refresh, dry_run)` -- generate IDE adapter files; `--refresh` re-renders the auto-regions of `.claude/CLAUDE.md` and of the Cursor core rule `.cursor/rules/beadloom-flow.mdc` when present, and `--dry-run` previews without writing
 - `setup_ai_techwriter(*, platform, project)` -- scaffold the AI tech-writer harness for `github` or `gitlab`
 - `setup_agentic_flow(*, project, force, tools, architecture, stack)` -- compose and write the agentic dev flow; selection is flag over `flow.yml` over default
 - `setup_branch_protection(*, repo_slug, branch, contexts, dry_run)` -- apply branch protection via `gh api`; `--dry-run` prints the call and payload without touching GitHub

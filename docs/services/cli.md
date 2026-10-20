@@ -1469,6 +1469,14 @@ beadloom setup-rules --tool {cursor,windsurf,cline} [--project DIR]
 
 Creates thin adapter files (`.cursorrules`, `.windsurfrules`, `.clinerules`) that instruct agents to read AGENTS.md.
 
+`--refresh` re-renders the auto-managed sections of every file that carries the composed
+core, `.claude/CLAUDE.md` and, when present, the Cursor core rule
+`.cursor/rules/beadloom-flow.mdc`, and regenerates `.beadloom/AGENTS.md`. It prints one line
+per file: `Updated <file> sections: <names>` or `<file>: no changes needed.`, the
+`CLAUDE.md` line also when that file is absent. `--dry-run` with `--refresh` prints
+`Would update` and writes nothing. Until BDL-083 S2R pass 1 Major 1 only `CLAUDE.md` was
+refreshed, so after a release the two tools carried two texts.
+
 ### beadloom config-check
 
 AgentConfigAsCode freshness gate: verify that generated agent-config is in sync with the graph.
@@ -1502,7 +1510,7 @@ is a pattern or a relative or absolute path, and a folder that names nothing in 
 each with its remedy, and exits 1 on them, because a mistyped folder leaves every import under
 the alias unresolved without a word. The Gate's step reports them as the rule `import-aliases`.
 
-Re-runs the same `setup-rules --refresh` generator in memory and diffs its output against on-disk content for `.beadloom/AGENTS.md`, the auto-managed sections of `.claude/CLAUDE.md`, and present IDE adapter files. For those three, only the auto-managed regions are compared — editing user-authored prose (the AGENTS.md `custom` block, CLAUDE.md content outside the `auto-start`/`auto-end` markers) never trips them. The composed artifacts are a separate check with its own rules, described below. Prints which file drifted, why, and the remediation; an absent target file is skipped unless the project adopted the flow, in which case it is `missing`. `--fix` regenerates via the refresh path (`config_sync.apply_config_fixes`), names every file it changed, declines any body Beadloom cannot prove it wrote, and re-checks. Delegates to `onboarding/config_sync.py:check_config_drift()`.
+Re-runs the same `setup-rules --refresh` generator in memory and diffs its output against on-disk content for `.beadloom/AGENTS.md`, the auto-managed sections of `.claude/CLAUDE.md` and of the Cursor core rule `.cursor/rules/beadloom-flow.mdc`, and present IDE adapter files. For those three, only the auto-managed regions are compared — editing user-authored prose (the AGENTS.md `custom` block, CLAUDE.md content outside the `auto-start`/`auto-end` markers) never trips them. The composed artifacts are a separate check with its own rules, described below. Prints which file drifted, why, and the remediation; an absent target file is skipped unless the project adopted the flow, in which case it is `missing`. `--fix` regenerates via the refresh path (`config_sync.apply_config_fixes`), names every file it changed, declines any body Beadloom cannot prove it wrote, and re-checks. Delegates to `onboarding/config_sync.py:check_config_drift()`.
 
 As of BDL-048, when a repo has the agentic flow scaffolded (`beadloom setup-agentic-flow`), `config-check` also drift-checks the **scaffolded flow files**. As of **BDL-061 S3** it checks them against their **composition result** rather than against fixed bytes: `.claude/CLAUDE.md`, each `.claude/commands/*` and each `.claude/agents/*` must equal `CORE + the flow.yml overlays + the project layer in .beadloom/flow/`. That is what makes a project extension legal — it is part of the expected output — while a change to a shipped fragment still differs from it and is reported.
 

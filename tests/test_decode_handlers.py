@@ -496,8 +496,11 @@ JUDGED_NARROW_DECODES: dict[str, NarrowDecode] = {
         ),
         until=_JUDGED_BY_67,
     ),
-    "onboarding/scanner/claude_md.py::refresh_claude_md#1": NarrowDecode(
-        reads="the adopter's CLAUDE.md, read to locate the composed markers before rewriting it",
+    "onboarding/scanner/claude_md.py::refresh_auto_regions#1": NarrowDecode(
+        reads=(
+            "a file carrying the composed core (the adopter's CLAUDE.md, the Cursor core "
+            "rule), read to locate the composed markers before rewriting it"
+        ),
         catches="OSError",
         reason=(
             "answers an empty change list, so nothing is rewritten; of every row here this one "

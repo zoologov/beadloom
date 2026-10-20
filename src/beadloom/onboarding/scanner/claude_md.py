@@ -321,6 +321,38 @@ def render_auto_regions(text: str, project_root: Path) -> tuple[str, list[str]]:
     return text, changed
 
 
+def refresh_auto_regions(
+    path: Path,
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> list[str]:
+    """Re-render the auto-managed regions of the file at ``path`` for ``project_root``.
+
+    Content outside the markers is preserved verbatim. Returns the names of the
+    regions whose content changed, and an empty list for a file that is absent,
+    unreadable or already current. With ``dry_run`` nothing is written. Every file
+    that carries the composed core is refreshed through here, so one release
+    re-renders one section in each of them (BDL-083 S2R pass 1 Major 1).
+    """
+    if not path.is_file():
+        return []
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    text, changed = render_auto_regions(text, project_root)
+    if not changed:
+        return []
+
+    if not dry_run:
+        path.write_text(text, encoding="utf-8")
+
+    return changed
+
+
 def refresh_claude_md(
     project_root: Path,
     *,
@@ -328,9 +360,9 @@ def refresh_claude_md(
 ) -> list[str]:
     """Refresh auto-managed sections in ``.claude/CLAUDE.md``.
 
-    Reads the file, finds ``<!-- beadloom:auto-start SECTION -->`` /
-    ``<!-- beadloom:auto-end -->`` marker pairs, regenerates their content,
-    and writes back.  Content outside markers is preserved verbatim.
+    Finds ``<!-- beadloom:auto-start SECTION -->`` / ``<!-- beadloom:auto-end -->``
+    marker pairs, regenerates their content and writes back, through
+    :func:`refresh_auto_regions`. Content outside markers is preserved verbatim.
 
     Parameters
     ----------
@@ -345,20 +377,6 @@ def refresh_claude_md(
         Names of sections whose content changed (empty if nothing changed
         or file does not exist).
     """
-    claude_md_path = project_root / ".claude" / "CLAUDE.md"
-    if not claude_md_path.is_file():
-        return []
-
-    try:
-        text = claude_md_path.read_text(encoding="utf-8")
-    except OSError:
-        return []
-
-    text, changed = render_auto_regions(text, project_root)
-    if not changed:
-        return []
-
-    if not dry_run:
-        claude_md_path.write_text(text, encoding="utf-8")
-
-    return changed
+    return refresh_auto_regions(
+        project_root / ".claude" / "CLAUDE.md", project_root, dry_run=dry_run
+    )

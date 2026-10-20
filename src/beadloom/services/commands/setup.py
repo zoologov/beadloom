@@ -182,14 +182,19 @@ def setup_rules(
     files and creates thin adapter files. Does not overwrite existing files.
 
     With --refresh, also refreshes auto-managed sections in .claude/CLAUDE.md
+    and in the Cursor core rule .cursor/rules/beadloom-flow.mdc when present,
     and regenerates .beadloom/AGENTS.md.  Use --dry-run with --refresh to
     preview changes without writing.
     """
+    from beadloom.onboarding.composed_core import (
+        CLAUDE_MD_RELPATH,
+        core_carriers,
+        refresh_core_regions,
+    )
     from beadloom.onboarding.scanner import (
         _RULES_ADAPTER_TEMPLATE,
         _RULES_CONFIGS,
         generate_agents_md,
-        refresh_claude_md,
         setup_rules_auto,
     )
 
@@ -200,13 +205,16 @@ def setup_rules(
         raise SystemExit(1)
 
     if refresh:
-        # Refresh CLAUDE.md auto-managed sections.
-        changed = refresh_claude_md(project_root, dry_run=dry_run)
-        if changed:
-            verb = "Would update" if dry_run else "Updated"
-            click.echo(f"{verb} .claude/CLAUDE.md sections: {', '.join(changed)}")
-        else:
-            click.echo(".claude/CLAUDE.md: no changes needed.")
+        # Refresh the auto-managed sections of every file carrying the composed
+        # core, so one release re-renders one section in both tools' files.
+        refreshed = refresh_core_regions(project_root, dry_run=dry_run)
+        verb = "Would update" if dry_run else "Updated"
+        for relpath in core_carriers():
+            changed = refreshed.get(relpath)
+            if changed:
+                click.echo(f"{verb} {relpath} sections: {', '.join(changed)}")
+            elif relpath == CLAUDE_MD_RELPATH or (project_root / relpath).is_file():
+                click.echo(f"{relpath}: no changes needed.")
 
         # Regenerate AGENTS.md (unless dry-run).
         if not dry_run:

@@ -1,6 +1,6 @@
 {
-  "declared_docs": 142,
-  "declared_pairs": 843,
+  "declared_docs": 143,
+  "declared_pairs": 845,
   "pairs": [
     ["architecture.md", "src/beadloom/__init__.py"],
     ["architecture.md", "src/beadloom/services/__init__.py"],
@@ -492,6 +492,7 @@
     ["domains/onboarding/README.md", "src/beadloom/onboarding/agentic_flow_setup.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/ai_techwriter_setup.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/branch_protection.py"],
+    ["domains/onboarding/README.md", "src/beadloom/onboarding/composed_core.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/composer.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/config_reader.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/config_sync.py"],
@@ -539,6 +540,7 @@
     ["domains/onboarding/README.md", "src/beadloom/services/commands/docs.py"],
     ["domains/onboarding/README.md", "src/beadloom/services/commands/query.py"],
     ["domains/onboarding/README.md", "src/beadloom/services/commands/setup.py"],
+    ["domains/onboarding/components/composed-core/DOC.md", "src/beadloom/onboarding/composed_core.py"],
     ["domains/onboarding/components/graph-files/DOC.md", "src/beadloom/onboarding/graph_files.py"],
     ["domains/onboarding/components/graph-layout/DOC.md", "src/beadloom/onboarding/graph_layout.py"],
     ["domains/onboarding/components/guard-hooks/DOC.md", "src/beadloom/onboarding/guard_hooks.py"],
@@ -846,5 +848,5 @@
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/lib/queryState.js"],
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/model/useUrlState.js"]
   ],
-  "recorded_at": "2026-10-20T00:13:40.467766+00:00"
+  "recorded_at": "2026-10-20T02:19:12.709870+00:00"
 }

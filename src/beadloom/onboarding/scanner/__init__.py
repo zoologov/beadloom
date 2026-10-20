@@ -28,6 +28,7 @@ from beadloom.onboarding.scanner.claude_md import (
     _parse_markers,
     _render_project_info_section,
     blank_auto_regions,
+    refresh_auto_regions,
     refresh_claude_md,
     render_auto_regions,
 )
@@ -127,6 +128,7 @@ __all__ = [
     "manifest_project_name",
     "non_interactive_init",
     "prime_context",
+    "refresh_auto_regions",
     "refresh_claude_md",
     "render_auto_regions",
     "scan_project",

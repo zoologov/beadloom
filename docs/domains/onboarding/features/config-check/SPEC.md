@@ -22,8 +22,10 @@ against disk, returning one `ConfigDrift` per drifted artifact, sorted by path:
 
 - `.beadloom/AGENTS.md` — fully generated, with a preserved `custom` block
   between the `beadloom:custom-start` / `custom-end` markers.
-- the auto-managed sections of `.claude/CLAUDE.md` — between the
-  `beadloom:auto-start` / `auto-end` markers.
+- the auto-managed sections of every file carrying the composed core —
+  `.claude/CLAUDE.md` and the Cursor core rule `.cursor/rules/beadloom-flow.mdc` —
+  between the `beadloom:auto-start` / `auto-end` markers, one finding per file
+  (see *A release moves the rendered sections in both tools* below).
 - the thin IDE adapter files (`.cursorrules`, …).
 - the **body** of `.claude/CLAUDE.md`, the `.claude/commands/*` files and the
   `.claude/agents/*` adapters — each against its **composition result**, not
@@ -43,7 +45,7 @@ A repo that never adopted the flow is never reported for it. A repo that DID
 adopt it and is missing a canonical file is reported, because the gate is not
 satisfied by having less to check (see *Deletion is not a pass*).
 `apply_config_fixes` is the `--fix` seam: it runs every writer
-(`refresh_claude_md`, `generate_agents_md`, `setup_rules_auto`,
+(`composed_core.refresh_core_regions`, `generate_agents_md`, `setup_rules_auto`,
 `refresh_agentic_flow_files`, `refresh_composed_adapters`) and reports what
 changed — see *`--fix` may only rewrite what Beadloom wrote*.
 
@@ -438,6 +440,26 @@ layers it lacks — the shipped ones by count, the project layer by path. It is 
 `--fix` composes the missing files. A project 9.0.0 composed for both tools exits 1 here
 where 9.0.0 exited 0 — an exit-code move recorded in RFC D13's Public API entry. A project
 declaring one tool has nothing to compare.
+
+### A release moves the rendered sections in both tools
+
+Measured at `b7d46e27` (BDL-083 S2R pass 1 Major 1) on a project composed for Claude and
+Cursor and clean: after the version went from 1.0.0 to 2.0.0 and a dependency was added,
+this check exited 1 with two errors. `.claude/CLAUDE.md` read `auto-managed section(s)
+stale: project-info`. The Cursor core rule read `composed body is stale vs CORE + the
+flow.yml overlays + the project layer`, although none of those had moved, because its body
+was compared whole, the rendered `project-info` section included. `setup-rules --refresh`
+then repaired `CLAUDE.md` and left the rule stale, so the two tools carried two texts.
+
+Both files now go through the [composed-core](../../components/composed-core/DOC.md)
+component. Each body is compared with every auto-region body blanked on every side, and each
+file whose regions moved is one `auto-managed section(s) stale: <names>` finding at `error`,
+`fixable`. The same release therefore reads as two findings with one reason, and
+`setup-rules --refresh` or `--fix` re-renders the sections in both, after which the rule's
+body is byte-identical to `CLAUDE.md` again. A section edited by hand reads the same way in
+either file and is re-rendered by the same refresh. An edit outside the sections is a hand
+edit of the body, as before. A version bump on a project composed for Claude alone is the
+one `CLAUDE.md` finding, as it was.
 
 ### Ownership boundary
 

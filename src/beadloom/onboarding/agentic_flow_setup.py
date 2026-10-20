@@ -77,6 +77,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from beadloom.onboarding.composed_core import CLAUDE_MD_RELPATH, core_digest, core_state
 from beadloom.onboarding.composer import (
     CLAUDE_ARTIFACT_NAME,
     COMMAND_NAMES,
@@ -91,9 +92,9 @@ from beadloom.onboarding.flow_config import (
 )
 from beadloom.onboarding.flow_manifest import (
     ArtifactState,
-    classify,
     digest,
     load_manifest,
+    read_manifest,
     record,
     state_of,
 )
@@ -102,11 +103,7 @@ from beadloom.onboarding.project_name import (
     composition_project_name,
 )
 from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
-from beadloom.onboarding.scanner import (
-    blank_auto_regions,
-    refresh_claude_md,
-    render_auto_regions,
-)
+from beadloom.onboarding.scanner import refresh_auto_regions, render_auto_regions
 from beadloom.onboarding.tool_reach import (
     LEGACY_CURSOR_POINTER,
     cursor_command_description,
@@ -369,59 +366,67 @@ def orphaned_flow_files(project_root: Path) -> list[str]:
     return orphans
 
 
+def _scaffold_core(
+    project_root: Path,
+    relpath: str,
+    composed: str,
+    *,
+    kind: str,
+    accounted: bool,
+    force: bool,
+) -> tuple[list[str], list[str]]:
+    """Write/refresh one file carrying the composed core; return (changed regions, notes).
+
+    The composed body is written when the file is absent, or when it still
+    matches what we last wrote (so an upgrade or a new project-layer fragment
+    lands), then its auto-regions are re-rendered for this project. A body that
+    differs from BOTH the composition and the recorded digest is a hand edit:
+    reported with migration guidance and left alone, its regions still rendered.
+    A note in the result means the body was skipped.
+
+    Comparison is over the composition with the auto-region bodies blanked —
+    those are generated per project and are checked separately, so including
+    them would report drift on facts that are supposed to move. One comparison
+    for ``.claude/CLAUDE.md`` and the Cursor core rule (BDL-083 S2R pass 1 Major 1).
+    """
+    path = project_root / relpath
+    state = core_state(
+        on_disk=path.read_text(encoding="utf-8") if path.is_file() else None,
+        expected=composed,
+        recorded=load_manifest(project_root).get(relpath),
+        accounted=accounted,
+    )
+    notes: list[str] = []
+    if not force and state is ArtifactState.HAND_EDITED:
+        notes.append(_hand_edit_note(relpath, kind, CLAUDE_ARTIFACT_NAME))
+    elif not force and state is ArtifactState.UNVERIFIED and path.is_file():
+        notes.append(_unverified_note(relpath, kind, CLAUDE_ARTIFACT_NAME))
+    elif state is not ArtifactState.CLEAN:
+        _write(path, composed)
+    changed = refresh_auto_regions(path, project_root)
+    if not notes:
+        record(project_root, {relpath: core_digest(path.read_text(encoding="utf-8"))})
+    return changed, notes
+
+
 def _scaffold_claude_md(
     project_root: Path,
     config: FlowConfig,
     *,
     force: bool,
 ) -> tuple[Path, list[str], list[str], list[str]]:
-    """Write/refresh ``.claude/CLAUDE.md``; return (path, changed, skipped, notes).
-
-    The composed body is written when the file is absent, or when it still
-    matches what we last wrote (so an upgrade or a new project-layer fragment
-    lands), then :func:`refresh_claude_md` regenerates the per-project
-    auto-regions. A body that differs from BOTH the composition and the recorded
-    digest is a hand edit: reported with migration guidance and left alone.
-
-    Comparison is over the composition with the auto-region bodies blanked —
-    those are generated per project and are checked separately, so including
-    them would report drift on facts that are supposed to move.
-    """
-    claude_md = project_root / ".claude" / "CLAUDE.md"
-    relpath = ".claude/CLAUDE.md"
+    """Write/refresh ``.claude/CLAUDE.md``; return (path, changed, skipped, notes)."""
     project_name = composition_project_name(project_root).value
-    expected = blank_auto_regions(
-        composed_claude_md(config, project_root, project_name=project_name)
+    changed, notes = _scaffold_core(
+        project_root,
+        CLAUDE_MD_RELPATH,
+        composed_claude_md(config, project_root, project_name=project_name),
+        kind="claude",
+        accounted=False,
+        force=force,
     )
-    on_disk = (
-        blank_auto_regions(claude_md.read_text(encoding="utf-8"))
-        if claude_md.is_file()
-        else None
-    )
-    state = classify(
-        on_disk=on_disk,
-        expected=expected,
-        recorded=load_manifest(project_root).get(relpath),
-    )
-    skipped: list[str] = []
-    notes: list[str] = []
-    if not force and state is ArtifactState.HAND_EDITED:
-        skipped.append("CLAUDE.md")
-        notes.append(_hand_edit_note(relpath, "claude", CLAUDE_ARTIFACT_NAME))
-    elif not force and state is ArtifactState.UNVERIFIED and claude_md.is_file():
-        skipped.append("CLAUDE.md")
-        notes.append(_unverified_note(relpath, "claude", CLAUDE_ARTIFACT_NAME))
-    elif state is not ArtifactState.CLEAN:
-        _write(
-            claude_md, composed_claude_md(config, project_root, project_name=project_name)
-        )
-    changed = refresh_claude_md(project_root)
-    if not skipped:
-        record(
-            project_root,
-            {relpath: digest(blank_auto_regions(claude_md.read_text(encoding="utf-8")))},
-        )
-    return claude_md, changed, skipped, notes
+    skipped = ["CLAUDE.md"] if notes else []
+    return project_root / CLAUDE_MD_RELPATH, changed, skipped, notes
 
 
 def scaffold(
@@ -513,17 +518,21 @@ def _scaffold_cursor_rules(
     if "cursor" not in config.tools:
         return []
     rules = cursor_rules(config, project_root)
-    batches = (
-        ("cursor", {CLAUDE_ARTIFACT_NAME: str(cursor_core_rule_relpath())}),
-        ("commands", {name: str(cursor_command_rule_relpath(name)) for name in COMMAND_FILES}),
+    core = str(cursor_core_rule_relpath())
+    _, notes = _scaffold_core(
+        project_root,
+        core,
+        rules[core],
+        kind="cursor",
+        accounted=read_manifest(project_root)[1],
+        force=force,
     )
-    notes: list[str] = []
-    for kind, relpaths in batches:
-        bodies = {name: rules[relpath] for name, relpath in relpaths.items()}
-        written, skipped, kind_notes = _scaffold_composed(
-            project_root, kind, bodies, relpaths, force=force
-        )
-        result.cursor_rules_written.extend(relpaths[name] for name in written)
-        result.cursor_rules_skipped.extend(relpaths[name] for name in skipped)
-        notes.extend(kind_notes)
-    return notes
+    (result.cursor_rules_skipped if notes else result.cursor_rules_written).append(core)
+    relpaths = {name: str(cursor_command_rule_relpath(name)) for name in COMMAND_FILES}
+    bodies = {name: rules[relpath] for name, relpath in relpaths.items()}
+    written, skipped, command_notes = _scaffold_composed(
+        project_root, "commands", bodies, relpaths, force=force
+    )
+    result.cursor_rules_written.extend(relpaths[name] for name in written)
+    result.cursor_rules_skipped.extend(relpaths[name] for name in skipped)
+    return [*notes, *command_notes]

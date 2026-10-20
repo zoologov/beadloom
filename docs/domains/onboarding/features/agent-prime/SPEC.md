@@ -583,6 +583,15 @@ rendered:
   in another language had to override the shipped default in prose
   (BDL-UX #136).
 
+### `refresh_auto_regions(path, project_root, *, dry_run=False)`
+
+The same refresh for any file holding the markers, and the body `refresh_claude_md` runs
+through. Since BDL-083 S2R pass 1 Major 1 it is how
+`composed_core.refresh_core_regions` reaches both files that carry the composed core,
+`.claude/CLAUDE.md` and the Cursor core rule `.cursor/rules/beadloom-flow.mdc`, so one
+release re-renders `project-info` in both and `setup-rules --refresh` leaves the two tools
+one text. An absent or unreadable file returns `[]` and nothing is written.
+
 ### `project_facts` — what the TARGET project declares about itself
 
 One module, one responsibility: read a fact out of somebody else's project.
@@ -621,7 +630,7 @@ checks from reporting each other's drift.
 
 ### `render_auto_regions(text, project_root)`
 
-The renderer `refresh_claude_md` runs over the file, exposed over a string: returns the text
+The renderer `refresh_auto_regions` runs over a file, exposed over a string: returns the text
 with every auto-region rendered for `project_root` and the names of the regions that changed.
 Since BDL-083 S2h it is also what renders the core rule a Cursor agent reads
 (`.cursor/rules/beadloom-flow.mdc`), which is why that rule's body and `.claude/CLAUDE.md`

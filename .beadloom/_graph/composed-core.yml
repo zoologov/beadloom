@@ -1,0 +1,26 @@
+nodes:
+  - ref_id: composed-core
+    kind: component
+    summary: "The files that carry the composed core (.claude/CLAUDE.md, the Cursor core rule): one comparison with the rendered regions blanked, one region refresh over both"
+    source: src/beadloom/onboarding/composed_core.py
+    docs:
+      - docs/domains/onboarding/components/composed-core/DOC.md
+edges:
+  - src: composed-core
+    dst: onboarding
+    kind: part_of
+  - src: composed-core
+    dst: flow-manifest
+    kind: depends_on
+  - src: composed-core
+    dst: agent-prime
+    kind: depends_on
+  - src: composed-core
+    dst: tool-reach
+    kind: depends_on
+  - src: config-check
+    dst: composed-core
+    kind: depends_on
+  - src: agentic-flow-setup
+    dst: composed-core
+    kind: depends_on

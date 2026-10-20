@@ -173,6 +173,14 @@ belongs in (`.beadloom/flow/cursor/CLAUDE.md` for the core, `.beadloom/flow/comm
 a command) and left alone. `ScaffoldResult.cursor_rules_written` and
 `cursor_rules_skipped` name them.
 
+The core rule is written through the same function as `.claude/CLAUDE.md`,
+`_scaffold_core` (BDL-083 S2R pass 1 Major 1): the body is compared with every auto-region
+body blanked, the digest recorded in the flow manifest is taken over the blanked text, and
+the regions are re-rendered on every run, a skipped hand-edited body included. Until then
+the rule went through the command path, compared whole, so a release that moved
+`project-info` read as a composition that had moved and a re-run was the only repair.
+See the [composed-core component](../../components/composed-core/DOC.md).
+
 Up to 9.0.0 a project naming Cursor received the role files and a 17-line pointer, and the
 core and commands were written under `.claude/` only. A pointer left by 9.0.0,
 `.cursor/rules/beadloom-flow.md`, is reported by `orphaned_flow_files()` with its `rm -f`
