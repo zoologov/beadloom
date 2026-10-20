@@ -329,8 +329,9 @@ wrong was this project's call form, and the correction is what the medium now ch
   before the Gate and refuses (exit 1) a push whose export still holds the slot for a bead the
   push carries, naming those four commands. 9.0.0 pushed it with exit 0. A hold by a bead the
   push does not carry is a neighbour's and reads clean. A slot already held by a closed bead
-  fails this medium, and the plan names the one remedy, `bd merge-slot release --holder
-  <closed-bead>`: waiting on it waits forever, because bd's refusal offers `--wait`.
+  fails this medium, and the plan names the one remedy,
+  `bd merge-slot release --holder <closed-bead>`: waiting on it waits forever, because bd's
+  refusal offers `--wait`.
 
 The check reads the composed flow artifacts an agent is HANDED, never the templates they were
 composed from: a template fixed and never recomposed leaves the instruction wrong on disk, and

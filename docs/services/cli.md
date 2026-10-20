@@ -396,9 +396,14 @@ root.`
 **`doctor` exits 1 on any `ERROR` row (BDL-083 S2e, `beadloom-7pd6`).** That was the rule of the
 Gate's doctor step over the same rows, and the command exited 0 on them. No built-in row
 emitted `ERROR` before this release, so the row below is the only input that moves the exit
-code today. **A project root below the git root** is that row: `[ERR] Project root refused: the
-git root is above the project root: the project root is <p>, the git root <g>. ...`, and the
-command exits 1 (BDL-UX #325). Git is asked (`rev-parse --show-cdup`), so worktrees, submodules
+code today. **A project root below the git root** is that row, and the command exits 1
+(BDL-UX #325):
+
+```
+[ERR] Project root refused: the git root is above the project root: the project root is <p>, the git root <g>. ...
+```
+
+Git is asked (`rev-parse --show-cdup`), so worktrees, submodules
 and `GIT_CEILING_DIRECTORIES` are git's to decide, and outside a repository the row reads OK.
 Measured on the monorepo fixture committed one folder below its git root: exit 0 with no word
 before, exit 1 now. Through the doctor step, `beadloom ci` and the pre-push hook exit 1 in that
@@ -420,10 +425,14 @@ beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--staged]
 
 Exit codes: 0 = all OK, 1 = error, 2 = a pair is stale **or missing**.
 
-`--since` on a project root below the git root exits 1 with `Error: sync-check --since refused
-— <sentence> Below the git root --since reads each file at the ref by the project's path, git
-holds none there, and every pair would read fresh over two empty sides.`, in the JSON mode too
-(BDL-083 S2e, BDL-UX #325). 9.0.0 exited 0 there with every pair `[ok]`. `sync-check` without
+`--since` on a project root below the git root exits 1, in the JSON mode too (BDL-083 S2e,
+BDL-UX #325), with:
+
+```
+Error: sync-check --since refused — <sentence> Below the git root --since reads each file at the ref by the project's path, git holds none there, and every pair would read fresh over two empty sides.
+```
+
+9.0.0 exited 0 there with every pair `[ok]`. `sync-check` without
 `--since` is unchanged in that layout.
 
 - `--porcelain` -- TAB-separated output for scripts. Format: `status\tref_id\tdoc_path\tcode_path\treason`.
@@ -2081,8 +2090,8 @@ D6).** In a monorepo the root is often not a Python project, so the room finds t
 that owns the carried files: the deepest `pyproject.toml` under the scan paths that holds a
 carried file. When the carried files span several projects, the one holding most of them is
 measured and each other one is named on a `note:` line. When no project holds a carried file,
-the room measures the project the room census reads. The line `measured project: <packaging>
-(<why>)` names the choice. The environment is built in that project's directory
+the room measures the project the room census reads. The line
+`measured project: <packaging> (<why>)` names the choice. The environment is built in that project's directory
 (`<room>/backend/.venv` for a project under `backend/`). A project with a `uv.lock` beside its
 `pyproject.toml` is installed with `uv sync --frozen` and the chosen extras, as CI's `uv sync`
 installs it, so the room holds the versions the lock pins. Measured on the monorepo fixture
@@ -2093,8 +2102,8 @@ newer gherkin-official and a newer mypy than `uv.lock` pins, and one test failed
 alone (BDL-UX #311).
 Without a lock, or without `uv` on the `PATH`, the environment is resolved afresh and the
 environment line says so: `resolved afresh outside any lock (...), so its versions are the
-index's today and not necessarily what CI installs`. `uv sync` is given `--python <the tree's
-interpreter>` only when the measured project keeps an environment in the tree. Otherwise uv
+index's today and not necessarily what CI installs`. `uv sync` is given
+`--python <the tree's interpreter>` only when the measured project keeps an environment in the tree. Otherwise uv
 chooses by `requires-python`. `VIRTUAL_ENV` is dropped and `UV_PROJECT_ENVIRONMENT` points at
 the room, so the sync cannot reach the tree's environment.
 
@@ -2103,8 +2112,8 @@ the room, so the sync cannot reach the tree's environment.
 module importable, its tests collected a second time. Naming the old path in `--carry` was
 refused with `file_missing`, because the tree no longer held it. Now a carried path that HEAD
 holds as a file and the working tree does not is deleted in the room, empty parent directories
-pruned, and named on the line `deleted in the room, because HEAD holds them and the working
-tree does not: <paths>`. A path neither the tree nor HEAD holds is still refused with
+pruned, and named on the line
+`deleted in the room, because HEAD holds them and the working tree does not: <paths>`. A path neither the tree nor HEAD holds is still refused with
 `file_missing`. A directory HEAD holds and the tree does not is refused with `not_a_file`:
 name its files, and each one is deleted. Measured on the monorepo fixture after `git mv
 backend/src/digest/sections.py`: 9.0.0 exits 2 with `file_missing`; this release exits 0 with

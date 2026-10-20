@@ -469,8 +469,8 @@ object in `--format json`, and as one `::notice::room` in `--format github`.
 
 Since BDL-083 S2a and S2F1 (RFC D6, BDL-UX #332) the legs come from `.github/workflows/*.yml`
 and `.gitlab-ci.yml`, as the project's `config.yml` `rooms.pipelines` declares (unset: every
-file present), and each room carries its source. A census that derives no room prints `rooms:
-not derived — <reason>` in all three formats instead of `0 of 0 declared room(s)`, and the
+file present), and each room carries its source. A census that derives no room prints
+`rooms: not derived — <reason>` in all three formats instead of `0 of 0 declared room(s)`, and the
 JSON `room` carries it as `not_derived`. The coverage statement reads the same pipeline files
 and names a file the key left unread rather than saying the project declares no pipeline.
 
