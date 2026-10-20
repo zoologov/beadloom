@@ -542,8 +542,9 @@
 - **Command:** the `ai-techwriter` GitHub Actions job
 - **Where:** read in the code it runs, `src/beadloom/ai_agents/ai_techwriter/cli.py`, and not
   run: the job runs on a self-hosted runner, so it cannot be started from here. Its logs are
-  readable: the 10 `ai-techwriter` jobs of the `ci.yml` runs from 2026-10-11 to 2026-10-20 all
-  concluded `success`, and none printed `could not run (infra)` (`gh run view --job <id> --log`,
+  readable: of the 10 `ai-techwriter` jobs of the `ci.yml` runs from 2026-10-11 to 2026-10-20, nine
+  concluded `success` and one was skipped (job 117989950791 of run 39227020301); none of the nine
+  printed `could not run (infra)` (`gh run view --job <id> --log`,
   read by `beadloom-ba9w.27`), so no log holds an `infra` verdict to measure.
 - **Printed:**
   ```
