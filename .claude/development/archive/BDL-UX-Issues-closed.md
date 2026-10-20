@@ -334,8 +334,8 @@ wrote are accounted for at the end of this section.
 
     **Closed 2026-10-20 on 9.0.0 at `41245dc7`** (BDL-083 S3a, `beadloom-k6f1`). Run: `beadloom
     ci` on a detached HEAD, as `actions/checkout` leaves a pull request. Where: the stacked
-    fixture of #330, `git checkout --detach` at `features/W2`. The job's environment variables were set by hand; the CI
-    run itself was read afterwards from its log (below). Evidence:
+    fixture of #330, `git checkout --detach` at `features/W2`. The job's environment variables
+    are set by hand; the CI run itself was read afterwards from its log (below). Evidence:
     2026-10-20, 9.0.0 (S2): on a detached HEAD of the monorepo fixture, `scope-check` judges
     the work item named by `GITHUB_HEAD_REF` or by GitLab's
     `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`, where without them it skips. Outcome: closed. Bead: `beadloom-tsqz` (closed). Confirmed on CI: PR #107,

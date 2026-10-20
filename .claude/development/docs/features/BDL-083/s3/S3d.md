@@ -579,7 +579,7 @@ are measured completely above.
 | #319 | live | `beadloom-ba9w.14` |
 | #317 | live | `beadloom-ba9w.12` |
 | #314 | live | `beadloom-ba9w.6` |
-| #293 | closed (its own month ends about 2026-10-29) | `beadloom-qq6m` (closed) |
+| #293 | closed as measured at 21 of 30 days — returned to the open index by S3F1 until the owner rules on the month | `beadloom-qq6m` (closed) |
 | #290 | closed | `beadloom-xzvp` (closed) |
 | #278 | live | proposed |
 | #277 | live | proposed |
