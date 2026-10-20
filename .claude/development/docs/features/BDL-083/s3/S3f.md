@@ -336,7 +336,7 @@ candidate** — a reason is put to the owner. Proposed bead titles are not creat
 - **Printed:** the change inventory lists `[unowned] .beads/issues.jsonl`; the diff adds 36
   records; REACHABLE names four channels and not the tracker export.
 - **Outcome:** live.
-- **Evidence:** 2026-10-20, 9.0.0: the brief listed `.beads/issues.jsonl` (36 added records) in
+- **Evidence:** 2026-10-20, 9.0.0: the brief listed the tracker export (36 added records) in
   the change it sends the reviewer to and did not name it as a channel.
 - **Bead:** `beadloom-qil0`.
 
