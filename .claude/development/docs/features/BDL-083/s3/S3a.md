@@ -13,8 +13,10 @@
   was not read or written. Fixtures are fresh committed copies of `tests/fixtures/monorepo`
   (`.fixture` names restored, `git init -b main`, `bd init --prefix fx` where needed).
 - **Room:** one room, this machine. No Linux leg, no Windows checkout, no CI run and no other
-  interpreter was entered. GitHub's API was not reachable from this machine (TLS handshake
-  timeout), so no live repository setting was read.
+  interpreter was entered. This agent's `gh api` calls for the repository's settings timed out
+  (TLS handshake timeout), so no live repository setting was read. GitHub itself was reachable
+  from this machine: S3d and the S3 review read `ci.yml` job logs with `gh run view`.
+  (Corrected on 2026-10-20 by the S3 fix bead `beadloom-ba9w.27`.)
 - **A limit of the measurement, stated once.** The session scratchpad is shared with the other
   measure agents and holds an older fixture repository at its top. One room for #334 was first
   built inside that foreign work tree; its `ci` read the refusal of S2e (`the git root is
@@ -368,8 +370,11 @@
 
 ### #300
 - **Command:** `beadloom ci` on a detached HEAD, as `actions/checkout` leaves a pull request
-- **Where:** the stacked fixture of #330, `git checkout --detach` at `features/W2`. The CI run
-  itself is not reproducible here (no network); the job's environment variables are set by hand.
+- **Where:** the stacked fixture of #330, `git checkout --detach` at `features/W2`; the job's
+  environment variables are set by hand. The CI run itself was read afterwards (S3 review, and
+  `beadloom-ba9w.27`): PR #107, run 39382706135, gate job 118495243247 printed
+  `scope-check PASS: 55 path(s) outside the axes BDL-083 declares ...; 55 judged, 161 owned by
+  no node; against origin/main` (`gh run view --job 118495243247 --log`).
 - **Printed:**
   ```
   no CI variable:                      scope-check SKIP: skipped — no branch is checked out, ...
@@ -381,7 +386,7 @@
 - **Evidence:** 2026-10-20, 9.0.0 (S2): on a detached HEAD of the monorepo fixture,
   `scope-check` judges the work item named by `GITHUB_HEAD_REF` or by GitLab's
   `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`, where without them it skips.
-- **Bead:** `beadloom-tsqz` (closed).
+- **Bead:** `beadloom-tsqz` (closed). Confirmed on CI by PR #107's gate job log, above.
 
 ### #287
 - **Command:** `beadloom ci`
@@ -535,8 +540,11 @@
 
 ### #178
 - **Command:** the `ai-techwriter` GitHub Actions job
-- **Where:** not reproducible as a job run (a self-hosted runner, GitHub unreachable from
-  here). Read in the code it runs, `src/beadloom/ai_agents/ai_techwriter/cli.py`.
+- **Where:** read in the code it runs, `src/beadloom/ai_agents/ai_techwriter/cli.py`, and not
+  run: the job runs on a self-hosted runner, so it cannot be started from here. Its logs are
+  readable: the 10 `ai-techwriter` jobs of the `ci.yml` runs from 2026-10-11 to 2026-10-20 all
+  concluded `success`, and none printed `could not run (infra)` (`gh run view --job <id> --log`,
+  read by `beadloom-ba9w.27`), so no log holds an `infra` verdict to measure.
 - **Printed:**
   ```
   cli.py:273  if verdict == VERDICT_INFRA: _report_infra(...); return

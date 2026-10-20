@@ -56,7 +56,7 @@
 
 ### Verified against current behaviour on 2026-10-20 (the BDL-083 S3 re-measurement)
 
-Twenty-three entries leave the open index: 22 whose defects no longer reproduce, and #352,
+Twenty-two entries leave the open index: 21 whose defects no longer reproduce, and #352,
 which is #292 filed a second time. Each was re-run by its own command on Beadloom 9.0.0 as
 BDL-083 S2 ships it (the code of `main` at `41245dc7`), in a git worktree or a fixture copy
 under the session scratchpad and never on the main checkout's index, by the six measure beads
@@ -65,12 +65,12 @@ under the session scratchpad and never on the main checkout's index, by the six 
 `docs/features/BDL-083/s3/S3a.md` to `S3f.md` under `.claude/development/`, and the dated line
 under each heading below is copied from them; no entry's text was rewritten. Every run was
 taken in one room: macOS 27.0 on arm64, CPython 3.12.12, bd 1.0.4. No Linux leg, Windows
-checkout or other interpreter was entered.
+checkout or other interpreter was entered, except where a line cites a CI job log.
 
-#293 is archived at 21 clean days of the month its own rule names; whether the owner holds the
-month is put to the owner in the BDL-083 PLAN, and if the owner holds it, the entry returns to
-the open index until about 2026-10-29. Two numbers the log never wrote are accounted for at the
-end of this section.
+#293 is not here. S3d measured it closed on the evidence at 21 of the 30 days its own rule
+names, and the S3 review (`beadloom-rrz5`) returned it to the open index: an entry waiting on
+the owner's ruling stays open, and the remaining days are unmeasured. Two numbers the log never
+wrote are accounted for at the end of this section.
 
 354. ~~[2026-10-19] [MEDIUM] a merge-slot `release` made after `git push` lands in no merged commit, so `master` carries the slot held by a closed bead and the next clone's `acquire` is refused~~ **CLOSED (verified 2026-10-20)**
 
@@ -306,8 +306,8 @@ end of this section.
     fixture with two stale pairs. Evidence: On 2026-10-20, on Beadloom 9.0.0 (`cdaf3f78`),
     `sync-update site-generation --yes --pair <SPEC> --code moved_pages.py --code scaffold.py`
     attested exactly 2 pairs and left the SPEC's two other stale pairs stale, naming both, on
-    this repository's worktree. Outcome: closed. Bead: `beadloom-ba9w.10` is open on the entry;
-    S3z closes it with this evidence.
+    this repository's worktree. Outcome: closed. Bead: `beadloom-ba9w.10`, which S3z closed
+    on 2026-10-20 with this evidence.
 
     **Severity:** medium (an attestation nobody made; the class of #163)
     **Command:** `beadloom sync-update site-generation --yes --pair docs/domains/application/features/site-generation/SPEC.md --code src/beadloom/application/site/moved_pages.py` (and `scaffold.py`)
@@ -334,12 +334,14 @@ end of this section.
 
     **Closed 2026-10-20 on 9.0.0 at `41245dc7`** (BDL-083 S3a, `beadloom-k6f1`). Run: `beadloom
     ci` on a detached HEAD, as `actions/checkout` leaves a pull request. Where: the stacked
-    fixture of #330, `git checkout --detach` at `features/W2`. The CI run itself is not
-    reproducible here (no network); the job's environment variables are set by hand. Evidence:
+    fixture of #330, `git checkout --detach` at `features/W2`. The job's environment variables were set by hand; the CI
+    run itself was read afterwards from its log (below). Evidence:
     2026-10-20, 9.0.0 (S2): on a detached HEAD of the monorepo fixture, `scope-check` judges
     the work item named by `GITHUB_HEAD_REF` or by GitLab's
-    `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`, where without them it skips. Outcome: closed. Bead:
-    `beadloom-tsqz` (closed).
+    `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`, where without them it skips. Outcome: closed. Bead: `beadloom-tsqz` (closed). Confirmed on CI: PR #107,
+    run 39382706135, gate job 118495243247 printed `scope-check PASS: 55 path(s) outside the
+    axes BDL-083 declares ...; 55 judged, 161 owned by no node; against origin/main` on
+    2026-10-20, read with `gh run view --job 118495243247 --log`.
 
     **Severity:** high (no wrong code shipped; what is wrong is that the Gate is a required check whose summary lists `scope-check` among its steps, and in CI that step has judged nothing on any pull request — a check reporting over an empty population in the one place this project treats as authoritative)
     **Command:** the `gate` job in `.github/workflows/ci.yml`, `beadloom ci` under `actions/checkout@v5`
@@ -351,109 +353,6 @@ end of this section.
     **What is NOT established:** whether any other Gate step also reads the branch name and is silent in CI for the same reason. Only `scope-check` was read.
     **Tracker:** `beadloom-tsqz`.
     **Related:** #230 (a suffix after the work-item key names no work item — a different, local cause of the same skip); #273 (a clean room with no `.git` reports the same `no branch is checked out` SKIP).
-
-293. ~~[2026-09-12] [MEDIUM] running the suite with `--cov` corrupts the project's own index, and 18 tests then fail with `database disk image is malformed`~~ **CLOSED (verified 2026-10-20)**
-
-    **Closed 2026-10-20 on 9.0.0 at `41245dc7`** (BDL-083 S3d, `beadloom-d9te`). Run: `uv run
-    pytest --cov=src/beadloom`, over the whole suite (run as `.venv/bin/python -m pytest -q
-    --cov=src/beadloom --cov-report=term -p no:cacheprovider`). Where: the worktree of this
-    repository, with an index built inside it before the run, so the reporter's "no index at
-    the start" condition was not reproduced. Also the `ci.yml` runs on GitHub created on or
-    after 2026-09-29. Evidence: 2026-10-20, Beadloom 9.0.0 (`41245dc7`): the whole suite under
-    `--cov` on macOS arm64, CPython 3.12.12, printed no `malformed` or `disk I/O error` line,
-    and the failed-job logs of all 5 failed `ci.yml` runs since 2026-09-29 hold none either.
-    Outcome: closed on the evidence. Its own condition is one month without the signature
-    (about 2026-10-29), and 21 days have been measured clean. The 10 cancelled runs were not
-    read. If the owner holds the full month, S3z keeps the entry open without a bead until
-    2026-10-29. Bead: `beadloom-qq6m` (closed 2026-09-29). No new bead proposed.
-
-    **Severity:** medium (no shipped behaviour is wrong. What is wrong is that the one command the role protocol names for proving coverage — `uv run pytest --cov=src` — produces a RED suite over a green tree, so a run taken to measure coverage cannot also be read as a verdict)
-    **Command:** `uv run pytest --cov=src/beadloom`, over the whole suite
-    **Context:** BDL-070, `beadloom-cfkk` (A7), 2026-09-12. Found while taking this bead's coverage figure, and proved **not to be this bead's change** by a control run.
-    **What happened.** Over the full suite the shared `.beadloom/beadloom.db` at the project root ends up corrupt, and every later test that reads it fails with `sqlite3.DatabaseError: database disk image is malformed`. Eighteen fail, in three files — `test_s3_decomposition.py` (5), `test_s4_the_instruments_agree.py` (1) and `test_the_layer_rule_states_the_population_it_judged.py` (12). Without `--cov` the same suite over the same files is green.
-    **How it was proved.** Three runs in `room-beadloom-cfkk`, each starting from a room with no index at all. With `--cov`: 18 failed, 10 478 passed. With `--cov` and this bead's three new test files excluded by `--ignore`: the SAME 18 failed, 10 463 passed — so the trigger is present at `43286775` and is not carried in by A7. Without `--cov`: 10 496 passed, 0 failed. Deleting the index and re-running the three failing files alone passes 64 of 64.
-    **Expected:** a coverage run is a measurement of the same suite, not a different one. Either the tests that reindex the project root are isolated from each other under instrumentation, or the corruption's cause is found and removed.
-    **What is NOT established:** the mechanism. `--cov` changes timing and adds `atexit` work, and the suite reindexes the project root from a session fixture and from subprocess tests; which pair of writers overlaps was not derived. Nor was it checked on Linux — every run above is macOS, Python 3.13, in one room.
-    **Consequence for this project's own numbers:** every coverage figure this repository has quoted was taken from a run in which those 18 tests failed. The per-module figures still stand — the failing tests are in three files and the modules they cover are exercised elsewhere — but the TOTAL is taken over a suite that did not finish as intended.
-    **THE COORDINATOR RAN THE SAME FORM ON THE TREE AND IT DID NOT REPRODUCE, 2026-09-12.**
-    `uv run pytest -q --cov=beadloom --cov-report=term-missing --cov-fail-under=80` over the whole
-    suite on `features/BDL-070` at `18345ccd`: **10545 passed, 13 skipped, 13 xfailed, 0 failed**,
-    713.74s. That is the invocation this project's own completion checklist names, with `--cov`, and
-    none of the eighteen failed. An earlier coverage run by the coordinator at `183fe47c` was green
-    too (10501 passed, 0 failed).
-    So the entry stands on ONE room's measurement and is contradicted by two runs on the tree. The
-    difference the two accounts do not resolve: the reporter's runs each started from **a room with
-    no index at all** and the coordinator's ran against an index already built. That is a candidate
-    mechanism, not a finding — nobody has run the crossed cases. Until someone does, "running the
-    suite with `--cov` corrupts the index" is not established as a property of the command; what is
-    established is that it happened three times in `room-beadloom-cfkk` and not twice on the tree.
-    **Consequence for the line above it:** the sentence "every coverage figure this repository has
-    quoted was taken from a run in which those 18 tests failed" is now known to be false for at least
-    the two runs named here.
-    **Tracker:** not filed as a bead. The coordinator's decision, 2026-09-12: it does not earn one
-    yet, because the two accounts disagree and the next step is a measurement rather than a repair —
-    whoever takes it should run the crossed cases (fresh room without `--cov`, existing index with
-    `--cov`) and only then file.
-    **AMENDED 2026-09-14 (BDL-071, `beadloom-tmgp`): REPRODUCED ON LINUX, IN CI, ON A REQUIRED CHECK.**
-    The sentence above that it "was not checked on Linux" is now false. PR #75, the 6.0.0 release
-    pull request, run `34787188082` at head `78166c20`, attempt 1: the `tests (3.12)` job, on
-    `ubuntu-latest` with CPython 3.12.14, step `Tests with coverage`, ended
-    `2 failed, 10663 passed, 65 skipped, 13 xfailed` in 727.96s. Both failures are
-    `sqlite3.DatabaseError: database disk image is malformed`:
-    `tests/test_graph_summary_facts.py::TestThisRepositoryIsChecked::test_this_repository_s_summaries_state_checkable_facts`
-    and
-    `tests/test_s4_the_instruments_agree.py::TestOneApprovalIsReadOnce::test_a_resolved_approval_is_named_identically_by_both`.
-    In the same attempt `tests (3.10)`, `tests (3.11)`, `tests (3.13)` and both `tests-locale` legs
-    passed. Attempt 2 re-ran it and every job succeeded. Read from the job log and the attempt's job
-    list, not from a summary.
-    **What this adds, and what it does not.** It is the first measurement on Linux and on CPython
-    3.12, and the first time the defect reddened a required check — on a release pull request. The
-    failing set differs from the 18 of `room-beadloom-cfkk`: two tests in two files, and only one of
-    those files, `test_s4_the_instruments_agree.py`, is also in that set. The job ran
-    `uv run pytest --cov=beadloom --cov-report=term-missing --cov-fail-under=80` on a fresh runner,
-    which builds its index from empty. That is the condition the reporter's rooms had and the
-    coordinator's tree runs did not, so the Linux run is CONSISTENT with the "no index at the start"
-    candidate. It does not establish it: the crossed cases are still unrun, and the other three
-    `tests` legs of the same attempt ran the same command from the same empty start and passed. So
-    the symptom is intermittent under one condition, which a mechanism will have to explain.
-    **The bead question is the owner's**, and is put to the coordinator on `beadloom-tmgp` rather than
-    decided here, because creating a bead changes a plan's DAG.
-    **AMENDED AGAIN 2026-09-14 (BDL-071 close-out, the coordinator): TWO LEGS OF THE NEXT PULL REQUEST.**
-    PR #76, the records pull request, run `34790798779` at head `617e082c`, attempt 1, read from the
-    two job logs: `tests (3.11)` ended `10 failed, 10655 passed, 65 skipped, 13 xfailed` in 834.48s,
-    and `tests (3.12)` ended `2 failed, 10663 passed, 58 skipped, 13 xfailed, 7 errors` in 727.98s —
-    every failure and every setup error `sqlite3.DatabaseError: database disk image is malformed`.
-    `tests (3.10)`, `tests (3.13)` and both `tests-locale` legs passed; attempt 2 re-ran the two and
-    both passed. The 3.12 set is new again — seven setup errors in
-    `test_a_commit_is_judged_against_the_declared_axes.py`, failures there and in
-    `test_bead18_s5_relation.py` — while the 3.11 set includes `test_graph_summary_facts.py`, one of
-    PR #75's two. So across two consecutive pull requests it reddened three of eight `tests` legs,
-    on three Python versions, never with the same set twice. That is what the intermittency claim
-    above rests on now, and it is also the argument against reading any single green re-run as a
-    verdict. The implementer's recommendation on `beadloom-tmgp` is to file a bead now, with the crossed
-    cases as its first step and #298 (same shared live index) considered in the same bead.
-    **FILED 2026-09-14 by owner decision: `beadloom-qq6m` (P1, bug), covering #293 and #298 together.**
-    This supersedes the "not filed as a bead" line above. Its first step is the crossed cases.
-    **AND A THIRD PULL REQUEST, WITH A DIFFERENT SIGNATURE.** PR #77, the BDL-071 close-out (documents
-    and tracker only), run `34793288575`, `tests (3.10)`: `9 failed, 10647 passed, 65 skipped,
-    13 xfailed, 9 errors` in 848.86s — none of them `malformed`; every one
-    `sqlite3.OperationalError: disk I/O error`, in tests that read this repository's own index
-    (`test_the_same_layer_split_is_recomputed.py`, `test_a_layer_the_declaration_names_and_no_node_is_in.py`,
-    `test_s3_decomposition.py`, `test_bead18_s5_relation.py`). The other seven required checks that
-    reported passed. Two things this adds: the family has a second symptom, so a triage that matches
-    only `malformed` misses it; and the CLI told the reader `index cannot be read (disk I/O error) —
-    it predates the current schema. Run beadloom reindex`, naming a schema cause for an I/O failure.
-
-    **AMENDED 2026-09-29 — the cause removed by BDL-074 (`beadloom-qq6m` closed).** Every test now starts
-    in an empty temporary directory and a contact guard fails any test that opens this repository's live
-    index, tracker or history; the self-checks read a session snapshot instead. A tracer over parent and
-    child processes found 0 live-index contacts (98 before). The `--cov` legs of PRs #83, #84 and #86 ran
-    green with it. Kept open here only until the next few weeks of PRs confirm it; close on the first
-    month without a `malformed` or `disk I/O error` signature.
-
-    **Still open by its own condition, 2026-09-29.** The records sweep of this date confirmed the
-    cause removed and did not close the entry: it closes after the first month without a
-    `malformed` or `disk I/O error` signature, roughly 2026-10-29.
 
 290. ~~[2026-09-12] [MEDIUM] `beadloom reindex` is not idempotent across a fresh and a carried-forward index, and the layer rule's new population statement inherits the difference~~ **CLOSED (verified 2026-10-20)**
 
