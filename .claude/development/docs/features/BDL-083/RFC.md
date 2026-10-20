@@ -698,8 +698,10 @@ The composer gains a `cursor` artifact kind beside `roles`, `commands`, `claude`
 for a project whose `flow.yml` names Cursor, `setup-agentic-flow` composes the core, the project
 layer and the STACK overlay — the same text `CLAUDE.md` carries — and the four commands into
 `.cursor/rules/` as `alwaysApply` rules, replacing the stub; the role files stay shared. The
-project layer's reach is stated in the flow documentation per kind (`roles` reaches every tool,
-`claude` reaches Claude, `cursor` reaches Cursor), and `config-check` reports a tool whose
+project layer's reach is stated in the flow documentation per kind: `roles` reaches every tool;
+`.beadloom/flow/claude/CLAUDE.md` is the one copy of the project layer and reaches the composed core
+of BOTH tools, so one definition of done is written once; `.beadloom/flow/cursor/` reaches Cursor
+alone (amended 2026-10-20 by the owner's ruling on S2h: one copy, not one per tool); and `config-check` reports a tool whose
 composition lacks a layer the other tool has, and stops naming `.claude/agents/<role>.md` as
 missing on a project composed for Cursor alone. `setup-mcp` and `init --bootstrap` write a
 portable MCP command (`beadloom` on PATH, as the composed instructions assume) and never
@@ -738,11 +740,14 @@ with no COMPLETED measurement — are a behaviour rule agreed with the owner bef
 - `config-check` and `ci` in a worktree or a room exit 0 instead of 1 on a project whose root
   manifest does not name it (an exit-code move, D7); `config.yml` gains `project_name:` (additive);
   the verdict names the composed-from and compared-against files (additive text; added 2026-10-20
-  from S2c).
+  from S2c). The owner's ruling 2026-10-20 on S2c's calls: the key stays, the root manifest the second
+  source; a project declaring neither keeps the name its last composition wrote and the verdict reports
+  it as not compared; the directory's name serves the first composition only; `init` writing the key
+  and `prime` reading it are a feature outside this epic.
 - `init`, `doctor` and `sync-check --since` exit 1 on a project root below the git root (an
   exit-code move on an input 9.0.0 accepted; #325, S2e).
 - `doctor` exits 1 on any `ERROR` row, not only the git-root one (an exit-code move generalised
-  in S2e; the owner's ruling pending, S2R Minor 1).
+  in S2e; accepted by the owner's ruling 2026-10-20, S2R Minor 1).
 - `rules.yml`: no vocabulary change in S1–S2; liveness findings for `forbid_import` change
   level from `warn` to `info` when live with nothing to ban (a finding-set move, named).
 - The issue-log entry format gains `measured_on` (S7, additive); the leg's summary adds the
