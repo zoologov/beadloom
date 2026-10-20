@@ -730,6 +730,19 @@ with no COMPLETED measurement — are a behaviour rule agreed with the owner bef
 - `sync-surface.json` gains the pair list beside `declared_pairs` (additive); indexed paths are
   POSIX on every platform (a finding-set move on Windows only, D11).
 - `setup-agentic-flow` writes `.cursor/rules/` rules in place of the stub on a project naming Cursor (a file-set move, D13); `config-check` exits 1 on a composition that lacks a layer the other tool has (an exit-code move on an input 9.0.0 accepted); `setup-mcp` and `init --bootstrap` write `beadloom` instead of an absolute path (a text move in a generated file).
+- `waves` exits 1 on a landing slot held by a bead the tracker lists closed, naming the release (an
+  exit-code move, D12; added 2026-10-20 from S2g).
+- `clean-room --carry <path>` where HEAD holds the path and the tree does not builds the room with
+  the path deleted (2 → 0/1, also for a path `--rebuild` remembers; D6); `--json` gains `deleted`,
+  `not_carried` and a third `limits` entry (additive; added 2026-10-20 from S2d).
+- `config-check` and `ci` in a worktree or a room exit 0 instead of 1 on a project whose root
+  manifest does not name it (an exit-code move, D7); `config.yml` gains `project_name:` (additive);
+  the verdict names the composed-from and compared-against files (additive text; added 2026-10-20
+  from S2c).
+- `init`, `doctor` and `sync-check --since` exit 1 on a project root below the git root (an
+  exit-code move on an input 9.0.0 accepted; #325, S2e).
+- `doctor` exits 1 on any `ERROR` row, not only the git-root one (an exit-code move generalised
+  in S2e; the owner's ruling pending, S2R Minor 1).
 - `rules.yml`: no vocabulary change in S1–S2; liveness findings for `forbid_import` change
   level from `warn` to `info` when live with nothing to ban (a finding-set move, named).
 - The issue-log entry format gains `measured_on` (S7, additive); the leg's summary adds the

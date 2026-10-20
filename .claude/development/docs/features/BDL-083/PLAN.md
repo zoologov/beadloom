@@ -50,6 +50,7 @@ graph TD
     S1P --> S2h[S2h the Cursor composition]
     S2h --> S2T
     S2T --> S2R[S2 review] --> S2W[S2 docs] --> S2P[S2 PR]
+    S2R --> S2F2[S2F2 the Cursor rule's rendered section] --> S2W
     S2P --> S3a[S3a Gate and CI entries]
     S2P --> S3b[S3b doc-sync entries]
     S2P --> S3c[S3c rules and lint entries]
@@ -105,8 +106,9 @@ Parent: `beadloom-ba9w`.
 | S2F1 | `beadloom-ba9w.22` | dev: the pipeline files the census reads are declared in `config.yml` under `rooms.pipelines`; unset reads every file present; a present file the key excludes is set aside naming the key; S2a's GitHub-first ordering withdrawn; this repository declares `[github]`; three tests (D6 amended) | P0 | S2a |
 | S2h | `beadloom-ybxm` | dev: `setup-agentic-flow --tool cursor` composes the core, the project layer, the STACK overlay and the four commands into `.cursor/rules/` as `alwaysApply` rules; `config-check` names a tool whose composition lacks a layer and stops reporting `.claude/agents/<role>.md` missing on a cursor-only project; `setup-mcp` and `init --bootstrap` write a portable MCP command; the composed `task-init` text names an absolute plan path (D13; #356 a, e, g) | P0 | S1P |
 | S2T | `beadloom-w2v6` | test: each S2 entry's own `Command` on the fixture — a named room, a built environment, one `config-check` verdict in a room and the checkout, one pair set under both separators, the lock's release landed before the push; the full tree once | P0 | S2a–S2h, S2F1 |
-| S2R | `beadloom-x94h` | review: S2, bead id only | P0 | S2T |
-| S2W | `beadloom-sc9d` | tech-writer: the verdict-room and wave-plan SPECs, `docs/guides/parallel-waves.md` (the room's environment and hint), the monorepo paragraph of `docs/getting-started.md`, CHANGELOG | P0 | S2R |
+| S2R | `beadloom-x94h` | review: S2, bead id only; re-run after the fix beads | P0 | S2T, S2F2 |
+| S2F2 | `beadloom-ba9w.24` | dev: S2R pass 1 Major 1 — the Cursor core rule's rendered project-info section blanked on both sides of the drift comparison as the CLAUDE.md check does; `setup-rules --refresh` re-renders it in the Cursor rule (D13) | P0 | S2R (first pass) |
+| S2W | `beadloom-sc9d` | tech-writer: the verdict-room and wave-plan SPECs, `docs/guides/parallel-waves.md` (the room's environment and hint), the monorepo paragraph of `docs/getting-started.md`, CHANGELOG | P0 | S2R, S2F2 |
 | S2P | `beadloom-6svu` | coordinator: S2 PR, merge on green | P0 | S2W |
 | S3a | - | measure: the open entries of the Gate, CI, hooks and rooms area, each re-run by its `Command` on the S2 version; closed with evidence, filed as a bead under `beadloom-ba9w`, or put to the owner for a `Won't fix` ruling (D9) | P0 | S2P |
 | S3b | - | measure: the doc-sync and docs-audit entries, the same protocol | P0 | S2P |
