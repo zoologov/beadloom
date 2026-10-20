@@ -76,6 +76,13 @@ class ArtifactKind:
     #: (BDL-061 S4: the writing standard used to live inside `tech-writer`, so the
     #: three roles that produce the TO-BE documents were held to no standard).
     shared: tuple[str, ...] = ()
+    #: The project-layer folders under ``.beadloom/flow/`` this kind reads, in
+    #: composition order; empty means the kind's own folder alone. The first is
+    #: labelled ``project`` and every later one ``project:<folder>``. The
+    #: ``cursor`` kind reads ``claude`` first, so the project layer an adopter
+    #: wrote for the core reaches Cursor as it reaches Claude, from one copy, and
+    #: ``cursor`` second, for text meant for Cursor alone (BDL-UX #356, RFC D13).
+    project_kinds: tuple[str, ...] = ()
 
 
 def _artifact_kinds() -> dict[str, ArtifactKind]:
@@ -91,6 +98,14 @@ def _artifact_kinds() -> dict[str, ArtifactKind]:
             "commands", root / "agentic_flow" / "commands", root / "commands"
         ),
         "claude": ArtifactKind("claude", root / "agentic_flow", root / "claude"),
+        # The core a Cursor agent reads: the same shipped core and overlays as
+        # `claude`, so the two tools read one text (BDL-UX #356, RFC D13).
+        "cursor": ArtifactKind(
+            "cursor",
+            root / "agentic_flow",
+            root / "claude",
+            project_kinds=("claude", "cursor"),
+        ),
         "docs": ArtifactKind(
             "docs",
             root / "docs" / "core",
@@ -117,7 +132,13 @@ def _artifact_kinds() -> dict[str, ArtifactKind]:
 SHARED_ROLE_FRAGMENTS: tuple[str, ...] = ("_writing", "_rooms", "_landing", "_tracker")
 
 #: The artifact kinds ``compose`` understands.
-ARTIFACT_KINDS: tuple[str, ...] = ("roles", "commands", "claude", "docs")
+ARTIFACT_KINDS: tuple[str, ...] = ("roles", "commands", "claude", "cursor", "docs")
+
+#: The slash commands the ``commands`` kind composes. Declared beside the kinds
+#: rather than in the scaffold, because two readers below the scaffold need the
+#: population: the scaffold writes them for every declared tool, and
+#: :mod:`~beadloom.onboarding.tool_reach` compares what each tool reads of them.
+COMMAND_NAMES: tuple[str, ...] = ("coordinator", "task-init", "checkpoint", "templates")
 
 #: Fragment name of the composed ``CLAUDE.md`` (its core is the vendored asset).
 CLAUDE_ARTIFACT_NAME = "CLAUDE"
@@ -201,17 +222,24 @@ def project_fragment_path(kind: str, name: str, project_root: Path) -> Path:
     return project_root / PROJECT_FLOW_DIRNAME / kind / f"{name}.md"
 
 
-def _project_layer(kind: str, name: str, project_root: Path | None) -> LayerFragment | None:
+def _project_layer(
+    kind: str, name: str, project_root: Path | None, *, layer: str = "project"
+) -> LayerFragment | None:
     if project_root is None:
         return None
     path = project_fragment_path(kind, name, project_root)
     if not path.is_file():
         return None
     return LayerFragment(
-        "project",
+        layer,
         str(path.relative_to(project_root)),
         path.read_text(encoding="utf-8"),
     )
+
+
+def _project_layer_label(spec_kinds: tuple[str, ...], folder: str) -> str:
+    """The layer label of the project folder ``folder`` in a kind reading ``spec_kinds``."""
+    return "project" if folder == spec_kinds[0] else f"project:{folder}"
 
 
 def compose(
@@ -276,9 +304,13 @@ def compose(
         )
         if overlay is not None:
             fragments.append(overlay)
-    project = _project_layer(kind, name, project_root)
-    if project is not None:
-        fragments.append(project)
+    folders = spec.project_kinds or (kind,)
+    for folder in folders:
+        project = _project_layer(
+            folder, name, project_root, layer=_project_layer_label(folders, folder)
+        )
+        if project is not None:
+            fragments.append(project)
 
     return Composition(
         kind=kind,

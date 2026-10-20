@@ -309,7 +309,21 @@ bd merge-slot create                            # once per repo
 bd merge-slot acquire --holder <bead-id>        # exit 0 means you hold it; anything else means you do not
 # ... commit (with `Bead: <bead-id>` in the message's last paragraph) / merge ...
 bd merge-slot release --holder <bead-id>        # the only release form bd verifies
+bd export -o .beads/issues.jsonl                # the release, in the file every other clone reads
+git commit -m "<subject>" -m "Bead: <bead-id>" -- .beads/issues.jsonl   # lands it, by path
+git push                                        # only now: the export it lands shows the slot free
 ```
+
+**Release before the push, and land the release.** The slot is tracker state exported into
+`.beads/issues.jsonl`, so the trunk says what the last landed export says. A release made
+after the push reaches no merged commit: the trunk exports the slot as held by a closed bead,
+and the next clone's `acquire` is refused naming a holder nobody can wait on — measured on
+the first outside adopter's second clone. The sequence is acquire → commit → release → export
+→ the export landed → push. The pre-push hook runs `beadloom landing-check` before the Gate
+and refuses a push whose export still holds the slot for a bead the push carries. A slot
+already held by a closed bead is freed by name,
+`bd merge-slot release --holder <closed-bead>`, and `beadloom waves` names that release on any
+plan made over it.
 
 **Pass `--holder`, and read the exit code.** Measured on bd 1.0.4: the slot refuses a held
 acquire with exit 1, and one of 32 simultaneous acquires won each round — the primitive is

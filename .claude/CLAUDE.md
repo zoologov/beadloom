@@ -53,6 +53,13 @@ beadloom install-hooks             # pre-commit (lint + sync-check + ACTIVE/trac
                                    # It does not run the test suite, and names that under its verdict.
 ```
 
+**The project root is the git root.** `.beadloom/` sits beside `.git`, never in a subfolder
+of a repository. Git answers in paths relative to its own root, so below it the two frames
+disagree, and `beadloom sync-check --since` would compare two empty sides and call every pair
+fresh. `beadloom init`, `beadloom doctor` and `beadloom sync-check --since` therefore refuse a
+project root below the git root, name both roots and exit 1. In a monorepo, put `.beadloom/`
+at the repository's root, or give the subproject a repository of its own.
+
 ### BEFORE any work
 
 ```bash
@@ -176,7 +183,10 @@ bd dep tree <id>                  # confirm the edge against the titles, not the
 - the merge slot — serialize parallel LANDINGS: `bd merge-slot acquire --holder <bead-id>`,
   where exit 0 means you hold it, and `release --holder <bead-id>`, the only release form bd
   verifies. It orders the commits and nothing else; keeping two agents out of one FILE is what
-  `beadloom waves` derives
+  `beadloom waves` derives. The release is exported and landed before the push
+  (acquire → commit → release → `bd export` → the export landed → push), because other
+  clones read the slot from the export the trunk carries; the pre-push hook runs
+  `beadloom landing-check` and refuses a push whose export still holds the slot for its bead
 
 **IMPORTANT:**
 - `bd comments add` — for checkpoints (preserves history)
@@ -499,6 +509,13 @@ first (BDL-UX #194, #237). Verify in a clean room built by
 from the bead and refuses a directory it did not create, and say so in those
 words: "green in a clean room over N files" is a different claim from "green on
 the tree" (BDL-UX #181).
+
+In this repository the export step of a landing is the coordinator's. bd rewrites
+`.beads/issues.jsonl` after every command, so a role agent releases the slot and
+leaves the export out of its commit; the coordinator's commit that records the
+wave lands the export, after every release of the wave and before any push. The
+pre-push hook's `beadloom landing-check` refuses a push whose export still holds
+the slot for a bead the push carries (BDL-UX #354).
 
 ### The README pair: Russian is the source, English follows it
 

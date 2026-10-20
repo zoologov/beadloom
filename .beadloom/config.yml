@@ -18,6 +18,15 @@ scan_paths:
 - src
 sync:
   hook_mode: warn
+# BDL-083 S2F1 (`beadloom-ba9w.22`), RFC D6 as amended on 2026-10-19. Which pipeline
+# files the room census and the gate's coverage report read is declared here, never
+# guessed. This repository runs on GitHub. Its `.gitlab-ci.yml` is the BDL-050 mirror of
+# `.github/workflows/ci.yml`, and no run of this project takes it, so reading it would add
+# three legs (`gate`, `tests`, `site-build`) that no verdict here is ever held against.
+# Measured 2026-10-19: 33 declared rooms with this key, 36 without it. The mirror is
+# listed as set aside, naming this key, so the choice is visible rather than silent.
+rooms:
+  pipelines: [github]
 # BDL-074 G2 (`beadloom-2mj3.11`, review `beadloom-b9ll` M3 and m4). Where this
 # project's tests are and which files are tests, declared rather than defaulted so
 # the lint population line can say where each kind's folder came from.

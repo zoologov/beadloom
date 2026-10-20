@@ -39,16 +39,16 @@ from beadloom.onboarding.flow_config import (
     detect_stack,
     resolve_flow_config,
 )
-from beadloom.onboarding.role_adapters import (
-    cursor_rules_body,
-    cursor_rules_relpath,
-    generate_adapters,
-)
+from beadloom.onboarding.role_adapters import generate_adapters
 from beadloom.onboarding.role_composer import (
     ROLE_NAMES,
     compose_all_roles,
     compose_role,
     roles_templates_root,
+)
+from beadloom.onboarding.tool_reach import (
+    LEGACY_CURSOR_POINTER,
+    cursor_core_rule_relpath,
 )
 from beadloom.services.cli import main
 
@@ -324,21 +324,13 @@ class TestResolvePrecedence:
 
 
 class TestAdapterGeneration:
-    def test_cursor_rules_body_is_orchestrator_pointer(self) -> None:
-        body = cursor_rules_body()
-        lowered = body.lower()
-        assert "cursor" in lowered
-        assert "coordinator" in lowered
-        assert "beadloom ci" in lowered
-        # Names the four roles it points at.
-        for role in ROLE_NAMES:
-            assert role in body
-
-    def test_claude_only_does_not_write_cursor_pointer(self, tmp_path: Path) -> None:
-        cfg = FlowConfig(tools=("claude",), architecture="ddd", stack=("python",))
-        res = generate_adapters(cfg, tmp_path)
-        assert not (tmp_path / cursor_rules_relpath()).exists()
-        assert res.extra == []
+    def test_the_role_writer_writes_no_cursor_pointer(self, tmp_path: Path) -> None:
+        """The 17-line pointer is retired; the scaffold writes Cursor's rules (#356)."""
+        for tools in (("claude",), ("cursor",)):
+            cfg = FlowConfig(tools=tools, architecture="ddd", stack=("python",))
+            res = generate_adapters(cfg, tmp_path)
+            assert not (tmp_path / LEGACY_CURSOR_POINTER).exists()
+            assert res.extra == []
 
     def test_both_tools_write_identical_role_bodies(self, tmp_path: Path) -> None:
         cfg = FlowConfig(
@@ -363,7 +355,6 @@ class TestAdapterGeneration:
         assert res.agents["cursor"] == [
             str(Path(".cursor") / "agents" / f"{r}.md") for r in ROLE_NAMES
         ]
-        assert str(cursor_rules_relpath()) in res.extra
 
     def test_idempotent_across_tools_and_pointer(self, tmp_path: Path) -> None:
         cfg = FlowConfig(
@@ -523,8 +514,9 @@ class TestCliScaffoldCursorFsd:
             encoding="utf-8"
         )
         assert _overlay_markers(dev) == ["fsd", "typescript", "vuejs"]
-        # The Cursor orchestrator pointer was written.
-        assert (project / cursor_rules_relpath()).is_file()
+        # The composed core Cursor reads was written, in place of the pointer.
+        assert (project / cursor_core_rule_relpath()).is_file()
+        assert not (project / LEGACY_CURSOR_POINTER).exists()
         # And it did NOT write a Claude agent set (cursor only).
         assert not (project / ".claude" / "agents" / "dev.md").exists()
 

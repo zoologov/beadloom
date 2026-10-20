@@ -209,6 +209,27 @@ Everything lives under `.beadloom/` in your repo.
 | `site` | the directory name, base `/`, no repository | The portal's identity: `title`, `description`, `base`, `repo_url`, `forges`; see the [`site:` reference](guides/vitepress-site.md#configuration-reference-site) |
 | `activity` | no block | `exclude:`, the project's own machine-written files, left out of activity; see below |
 | `imports` | no block | `aliases:`, the import aliases a bundler applies and no tsconfig carries; see below |
+| `project_name` | the root manifest's name | The name the composed `CLAUDE.md` heading takes; `config-check` compares against it in a checkout, a worktree and a clean room alike (BDL-083 S2c) |
+| `rooms.pipelines` | every pipeline file present | `github` and/or `gitlab`: which of `.github/workflows/*.yml` and `.gitlab-ci.yml` the room census reads (BDL-083 S2F1); see [`rooms`](services/cli.md#beadloom-rooms) |
+
+#### A monorepo
+
+`.beadloom/` sits at the git root, beside `.git`, never in a subfolder of a repository. Git
+answers in paths relative to its own root, so below it `sync-check --since` would compare two
+empty sides and read every pair fresh. Since BDL-083 S2e `init` refuses that layout and writes
+nothing, `doctor` reports `[ERR] Project root refused: the git root is above the project root`,
+and `sync-check --since` refuses, each exiting 1 and naming both roots (BDL-UX #325). In a
+monorepo, put `.beadloom/` at the repository's root and list each package's source under
+`scan_paths`, or give the subproject a repository of its own. `install-hooks`, `diff --since`
+and `export` are not yet refused below the git root.
+
+A monorepo with packages in several languages is read as one project: a `pyproject.toml` under
+a scan path, or between the root and one, is a Python project of its own, and the clean room measures the one that
+owns the files you carry, installed from its own `uv.lock` (BDL-083 S2b). The room census reads
+`.gitlab-ci.yml` as well as `.github/workflows/`, and `rooms.pipelines` says which. A project
+that names itself in no root manifest (`pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml`)
+leaves the composed heading's name undeclared: set `project_name:` so the name is declared and
+compared.
 
 #### `tests:` — where your tests are
 
@@ -387,13 +408,18 @@ beadloom setup-agentic-flow --tool cursor --architecture fsd --stack typescript,
 ```
 
 This writes `.claude/agents/*` (Claude Code) and/or `.cursor/agents/*` (Cursor)
-at parity, plus `.claude/commands/*` and `.claude/CLAUDE.md`. `config-check`
+at parity, plus `.claude/commands/*` and `.claude/CLAUDE.md`. For `cursor` it also writes
+the composed core and the four commands as `alwaysApply` rules under `.cursor/rules/`
+(`beadloom-flow.mdc`, `beadloom-coordinator.mdc`, `beadloom-task-init.mdc`,
+`beadloom-checkpoint.mdc`, `beadloom-templates.mdc`), each body byte-identical to the file
+Claude reads; up to 9.0.0 Cursor received a 17-line pointer instead (BDL-083 S2h). `config-check`
 compares each of them against its composition, so the workflow never silently
-drifts.
+drifts, and exits 1 when one declared tool's files lack a layer the other's carry.
 
 Your project's own rules go in `.beadloom/flow/{roles,commands,claude}/` rather
 than into the composed files: that fourth layer composes last, is never
-overwritten, and survives every upgrade. See the
+overwritten, and survives every upgrade. `.beadloom/flow/claude/CLAUDE.md` reaches the core
+of both tools, and `.beadloom/flow/cursor/CLAUDE.md` reaches Cursor's alone. See the
 [Project Overlays guide](guides/project-overlays.md) for adding a fragment,
 declaring a suppression, and migrating an edit you already made by hand.
 
@@ -406,7 +432,9 @@ beadloom install-hooks
 Installs **both** hooks by default:
 
 - **pre-commit** (lighter) — judges **the commit, not the tree**: ruff over the staged source files (its own exit code read, so `ruff did not run` is told apart from violations), the architecture lint over the nodes that own a staged path (`beadloom lint --staged --strict`, BDL-083 S1a), a type check over the staged files inside the surface the project declares typed (derived per run from `[tool.mypy]`; a surface that could not be derived reads `NOT CHECKED` with its reason and never blocks), `sync-check --staged` over the pairs the commit stages either side of, and the ACTIVE/tracker coherence step (`warn` or `block` via `--mode`). It prints how many modified or untracked files outside the commit it did not judge, so a narrow green is not read as a whole-tree green. Re-run `beadloom install-hooks` after upgrading — an already-installed hook keeps its old whole-tree behaviour until you do.
-- **pre-push Beadloom Gate** (authoritative for what it runs) — runs every step of `beadloom ci` over the whole tree (the [CLI reference](services/cli.md#beadloom-ci) lists them) and **blocks the push on red**. It does **not** run your test suite, and it says so: under the verdict it names the verifications your own pipeline declares that no step of the run performed, each with the command your workflow runs for it. A push the hook cannot judge is refused, not let through (BDL-083 S1a, BDL-UX #326): without `beadloom` on the `PATH` git runs the hook with, it exits 1 with a sentence saying so, where 9.0.0 exited 0 in silence. It reads the Gate's verdict line from a copy of the report (`beadloom ci --format rich --tee <temporary file>`), and a run that leaves no verdict line is reported as `the Gate did not run` and refused, never as stale documentation. `git push --no-verify` is the documented escape hatch. Re-run `beadloom install-hooks` after upgrading: an installed hook keeps the text it was written with.
+- **pre-push Beadloom Gate** (authoritative for what it runs) — runs every step of `beadloom ci` over the whole tree (the [CLI reference](services/cli.md#beadloom-ci) lists them) and **blocks the push on red**. It does **not** run your test suite, and it says so: under the verdict it names the verifications your own pipeline declares that no step of the run performed, each with the command your workflow runs for it. A push the hook cannot judge is refused, not let through (BDL-083 S1a, BDL-UX #326): without `beadloom` on the `PATH` git runs the hook with, it exits 1 with a sentence saying so, where 9.0.0 exited 0 in silence. It reads the Gate's verdict line from a copy of the report (`beadloom ci --format rich --tee <temporary file>`), and a run that leaves no verdict line is reported as `the Gate did not run` and refused, never as stale documentation.
+  Before the Gate it runs `beadloom landing-check --stdin` and refuses (exit 1) a push whose exported tracker still holds the merge slot for a bead the push carries, naming the landing sequence acquire → commit → release → `bd export` → the export landed → push (BDL-083 S2g, BDL-UX #354). Until this release that push went through, and the next clone's `acquire` was refused.
+  `git push --no-verify` is the documented escape hatch. Re-run `beadloom install-hooks` after upgrading: an installed hook keeps the text it was written with.
 
 Select one with `--pre-commit` / `--pre-push`; remove with `--remove`.
 
@@ -417,6 +445,9 @@ beadloom setup-mcp                 # .mcp.json (Claude Code) / .cursor/mcp.json 
 beadloom setup-mcp --tool cursor   # target a specific editor
 beadloom setup-rules               # thin IDE adapter files pointing at .beadloom/AGENTS.md
 ```
+
+The MCP configuration names the server's command as `beadloom`, resolved on each clone's own
+`PATH`, never one machine's absolute path (BDL-083 S2h).
 
 The MCP server (`beadloom mcp-serve`) exposes 18 tools — 14 graph read/write
 tools plus four process tools (`task_init`, `bead_context`, `checkpoint`,

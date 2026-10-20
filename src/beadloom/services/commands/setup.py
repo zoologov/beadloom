@@ -81,6 +81,8 @@ def setup_mcp(*, remove: bool, tool_name: str, project: Path | None) -> None:
     """
     import shutil
 
+    from beadloom.onboarding.scanner import MCP_SERVER_COMMAND
+
     project_root = project or Path.cwd()
     tool_cfg = _MCP_TOOL_CONFIGS[tool_name]
 
@@ -112,16 +114,17 @@ def setup_mcp(*, remove: bool, tool_name: str, project: Path | None) -> None:
         click.echo(f"Removed beadloom from {mcp_json_path}")
         return
 
-    # Find beadloom command path.
-    beadloom_path = shutil.which("beadloom") or "beadloom"
-
     args: list[str] = ["mcp-serve"]
     # Global configs need explicit --project path.
     if tool_cfg["scope"] == "global":
         args.extend(["--project", str(project_root.resolve())])
 
+    # The command by name, never `shutil.which`'s absolute path: the file is
+    # committed, and one machine's path is a server no other clone can start
+    # (BDL-UX #356 e). Whether THIS machine can start it is a separate fact,
+    # stated rather than written into the file.
     data["mcpServers"]["beadloom"] = {
-        "command": beadloom_path,
+        "command": MCP_SERVER_COMMAND,
         "args": args,
     }
 
@@ -130,6 +133,14 @@ def setup_mcp(*, remove: bool, tool_name: str, project: Path | None) -> None:
         encoding="utf-8",
     )
     click.echo(f"Updated {mcp_json_path}")
+    if shutil.which(MCP_SERVER_COMMAND) is None:
+        click.echo(
+            f"Note: `{MCP_SERVER_COMMAND}` is not on PATH here, so the MCP server "
+            "does not start from this config on this machine until it is. The "
+            "file names the command rather than a path, so every clone resolves "
+            "its own.",
+            err=True,
+        )
 
 
 @main.command("setup-rules")
@@ -171,14 +182,19 @@ def setup_rules(
     files and creates thin adapter files. Does not overwrite existing files.
 
     With --refresh, also refreshes auto-managed sections in .claude/CLAUDE.md
+    and in the Cursor core rule .cursor/rules/beadloom-flow.mdc when present,
     and regenerates .beadloom/AGENTS.md.  Use --dry-run with --refresh to
     preview changes without writing.
     """
+    from beadloom.onboarding.composed_core import (
+        CLAUDE_MD_RELPATH,
+        core_carriers,
+        refresh_core_regions,
+    )
     from beadloom.onboarding.scanner import (
         _RULES_ADAPTER_TEMPLATE,
         _RULES_CONFIGS,
         generate_agents_md,
-        refresh_claude_md,
         setup_rules_auto,
     )
 
@@ -189,13 +205,16 @@ def setup_rules(
         raise SystemExit(1)
 
     if refresh:
-        # Refresh CLAUDE.md auto-managed sections.
-        changed = refresh_claude_md(project_root, dry_run=dry_run)
-        if changed:
-            verb = "Would update" if dry_run else "Updated"
-            click.echo(f"{verb} .claude/CLAUDE.md sections: {', '.join(changed)}")
-        else:
-            click.echo(".claude/CLAUDE.md: no changes needed.")
+        # Refresh the auto-managed sections of every file carrying the composed
+        # core, so one release re-renders one section in both tools' files.
+        refreshed = refresh_core_regions(project_root, dry_run=dry_run)
+        verb = "Would update" if dry_run else "Updated"
+        for relpath in core_carriers():
+            changed = refreshed.get(relpath)
+            if changed:
+                click.echo(f"{verb} {relpath} sections: {', '.join(changed)}")
+            elif relpath == CLAUDE_MD_RELPATH or (project_root / relpath).is_file():
+                click.echo(f"{relpath}: no changes needed.")
 
         # Regenerate AGENTS.md (unless dry-run).
         if not dry_run:
@@ -321,8 +340,9 @@ def setup_agentic_flow(
     subagents from CORE + the selected architecture overlay (``ddd``/``fsd``) +
     the selected stack overlays, then writes the per-tool adapter set(s) — for
     ``claude`` to ``.claude/agents/*`` (+ ``.claude/commands/*`` + a per-project
-    ``.claude/CLAUDE.md``), for ``cursor`` to ``.cursor/agents/*`` (+ a Cursor
-    orchestrator pointer). Selection comes from ``.beadloom/flow.yml`` (or the
+    ``.claude/CLAUDE.md``), for ``cursor`` to ``.cursor/agents/*`` plus the same
+    core and the four commands as ``alwaysApply`` rules under ``.cursor/rules/``
+    (BDL-UX #356). Selection comes from ``.beadloom/flow.yml`` (or the
     ``--tool``/``--architecture``/``--stack`` flags, which override it; defaults
     are ``claude`` / ``ddd`` / auto-detected stack). A drift-guard test keeps
     every generated adapter byte-identical to its composition.
@@ -397,6 +417,10 @@ def setup_agentic_flow(
         verb = "Skipped" if result.claude_md_skipped else "Wrote"
         suffix = " (hand-edited)" if result.claude_md_skipped else ""
         click.echo(f"{verb} {relpath}{suffix}")
+    for rel in result.cursor_rules_written:
+        click.echo(f"Wrote {rel} (cursor)")
+    for rel in result.cursor_rules_skipped:
+        click.echo(f"Skipped {rel} (hand-edited)")
     _echo_scaffold_findings(result, declined)
 
     # The guard hook adapter: the harness binding for the tool-agnostic
@@ -587,6 +611,7 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         click.echo(f"  ! {scope.target}: {scope.why}", err=True)
         click.echo(f"    -> {scope.remediation}", err=True)
 
+    _echo_claude_comparison(project_root)
     _echo_duty_limits(project_root)
     _echo_role_map_limits(project_root)
 
@@ -677,6 +702,19 @@ def _echo_block_refusals(block: str, refusals: Sequence[Refusal]) -> bool:
         click.echo(f"  - {refusal.where}: {refusal.why}", err=True)
         click.echo(f"    -> {refusal.remediation}", err=True)
     return True
+
+
+def _echo_claude_comparison(project_root: Path) -> None:
+    """Name what the ``CLAUDE.md`` body check composed and compared, on every run.
+
+    A red in a worktree beside a green in the checkout of the same files named
+    neither input on 9.0.0 (BDL-UX #334). Silent only when no body is compared.
+    """
+    from beadloom.onboarding import claude_md_comparison
+
+    comparison = claude_md_comparison(project_root)
+    if comparison is not None:
+        click.echo(f"  CLAUDE.md: {comparison.describe()}.", err=True)
 
 
 def _echo_duty_limits(project_root: Path) -> None:
@@ -1661,6 +1699,22 @@ _UNBOUND_HEADING_INDENT = "  "
 _UNBOUND_FILE_INDENT = "    "
 
 
+def _refuse_a_project_root_below_the_git_root(project_root: Path) -> None:
+    """Exit 1, before any writer runs, when the git root is above *project_root* (#325).
+
+    BDL-083 S2e (``beadloom-7pd6``), the owner's ruling of 2026-10-12: a project root below
+    the git root is refused by name rather than supported, in every mode, so no mode leaves a
+    ``.beadloom/`` behind in a layout the other commands would then read in two path frames.
+    """
+    from beadloom.infrastructure.git_root import nested_root
+
+    found = nested_root(project_root)
+    if found is None:
+        return
+    click.echo(f"Error: init refused — {found.sentence()}", err=True)
+    sys.exit(1)
+
+
 # beadloom:domain=onboarding
 @main.command()
 @click.option("--bootstrap", is_flag=True, help="Bootstrap: generate graph from code.")
@@ -1716,6 +1770,7 @@ def init(
     from beadloom.onboarding import bootstrap_project, import_docs
 
     project_root = project or Path.cwd()
+    _refuse_a_project_root_below_the_git_root(project_root)
     # Sampled before any writer runs, in ONE place, so every branch below is
     # judged by the same instrument: the difference against the same directory
     # at verdict time is what this run wrote. Both grains at once — the files,

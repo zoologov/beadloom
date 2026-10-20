@@ -187,7 +187,7 @@ cross-service landscape step is opt-in via `--hub`.
 | `steps` | one `{name, status, passed, skipped, summary, error, findings}` per step; `error` is `<class>: <message>` for an `ERROR` step and `null` otherwise |
 | `crashed` | the names of the steps that raised, in step order, `[]` when none did |
 | `not_run` | `{performed, not_performed, ...}`: the verifications the project's pipeline declares that no step performed |
-| `room` | `{current, entered, not_entered, ...}`: the room the run was taken in |
+| `room` | `{current, entered, not_entered, ..., not_derived}`: the room the run was taken in; `not_derived` is `null`, or the reason the census derived no room (BDL-083 S2a) |
 | `ownership` | `{reason, rule, base, claimed, none_owned, claims, findings}`: who owns what the run found |
 
 `room`, `not_run` and `ownership` are qualifications of the verdict, not steps, and none of
@@ -214,7 +214,18 @@ uncommitted}`. The MCP `complete_bead` tool returns the same object as `owners`
 `beadloom install-hooks` writes two hooks, and an installed hook keeps the text it was
 written with: re-run the command after upgrading.
 
-- **pre-push** runs `beadloom ci --format rich --tee <temporary file>` and reads the verdict
+- **pre-push** first runs `beadloom landing-check --stdin` over the refs git hands it
+  (BDL-083 S2g, BDL-UX #354, RFC D12). The merge slot is tracker state exported into
+  `.beads/issues.jsonl`, so the trunk says what the last landed export says. A push whose
+  export at the pushed commit still holds the slot for a bead its commits carry (by their
+  `Bead:` trailer) is refused with exit 1, before the Gate runs, with `Landing lock: REFUSED --
+  ...` and the four commands that land the release: `bd merge-slot release --holder <bead>`,
+  `bd export -o .beads/issues.jsonl`, a commit of the export by path, `git push`.
+  Through 9.0.0 that push went through, and the next clone's `bd merge-slot acquire` was refused naming a
+  closed bead. A landing therefore runs acquire → commit → release → `bd export` → the export
+  landed → push. A hold by a bead the push does not carry reads `clean`, and a check that gave
+  no verdict or could not judge the push reads `NOT CHECKED` and never blocks.
+- **pre-push** then runs `beadloom ci --format rich --tee <temporary file>` and reads the verdict
   line from the copy, because a report captured and reprinted by the shell was lost on a
   non-blocking pipe (BDL-UX #226). A red verdict blocks the push. A run that leaves no
   verdict line is reported as `the Gate did not run: beadloom ci exited N without a verdict`
@@ -328,6 +339,14 @@ rules files are verified-fresh, never hand-maintained.
 beadloom config-check          # exit 1 on agent-config drift, 0 when clean
 beadloom config-check --fix    # regenerate drifted artifacts, then re-check
 ```
+
+Since BDL-083 S2 the verdict is the same in a checkout, a `git worktree` and a clean room of the
+same files: the composition takes the project's name from `.beadloom/config.yml`
+`project_name:` or a root manifest, never from the directory, and every run names the file it
+compared, the flow configuration it composed from, the layers and the name's source (S2c). On
+a project whose `flow.yml` declares `claude` and `cursor`, a tool whose files lack a layer the
+other tool's carry exits 1 (S2h). The [CLI reference](../services/cli.md#beadloom-config-check)
+has the measurements.
 
 ### GitHub Actions (composite Action)
 

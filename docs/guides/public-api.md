@@ -22,6 +22,30 @@ makes it.
    [`docs/services/cli.md`](../services/cli.md) and `beadloom <command> --help`.
    Added in 9.0.0 (BDL-080 S3c): the value `fsd` of `init --preset`, beside
    `monolith`, `microservices` and `monorepo`.
+   Changed after 9.0.0, in the next major release (BDL-083 S1, unreleased), each under
+   *Breaking* in the change log: the pre-push hook without `beadloom` on its `PATH` (0 → 1),
+   `issue-number check` over a declared log the tree does not hold (0 → 1), and
+   `lint --fail-on-warn` over an import rule with nothing to ban (1 → 0).
+   Changed after 9.0.0, in the next major release (BDL-083 S2, unreleased), each under
+   *Breaking* in the change log with its measurement:
+   - the pre-push hook exits 1 on a push whose exported `.beads/issues.jsonl` holds the merge
+     slot for a bead the push carries (0 → 1, RFC D12);
+   - `waves` exits 1 when the merge slot is held by a bead the tracker lists as closed (0 → 1);
+   - `clean-room --carry <path>`, where HEAD holds the path as a file and the working tree does
+     not, builds the room with the path deleted (2 → 0 or 1, also for a path `--rebuild`
+     remembers);
+   - `config-check` and `ci` in a `git worktree` or a clean room of a project whose root
+     manifest does not name it (1 → 0, RFC D7);
+   - `init` in every mode, `doctor` and `sync-check --since` on a project root below the git
+     root (0 → 1), and `ci` and the pre-push hook through the doctor step;
+   - `doctor` exits 1 on any `ERROR` row, not only the git-root one, the rule the Gate's
+     doctor step already applied;
+   - `config-check` on a project whose `flow.yml` declares two tools and whose files carry
+     fewer composed layers for one of them (0 → 1, RFC D13), and on role files and a
+     `CLAUDE.md` composed before this release (0 → 1, until `setup-agentic-flow` recomposes).
+   Command added (BDL-083 S2g, unreleased): `landing-check [--stdin] [--project DIR]`, exit 0
+   when no ref of the push lands its own hold, 1 when one does, 2 when the push could not be
+   judged.
 2. **The keys of `.beadloom/config.yml`.** Every key a command reads, and the values each key
    accepts. A key is documented in the reference of the node whose code reads it: `tests:` in the
    [test-mapping SPEC](../domains/context-oracle/features/test-mapping/SPEC.md), `site:` in the
@@ -52,6 +76,15 @@ makes it.
    read it or refuse it. 9.0.0 does so for four places, each under *Breaking*: the `imports:`
    block, `scope:` and `title:` on a `layers` rule, and `tag_prefix` beside `kind` in a node
    matcher.
+   Keys added after 9.0.0, in the next major release (BDL-083 S2, unreleased):
+   `project_name`, the name the composed `CLAUDE.md` heading takes and `config-check` compares,
+   read before a root manifest (S2c, the
+   [project-name DOC](../domains/onboarding/components/project-name/DOC.md)); and
+   `rooms.pipelines`, a list with the vocabulary `github`, `gitlab`, naming the pipeline files
+   the room census and the Gate's coverage statement read, every file present when unset (S2F1,
+   the [verdict-room DOC](../domains/application/components/verdict-room/DOC.md)). A project
+   that holds both `.github/workflows/` and `.gitlab-ci.yml` and declares no key gains the
+   GitLab rooms: a finding-set move in a report that moves no exit code.
 3. **The keys and the value vocabularies of the JSON outputs**: `ctx --json`, `status --json`,
    the debt report (`status --debt-report --json`) and `export`, whose artifact is JSON without
    an option. A vocabulary is the set of values a key can take. The activity level is one:
@@ -145,6 +178,20 @@ makes it.
    no finding. The
    [rule-engine SPEC](../domains/graph/features/rule-engine/SPEC.md#where-beadloom-and-steiger-differ)
    lists the differences as measured.
+   Changed after 9.0.0, in the next major release (BDL-083 S2, unreleased):
+   `setup-agentic-flow` on a flow declaring `cursor` writes the composed core and the four
+   commands as `alwaysApply` rules, `.cursor/rules/beadloom-flow.mdc` and
+   `.cursor/rules/beadloom-{coordinator,task-init,checkpoint,templates}.mdc`, each body
+   byte-identical to the file Claude reads, and no longer writes the pointer
+   `.cursor/rules/beadloom-flow.md` (a file-set move, S2h). A project layer
+   `.beadloom/flow/cursor/CLAUDE.md` reaches Cursor's core alone, and
+   `.beadloom/flow/claude/CLAUDE.md` now reaches the core of both tools. `setup-mcp` and
+   `init --bootstrap` write the server command `beadloom` instead of the absolute path of the
+   machine that ran them (S2h). The pre-push hook `install-hooks` writes runs
+   `beadloom landing-check --stdin` before the Gate (S2g). The composed `CLAUDE.md` gains the
+   paragraph "The project root is the git root" (S2e), the landing sequence acquire → commit →
+   release → export → the export landed → push (S2g), and the composed `task-init` command
+   writes its plan file under `$(mktemp -d)` (S2h).
 
 **The promise.** Within one major version, nothing on this list is removed, renamed or changed
 in a way that breaks a reader that used it as documented. A release that does any of those is a

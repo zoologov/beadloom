@@ -160,7 +160,7 @@ def index_docs(
 
     for md_path in sorted(docs_dir.rglob("*.md")):
         content = md_path.read_text(encoding="utf-8")
-        rel_path = str(md_path.relative_to(docs_dir))
+        rel_path = md_path.relative_to(docs_dir).as_posix()
         _insert_document(
             conn,
             path=rel_path,

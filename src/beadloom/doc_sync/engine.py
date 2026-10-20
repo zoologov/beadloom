@@ -236,7 +236,7 @@ def _unchecked_reason(conn: sqlite3.Connection, source: str) -> dict[str, str]:
     else:
         indexed = conn.execute(
             "SELECT COUNT(*) FROM file_index WHERE kind = 'code' AND path = ?",
-            (source,),
+            (prefix,),
         ).fetchone()
     if indexed is not None and int(indexed[0]) > 0:
         return {"reason": "files_owned_by_nested_nodes", "details": source}
@@ -1199,7 +1199,7 @@ def _discover_reference_docs(project_root: Path) -> list[tuple[str, list[str]]]:
             continue
         watches = parse_watches(text)
         if watches:
-            rel = str(path.relative_to(project_root))
+            rel = path.relative_to(project_root).as_posix()
             found.append((rel, watches))
     return found
 
@@ -1429,11 +1429,11 @@ def _tracked_paths_from_doc(doc_file: Path, project_root: Path) -> set[str]:
         candidate = Path(raw)
         if candidate.is_absolute():
             try:
-                tracked.add(str(candidate.relative_to(project_root)))
+                tracked.add(candidate.relative_to(project_root).as_posix())
             except ValueError:
                 continue
         else:
-            tracked.add(str(candidate))
+            tracked.add(candidate.as_posix())
     return tracked
 
 
@@ -1572,7 +1572,7 @@ def check_source_coverage(
         # 4. The node's files, excluding boilerplate: *.py on disk directly in
         #    the directory, and every indexed code file the node owns.
         disk_files = {
-            str(py_file.relative_to(project_root)) for py_file in source_dir.glob("*.py")
+            py_file.relative_to(project_root).as_posix() for py_file in source_dir.glob("*.py")
         }
         disk_files |= indexed_by_owner.get(ref_id, set())
         disk_files = {f for f in disk_files if Path(f).name not in _COVERAGE_EXCLUDE}

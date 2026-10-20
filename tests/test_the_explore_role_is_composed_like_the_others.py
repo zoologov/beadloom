@@ -45,7 +45,7 @@ from beadloom.onboarding.agentic_flow_setup import (
     AGENT_FILES,
     scaffold,
 )
-from beadloom.onboarding.composer import SHARED_ROLE_FRAGMENTS, compose
+from beadloom.onboarding.composer import CLAUDE_ARTIFACT_NAME, SHARED_ROLE_FRAGMENTS, compose
 from beadloom.onboarding.config_sync import ConfigDrift, check_config_drift
 from beadloom.onboarding.doc_templates import DEFAULT_DOC_CONFIG
 from beadloom.onboarding.flow_config import (
@@ -53,7 +53,7 @@ from beadloom.onboarding.flow_config import (
     FlowConfig,
     load_flow_config,
 )
-from beadloom.onboarding.role_adapters import cursor_rules_body, generate_adapters
+from beadloom.onboarding.role_adapters import generate_adapters
 from beadloom.onboarding.role_composer import (
     ROLE_NAMES,
     compose_all_roles,
@@ -163,12 +163,16 @@ class TestARoleExistsBecauseAFragmentShipsForIt:
         for role in ROLE_NAMES:
             assert composed[role].strip(), role
 
-    def test_the_cursor_pointer_names_the_derived_population(self) -> None:
-        """The prose list inside the pointer was a third home for the same fact."""
-        body = cursor_rules_body()
+    def test_the_core_cursor_reads_names_the_derived_population(self) -> None:
+        """The pointer's prose list was a third home for the same fact.
+
+        Since BDL-083 S2h Cursor reads the composed core instead of the pointer
+        (BDL-UX #356), so the population is the one the core's role map names.
+        """
+        config = FlowConfig(tools=("cursor",), architecture="ddd", stack=("python",))
+        body = compose("cursor", CLAUDE_ARTIFACT_NAME, config=config).text
         for role in ROLE_NAMES:
-            assert role in body
-        assert f"{len(ROLE_NAMES)} roles" in body
+            assert f"`{role}`" in body
 
 
 class TestTheExploreRoleStatesAFixedDeliverable:

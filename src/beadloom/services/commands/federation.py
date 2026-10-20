@@ -626,12 +626,15 @@ def _gate_room_lines(result: GateResult) -> list[str]:
     Printed under the verdict rather than beside it, because it does not change
     the verdict: the same result, now answerable about which rooms it covers.
     """
-    from beadloom.application.rooms import room_line
+    from beadloom.application.rooms import NOT_DERIVED_PREFIX, room_line
 
     census = result.room
     if census is None:
         return _absent_report_lines("Room: not stated", result.room_reason)
     lines = [f"Room: {room_line(census.current)}"]
+    if census.not_derived is not None:
+        lines.append(f"  {NOT_DERIVED_PREFIX}{census.not_derived}")
+        return lines
     if not census.comparisons:
         lines.append(
             "  this project declares no room a verdict could be held against "
@@ -735,6 +738,7 @@ def _format_gate_json(result: GateResult) -> str:
     if census is not None:
         payload["room"] = {
             "current": dict(census.current.dimensions),
+            "not_derived": census.not_derived,
             "entered": [c.room.label for c in census.entered],
             "not_entered": [
                 {"room": c.room.label, "source": c.room.source, "why": c.why}
@@ -758,10 +762,15 @@ def _format_gate_github(result: GateResult) -> str:
     ``file=<path:line>`` colon-joined string (which GitHub does not parse).
     """
     from beadloom.application.gate import crashed_clause
-    from beadloom.application.rooms import room_line
+    from beadloom.application.rooms import NOT_DERIVED_PREFIX, room_line
 
     lines: list[str] = []
-    if result.room is not None:
+    if result.room is not None and result.room.not_derived is not None:
+        lines.append(
+            f"::notice::room {room_line(result.room.current)} — "
+            f"{NOT_DERIVED_PREFIX}{result.room.not_derived}"
+        )
+    elif result.room is not None:
         entered = len(result.room.entered)
         declared = len(result.room.comparisons)
         lines.append(

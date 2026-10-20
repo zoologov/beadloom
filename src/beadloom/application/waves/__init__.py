@@ -42,7 +42,6 @@ from beadloom.application.waves.clean_room import (
     RoomBuild,
     RoomRequest,
     build_room,
-    room_invocation,
     room_owner,
     room_path,
     room_request,
@@ -159,6 +158,11 @@ from beadloom.application.waves.population import (
     population_lines,
     ready_under,
 )
+from beadloom.application.waves.room_distribution import (
+    RoomDistribution,
+    owning_distribution,
+    room_invocation,
+)
 from beadloom.application.waves.room_env import (
     ENVIRONMENT_DIR,
     INSTALLER_STDLIB,
@@ -172,6 +176,10 @@ from beadloom.application.waves.room_env import (
     extras_a_room_installs,
     room_python,
     site_packages,
+)
+from beadloom.application.waves.room_tree import (
+    TreeDifference,
+    difference_records,
 )
 from beadloom.application.waves.running import (
     FINDING_RUNNING_NOT_COMPARED,
@@ -283,6 +291,7 @@ __all__ = [
     "OverrideOutcome",
     "Population",
     "RoomBuild",
+    "RoomDistribution",
     "RoomEnvironment",
     "RoomRequest",
     "RunningConflict",
@@ -291,6 +300,7 @@ __all__ = [
     "SharedMedium",
     "TrackerBead",
     "TrackerCensus",
+    "TreeDifference",
     "UnguardedAxis",
     "Wave",
     "WaveConfigError",
@@ -311,10 +321,12 @@ __all__ = [
     "defect_detail",
     "derivation_findings",
     "derive_population",
+    "difference_records",
     "extras_a_room_installs",
     "finding_for",
     "load_overrides",
     "lock_sites",
+    "owning_distribution",
     "parse_declaration",
     "plan_waves",
     "population_findings",

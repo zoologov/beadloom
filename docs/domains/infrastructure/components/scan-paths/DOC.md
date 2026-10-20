@@ -2,7 +2,7 @@
 
 Internal building block of the infrastructure domain.
 
-**Source:** `src/beadloom/infrastructure/scan_paths.py`
+**Source:** `src/beadloom/infrastructure/scan_paths.py`, `src/beadloom/infrastructure/python_projects.py`
 
 ---
 
@@ -24,6 +24,12 @@ This closes the historic `graph -> application.reindex` layering inversion
 
 - `resolve_scan_paths(project_root)` — return the list of scan directory names
   for the project, read from `config.yml` (or the default fallback).
+- `find_python_projects(project_root)` (BDL-083 S2a, BDL-UX #332) — every Python project the
+  project holds: a `pyproject.toml` at the root, between the root and a scan path, or under a
+  scan path, with `node_modules`, `site-packages`, `venv`, `__pycache__` and hidden directories
+  not entered and a scan path outside the root not followed. The root's project comes first.
+- `census_packaging(project_root)` — the packaging the room census reads: the root's when the
+  root holds a `pyproject.toml`, else the first project found, with the others named in a note.
 
 ## Collaborators
 
@@ -31,5 +37,7 @@ This closes the historic `graph -> application.reindex` layering inversion
   it for backward-compatible import paths.
 - `graph/import_resolver.py` uses it to enumerate source files for import
   indexing.
+- `application/rooms.py` reads the packaging `census_packaging` chooses, so a monorepo whose
+  Python project is `backend/pyproject.toml` declares its interpreters and distribution.
 
 > Component doc (BDL-059 S3). Public surface verified against `scan_paths.py`.

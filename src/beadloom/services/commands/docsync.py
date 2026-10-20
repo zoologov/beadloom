@@ -135,6 +135,8 @@ def sync_check(
         click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
         sys.exit(1)
 
+    if since_ref is not None:
+        _refuse_since_below_the_git_root(project_root)
     if since_ref is not None and (
         set(since_ref) == {"0"} or not _validate_git_ref(project_root, since_ref)
     ):
@@ -167,7 +169,8 @@ def sync_check(
     # project declared less. Counted after the filter, `--ref sync-check` read
     # "declared surface SHRANK: 322 -> 6 pair(s)", and `--record-surface` would
     # have written that 6 into the committed ledger (BDL-061 S6).
-    declared_pairs = len([r for r in results if r.get("code_path")])
+    declared = [(str(r["doc_path"]), str(r["code_path"])) for r in results if r.get("code_path")]
+    declared_pairs = len(declared)
 
     if ref_filter:
         results = [r for r in results if r["ref_id"] == ref_filter]
@@ -199,6 +202,7 @@ def sync_check(
             declared_pairs=pair_count,
             declared_docs=declared_docs,
             recorded_at=datetime.now(tz=timezone.utc).isoformat(),
+            pairs=declared,
         )
         click.echo(
             f"Recorded declared surface: {pair_count} pair(s), "
@@ -208,6 +212,7 @@ def sync_check(
         read_ledger(project_root),
         declared_pairs=pair_count,
         declared_docs=declared_docs,
+        pairs=declared,
     )
 
     if output_json:
@@ -272,6 +277,7 @@ def sync_check(
                 "recorded": surface.recorded,
                 "shrank": surface.shrank,
                 "message": surface.message,
+                "dropped": [list(pair) for pair in surface.dropped],
             }
             data["references"] = [
                 {
@@ -380,6 +386,29 @@ def sync_check(
 
     if has_blocking:
         sys.exit(2)
+
+
+def _refuse_since_below_the_git_root(project_root: Path) -> None:
+    """Exit 1 when ``--since`` would compare two empty sides (BDL-083 S2e, BDL-UX #325).
+
+    ``--since`` reads ``git show <ref>:<path>`` with the project's path, and below the git
+    root git holds no file at that path: both sides came back empty and every pair read
+    ``ok``, a green verdict over nothing. The owner ruled a refusal rather than a translation
+    (2026-10-12). ``sync-check`` without ``--since`` reads git through ``--show-prefix`` and
+    is not refused.
+    """
+    from beadloom.infrastructure.git_root import nested_root
+
+    found = nested_root(project_root)
+    if found is None:
+        return
+    click.echo(
+        f"Error: sync-check --since refused — {found.sentence()} Below the git root --since "
+        "reads each file at the ref by the project's path, git holds none there, and every "
+        "pair would read fresh over two empty sides.",
+        err=True,
+    )
+    sys.exit(1)
 
 
 def _pair_label(row: dict[str, Any]) -> str:

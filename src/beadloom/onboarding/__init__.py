@@ -1,6 +1,11 @@
 """Onboarding domain — project bootstrap, doc import, and presets."""
 
-from beadloom.onboarding.config_sync import ConfigDrift, check_config_drift
+from beadloom.onboarding.config_sync import (
+    ClaudeComparison,
+    ConfigDrift,
+    check_config_drift,
+    claude_md_comparison,
+)
 from beadloom.onboarding.doc_generator import generate_polish_data, generate_skeletons
 from beadloom.onboarding.flow_config import (
     FlowConfig,
@@ -52,6 +57,7 @@ __all__ = [
     "PRESETS",
     "ROLE_NAMES",
     "AdapterResult",
+    "ClaudeComparison",
     "ConfigDrift",
     "FlowConfig",
     "FlowConfigError",
@@ -62,6 +68,7 @@ __all__ = [
     "build_flow_config",
     "check_config_drift",
     "classify_doc",
+    "claude_md_comparison",
     "compose_all_roles",
     "compose_role",
     "detect_preset",

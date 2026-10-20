@@ -12,6 +12,7 @@ from beadloom.onboarding.scanner.agents_md import (
     _BEADLOOM_ADAPTER_MARKERS,
     _RULES_ADAPTER_TEMPLATE,
     _RULES_CONFIGS,
+    MCP_SERVER_COMMAND,
     _build_mcp_tools_section,
     _build_rules_section,
     _extract_agents_custom_content,
@@ -27,7 +28,9 @@ from beadloom.onboarding.scanner.claude_md import (
     _parse_markers,
     _render_project_info_section,
     blank_auto_regions,
+    refresh_auto_regions,
     refresh_claude_md,
+    render_auto_regions,
 )
 from beadloom.onboarding.scanner.constants import (
     _CODE_EXTENSIONS,
@@ -54,6 +57,7 @@ from beadloom.onboarding.scanner.project_scan import (
     _cluster_with_children,
     _detect_project_name,
     _read_manifest_deps,
+    manifest_project_name,
     scan_project,
 )
 from beadloom.onboarding.scanner.readme import (
@@ -78,6 +82,7 @@ from beadloom.onboarding.scanner.types import ClusterEntry, ScanResult
 # ``from beadloom.onboarding.scanner import _helper`` import paths used by the
 # test suite and a few in-package callers (behavior-preserving split, BDL-059).
 __all__ = [
+    "MCP_SERVER_COMMAND",
     "_BEADLOOM_ADAPTER_MARKERS",
     "_CODE_EXTENSIONS",
     "_MANIFESTS",
@@ -120,9 +125,12 @@ __all__ = [
     "generate_rules",
     "import_docs",
     "interactive_init",
+    "manifest_project_name",
     "non_interactive_init",
     "prime_context",
+    "refresh_auto_regions",
     "refresh_claude_md",
+    "render_auto_regions",
     "scan_project",
     "setup_mcp_auto",
     "setup_rules_auto",

@@ -79,7 +79,14 @@ normal layer, each is language-selectable like every other one
 | `roles` | `templates/roles/core/<role>.md.txt` | `templates/roles/` | `.beadloom/flow/roles/<role>.md` |
 | `commands` | `templates/agentic_flow/commands/<cmd>.md.txt` | `templates/commands/` | `.beadloom/flow/commands/<cmd>.md` |
 | `claude` | `templates/agentic_flow/CLAUDE.md.txt` | `templates/claude/` | `.beadloom/flow/claude/CLAUDE.md` |
+| `cursor` | `templates/agentic_flow/CLAUDE.md.txt` | `templates/claude/` | `.beadloom/flow/claude/CLAUDE.md`, then `.beadloom/flow/cursor/CLAUDE.md` |
 | `docs` | `templates/docs/core/<kind>.md.txt` | `templates/docs/` | `.beadloom/flow/docs/<kind>.md` |
+
+`cursor` (BDL-083 S2h, RFC D13) is the core a Cursor agent reads: the same core and
+overlays as `claude`, and the project folders `ArtifactKind.project_kinds` names, in that
+order. The `claude` fragment is labelled `project` and reaches both tools from one copy;
+the `cursor` fragment is labelled `project:cursor` and holds text for Cursor alone. Every
+other kind reads its own folder, which is what an empty `project_kinds` means.
 
 `docs` (BDL-061 S4b) is the only kind with `carries_suppressions=False`: a
 declared suppression stands down a rule addressed to an AGENT, and a generated
@@ -127,8 +134,10 @@ Module `src/beadloom/onboarding/composer.py`:
 - `compose(kind, name, *, config, project_root=None)` → `Composition`
 - `Composition.text` → the composed body
 - `templates_dir()`, `project_fragment_path(kind, name, project_root)`
-- `ARTIFACT_KINDS` (`roles`, `commands`, `claude`, `docs`), `CLAUDE_ARTIFACT_NAME`, `COMPOSED_MARKER`,
-  `PROJECT_FLOW_DIRNAME`
+- `ARTIFACT_KINDS` (`roles`, `commands`, `claude`, `cursor`, `docs`), `CLAUDE_ARTIFACT_NAME`,
+  `COMPOSED_MARKER`, `PROJECT_FLOW_DIRNAME`
+- `COMMAND_NAMES` — the four slash commands the `commands` kind composes, declared here so
+  the scaffold and `tool-reach` read one population
 
 ## Testing
 

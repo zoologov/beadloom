@@ -88,7 +88,18 @@ Reports `sync_state` entries that are already marked as stale.
 - **On no stale entries**: Returns `[Check("stale_sync", Severity.OK, "No stale sync entries.")]`
 - **On stale entries**: Returns one `Check` per stale entry with `Severity.WARNING` and message `"Sync stale for '<ref_id>': doc=<doc_path>, code=<code_path>"`
 
-#### 7. `_check_source_coverage`
+#### 7. `_check_index_separator`
+
+Names an index whose paths carry a backslash as one to rebuild (BDL-083 S2f, RFC D11, BDL-UX
+#353). The index is written with forward slashes on every platform; an index an older version
+built on a Windows checkout holds backslashes, which no `source:` matches, so every directory
+node reads "no indexed code" and the declared surface shrinks with nothing that says why.
+
+- **Query**: `SELECT COUNT(*) FROM <table> WHERE instr(<column>, '\') > 0` over `file_index.path`, `code_symbols.file_path`, `code_imports.file_path` and `docs.path`; a table the schema does not hold is skipped
+- **On no backslash path**: Returns `[Check("index_separator", Severity.OK, "Every indexed path is POSIX.")]`
+- **On backslash paths**: Returns one `Check` per table with `Severity.WARNING`, the count, and the command that rebuilds the index: `beadloom reindex --full`
+
+#### 8. `_check_source_coverage`
 
 Checks for nodes with untracked source files. Uses `check_source_coverage()` from `doc_sync.engine` to detect Python files in a node's source directory that are not tracked in `sync_state` or `code_symbols`. Derives `project_root` from the database file path via `PRAGMA database_list`.
 
@@ -97,7 +108,21 @@ Checks for nodes with untracked source files. Uses `check_source_coverage()` fro
 - **On no gaps**: Returns `[Check("source_coverage", Severity.OK, "All source files are tracked.")]`
 - **On gaps**: Returns one `Check` per node with untracked files, `Severity.WARNING` and message `"Node '<ref_id>' has untracked source files: <file_names>"`
 
-#### 8. `_check_agent_instructions`
+#### 9. `_check_git_root`
+
+Names a git root above the project root as an error (BDL-083 S2e, BDL-UX #325, the owner's
+ruling of 2026-10-12). Git answers in paths relative to its own root and Beadloom asks in the
+project root's, so below the git root `sync-check --since` compares two empty sides and every
+pair reads fresh. The layout is refused by name rather than supported. Reads
+`beadloom.infrastructure.git_root.nested_root`; runs only when `project_root` is provided.
+
+- **On a project root at the git root, or in no repository, or when git cannot answer**: Returns `[Check("git_root", Severity.OK, "No git root above the project root.")]`
+- **On a project root below the git root**: Returns `[Check("git_root", Severity.ERROR, "Project root refused: the git root is above the project root: ...")]`, naming both roots and the rule that the project root must be the git root
+
+This is the only built-in check that emits `Severity.ERROR`. An `ERROR` row fails the Gate's
+`doctor` step and makes `beadloom doctor` exit 1.
+
+#### 10. `_check_agent_instructions`
 
 Validates agent instruction files (`.claude/CLAUDE.md` and `.beadloom/AGENTS.md`) for factual drift against actual runtime state. Accepts a `pathlib.Path` project root (not a database connection). Reads both instruction files, extracts factual claims via regex, and compares them with live introspection of the codebase.
 
@@ -141,7 +166,7 @@ Regex patterns used for extraction:
 
 ### Execution Order
 
-`run_checks` executes the seven database checks in a fixed order, then conditionally runs the agent instructions check:
+`run_checks` executes the eight database checks in a fixed order, then conditionally runs the agent instructions check:
 
 1. `_check_empty_summaries`
 2. `_check_unlinked_docs`
@@ -149,8 +174,10 @@ Regex patterns used for extraction:
 4. `_check_isolated_nodes`
 5. `_check_symbol_drift`
 6. `_check_stale_sync`
-7. `_check_source_coverage`
-8. `_check_agent_instructions` (only when `project_root is not None`)
+7. `_check_index_separator`
+8. `_check_source_coverage`
+9. `_check_git_root` (only when `project_root is not None`)
+10. `_check_agent_instructions` (only when `project_root is not None`)
 
 ### CLI Interface
 
@@ -163,6 +190,7 @@ beadloom doctor [--project DIR]
 - The CLI opens the database via `open_db` from `beadloom.infrastructure.db` and passes `project_root` to `run_checks`, enabling the agent instructions check (check 8).
 - Output: Formatted list of checks with severity markers (`[ok]`, `[info]`, `[warn]`, `[ERR]`) via `click.echo`.
 - Exits with error if the database file is not found at `<project>/.beadloom/beadloom.db`.
+- Exit codes: 0 when no check reads `ERROR`; 1 when one does (since BDL-083 S2e the git root above the project root, `_check_git_root`) or when the database is missing. The rule is the one the Gate's `doctor` step applies to the same rows.
 
 ## API
 
@@ -203,7 +231,7 @@ class Check:
 ## Invariants
 
 - The seven database checks always execute; there is no mechanism to skip individual checks.
-- The eighth check (`_check_agent_instructions`) runs only when `project_root` is provided to `run_checks`.
+- `_check_git_root` and `_check_agent_instructions` run only when `project_root` is provided to `run_checks`.
 - Each check independently returns its own result list. A failure in one check does not affect others.
 - When a check finds no issues, it returns exactly one `Check` with `Severity.OK`.
 - When a check finds N issues, it returns exactly N `Check` objects (one per affected entity).
@@ -218,7 +246,7 @@ class Check:
 - Requires a populated SQLite database. Running doctor before `beadloom reindex` will produce misleading results (e.g., all checks return OK on empty tables).
 - No auto-fix capability. Doctor is strictly read-only and diagnostic.
 - No check prioritization or filtering. The caller receives all results and must decide how to present or act on them.
-- The `ERROR` severity level exists in the enum but is not currently emitted by any built-in check.
+- `ERROR` is emitted by one built-in check, `_check_git_root`, for a project root below the git root (BDL-083 S2e).
 - `_check_symbol_drift` depends on `doc_sync.engine._compute_symbols_hash` being available; it imports the function at call time.
 - `_check_source_coverage` depends on `doc_sync.engine.check_source_coverage` and derives `project_root` from the database path via `PRAGMA database_list`.
 - `_check_agent_instructions` depends on `beadloom.__version__` being defined in the package `__init__.py`, and on `beadloom.services.cli.main` being a Click group with a `.commands` dict.

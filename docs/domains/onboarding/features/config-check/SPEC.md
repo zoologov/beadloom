@@ -22,12 +22,19 @@ against disk, returning one `ConfigDrift` per drifted artifact, sorted by path:
 
 - `.beadloom/AGENTS.md` — fully generated, with a preserved `custom` block
   between the `beadloom:custom-start` / `custom-end` markers.
-- the auto-managed sections of `.claude/CLAUDE.md` — between the
-  `beadloom:auto-start` / `auto-end` markers.
+- the auto-managed sections of every file carrying the composed core —
+  `.claude/CLAUDE.md` and the Cursor core rule `.cursor/rules/beadloom-flow.mdc` —
+  between the `beadloom:auto-start` / `auto-end` markers, one finding per file
+  (see *A release moves the rendered sections in both tools* below).
 - the thin IDE adapter files (`.cursorrules`, …).
 - the **body** of `.claude/CLAUDE.md`, the `.claude/commands/*` files and the
   `.claude/agents/*` adapters — each against its **composition result**, not
   against fixed bytes (BDL-061 S3).
+- for a flow declaring `cursor`, the `.cursor/agents/*` adapters and the
+  `.cursor/rules/beadloom-flow.mdc` and `beadloom-<cmd>.mdc` rules, the same way
+  (BDL-083 S2h).
+- the layers each declared tool reads, against every other declared tool — see
+  *A layer one tool reads and another does not* below.
 - `.beadloom/flow.yml` itself (unknown tool / architecture / stack / language,
   a suppression missing its reason or exit condition).
 - the project's `.gitignore`, against the patterns `ignore_block` emits — see
@@ -38,7 +45,7 @@ A repo that never adopted the flow is never reported for it. A repo that DID
 adopt it and is missing a canonical file is reported, because the gate is not
 satisfied by having less to check (see *Deletion is not a pass*).
 `apply_config_fixes` is the `--fix` seam: it runs every writer
-(`refresh_claude_md`, `generate_agents_md`, `setup_rules_auto`,
+(`composed_core.refresh_core_regions`, `generate_agents_md`, `setup_rules_auto`,
 `refresh_agentic_flow_files`, `refresh_composed_adapters`) and reports what
 changed — see *`--fix` may only rewrite what Beadloom wrote*.
 
@@ -300,8 +307,9 @@ derivation is `role_map.role_map_report()`; `_role_map_drifts()` maps its findin
 `ConfigDrift`.
 
 **One map per declared tool** (BDL-068 `.84`). The corpus is `config.tools`: the composed
-`.claude/CLAUDE.md` for `claude`, the `.cursor/rules/beadloom-flow.md` orchestrator pointer
-for `cursor`. Until `.84` the check composed Claude's map unconditionally, so a project
+`.claude/CLAUDE.md` for `claude`, the composed core Cursor reads as
+`.cursor/rules/beadloom-flow.mdc` for `cursor` (the same text since BDL-083 S2h, which
+retired the orchestrator pointer that held only the roster). Until `.84` the check composed Claude's map unconditionally, so a project
 declaring `cursor` alone was judged against a composition its flow does not declare while
 the map its agent reads was asked nothing. A declared tool this release names no map
 artifact for produces **no drift**: it is printed as an unreached population, because the
@@ -407,9 +415,51 @@ Its policy is the ignore block's, applied to a different file rather than invent
 
 What it does not claim is a file the manifest does not record. An adopter who drives Cursor
 by hand owns `.cursor/agents/dev.md` outright, and claiming it would be the false positive
-`_adapter_drifts` avoids by checking only adapters it recognises. `.cursor/rules/beadloom-flow.md`
-is excluded for the reason `role_adapters` publishes: no check compares that pointer in
-either state, so calling it orphaned would imply it was guarded before.
+`_adapter_drifts` avoids by checking only adapters it recognises. `.cursor/rules/` is outside
+the agent directories the population is read from, so the Cursor rules are not reported as
+orphaned when `cursor` leaves `tools:` — a stated limit (BDL-083 S2h).
+
+### A layer one tool reads and another does not
+
+Measured on 9.0.0 (BDL-UX #356): a project composed for Claude and Cursor gave Claude the
+core, the project layer, the STACK overlay and the four commands, gave Cursor the role files
+and a 17-line pointer, and this check compared nothing across the two. On a project composed
+for Cursor alone it warned five times that `.claude/agents/<role>.md` was missing, a file the
+scaffold never writes for Cursor.
+
+Since BDL-083 S2h the canonical file set follows `tools:` (`_canonical_flow_files`): each
+declared tool's role directory, `.claude/commands/*` for every flow because the scaffold
+writes it for every flow, and the Cursor rules when `cursor` is declared. A cursor-only
+project is no longer told about `.claude/agents/`.
+
+`_layer_gap_drifts()` projects `tool_reach.layer_gaps()` (the
+[tool-reach SPEC](../tool-reach/SPEC.md) states the comparison): a declared tool whose files
+on disk carry fewer layers than another declared tool's is an `error` on the tool's
+directory (`.cursor` or `.claude`), naming the tool, the tool it is compared with and the
+layers it lacks — the shipped ones by count, the project layer by path. It is `fixable`:
+`--fix` composes the missing files. A project 9.0.0 composed for both tools exits 1 here
+where 9.0.0 exited 0 — an exit-code move recorded in RFC D13's Public API entry. A project
+declaring one tool has nothing to compare.
+
+### A release moves the rendered sections in both tools
+
+Measured at `b7d46e27` (BDL-083 S2R pass 1 Major 1) on a project composed for Claude and
+Cursor and clean: after the version went from 1.0.0 to 2.0.0 and a dependency was added,
+this check exited 1 with two errors. `.claude/CLAUDE.md` read `auto-managed section(s)
+stale: project-info`. The Cursor core rule read `composed body is stale vs CORE + the
+flow.yml overlays + the project layer`, although none of those had moved, because its body
+was compared whole, the rendered `project-info` section included. `setup-rules --refresh`
+then repaired `CLAUDE.md` and left the rule stale, so the two tools carried two texts.
+
+Both files now go through the [composed-core](../../components/composed-core/DOC.md)
+component. Each body is compared with every auto-region body blanked on every side, and each
+file whose regions moved is one `auto-managed section(s) stale: <names>` finding at `error`,
+`fixable`. The same release therefore reads as two findings with one reason, and
+`setup-rules --refresh` or `--fix` re-renders the sections in both, after which the rule's
+body is byte-identical to `CLAUDE.md` again. A section edited by hand reads the same way in
+either file and is re-rendered by the same refresh. An edit outside the sections is a hand
+edit of the body, as before. A version bump on a project composed for Claude alone is the
+one `CLAUDE.md` finding, as it was.
 
 ### Ownership boundary
 
@@ -431,6 +481,41 @@ hand-edited would be the false red on upgrade this slice exists to prevent.
 A project that never adopted the flow is still not policed and not mentioned —
 adoption is what separates "no stamp, and this is your file" from "no stamp, and
 this is a file we should be able to account for".
+
+### One verdict in the checkout, a worktree and a clean room (BDL-UX #334)
+
+BDL-083 S2c, RFC D7. The composed body carries the project's name in its
+`## 0.1 Project:` heading. On 9.0.0 that name came from a root manifest or, failing
+one, from the directory the files sat in. Measured at `f3d6f293` over a copy of the
+monorepo fixture, which names itself in no root manifest: `config-check` exited 0 in
+the main checkout, 1 in a `git worktree` of a clean HEAD and 1 in a clean room of the
+same files, each time with `composed body is stale`. `beadloom ci` gave the same three
+exit codes. On this repository the three were already equal, because `pyproject.toml`
+names the project.
+
+The composition now takes the name
+[`composition_project_name`](../../components/project-name/DOC.md) reads, in this
+order: `project_name:` in `.beadloom/config.yml`, a root manifest, the name the
+project's last composition wrote into the heading, and the directory's name only
+for a first composition of a project that declares nothing. `setup-agentic-flow`
+composes with the same name, so a re-run in a worktree keeps the checkout's name
+instead of writing the worktree's.
+
+What the comparison read is named on every run, not only on a finding.
+`claude_md_comparison()` returns a `ClaudeComparison`, and its `describe()` sentence
+names the compared file, the flow configuration the composition was resolved from,
+the layers it read (a project layer with its path) and the name with its source:
+
+    compared .claude/CLAUDE.md against its composition from .beadloom/flow.yml, layers core,
+    stack:python, project (.beadloom/flow/claude/CLAUDE.md), with the project name
+    'beadloom' from pyproject.toml
+
+`config-check` prints it as the `CLAUDE.md:` line, the Gate appends it to the
+`config-check` step's summary, and every finding on the body (`stale`, `hand_edited`,
+`missing`, `unverified`) ends with it. When the name is a record and not a
+declaration, the sentence adds that the heading's name is not compared and names
+`project_name:` as the way to compare it. `sync-check` in a room without `.git` keeps
+the named skip of BDL-UX #273; this section does not change it.
 
 ## Invariants
 
@@ -478,6 +563,12 @@ Module `src/beadloom/onboarding/config_sync.py`:
 - `_orphaned_adapter_drifts(project_root) -> list[ConfigDrift]` — every
   `role_adapters.orphaned_adapters()` result as a warning, non-fixable drift against the
   adapter's own path; empty for a project with no valid `.beadloom/flow.yml`.
+- `claude_md_comparison(project_root) -> ClaudeComparison | None` — what the body
+  check composes and compares; `None` when no `.claude/CLAUDE.md` is compared (absent,
+  ownership unproved, or a `flow.yml` that does not load). Re-exported from
+  `beadloom.onboarding`.
+- `ClaudeComparison` — `compared`, `composed_from`, `layers`, `name` (a
+  `ProjectName`) and `describe()`, the sentence both surfaces print.
 - `apply_config_fixes(project_root) -> FixReport` — run every `--fix` writer and
   report, by measurement, what changed.
 - `FixReport` — `rewritten`, `created` (measured against the disk) and `declined`;
@@ -503,7 +594,11 @@ Tests: `tests/test_config_sync.py`, `tests/test_flow_composition.py`,
 (the adversarial half), `tests/test_config_check_names_what_it_could_not_verify.py`,
 `tests/acceptance/features/ignore_block_drift.feature` for the ignore block, and
 `tests/acceptance/onboarding/config-check/orphaned_adapters.feature` +
-`tests/test_orphaned_adapters.py` for the adapters of a dropped tool.
+`tests/test_orphaned_adapters.py` for the adapters of a dropped tool, and
+`tests/acceptance/onboarding/config-check/one_verdict_wherever_it_runs.feature`,
+`tests/unit/onboarding/config_sync/test_config_check_gives_one_verdict_wherever_it_runs.py`
+and `tests/integration/onboarding/config_sync/test_the_verdict_names_what_it_compared.py`
+for one verdict in the checkout, a worktree and a clean room.
 
 ## What is still not checked, measured
 

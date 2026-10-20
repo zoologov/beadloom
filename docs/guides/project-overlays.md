@@ -58,14 +58,27 @@ rather than a budget the core is held under.
 Layers 1–3 ship inside the `beadloom` wheel and change when you upgrade. Layer 4 is
 yours and never does.
 
-Four kinds of artifact compose, and each has its own project fragment:
+Five kinds of artifact compose, and each has its own project fragment. The table says
+which tool each kind reaches, because a fragment reaches only the files its kind is
+written to:
 
-| kind | written to | your fragment |
-|------|-----------|---------------|
-| `roles` | `.claude/agents/<role>.md`, `.cursor/agents/<role>.md` | `.beadloom/flow/roles/<role>.md` |
-| `commands` | `.claude/commands/<cmd>.md` | `.beadloom/flow/commands/<cmd>.md` |
-| `claude` | `.claude/CLAUDE.md` | `.beadloom/flow/claude/CLAUDE.md` |
-| `docs` | the skeletons `beadloom docs generate` writes | `.beadloom/flow/docs/<kind>.md` |
+| kind | written to | reaches | your fragment |
+|------|-----------|---------|---------------|
+| `roles` | `.claude/agents/<role>.md`, `.cursor/agents/<role>.md` | every tool | `.beadloom/flow/roles/<role>.md` |
+| `commands` | `.claude/commands/<cmd>.md`; `.cursor/rules/beadloom-<cmd>.mdc` when `cursor` is declared | every tool | `.beadloom/flow/commands/<cmd>.md` |
+| `claude` | `.claude/CLAUDE.md`; read again by the `cursor` kind | every tool's core | `.beadloom/flow/claude/CLAUDE.md` |
+| `cursor` | `.cursor/rules/beadloom-flow.mdc`, the core Cursor reads, when `cursor` is declared | Cursor only | `.beadloom/flow/cursor/CLAUDE.md` |
+| `docs` | the skeletons `beadloom docs generate` writes | no tool, the documents | `.beadloom/flow/docs/<kind>.md` |
+
+A rule for every agent of the project, such as a Definition of Done, goes into
+`.beadloom/flow/claude/CLAUDE.md`. The `cursor` kind composes the same core and the
+same overlays and reads that fragment first, so Cursor's core rule carries it from the
+one copy, and `.beadloom/flow/cursor/CLAUDE.md` is appended after it for text meant for
+Cursor alone. Up to 9.0.0 the `claude` and `commands` kinds were written under `.claude/`
+only, and a fragment in them never reached Cursor (BDL-UX #356). `config-check` now
+names a declared tool whose files carry fewer layers than another declared tool's, at
+`error`, with the layers it lacks; the [tool-reach SPEC](../domains/onboarding/features/tool-reach/SPEC.md)
+states the comparison.
 
 Role names are `dev`, `explore`, `review`, `tech-writer`, `test`. Command names are
 `coordinator`, `task-init`, `checkpoint`, `templates`. Doc kinds are `overview`,
@@ -76,7 +89,7 @@ anyone maintains. `role_composer.roles_in()` reads it out of the shipped
 `templates/roles/core/*.md.txt` fragments over a shape — a fragment is a role when
 its front matter names its own file — so dropping a fragment in makes the role
 exist for every reader at once, including `config-check`, the scaffold and the
-Cursor orchestrator pointer. The order is sorted, which is why `test` is last:
+composed core both tools read. The order is sorted, which is why `test` is last:
 `ROLE_NAMES` was `('dev', 'test', 'review', 'tech-writer')` before and is now
 `('dev', 'explore', 'review', 'tech-writer', 'test')`. A project that composed a
 `.beadloom/flow/roles/<role>.md` fragment for the four keeps it. `explore` gets a

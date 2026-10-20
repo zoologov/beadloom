@@ -71,3 +71,29 @@ Feature: a wave states what serialises its landings, and what the lock it names 
     When the wave shape is decided
     Then the wave reports "landing-order" as passed
     And the landing-order verdict states that it read no instruction
+
+  # BDL-083 S2g (BDL-UX #354, RFC D12). The slot is tracker state, exported into
+  # `.beads/issues.jsonl`, so its truth on the trunk is whatever commit last
+  # exported it. A release made after the push lands in no merged commit, and the
+  # next clone's `acquire` is refused naming a bead that is closed — while bd's
+  # own refusal offers `--wait`, a queue nothing drains. A closed bead cannot be
+  # waited on, so the plan names the one release that frees it.
+
+  @bead:beadloom-89gm
+  Scenario: A wave planned over a slot held by a closed bead names the one remedy
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the shared media were measured and are clean
+    And the landing slot is held by "gamma", a bead the tracker lists as "closed"
+    When the wave shape is decided
+    Then the wave reports "landing-order" as failed
+    And the landing-order verdict names the release "bd merge-slot release --holder gamma"
+
+  @bead:beadloom-89gm
+  Scenario: A slot held by a bead still in progress is a neighbour's landing, not a stale hold
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the shared media were measured and are clean
+    And the landing slot is held by "gamma", a bead the tracker lists as "in_progress"
+    When the wave shape is decided
+    Then the wave reports "landing-order" as passed

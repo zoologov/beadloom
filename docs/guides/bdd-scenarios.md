@@ -211,7 +211,10 @@ trusted the check.
 The population is the honest one: `for: {kind: feature}` selects all **51** declared feature
 nodes, of which 32 are covered. The suite holds 650 scenarios in 115 files. BDL-062's
 measurement of 2026-08-26 read **59** findings, a population of **42** with 10 covered, and 92
-scenarios in 20 files. The uncovered count falls whenever a bead binds a
+scenarios in 20 files. Re-measured on 2026-10-20 at `e7f2ba5c` (BDL-083 S2, which declared the
+feature `tool-reach`): 48 findings, 18 of the first kind, 29 of the second and 1 of the third,
+over the **52** declared features, **34** of them covered, and 834 scenarios in 160 files. The
+uncovered count falls whenever a bead binds a
 scenario to a node its work touched, and the population grows whenever a feature node is
 declared, so the two move independently and neither is a target. A hand-picked `ref_id` list
 would report 0 by construction, which is the false

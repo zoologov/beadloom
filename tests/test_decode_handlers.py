@@ -496,23 +496,16 @@ JUDGED_NARROW_DECODES: dict[str, NarrowDecode] = {
         ),
         until=_JUDGED_BY_67,
     ),
-    "onboarding/scanner/claude_md.py::refresh_claude_md#1": NarrowDecode(
-        reads="the adopter's CLAUDE.md, read to locate the composed markers before rewriting it",
+    "onboarding/scanner/claude_md.py::refresh_auto_regions#1": NarrowDecode(
+        reads=(
+            "a file carrying the composed core (the adopter's CLAUDE.md, the Cursor core "
+            "rule), read to locate the composed markers before rewriting it"
+        ),
         catches="OSError",
         reason=(
             "answers an empty change list, so nothing is rewritten; of every row here this one "
             "sits closest to a write, and a decode failure ends the refresh with the file's "
             "future undecided"
-        ),
-        until=_JUDGED_BY_67,
-    ),
-    "onboarding/scanner/project_scan.py::_detect_project_name#1": NarrowDecode(
-        reads="an adopter's package.json, read for the project name",
-        catches="json.JSONDecodeError, KeyError",
-        reason=(
-            "falls back to the directory name, so a missing name is not fatal; the caught set "
-            "names no OSError at all, and only an is_file() check ahead of it keeps that second "
-            "narrowness unreachable"
         ),
         until=_JUDGED_BY_67,
     ),

@@ -8,7 +8,7 @@ Source: `src/beadloom/application/reindex/` (package; decomposed by cohesion in 
 
 ### Purpose
 
-The reindex module orchestrates the complete data pipeline that transforms YAML graph definitions, Markdown documentation, and source code into a queryable SQLite database. It provides two modes: a full reindex that drops all tables and rebuilds from scratch, and an incremental reindex that processes only changed files. The incremental path uses SHA-256 file hashes stored in a `file_index` table to detect changes, and falls back to full reindex when graph YAML files change or no prior file index exists.
+The reindex module orchestrates the complete data pipeline that transforms YAML graph definitions, Markdown documentation, and source code into a queryable SQLite database. It provides two modes: a full reindex that drops all tables and rebuilds from scratch, and an incremental reindex that processes only changed files. The incremental path uses SHA-256 file hashes stored in a `file_index` table to detect changes, and falls back to full reindex when graph YAML files change or no prior file index exists. Every path the index stores — `file_index`, `code_symbols`, `code_imports`, `docs`, `declared_docs` and the pairs derived from them — is written as `relative_to(root).as_posix()`, with forward slashes on every platform (BDL-083 S2f, RFC D11): until then a Windows checkout stored backslashes, which no `source:` matched. An index an older version built on Windows is rebuilt by `reindex --full`, and `doctor` names it.
 
 ### Data Structures
 

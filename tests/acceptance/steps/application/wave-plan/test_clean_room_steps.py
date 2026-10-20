@@ -197,9 +197,14 @@ def _the_invocation_sets_pythonpath(world: dict[str, Any]) -> None:
     assert any(f"PYTHONPATH={room / 'src'}" in line for line in world["last"].invocation)
 
 
-@then("the invocation prints where beadloom was imported from")
-def _the_invocation_checks_the_import(world: dict[str, Any]) -> None:
-    assert any("import beadloom" in line for line in world["last"].invocation)
+@then(
+    parsers.parse(
+        'the invocation prints where the project\'s own module "{module}" was imported from'
+    )
+)
+def _the_invocation_checks_the_import(world: dict[str, Any], module: str) -> None:
+    """The module is the project's, read from its sources (BDL-UX #333), never this tool's."""
+    assert any(f"import {module};" in line for line in world["last"].invocation)
 
 
 @given(parsers.parse('the working tree changes "{path}" again'))

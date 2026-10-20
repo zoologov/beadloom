@@ -156,6 +156,10 @@ it answers the same in a fresh CI checkout, and `beadloom docs spaces` the live
 - `read_tracker_export(project_root)` — the committed export as a `TrackerRead`.
 - `jsonl_records(project_root)` — the tracked export as records, or `None` when
   no file was readable.
+- `records_from_jsonl(text)` — the lines of an export's text that read as JSON objects,
+  the rest skipped. `jsonl_records` reads the working-tree file through it, and since
+  BDL-083 S2g `landing_slot.check_push` reads the export inside a pushed commit through it,
+  so the two cannot disagree about what a record is.
 - `describe_unresolved(reasons)` — the unresolved bucket's composition as one
   clause, shared by the gate and the command so one bucket cannot be described
   two ways.

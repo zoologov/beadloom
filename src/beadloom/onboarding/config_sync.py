@@ -22,7 +22,7 @@ regions so editing user-authored prose can never trip it (avoids the
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from beadloom.infrastructure.exit_condition import exit_condition_deadline
@@ -31,11 +31,14 @@ from beadloom.onboarding.agentic_flow_setup import (
     COMMAND_FILES,
     composed_claude_md,
     composed_command,
+    cursor_rules,
 )
+from beadloom.onboarding.composed_core import core_state, refresh_core_regions
 from beadloom.onboarding.composer import (
     CLAUDE_ARTIFACT_NAME,
     COMPOSED_MARKER,
     PROJECT_FLOW_DIRNAME,
+    compose,
     project_fragment_path,
 )
 from beadloom.onboarding.flow_config import (
@@ -47,7 +50,6 @@ from beadloom.onboarding.flow_config import (
 from beadloom.onboarding.flow_manifest import (
     FLOW_MANIFEST_RELPATH,
     ArtifactState,
-    classify,
     load_manifest,
     read_manifest,
     state_of,
@@ -61,9 +63,13 @@ from beadloom.onboarding.ignore_block import (
     IGNORE_RELPATH,
     ignore_block_findings,
 )
+from beadloom.onboarding.project_name import (
+    PROJECT_NAME_KEY,
+    ProjectName,
+    composition_project_name,
+)
 from beadloom.onboarding.role_adapters import (
     TOOL_AGENT_DIRS,
-    cursor_rules_relpath,
     generate_adapters,
     orphaned_adapters,
 )
@@ -73,13 +79,15 @@ from beadloom.onboarding.role_map import role_map_report
 from beadloom.onboarding.scanner import (
     _RULES_ADAPTER_TEMPLATE,
     _RULES_CONFIGS,
-    _detect_project_name,
     _is_beadloom_adapter,
-    blank_auto_regions,
     build_agents_md_content,
     generate_agents_md,
-    refresh_claude_md,
     setup_rules_auto,
+)
+from beadloom.onboarding.tool_reach import (
+    cursor_command_rule_relpath,
+    cursor_core_rule_relpath,
+    layer_gaps,
 )
 
 if TYPE_CHECKING:
@@ -183,6 +191,9 @@ class FixReport:
 _AGENTS_CUSTOM_START = "<!-- beadloom:custom-start -->"
 _AGENTS_CUSTOM_END = "<!-- beadloom:custom-end -->"
 
+#: The composed core Claude reads, the file the body check compares.
+_CLAUDE_MD_RELPATH = ".claude/CLAUDE.md"
+
 
 def _agents_auto_region(text: str) -> str:
     """Return everything in AGENTS.md OUTSIDE the user ``custom`` block.
@@ -230,18 +241,19 @@ def _agents_md_drift(project_root: Path) -> ConfigDrift | None:
     )
 
 
-def _claude_md_drift(project_root: Path) -> ConfigDrift | None:
-    """Drift for the auto-managed sections of ``.claude/CLAUDE.md``.
+def _core_region_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Drift for the auto-managed sections of every file carrying the composed core.
 
-    Reuses ``refresh_claude_md(dry_run=True)`` which returns the names of
-    auto-managed sections whose regenerated content differs from disk.
-    Content outside the markers is checked separately by
-    :func:`_claude_md_body_drift` against the composition result.
+    ``.claude/CLAUDE.md`` and the Cursor core rule carry one composed core with
+    the same rendered sections, so each is read through
+    :func:`~beadloom.onboarding.composed_core.refresh_core_regions` in dry-run
+    mode, and a section that moved is named in each file it moved in, with the
+    one remedy that re-renders both. Until BDL-083 S2R pass 1 Major 1 only
+    CLAUDE.md was read here, and a release reached the Cursor rule as a
+    composition that had moved. Content outside the markers is checked
+    separately against the composition (:func:`_claude_md_body_drift`,
+    :func:`_cursor_rule_drifts`).
     """
-    claude_md_path = project_root / ".claude" / "CLAUDE.md"
-    if not claude_md_path.is_file():
-        return None
-
     try:
         resolve_flow_config(project_root)
     except FlowConfigError:
@@ -251,19 +263,94 @@ def _claude_md_drift(project_root: Path) -> ConfigDrift | None:
         # :func:`_flow_config_drift` at `error`; naming the symptom here as a
         # second independent finding would double-count one root cause — the
         # same reason :func:`_claude_md_body_drift` returns early.
-        return None
+        return []
 
-    changed = refresh_claude_md(project_root, dry_run=True)
-    if not changed:
-        return None
+    return [
+        ConfigDrift(
+            file=relpath,
+            reason=f"auto-managed section(s) stale: {', '.join(sorted(changed))}",
+        )
+        for relpath, changed in refresh_core_regions(project_root, dry_run=True).items()
+    ]
 
-    return ConfigDrift(
-        file=".claude/CLAUDE.md",
-        reason=(
-            "auto-managed section(s) stale: "
-            f"{', '.join(sorted(changed))}"
-        ),
+
+@dataclass(frozen=True)
+class ClaudeComparison:
+    """What the ``CLAUDE.md`` body check composed from and what it compared (BDL-UX #334).
+
+    ``compared`` is the file on disk; ``composed_from`` the flow configuration the
+    composition was resolved from; ``layers`` the label of every layer it read,
+    a project layer with its path; ``name`` the project's name and its source.
+    Named on every run, because a verdict that does not say what it compared
+    cannot be told apart from one that compared something else.
+    """
+
+    compared: str
+    composed_from: str
+    layers: tuple[str, ...]
+    name: ProjectName
+
+    def describe(self) -> str:
+        """One sentence naming both files, the layers and the name's source."""
+        text = (
+            f"compared {self.compared} against its composition from {self.composed_from}, "
+            f"layers {', '.join(self.layers)}, with the project name "
+            f"'{self.name.value}' from {self.name.source}"
+        )
+        if self.name.declared:
+            return text
+        return (
+            f"{text}; no file declares the name, so the heading's name is not compared "
+            f"— declare `{PROJECT_NAME_KEY}:` in .beadloom/config.yml to compare it"
+        )
+
+
+def _comparison(project_root: Path, config: FlowConfig) -> ClaudeComparison:
+    """The inputs of the ``CLAUDE.md`` body comparison for a resolved *config*."""
+    composition = compose("claude", CLAUDE_ARTIFACT_NAME, config=config, project_root=project_root)
+    layers = tuple(
+        f"{fragment.layer} ({fragment.source})"
+        if fragment.layer.startswith("project")
+        else fragment.layer
+        for fragment in composition.fragments
     )
+    flow = FLOW_CONFIG_RELPATH.as_posix()
+    composed_from = (
+        flow
+        if (project_root / FLOW_CONFIG_RELPATH).is_file()
+        else f"the default flow configuration (no {flow})"
+    )
+    return ClaudeComparison(
+        compared=_CLAUDE_MD_RELPATH,
+        composed_from=composed_from,
+        layers=layers,
+        name=composition_project_name(project_root),
+    )
+
+
+def claude_md_comparison(project_root: Path) -> ClaudeComparison | None:
+    """What the ``CLAUDE.md`` body check compares, or ``None`` when it compares nothing.
+
+    ``None`` for a project with no ``.claude/CLAUDE.md``, for a body whose
+    ownership neither the manifest nor the stamp proves (reported as unverified
+    by the drift check, not compared) and for a flow configuration that does
+    not load (reported by the flow-config drift).
+    """
+    claude_md_path = project_root / _CLAUDE_MD_RELPATH
+    if not claude_md_path.is_file():
+        return None
+    try:
+        raw = claude_md_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    manifest, _ = read_manifest(project_root)
+    if manifest.get(_CLAUDE_MD_RELPATH) is None and COMPOSED_MARKER not in raw:
+        return None
+    try:
+        config = resolve_flow_config(project_root)
+    except FlowConfigError:
+        return None
+    return _comparison(project_root, config)
 
 
 def _claude_md_body_drift(project_root: Path) -> ConfigDrift | None:
@@ -311,25 +398,26 @@ def _claude_md_body_drift(project_root: Path) -> ConfigDrift | None:
     except FlowConfigError:
         # Reported by :func:`_flow_config_drift`; don't double-report.
         return None
-    project_name = _detect_project_name(project_root)
-    expected = blank_auto_regions(
-        composed_claude_md(config, project_root, project_name=project_name)
-    )
-    shipped_only = blank_auto_regions(
-        composed_claude_md(config, None, project_name=project_name)
-    )
-    state = classify(
-        on_disk=blank_auto_regions(raw),
-        expected=expected,
+    comparison = _comparison(project_root, config)
+    project_name = comparison.name.value
+    state = core_state(
+        on_disk=raw,
+        expected=composed_claude_md(config, project_root, project_name=project_name),
         recorded=recorded,
-        alternates=(shipped_only,),
+        alternates=(composed_claude_md(config, None, project_name=project_name),),
         # Two independent pieces of evidence, so deleting the generated manifest
         # is not a way to downgrade a hand edit to a warning: the stamp is
         # written only by a manifest-era composer, so a stamped file that no
         # manifest accounts for was edited, not inherited (BDL-061 `.57`).
         accounted=manifest_usable or stamped,
     )
-    return _state_drift(relpath, state, kind="claude", name=CLAUDE_ARTIFACT_NAME)
+    return _state_drift(
+        relpath,
+        state,
+        kind="claude",
+        name=CLAUDE_ARTIFACT_NAME,
+        compared=comparison.describe(),
+    )
 
 
 def _unverifiable_body_drift(
@@ -387,8 +475,27 @@ def _state_drift(
     *,
     kind: str,
     name: str,
+    compared: str | None = None,
 ) -> ConfigDrift | None:
-    """Project an :class:`ArtifactState` onto a :class:`ConfigDrift` (or ``None``)."""
+    """Project an :class:`ArtifactState` onto a :class:`ConfigDrift` (or ``None``).
+
+    ``compared`` names what the comparison read (:meth:`ClaudeComparison.describe`)
+    and is appended to the reason, so the finding names both files (#334).
+    """
+    drift = _state_finding(relpath, state, kind=kind, name=name)
+    if drift is None or compared is None:
+        return drift
+    return replace(drift, reason=f"{drift.reason}; {compared}")
+
+
+def _state_finding(
+    relpath: str,
+    state: ArtifactState,
+    *,
+    kind: str,
+    name: str,
+) -> ConfigDrift | None:
+    """The finding one :class:`ArtifactState` reads as, before its inputs are named."""
     if state is ArtifactState.CLEAN:
         return None
     overlay = PROJECT_FLOW_DIRNAME / kind / f"{name}.md"
@@ -488,15 +595,38 @@ def _adapter_drifts(project_root: Path) -> list[ConfigDrift]:
     return drifts
 
 
-#: Kinds of canonical flow file, paired with their name tuple. The scaffold
-#: writes each under ``.claude/<kind>/<name>.md`` as the composition for that
-#: project's own flow, so the comparison is against a composition rather than
-#: against fixed bytes. Mirrors
-#: :data:`agentic_flow_setup.AGENT_FILES`/``COMMAND_FILES``.
-_AGENTIC_FLOW_KINDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("agents", AGENT_FILES),
-    ("commands", COMMAND_FILES),
-)
+def _declared_tools(project_root: Path) -> tuple[str, ...]:
+    """The tools this project's flow declares; ``claude`` when it declares none it can read.
+
+    ``claude`` for an absent or invalid ``flow.yml`` because that is the tool the
+    scaffold composed for before ``tools:`` existed. An invalid one is reported
+    by :func:`_flow_config_drift`, so the fallback names no false file.
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return ("claude",)
+    try:
+        return load_flow_config(project_root).tools
+    except FlowConfigError:
+        return ("claude",)
+
+
+def _canonical_flow_files(tools: tuple[str, ...]) -> tuple[str, ...]:
+    """Every flow file the scaffold writes for ``tools``, project-relative.
+
+    The population follows ``tools:``. Until BDL-083 S2h it was
+    ``.claude/agents/*`` and ``.claude/commands/*`` whatever the flow declared,
+    so a project composed for Cursor alone was warned five times that a
+    ``.claude/agents/<role>.md`` it was never given was missing, and the files a
+    Cursor agent does read were in no population at all (BDL-UX #356). The
+    ``.claude/commands/*`` set stays in for every flow because the scaffold
+    writes it for every flow.
+    """
+    files = [str(TOOL_AGENT_DIRS[tool] / f"{name}.md") for tool in tools for name in AGENT_FILES]
+    files.extend(f".claude/commands/{name}.md" for name in COMMAND_FILES)
+    if "cursor" in tools:
+        files.append(str(cursor_core_rule_relpath()))
+        files.extend(str(cursor_command_rule_relpath(name)) for name in COMMAND_FILES)
+    return tuple(files)
 
 
 @dataclass(frozen=True)
@@ -525,11 +655,9 @@ def _flow_scaffold(project_root: Path, manifest: dict[str, str]) -> _FlowScaffol
     """
     present: list[str] = []
     missing: list[str] = []
-    for kind, names in _AGENTIC_FLOW_KINDS:
-        for name in names:
-            relpath = f".claude/{kind}/{name}.md"
-            target = present if (project_root / relpath).is_file() else missing
-            target.append(relpath)
+    for relpath in _canonical_flow_files(_declared_tools(project_root)):
+        target = present if (project_root / relpath).is_file() else missing
+        target.append(relpath)
     adopted = bool(present) and (
         any(relpath in manifest for relpath in (*present, *missing))
         or (project_root / FLOW_CONFIG_RELPATH).is_file()
@@ -650,6 +778,13 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
         if drift is not None:
             drifts.append(drift)
 
+    if "cursor" in config.tools:
+        drifts.extend(
+            _cursor_rule_drifts(
+                project_root, config, scaffold_state, manifest, manifest_usable=manifest_usable
+            )
+        )
+
     if not flow_yml:
         # Without a flow.yml the role files come from this same function's own
         # scaffold path (`include_agents=True`), which since `beadloom-iur5`
@@ -679,6 +814,96 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
             if drift is not None:
                 drifts.append(drift)
     return drifts
+
+
+def _read_text(path: Path) -> str | None:
+    """The file's text, or ``None`` for one that is absent or unreadable."""
+    try:
+        return path.read_text(encoding="utf-8") if path.is_file() else None
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _cursor_rule_drifts(
+    project_root: Path,
+    config: FlowConfig,
+    scaffold_state: _FlowScaffold,
+    manifest: dict[str, str],
+    *,
+    manifest_usable: bool,
+) -> list[ConfigDrift]:
+    """Drift for the ``.cursor/rules/*.mdc`` files a Cursor agent reads the flow from.
+
+    The same projection the commands and ``CLAUDE.md`` go through: a rule
+    Beadloom wrote that the composition has moved past is stale, a rule somebody
+    changed is hand-edited and never rewritten. The core rule's project layer for
+    a Cursor-only addition is ``.beadloom/flow/cursor/``, a command's is
+    ``.beadloom/flow/commands/`` (BDL-UX #356, RFC D13). The core rule is compared
+    as ``CLAUDE.md`` is, its rendered sections blanked (BDL-083 S2R pass 1 Major 1).
+    """
+    expected = cursor_rules(config, project_root)
+    core = str(cursor_core_rule_relpath())
+    drifts: list[ConfigDrift] = []
+    if core not in scaffold_state.missing:
+        # The core rule is a carrier of the composed core: its rendered sections
+        # are blanked here and named by :func:`_core_region_drifts`, as they are
+        # for CLAUDE.md, so a release is not reported as a composition that moved.
+        state = core_state(
+            on_disk=_read_text(project_root / core),
+            expected=expected[core],
+            recorded=manifest.get(core),
+            accounted=manifest_usable,
+        )
+        drift = _state_drift(core, state, kind="cursor", name=CLAUDE_ARTIFACT_NAME)
+        if drift is not None:
+            drifts.append(drift)
+    for name in COMMAND_FILES:
+        relpath = str(cursor_command_rule_relpath(name))
+        if relpath in scaffold_state.missing:
+            continue  # already reported as missing; there is nothing to diff
+        state = state_of(
+            project_root,
+            relpath,
+            expected=expected[relpath],
+            manifest=manifest,
+            accounted=manifest_usable,
+        )
+        drift = _state_drift(relpath, state, kind="commands", name=name)
+        if drift is not None:
+            drifts.append(drift)
+    return drifts
+
+
+def _layer_gap_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Report a declared tool whose files carry fewer layers than another declared tool's.
+
+    Measured on 9.0.0: a project composed for Claude and Cursor gave Claude the
+    core, the project layer, the STACK overlay and the four commands, gave Cursor
+    the role files and a pointer, and ``config-check`` compared nothing across
+    the two (BDL-UX #356). The comparison is
+    :func:`~beadloom.onboarding.tool_reach.layer_gaps`; this projects it.
+
+    ``error`` although it turns a project 9.0.0 composed for both tools red on
+    upgrade, and that is the reason for it rather than against it: the project
+    was missing the rules on one tool before the release, the release only
+    makes it visible, and ``--fix`` composes what is missing. The exit-code move
+    is recorded as one (RFC D13, the Public API section).
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return []
+    try:
+        config = load_flow_config(project_root)
+    except FlowConfigError:
+        return []  # reported by :func:`_flow_config_drift`
+    return [
+        ConfigDrift(
+            file=gap.file,
+            reason=gap.why,
+            severity="error",
+            remediation=gap.remediation,
+        )
+        for gap in layer_gaps(project_root, config)
+    ]
 
 
 def _flow_config_drift(project_root: Path) -> ConfigDrift | None:
@@ -722,6 +947,7 @@ def _project_layer_drift(project_root: Path) -> ConfigDrift | None:
     fragments: list[str] = []
     for kind, names in (
         ("claude", (CLAUDE_ARTIFACT_NAME,)),
+        ("cursor", (CLAUDE_ARTIFACT_NAME,)),
         ("commands", COMMAND_FILES),
         ("roles", ROLE_NAMES),
     ):
@@ -994,7 +1220,7 @@ def _composed_corpus(config: FlowConfig, project_root: Path) -> tuple[str, ...]:
     texts.extend(compose_all_roles(config, project_root).values())
     texts.append(
         composed_claude_md(
-            config, project_root, project_name=_detect_project_name(project_root)
+            config, project_root, project_name=composition_project_name(project_root).value
         )
     )
     return tuple(texts)
@@ -1179,6 +1405,7 @@ def refresh_agentic_flow_files(project_root: Path) -> list[str]:
     written.extend(f"commands/{name}.md" for name in result.commands_written)
     if result.claude_md is not None:
         written.append("CLAUDE.md")
+    written.extend(result.cursor_rules_written)
     return written
 
 
@@ -1196,7 +1423,8 @@ def _fix_surface(project_root: Path) -> tuple[str, ...]:
     paths |= {f".claude/commands/{name}.md" for name in COMMAND_FILES}
     for agent_dir in TOOL_AGENT_DIRS.values():
         paths |= {str(agent_dir / f"{role}.md") for role in ROLE_NAMES}
-    paths.add(str(cursor_rules_relpath()))
+    paths.add(str(cursor_core_rule_relpath()))
+    paths |= {str(cursor_command_rule_relpath(name)) for name in COMMAND_FILES}
     paths |= {config["path"] for config in _RULES_CONFIGS.values()}
     paths |= set(load_manifest(project_root))
     return tuple(sorted(paths))
@@ -1232,7 +1460,7 @@ def apply_config_fixes(project_root: Path) -> FixReport:
     report never means somebody's text was lost.
     """
     before = _surface_digests(project_root)
-    refresh_claude_md(project_root)
+    refresh_core_regions(project_root)
     generate_agents_md(project_root)
     setup_rules_auto(project_root)
     # Never force the flow onto a repo that did not adopt it; no-op if absent.
@@ -1273,9 +1501,7 @@ def check_config_drift(
     if agents is not None:
         drifts.append(agents)
 
-    claude = _claude_md_drift(project_root)
-    if claude is not None:
-        drifts.append(claude)
+    drifts.extend(_core_region_drifts(project_root))
 
     body = _claude_md_body_drift(project_root)
     if body is not None:
@@ -1296,5 +1522,6 @@ def check_config_drift(
     drifts.extend(_ignore_block_drifts(project_root))
     drifts.extend(_composed_adapter_drifts(project_root))
     drifts.extend(_orphaned_adapter_drifts(project_root))
+    drifts.extend(_layer_gap_drifts(project_root))
 
     return sorted(drifts, key=lambda d: (d.file, d.reason))

@@ -60,6 +60,7 @@ is what holds that line.
 | `version_surface.py` | `version-surface` |
 | `bd_calls.py` | `bd-calls` |
 | `issue_number.py` | `issue-number allocate`, `issue-number check` |
+| `landing_check.py` | `landing-check` |
 
 `docs site` renders what `application.site.generate_site` wrote (BDL-076 B1, B2, `beadloom-ujzb.13`, `beadloom-ujzb.20`): `Generated N files under <out>`, then the scaffold line `Scaffold (beadloom <version>): N written, N updated, N unchanged, N retired, N empty folders retired, N moved pages retired, N copied from .beadloom/site/` (the moved pages since BDL-081 R2: the node pages `application.site.moved_pages.retire_moved_pages` removed from a section the node's page has left, a section they leave empty counted with the empty folders), then on stderr every file it kept with the reason and the remedy. A `site:` block it cannot use exits 1 before anything is written, each refusal printed as `site.<key>: <why>` with its remedy. Its `--out` defaults to `onboarding.ignore_block.PORTAL_DIR`, the directory `init` ignores. On stderr it warns when `site.base` is `/` and `origin` is a `github.com` project repository, which Pages serves under `/<repo>/` (`application.site.pages_base.base_warning`), and since BDL-080 S4c when the portal was built from a commit no branch of `origin` holds (`_warn_about_an_unpublished_commit` over `application.site.source_ref.unpublished_warning`: `Warning: the portal was built from <short sha>, which is on no branch of origin, so its source links point at <branch> instead; ...`, or, with no stand-in, ``... and no branch of origin stands in for it, so its source links point at <short sha> and stay dead until it is pushed. Push it, or record origin's default branch with `git remote set-head origin --auto`, and run `beadloom docs site` again.``; only `origin`'s branches count since BDL-080 S4h); the exit code is the generation's. With `--pages-workflow` it then writes `.github/workflows/beadloom-portal.yml` through `application.site.pages_workflow.write_pages_workflow` and prints `Pages workflow: <path> <written|updated|unchanged|kept> (base <base>, Node <major>, portal <dir>/, branch <name>)`, or `no branch` with a stderr note naming `git remote set-head origin --auto` when git records no `origin/HEAD`. An `--out` outside the project exits 1 before anything is written.
 
@@ -84,11 +85,28 @@ and `tests/acceptance/application/reindex/the_index_names_the_code_it_could_not_
 
 `init` prints the same `Tests:` line after its reindex and, below it, every test file bound to no node, by path and placement (`_echo_test_binding`, BDL-078 `beadloom-76mk`), reading the index through `infrastructure.db.readonly_connection` (`beadloom-btkd.18`). The list is indented rather than prefixed, because under `--bootstrap` the prefix is a check mark. A project with no test file, or an index without the test tables, prints neither. `bootstrap_project` writes `tests: {flat_tests: true}` into `.beadloom/config.yml` for a project whose languages include `.py`.
 
+Three commands refuse a project root below the git root, by name and at exit 1 (BDL-083 S2e,
+BDL-UX #325, the owner's ruling of 2026-10-12): `init`, before any writer runs and in every
+mode (`_refuse_a_project_root_below_the_git_root` in `setup.py`); `sync-check --since`, before
+it validates the ref (`_refuse_since_below_the_git_root` in `docsync.py`), because there both
+sides of every pair read empty and every pair read `ok`; and `doctor`, which exits 1 whenever a
+check reads `ERROR`, the rule its Gate step applies to the same rows, and the `git_root` row is
+the only built-in `ERROR`. Each prints `infrastructure.git_root.NestedRoot.sentence()`, which
+names both roots. `sync-check` without `--since` is not refused: it translates its paths
+through `git rev-parse --show-prefix`. Tested in
+`tests/acceptance/infrastructure/git-root/a_project_root_below_the_git_root_is_refused.feature`.
+
 `ctx` states the node's activity in the node card's words (`_describe_activity`, BDL-078 F-activity): `Activity: <mark> <level> (N lines changed in 30 days)`, with `ACTIVITY_MARKS` giving one mark per level (`hot`, `warm`, `cool`, `quiet`, `dormant`), `no change in 30 days` / `no change in 90 days` for `quiet` / `dormant` from `NO_CHANGE_WORDS`, and the count through `count_in_words` (`1 line`, `1 commit`; `beadloom-btkd.18`). An activity recorded before changed lines were counted is said in commits.
 
 `ctx` prints the node's `Tests:` line from the bundle's `tests` key and, when any test file is unplaced, one line under it (BDL-074 C2): `_format_markdown` prints the bundle's `test_unplaced` sentence, which the builder stated against the test layout the index recorded (BDL-074 G2), and appends ", so the count above can be short". A bundle built before that key existed — the context cache keeps bundles — falls back to `context_oracle.test_binding.describe_unplaced` over its `test_placements`, which names the default layout's folders. A bundle with no unplaced file, or with neither key, prints no such line. Since `beadloom-2mj3.15` `_format_markdown` also prints the bundle's `test_recognition` clause under `Tests:`, capitalised, after the unplaced line when there is one, whether or not any file is unplaced: which paths a test file is read under, because a count of bound files is a count of the files those patterns matched. A bundle without that key (built before it, or over an index with no recorded test layout) prints no such line. Tested in `tests/unit/services/commands/test_the_ctx_markdown_states_the_tests_line.py` (moved there by BDL-074 F2), `tests/unit/services/commands/test_the_ctx_markdown_prints_the_bundles_unplaced_sentence.py` and `tests/unit/services/commands/test_the_ctx_markdown_says_which_files_count_as_tests.py`.
 
 `status --debt-report --category` narrows the Rich report with `dataclasses.replace(report, categories=...)`. The hand-built `DebtReport` it replaced named five fields and dropped every later one, `layer_populations` included; `replace` keeps `layer_populations` and `test_population`.
+
+`config-check` prints a `CLAUDE.md:` line on every run in which the body of
+`.claude/CLAUDE.md` is compared (`_echo_claude_comparison`, BDL-083 S2c, BDL-UX #334): the
+compared file, the flow configuration the composition was resolved from, its layers and the
+project name with its source, from `onboarding.claude_md_comparison`. The Gate's step summary
+ends with the same sentence.
 
 `config-check` prints three derivations beside the drift list, because none has a Gate
 step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
@@ -122,8 +140,17 @@ declared tool(s)` is a sentence rather than an empty list, because an empty list
 heading reads as "nothing to say here". Before `.84` the block named the composed
 `CLAUDE.md` for every project, including one whose `flow.yml` declares `cursor` alone.
 Measured on this repository, which declares `claude` alone: 1 of 1 tool, 16 designations, 6
-of them rosters, 5 not-judged lines. On a `cursor`-only project: 1 of 1 tool,
-`.cursor/rules/beadloom-flow.md`, 1 designation, 2 not-judged lines.
+of them rosters, 5 not-judged lines. On a `cursor`-only project, measured before BDL-083
+S2h: 1 of 1 tool, `.cursor/rules/beadloom-flow.md`, 1 designation, 2 not-judged lines. Since
+S2h the `cursor` map is `.cursor/rules/beadloom-flow.mdc`, the composed core, so its counts
+are the `claude` map's for the same declaration (BDL-UX #356).
+
+`setup.py` holds the writers whose output an adopter commits, and since BDL-083 S2h two of
+them changed what they write. `setup-agentic-flow` writes the composed core and the four
+commands as `.cursor/rules/*.mdc` rules for a flow declaring `cursor`, and prints each
+(`Wrote <rule> (cursor)`). `setup-mcp` writes the server command as `beadloom` instead of
+`shutil.which("beadloom")`'s absolute path, and says so on stderr when `beadloom` is not on
+PATH where it runs.
 
 `guard.py` prints one line no other verdict has: for an `unresolved` outcome — the guard could
 not evaluate itself — it states, between the `not checked:` lines and the `fix:` line, that the
@@ -161,7 +188,7 @@ also covers an unreadable change or survivor list, `--sample-of` without `--stat
 larger than its population, and a missing index. `--json` gains `change`,
 `survivors_by_node` and `sample`, each `null` when unused.
 
-`waves.py` gathers what the graph cannot see and renders what `application.waves` decided, at every wave size. It reads six things at the services edge and hands them over as a `WaveEnvironment`: what differs from `HEAD`, what the installed pre-commit hook judges, how many doc pairs are already stale, every instruction of the landing lock in the composed flow artifacts, the rows of the document every route of the composed `/task-init` writes, and the node population of the graph itself -- from the files through `each_graph_file` and from the index through `get_all_nodes`, held apart so that a difference between the plan's own two inputs is a verdict the application layer takes rather than one this edge takes for it (BDL-UX #261). The last population is DERIVED rather than listed, by `bd_seam.population.flow_artifacts` -- the agent directories come from `TOOL_AGENT_DIRS`, the slash commands from `COMMAND_FILES` and the project layer from `.beadloom/flow` -- so a tool added to the flow is read by the same act. The instructions are parsed by the seam's one grammar (`text_invocations`) and judged by `application.waves.landing`, which since BDL-068 S5 carries no grammar of its own. The composed file on disk is read rather than the composition, because what decides an agent's behaviour is the file it is handed: a template fixed and never recomposed leaves the instruction wrong and the check red, which is the correct verdict. Each
+`waves.py` gathers what the graph cannot see and renders what `application.waves` decided, at every wave size. It reads six things at the services edge and hands them over as a `WaveEnvironment`: what differs from `HEAD`, what the installed pre-commit hook judges, how many doc pairs are already stale, every instruction of the landing lock in the composed flow artifacts, the rows of the document every route of the composed `/task-init` writes, and the node population of the graph itself -- from the files through `each_graph_file` and from the index through `get_all_nodes`, held apart so that a difference between the plan's own two inputs is a verdict the application layer takes rather than one this edge takes for it (BDL-UX #261). The last population is DERIVED rather than listed, by `bd_seam.population.flow_artifacts` -- the agent directories come from `TOOL_AGENT_DIRS`, the slash commands from `COMMAND_FILES` and the project layer from `.beadloom/flow` -- so a tool added to the flow is read by the same act. The instructions are parsed by the seam's one grammar (`text_invocations`) and judged by `application.waves.landing`, which since BDL-068 S5 carries no grammar of its own. The composed file on disk is read rather than the composition, because what decides an agent's behaviour is the file it is handed: a template fixed and never recomposed leaves the instruction wrong and the check red, which is the correct verdict. Since BDL-083 S2g `_tracker_census` also returns who holds the landing slot, read by `application.landing_slot.slot_hold` from the same `bd list --all --json` answer the census reads, and `_environment` hands it over as `WaveEnvironment.landing_slot`: a second call for it would be a second population of one fact. Each
 wave prints its beads, the `gate_owner` that measures the combined tree, and the clean room
 each bead owes — `room-<bead-id>`, also under `rooms` in `--json`. Before BDL-068 S4 the gate
 owner and the shared media were printed only for a wave of more than one bead, so the
@@ -208,10 +235,25 @@ interpreter of its own); `2` no room was built. A tracker that answers and has n
 bead is a refusal rather than a finding, because a room named after a bead nobody holds cannot
 say whose it is; a tracker that cannot be reached is a finding, because refusing there would
 make the command unusable wherever `bd` is not installed. The room's own limits are printed
-beside its path — no `.git`, so a freshness check inside has no baseline, a verdict that is a
-claim about its files and never about the combined tree, and the optional extras its
+beside its path, as the list `application.waves.ROOM_LIMITS` holds and `limits` in `--json` —
+no `.git`, so a freshness check inside has no baseline and a test or tool that reads git fails
+or skips there for that reason and not for the bead's (BDL-UX #333), and a verdict that is a
+claim about its files and never about the combined tree — followed by the optional extras its
 invocation's interpreter has, because those and not the files decided 82 mypy errors against 0
-on one code base (BDL-UX #235, #243, #181, #236).
+on one code base (BDL-UX #235, #243, #181, #236). Since BDL-083 S2b the human shape also prints
+the `measured project:` the room was built for, and the `Measure in the room` hint is that
+project's — its sources, its first package and its `testpaths` — rather than this repository's
+layout; `--json` carries it as `distribution`, and `environment.lock` / `environment.resolution`
+say whether the environment came from the project's `uv.lock`. Since BDL-083 S2d (BDL-UX #335)
+a carried path that `HEAD` holds and the working tree does not is deleted in the room instead
+of refusing it with `file_missing`, so a rename is carried as its two sides: the human shape
+prints a `deleted in the room` line and `--json` a `deleted` list beside `carried`. Both shapes
+also name every file where the working tree differs from `HEAD` that the room does not carry —
+`not_carried` in `--json`, a list of `{path, change}` or `null` when git did not answer, and a
+block of at most twenty lines in the human shape — because those are what the room's verdict
+leaves out. A third limit says a carried file is copied whole, a neighbour's edits in it
+included. The exit codes do not move: a left-out difference is a report, not a finding, since
+every shared tree has one.
 
 Since BDL-UX #256 the command also gives the room the interpreter that verdict is taken
 under: `--extras` names the optional extras to install, the default being the union of every
@@ -232,6 +274,11 @@ the optional extras a leg installs against the ones this run has — and this re
 project's own extras with the distributions each absent one needs. The values of an axis are
 printed in a stable order: they come from a set, so an axis whose values are not versions was
 previously printed in the hash order of that set, which differs between processes.
+A census that derived no room — no readable pipeline, in the census's words — is printed as
+`rooms: not derived — <reason>` by `rooms`, carried as `not_derived` in `rooms --json`, and
+refused with the reason by `--dimension` (exit 2). `federation.py` prints the same sentence
+under the `ci` verdict in the rich and GitHub formats and carries `room.not_derived` in
+`--format json`, where 9.0.0 printed `0 of 0 declared room(s)` (BDL-083 S2a, BDL-UX #332).
 
 `typed_surface.py` renders what `application.typed_surface` derived: the files this project
 declares type-checked, read from its own `[tool.mypy]` (BDL-068 S4, BDL-UX #231). `--filter`
@@ -296,6 +343,19 @@ shorter than `PIPE_BUF` (512 bytes on Darwin), so a retry repeats nothing, and a
 that bound over the template. A verdict that names crashed steps is answered with "a step that
 crashed checked nothing" rather than "the findings above name their fixes", by the
 `step(s) crashed` clause a test holds against `crashed_clause`.
+
+Since BDL-083 S2g (`beadloom-89gm`, BDL-UX #354, RFC D12) the pre-push hook runs
+`beadloom landing-check --stdin` before the Gate, with git's own input: one line per pushed ref.
+`landing_check.py` reads those lines with `application.landing_slot.pushed_refs` and prints the
+verdict `check_push` returns, led by `Landing lock: ` (`LANDING_VERDICT_LEAD` in the template):
+exit `1` and `REFUSED` when the export at the pushed commit still holds the merge slot for a
+bead whose `Bead:` trailer the pushed commits carry, `0` and `clean` otherwise, `2` and
+`NOT CHECKED` when git could not answer or the input is not what git writes. The hook refuses
+the push only on `1` with a `REFUSED` verdict line, prints the verdict's lines (the release,
+`bd export`, the commit that lands the export by path, the sequence) and `--no-verify`. Any
+other answer prints its verdict, or `NOT CHECKED` when there is none, and the Gate runs as
+before. Without `--stdin` the command judges `HEAD` as a branch no remote holds yet. The move
+from `0` to `1` on a push 9.0.0 let through is an exit-code move of the hook.
 
 Since BDL-083 S1e a step that raises no longer ends `ci` (BDL-UX #318): the application layer
 reports it as an `ERROR` step and the command renders it. `_gate_verdict_line` puts the

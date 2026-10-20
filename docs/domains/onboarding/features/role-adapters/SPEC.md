@@ -23,15 +23,15 @@ expected result rather than drift (BDL-UX #139, #152).
   slash-command set (`.claude/commands/*`) is composed separately by
   `agentic_flow_setup` and is not regenerated here.
 - **cursor** → `.cursor/agents/<role>.md` (Cursor subagents — same composed
-  body) plus a thin `.cursor/rules/beadloom-flow.md` orchestrator pointer (the
-  coordinator-as-Cursor-mode entry point).
+  body).
 
-The pointer's list of roles is **rendered over `ROLE_NAMES`**, not typed into it (BDL-068
-S1.5). It used to spell the four names as prose, so a fifth role reached the composer, the
-adapters and the drift-guard and was absent from the one file that tells a Cursor user which
-roles exist. Since BDL-068 `.84` that rendering is also checked: `role-map` reads the
-pointer's composed body as the map a `cursor` project's reader opens, so a role the
-rendering stops covering is a finding rather than a silence.
+Until BDL-083 S2h this writer also wrote `.cursor/rules/beadloom-flow.md`, a 17-line
+pointer that named the roles and carried no core, no project layer and no command, so a
+Cursor agent ran the flow without them (BDL-UX #356). The pointer is retired: the scaffold
+writes the composed core and the four commands as `alwaysApply` rules under
+`.cursor/rules/`, and [`tool-reach`](../tool-reach/SPEC.md) states what each tool reads.
+`AdapterResult.extra` stays and is empty. `cursor_rules_body()` and `cursor_rules_relpath()`
+are gone with the pointer.
 
 ### Orphaned adapters — a tool that leaves `flow.yml`
 
@@ -52,9 +52,9 @@ for it, which tells a file that has already changed apart from one that has mere
 being watched. An undecodable body counts as diverged: `_write` writes UTF-8, so a body that
 will not decode as UTF-8 is not the one Beadloom wrote.
 
-`.cursor/rules/beadloom-flow.md` is **not** in this population, for the reason it is the
-stated exception below: no check compares that pointer on disk in either state, so calling
-it orphaned would imply it was guarded before the tool was dropped.
+`.cursor/rules/` is **not** in this population: the rules sit outside the agent directory
+the population is read from. When `cursor` leaves `tools:`, the `.cursor/rules/*.mdc` files
+are therefore not reported as orphaned; that is a stated limit, not a decision about them.
 
 Stated limit: provenance comes from the manifest, so a project whose
 `.beadloom/flow-manifest.json` was deleted has none and is under-reported here.
@@ -85,14 +85,9 @@ Stated limit: provenance comes from the manifest, so a project whose
   reading that a scaffold is an explicit instruction to compose. See
   [the agentic-flow-setup SPEC](../agentic-flow-setup/SPEC.md#one-policy-for-every-artifact-the-command-writes)
   for why that reading was retired (BDL-UX #191).
-- **`.cursor/rules/beadloom-flow.md` is the stated exception**: it is rewritten
-  unconditionally by both callers, because it is a four-line pointer whose own
-  body says it is generated, it carries no composed protocol and no check
-  compares the file against what Beadloom wrote. A residue named here rather
-  than a policy defended. Its composed **body** is read since BDL-068 `.84` by
-  [`role-map`](../role-map/SPEC.md), as the map a Cursor adopter opens to learn
-  which roles exist — a different question, and one that leaves the file on disk
-  as unguarded as this paragraph says it is.
+- The exception this list used to carry, the Cursor pointer rewritten
+  unconditionally, is gone with the pointer (BDL-083 S2h). The rules that replaced
+  it are written by the scaffold under the same policy as every other composed file.
 - Beadloom's own `.claude/agents/*` reproduce exactly from
   `compose_role(ddd, python)`.
 

@@ -1,0 +1,23 @@
+  # Component: who holds the landing slot in a tracker's records, and whether a push
+  # lands its own bead's hold (BDL-083 S2g, BDL-UX #354, RFC D12). A component rather
+  # than a feature: the capabilities an adopter runs are the wave plan and the
+  # pre-push hook, and this is the one answer both read.
+nodes:
+  - ref_id: landing-slot
+    kind: component
+    summary: "Who holds the landing slot in a tracker's records, and whether a push lands an export holding it for a bead the push carries"
+    source: src/beadloom/application/landing_slot.py
+    docs:
+      - docs/domains/application/components/landing-slot/DOC.md
+edges:
+  - src: landing-slot
+    dst: application
+    kind: part_of
+  # Declared here rather than in the consumers' files: the layout's own rule is that a
+  # node-adding bead writes the edges pointing at its new node into that node's file.
+  - src: wave-plan
+    dst: landing-slot
+    kind: depends_on
+  - src: cli-commands
+    dst: landing-slot
+    kind: depends_on

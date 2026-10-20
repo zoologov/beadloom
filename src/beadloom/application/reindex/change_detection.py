@@ -100,13 +100,13 @@ def _scan_project_files(
     graph_dir = project_root / ".beadloom" / "_graph"
     if graph_dir.is_dir():
         for f in sorted(graph_dir.glob("*.yml")):
-            rel = str(f.relative_to(project_root))
+            rel = f.relative_to(project_root).as_posix()
             files[rel] = (_compute_file_hash(f), "graph")
 
     # Doc files
     if docs_dir.is_dir():
         for f in sorted(docs_dir.rglob("*.md")):
-            rel = str(f.relative_to(project_root))
+            rel = f.relative_to(project_root).as_posix()
             files[rel] = (_compute_file_hash(f), "doc")
 
     # Code files
@@ -117,7 +117,7 @@ def _scan_project_files(
         for f in sorted(scan_dir.rglob("*")):
             if f.suffix not in _CODE_EXTENSIONS or not f.is_file():
                 continue
-            rel = str(f.relative_to(project_root))
+            rel = f.relative_to(project_root).as_posix()
             files[rel] = (_compute_file_hash(f), "code")
 
     return files

@@ -134,12 +134,16 @@ Draft  →  Approved  →  Done
      by plan-local KEY:
 
      ```bash
-     bd create --graph plan.json --json    # -> {"ids": {"dev": "proj-fac", ...}}
+     plan="$(mktemp -d)/plan.json"         # an absolute path outside the project
+     # write the plan to "$plan", then:
+     bd create --graph "$plan" --json      # -> {"ids": {"dev": "proj-fac", ...}}
      ```
 
-     where `plan.json` is `{"nodes": [{"key": "dev", "title": "...", "type": "task",
+     where the plan file holds `{"nodes": [{"key": "dev", "title": "...", "type": "task",
      "parent_id": "<parent-id>"}], "edges": [{"from_key": "test", "to_key": "dev",
-     "type": "blocks"}]}`. Measured on bd 1.0.4: a 60-bead DAG with 59 edges cost 69.45 s
+     "type": "blocks"}]}`. The plan is input to one command and not a document, so it
+     goes into a temporary directory, as the MCP `task_init` tool writes its own: a plan
+     file left in the document folder is an untracked file nobody reads again. Measured on bd 1.0.4: a 60-bead DAG with 59 edges cost 69.45 s
      over 119 processes created one at a time, against 1.15 s over one process from a
      plan. A node key spelled `parent` instead of `parent_id` is silently ignored — exit
      0, no parent set.
@@ -219,8 +223,10 @@ graph LR
    rather than typed — `beadloom axes .claude/development/docs/features/{ISSUE-KEY}/BRIEF.md --refs`:
    ```bash
    bd create --type {type} --title "{ISSUE-KEY}: [Name]" --description "..." --json
-   # If multiple subtasks: one plan, one process, every edge named by key
-   bd create --graph plan.json --json
+   # If multiple subtasks: one plan, one process, every edge named by key,
+   # the plan file in a temporary directory outside the project
+   plan="$(mktemp -d)/plan.json"
+   bd create --graph "$plan" --json
    ```
 
    The title carries the work-item key and never a bead number — the number is
@@ -268,7 +274,7 @@ All documents MUST use templates from `/templates`. No improvisation.
 - [ ] PLAN.md created with `Status: Draft` (beads described, NOT created yet)
 - [ ] CONTEXT.md + PLAN.md → **user approved** → `Status: Approved`
 - [ ] Parent bead created, its id read from bd's answer: `bd create --type feature --json`
-- [ ] Sub-bead DAG created as ONE plan, edges named by key: `bd create --graph plan.json --json`
+- [ ] Sub-bead DAG created as ONE plan, edges named by key: `bd create --graph "$plan" --json`, with `plan="$(mktemp -d)/plan.json"`
 - [ ] Dev sub-beads in the plan (one per BEAD)
 - [ ] Test sub-bead in the plan (depends on all dev beads)
 - [ ] Review sub-bead in the plan (depends on the test bead)

@@ -163,6 +163,12 @@ class TestTheDerivedPath:
         self, tmp_path: Path
     ) -> None:
         room = tmp_path / "room-x"
+        (room / "src" / "thing").mkdir(parents=True)
+        (room / "src" / "thing" / "__init__.py").write_text("", encoding="utf-8")
+        (room / "pyproject.toml").write_text(
+            '[project]\nname = "thing"\n\n[tool.pytest.ini_options]\ntestpaths = ["tests"]\n',
+            encoding="utf-8",
+        )
         lines = room_invocation(room)
 
         assert all(f"PYTHONPATH={room / 'src'}" in line for line in lines)

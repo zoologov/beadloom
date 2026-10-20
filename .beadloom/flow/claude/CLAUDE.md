@@ -64,6 +64,13 @@ from the bead and refuses a directory it did not create, and say so in those
 words: "green in a clean room over N files" is a different claim from "green on
 the tree" (BDL-UX #181).
 
+In this repository the export step of a landing is the coordinator's. bd rewrites
+`.beads/issues.jsonl` after every command, so a role agent releases the slot and
+leaves the export out of its commit; the coordinator's commit that records the
+wave lands the export, after every release of the wave and before any push. The
+pre-push hook's `beadloom landing-check` refuses a push whose export still holds
+the slot for a bead the push carries (BDL-UX #354).
+
 ### The README pair: Russian is the source, English follows it
 
 `README.ru.md` is where positioning is decided and reviewed. `README.md` is

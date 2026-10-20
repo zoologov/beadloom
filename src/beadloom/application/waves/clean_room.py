@@ -29,7 +29,14 @@ refreshing it, so every file inside a room still postdates nothing.
 **What it copies is what the caller names, and nothing else.** There is
 deliberately no "copy everything that differs from ``HEAD``" mode: on a shared
 working tree that set contains the neighbour's work, which is #235 reached by a
-second route.
+second route. A named path HEAD holds and the tree does not is the bead's
+deletion, and the room deletes it too (BDL-UX #335): a room built from ``HEAD``
+otherwise keeps the old side of every rename, the old package importable and
+the old tests collected beside the new ones. And the room NAMES the files where
+the tree differs from ``HEAD`` that it does not carry, read by
+:mod:`~beadloom.application.waves.room_tree`, because those are what its verdict
+leaves out — a neighbour's work, or a file of the bead's own that nobody named
+— and git cannot say which, so the reader is told rather than the room guessing.
 
 **A rebuild reproduces the REQUEST, over the working tree's files.** Naming every
 file is correct and it is retyped on every rebuild: measured by
@@ -72,8 +79,10 @@ its four modules skip and the fourth stops the collection with an error. So the
 marker records the extras the invocation's interpreter has, derived by
 :func:`~beadloom.application.rooms.installed_extras` — the same derivation
 ``beadloom rooms`` reports, because two answers to one question are two things
-that can disagree. The room does NOT build an environment of its own: which
-extras a verdict SHOULD be taken under is a decision, and BDL-UX #256 owns it.
+that can disagree. Since BDL-UX #256 the room builds an environment of its own,
+for the Python project that owns the carried files and from that project's
+``uv.lock`` where it has one (BDL-UX #333, :mod:`room_env`); the marker records
+which, and how it was resolved.
 """
 
 # beadloom:feature=wave-plan
@@ -93,12 +102,27 @@ from typing import Any
 
 from beadloom.application.rooms import ExtraSet, installed_extras
 from beadloom.application.waves.media import room_for
+from beadloom.application.waves.room_distribution import (
+    RoomDistribution,
+    interpreter_for,
+    owning_distribution,
+    room_invocation,
+    tree_interpreter,
+)
 from beadloom.application.waves.room_env import (
     RoomEnvironment,
     build_environment,
     extras_a_room_installs,
-    room_python,
     site_packages,
+)
+from beadloom.application.waves.room_tree import (
+    HELD_AS_DIRECTORY,
+    HELD_AS_FILE,
+    TreeDifference,
+    difference_records,
+    differences_not_carried,
+    held_at_head,
+    tree_differences,
 )
 
 #: The file that makes a room able to say whose it is. A directory without one
@@ -122,10 +146,18 @@ REFUSAL_FILE_MISSING = "file_missing"
 REFUSAL_NOT_A_FILE = "not_a_file"
 REFUSAL_FILE_OUTSIDE = "file_outside_the_project"
 
-#: Where a project keeps the environment its suite runs under, POSIX first.
-_PROJECT_INTERPRETERS = (
-    Path(".venv") / "bin" / "python",
-    Path(".venv") / "Scripts" / "python.exe",
+#: What a verdict taken in any room cannot answer, stated beside every room it is true of.
+#: The first is BDL-UX #333's last clause: a project's own test that reads a commit hash
+#: failed in a room and the room had named only the freshness check, so the failure read
+#: as the bead's.
+ROOM_LIMITS = (
+    "it carries no .git: a freshness check inside it has no baseline, and a test or tool "
+    "that reads git (a commit's hash, the history, a diff) fails or skips here for that "
+    "reason and not for the bead's",
+    "its verdict is a claim about these files only, never about the combined tree: that "
+    "measurement belongs to the wave's gate owner",
+    "a carried file is copied whole from the working tree, so an edit a neighbour made in "
+    "the same file is in the room too: the room cannot tell one bead's lines from another's",
 )
 
 _TEXT_CODEC = "utf-8"
@@ -161,6 +193,18 @@ class RoomBuild:
     #: caller who did not type a list has to be able to see that one was used,
     #: or the room's contents become a fact with no stated source.
     reused: tuple[str, ...] = ()
+    #: The Python project the room measures, and how it was chosen (BDL-UX #333).
+    distribution: RoomDistribution | None = None
+    #: What a verdict taken in this room cannot answer, in words a report can quote.
+    limits: tuple[str, ...] = ()
+    #: The carried paths HEAD holds and the working tree does not, deleted in the room
+    #: (BDL-UX #335). Kept apart from ``carried``, which names the files copied in.
+    deleted: tuple[str, ...] = ()
+    #: Every file where the working tree differs from HEAD that the room does not carry —
+    #: the differences its verdict leaves out — or ``None`` when git could not say. ``None``
+    #: is not "no difference": printing the second for the first is a room claiming a tree
+    #: it never read.
+    not_carried: tuple[TreeDifference, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -249,63 +293,6 @@ def _names(value: object) -> tuple[str, ...]:
     return tuple(item for item in value if isinstance(item, str) and item)
 
 
-def room_invocation(path: Path, *, project_root: Path | None = None) -> tuple[str, ...]:
-    """How to run a suite IN the room, and how to check that you did.
-
-    The measured trap this closes (found building the room for ``beadloom-67t1``):
-    with an editable install, running the suite from inside the room under the
-    project's environment imports the TREE's source. The first attempt did
-    exactly that and it showed up in a warning path rather than in a failure — a
-    green that is a measurement of the tree wearing a room's name. ``PYTHONPATH``
-    pointing at the room's own ``src`` fixes it, and the import line is the check:
-    it must print a path under the room.
-
-    The room's OWN interpreter is named when it has one (BDL-UX #256), and the
-    project's otherwise. ``PYTHONPATH`` is kept in both spellings: under the
-    room's own interpreter it is redundant, and it is the line whose output is
-    the check, so removing it would remove the evidence rather than the need.
-    """
-    room = Path(path)
-    sources = room / "src"
-    interpreter = _interpreter(project_root, room=room)
-    return (
-        f"PYTHONPATH={sources} {interpreter} -c "
-        f'"import beadloom; print(beadloom.__file__)"  # must print a path under {room}',
-        f"PYTHONPATH={sources} {interpreter} -m pytest {room / 'tests'}",
-    )
-
-
-def _interpreter(project_root: Path | None, *, room: Path | None = None) -> str:
-    """The interpreter a verdict in the room is taken under.
-
-    The room's own comes first when it has one: isolating the FILES and leaving
-    the interpreter to the machine is BDL-UX #256, where a correctly-named room
-    returned a verdict decided by whatever happened to be installed. The rest of
-    this docstring is about the fallback, which is what a room without an
-    environment of its own still names.
-
-    Found by using this command on its own bead. ``sys.executable`` is the
-    interpreter of the CLI PROCESS, and Beadloom installed as a ``uv`` tool runs
-    under ``~/.local/share/uv/tools/beadloom/bin/python3`` — an interpreter with
-    neither ``pytest`` nor the project's development dependencies, so the
-    invocation handed back could not be run at all. What the suite runs under is
-    the environment the project keeps beside itself, so that is what is named
-    when it exists, and ``sys.executable`` is the fallback for a project that
-    keeps none.
-    """
-    if room is not None:
-        own = room_python(room)
-        if own is not None:
-            return str(own)
-    if project_root is not None:
-        root = Path(project_root)
-        for relative in _PROJECT_INTERPRETERS:
-            candidate = root / relative
-            if candidate.exists():
-                return str(candidate)
-    return sys.executable
-
-
 def build_room(
     *,
     bead_id: str,
@@ -343,7 +330,9 @@ def build_room(
     refusal = _refuse_the_request(bead_id, root, path, request.carry)
     if refusal is not None:
         return refusal
+    left_out = _left_out(root, request.carry)
 
+    distribution = owning_distribution(root, request.carry)
     commit = _head_commit(root)
     if commit is None:
         return _refused(
@@ -360,10 +349,22 @@ def build_room(
 
     try:
         _archive_head(root, path)
-        carried = _carry(root, path, request.carry)
-        built_environment = _environment(root, path, request)
-        held = installed_extras(root, search_path=site_packages(path))
-        _write_marker(bead_id, root, path, commit, request, held, built_environment)
+        carried, deleted = _carry(root, path, request.carry)
+        built_environment = _environment(root, path, request, distribution)
+        held = installed_extras(
+            distribution.under(root),
+            search_path=site_packages(path, distribution.directory),
+        )
+        _write_marker(
+            bead_id,
+            root,
+            path,
+            commit,
+            request,
+            held,
+            (built_environment, distribution),
+            (carried, deleted, left_out),
+        )
     except (OSError, subprocess.SubprocessError, tarfile.TarError):
         # A half-built room is worse than none: it is a directory the next
         # attempt would refuse, for a reason that has nothing to do with a
@@ -377,16 +378,42 @@ def build_room(
         built=True,
         detail=(
             f"built from {commit[:8]} with {len(carried)} carried file(s)"
+            + (f" and {len(deleted)} deleted" if deleted else "")
             + (f", reusing the replaced room's {' and '.join(reused)}" if reused else "")
             + "; no .git, so a freshness check inside it has no baseline"
         ),
         commit=commit,
         carried=carried,
-        invocation=room_invocation(path, project_root=root),
+        invocation=room_invocation(path, project_root=root, distribution=distribution),
         extras=held.label if held.resolved else None,
         environment=built_environment,
         reused=reused,
+        distribution=distribution,
+        limits=ROOM_LIMITS,
+        deleted=deleted,
+        not_carried=left_out,
     )
+
+
+def _left_out(root: Path, carry: tuple[str, ...]) -> tuple[TreeDifference, ...] | None:
+    """The files where the tree differs from HEAD that *carry* does not name, or ``None``.
+
+    Read before the room exists, so a room that cannot be built reads nothing, and over the
+    project-relative form of each carried path, so ``./a.py`` and ``a.py`` are one name.
+    """
+    differences = tree_differences(root)
+    if differences is None:
+        return None
+    named = (_project_relative(root, item) for item in carry)
+    return differences_not_carried(differences, (item for item in named if item))
+
+
+def _project_relative(root: Path, named: str) -> str | None:
+    """*named* as a POSIX path relative to *root*, or ``None`` when it resolves outside it."""
+    candidate = (root / named).resolve()
+    if not candidate.is_relative_to(root):
+        return None
+    return candidate.relative_to(root).as_posix()
 
 
 def _remembering(
@@ -422,9 +449,11 @@ def _remembering(
     )
 
 
-def _environment(root: Path, path: Path, request: RoomRequest) -> RoomEnvironment:
-    """Give the room its own interpreter, or say which one it borrows instead."""
-    otherwise = _interpreter(root)
+def _environment(
+    root: Path, path: Path, request: RoomRequest, distribution: RoomDistribution
+) -> RoomEnvironment:
+    """Give the measured project its own interpreter in the room, or say which it borrows."""
+    otherwise = interpreter_for(root, directory=distribution.directory)
     if not request.environment:
         return RoomEnvironment(
             detail=(
@@ -436,8 +465,12 @@ def _environment(root: Path, path: Path, request: RoomRequest) -> RoomEnvironmen
         )
     return build_environment(
         room=path,
-        choice=extras_a_room_installs(root, request.extras),
+        choice=extras_a_room_installs(
+            root, request.extras, distribution_root=distribution.under(root)
+        ),
         otherwise=otherwise,
+        distribution=distribution,
+        interpreter=tree_interpreter(root, distribution.directory),
     )
 
 
@@ -466,31 +499,43 @@ def _refuse_the_request(
 ) -> RoomBuild | None:
     """The checks about the FILES asked for, whoever named them.
 
-    A remembered path is checked exactly like a typed one: a file the working
-    tree no longer holds refuses the rebuild rather than quietly dropping out of
-    it, so a reused list can never shrink without the caller being told.
+    A remembered path is checked exactly like a typed one. A path HEAD holds as a
+    file and the working tree does not is the bead's deletion and is deleted in
+    the room, which reports it (BDL-UX #335); a path neither holds refuses the
+    build rather than quietly dropping out of it, so a list can never shrink
+    without the caller being told.
     """
+    absent = [
+        relative
+        for relative in (_project_relative(root, named) for named in carry)
+        if relative is not None and not (root / relative).exists()
+    ]
+    at_head = held_at_head(root, absent)
     for named in carry:
-        refusal = _refuse_carried(bead_id, root, path, named)
+        refusal = _refuse_carried(bead_id, root, path, named, at_head)
         if refusal is not None:
             return refusal
     return None
 
 
-def _refuse_carried(bead_id: str, root: Path, path: Path, named: str) -> RoomBuild | None:
-    """Refuse a carried path that is not a file of this project."""
-    candidate = (root / named).resolve()
-    if not candidate.is_relative_to(root):
+def _refuse_carried(
+    bead_id: str, root: Path, path: Path, named: str, at_head: dict[str, str]
+) -> RoomBuild | None:
+    """Refuse a carried path that is neither a file of this project nor a deletion of one.
+
+    *at_head* says what HEAD holds each carried path the tree lacks as.
+    """
+    relative = _project_relative(root, named)
+    if relative is None:
         return _refused(
             bead_id,
             path,
             REFUSAL_FILE_OUTSIDE,
             f"{named} resolves outside {root}: a room carries this project's files",
         )
+    candidate = root / relative
     if not candidate.exists():
-        return _refused(
-            bead_id, path, REFUSAL_FILE_MISSING, f"{named} is not a path this project holds"
-        )
+        return _refuse_absent(bead_id, path, named, at_head.get(relative))
     if not candidate.is_file():
         return _refused(
             bead_id,
@@ -500,6 +545,27 @@ def _refuse_carried(bead_id: str, root: Path, path: Path, named: str) -> RoomBui
             "how a neighbour's work reaches a room that is supposed to exclude it",
         )
     return None
+
+
+def _refuse_absent(bead_id: str, path: Path, named: str, held_as: str | None) -> RoomBuild | None:
+    """Accept a deletion HEAD holds as a file; refuse every other path the tree lacks."""
+    if held_as == HELD_AS_FILE:
+        return None
+    if held_as == HELD_AS_DIRECTORY:
+        return _refused(
+            bead_id,
+            path,
+            REFUSAL_NOT_A_FILE,
+            f"{named} is a directory HEAD holds and the working tree does not: name its "
+            "files, and each one is deleted in the room",
+        )
+    return _refused(
+        bead_id,
+        path,
+        REFUSAL_FILE_MISSING,
+        f"{named} is not a path this project holds: neither the working tree nor HEAD has "
+        "it, so it is neither a file to carry nor a deletion",
+    )
 
 
 def _occupied(bead_id: str, path: Path, *, rebuild: bool) -> RoomBuild | None:
@@ -602,13 +668,39 @@ def _within(tar: tarfile.TarFile, path: Path) -> list[tarfile.TarInfo]:
     return keep
 
 
-def _carry(root: Path, path: Path, carry: tuple[str, ...]) -> tuple[str, ...]:
-    """Copy the named project files into the room, before anything indexes it."""
+def _carry(
+    root: Path, path: Path, carry: tuple[str, ...]
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Copy the named files into the room and delete the ones the tree no longer holds.
+
+    Both happen before anything indexes the room. The refusals have already run, so a
+    named path the tree lacks is one HEAD holds as a file: the bead deleted it, and the
+    room, which was extracted from HEAD, deletes it too — with every directory that
+    deletion leaves empty, because git holds no empty directory and an empty package
+    directory still imports as a namespace package.
+    """
+    carried: list[str] = []
+    deleted: list[str] = []
     for named in carry:
         destination = path / named
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(root / named, destination)
-    return tuple(carry)
+        if (root / named).exists():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(root / named, destination)
+            carried.append(named)
+            continue
+        destination.unlink(missing_ok=True)
+        _prune_empty_parents(destination.parent, path)
+        deleted.append(named)
+    return tuple(carried), tuple(deleted)
+
+
+def _prune_empty_parents(directory: Path, room: Path) -> None:
+    """Remove *directory* and its ancestors below *room* while each one is empty."""
+    room = room.resolve()
+    current = directory.resolve()
+    while current != room and current.is_relative_to(room) and not any(current.iterdir()):
+        current.rmdir()
+        current = current.parent
 
 
 def _write_marker(
@@ -618,7 +710,8 @@ def _write_marker(
     commit: str,
     request: RoomRequest,
     extras: ExtraSet,
-    environment: RoomEnvironment,
+    measured: tuple[RoomEnvironment, RoomDistribution],
+    contents: tuple[tuple[str, ...], tuple[str, ...], tuple[TreeDifference, ...] | None],
 ) -> None:
     """Record who the room belongs to and what a measurement in it is true of.
 
@@ -644,13 +737,17 @@ def _write_marker(
     """
     from beadloom import __version__
 
+    environment, distribution = measured
+    carried, deleted, left_out = contents
     record = {
         "bead": bead_id,
         "room": path.name,
         "project": str(root),
         "commit": commit,
         "built_at": datetime.now(timezone.utc).isoformat(),
-        "carried": list(request.carry),
+        "carried": list(carried),
+        "deleted": list(deleted),
+        "not_carried": difference_records(left_out),
         REQUEST_KEY: {
             REUSABLE_CARRY: list(request.carry),
             REUSABLE_EXTRAS: None if request.extras is None else list(request.extras),
@@ -661,7 +758,7 @@ def _write_marker(
             # prints. Recording the project's here while printing the room's
             # would make the record disagree with the command that wrote it,
             # about the one fact BDL-UX #256 is that a report gets wrong.
-            "invocation": _interpreter(root, room=path),
+            "invocation": interpreter_for(root, room=path, directory=distribution.directory),
             "built_by": {
                 "executable": sys.executable,
                 "version": ".".join(str(part) for part in sys.version_info[:3]),
@@ -684,9 +781,20 @@ def _write_marker(
             "seconds": environment.seconds,
             "python": str(environment.python) if environment.python else None,
             "detail": environment.detail,
+            "lock": environment.lock,
+            "resolution": environment.resolution,
         },
+        "distribution": {
+            "directory": distribution.directory,
+            "packaging": distribution.packaging,
+            "lock": distribution.lock,
+            "why": distribution.why,
+            "notes": list(distribution.notes),
+        },
+        "limits": list(ROOM_LIMITS),
         "beadloom": __version__,
     }
     (path / ROOM_MARKER).write_text(
         json.dumps(record, indent=2) + "\n", encoding=_TEXT_CODEC
     )
+

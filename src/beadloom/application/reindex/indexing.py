@@ -74,7 +74,7 @@ def read_declared_docs(
                 # Normalize: if path starts with docs dir prefix, strip to make it relative.
                 abs_path = project_root / doc_path_str
                 if abs_path.is_relative_to(docs_dir):
-                    rel = str(abs_path.relative_to(docs_dir))
+                    rel = abs_path.relative_to(docs_dir).as_posix()
                 else:
                     rel = doc_path_str
                 declared.append(
@@ -96,7 +96,7 @@ def _project_relative_doc(docs_dir: Path, project_root: Path, rel: str) -> str:
     """
     resolved = docs_dir / rel
     if resolved.is_relative_to(project_root):
-        return str(resolved.relative_to(project_root))
+        return resolved.relative_to(project_root).as_posix()
     return str(resolved)
 
 
@@ -172,7 +172,7 @@ def _index_code_files(
                 continue
 
             symbols = extract_symbols(file_path)
-            rel_path = str(file_path.relative_to(project_root))
+            rel_path = file_path.relative_to(project_root).as_posix()
 
             for sym in symbols:
                 conn.execute(
@@ -223,7 +223,7 @@ def _index_single_doc(
     from beadloom.infrastructure.doc_roots import SPACE_AS_IS
 
     content = md_path.read_text(encoding="utf-8")
-    rel_path = str(md_path.relative_to(docs_dir))
+    rel_path = md_path.relative_to(docs_dir).as_posix()
     result = DocIndexResult()
     _insert_document(
         conn,
@@ -245,7 +245,7 @@ def _index_single_code_file(
 ) -> int:
     """Index one code file. Returns symbol count."""
     symbols = extract_symbols(file_path)
-    rel_path = str(file_path.relative_to(project_root))
+    rel_path = file_path.relative_to(project_root).as_posix()
     count = 0
 
     for sym in symbols:

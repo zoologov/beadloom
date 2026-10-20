@@ -119,7 +119,7 @@ def _scan_routes(project_root: Path) -> list[dict[str, object]]:
             if not routes:
                 continue
 
-            rel_path = str(file_path.relative_to(project_root))
+            rel_path = file_path.relative_to(project_root).as_posix()
             for route in routes:
                 all_routes.append(
                     {

@@ -391,12 +391,17 @@ class TestTheRoleMapReadsTheMapEachDeclaredToolHolds:
     Major 1: ``role_map_report`` composed ``("claude", "CLAUDE")`` unconditionally
     and never read ``config.tools``, so a project declaring ``cursor`` alone was
     judged against a composition its flow does not declare while the map its
-    agent actually reads -- ``.cursor/rules/beadloom-flow.md``, whose body
-    enumerates the roles -- was asked nothing.
+    agent actually reads was asked nothing.
 
     The control below is the one that moved. It used to assert that the verdict
     does NOT change with the tool set, which was the defect stated as a property;
     it now asserts that it does, because the corpus is the tool's own map.
+
+    It moved a second time in BDL-083 S2h (BDL-UX #356). The map a Cursor agent
+    reads is now the composed core, ``.cursor/rules/beadloom-flow.mdc``, in place
+    of a pointer whose only content was the roster, so the two tools' maps are one
+    TEXT read under two NAMES: the tool set moves the artifact named, and no
+    longer the fragments read.
     """
 
     def test_a_cursor_only_project_is_checked_against_the_cursor_map(
@@ -406,28 +411,30 @@ class TestTheRoleMapReadsTheMapEachDeclaredToolHolds:
         report = role_map_report(flow.root)
         assert [artifact.tool for artifact in report.artifacts] == ["cursor"]
         assert [artifact.name for artifact in report.artifacts] == [
-            ".cursor/rules/beadloom-flow.md"
+            ".cursor/rules/beadloom-flow.mdc"
         ]
-        assert report.inspected == (".cursor/rules/beadloom-flow.md",)
 
-    def test_the_tool_set_moves_the_corpus(self, tmp_path: Path) -> None:
-        """The control the defect used to pass: two tool sets, two maps."""
+    def test_the_tool_set_moves_the_artifact_and_not_the_text(self, tmp_path: Path) -> None:
+        """The control the defect used to pass: two tool sets, two maps, one composition."""
         ours = role_map_report(build_flow(tmp_path / "ours", OURS).root)
         cursor = role_map_report(build_flow(tmp_path / "cursor", CURSOR_ONLY).root)
-        assert [artifact.tool for artifact in ours.artifacts] == ["claude"]
+        assert [artifact.name for artifact in ours.artifacts] == [".claude/CLAUDE.md"]
+        assert [artifact.name for artifact in cursor.artifacts] == [
+            ".cursor/rules/beadloom-flow.mdc"
+        ]
         assert ours.inspected == ("templates/agentic_flow/CLAUDE.md.txt",
                                   "templates/claude/stack/python/CLAUDE.md.txt")
-        assert set(ours.inspected).isdisjoint(cursor.inspected)
+        assert cursor.inspected == ours.inspected
 
     def test_neither_arrangement_reads_an_artifact_that_project_wrote(
         self, tmp_path: Path
     ) -> None:
         """Both corpora are the COMPOSITION, so no adopter's edit is judged.
 
-        The cursor map's one fragment is labelled with the path the pointer is
-        written TO, because that is what a reader opens; its BODY comes from
-        ``role_adapters``. Asserted by building the project without ever running
-        the adapter generator, so the file the label names does not exist.
+        Each map is named by the path its file is written TO, because that is
+        what a reader opens; its BODY is the composition. Asserted by building the
+        project without ever running the scaffold, so the file the name points at
+        does not exist.
         """
         for arrangement in (OURS, CURSOR_ONLY):
             flow = build_flow(tmp_path / arrangement.label, arrangement)
@@ -439,7 +446,7 @@ class TestTheRoleMapReadsTheMapEachDeclaredToolHolds:
     def test_the_cursor_map_is_judged_by_the_same_derivation(
         self, tmp_path: Path
     ) -> None:
-        """A role the Cursor pointer does not name is a finding against it.
+        """A role the Cursor core rule does not name is a finding against it.
 
         This is BDL-UX #252's own class on the axis the check could not reach: a
         composed role missing from the map that enumerates roles. The population
@@ -451,8 +458,8 @@ class TestTheRoleMapReadsTheMapEachDeclaredToolHolds:
         unmapped = [f for f in report.findings if f.kind == "unmapped"]
         assert [f.role for f in unmapped] == ["scout"]
         assert unmapped[0].tool == "cursor"
-        assert unmapped[0].artifact == ".cursor/rules/beadloom-flow.md"
-        assert ".cursor/rules/beadloom-flow.md" in unmapped[0].why
+        assert unmapped[0].artifact == ".cursor/rules/beadloom-flow.mdc"
+        assert ".cursor/rules/beadloom-flow.mdc" in unmapped[0].why
 
     def test_the_shipped_cursor_map_names_every_composed_role(
         self, tmp_path: Path

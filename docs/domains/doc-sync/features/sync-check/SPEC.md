@@ -345,7 +345,11 @@ Two baselines live outside it, and both are committed:
    fabricated baseline does not become earned by being copied.
 2. **Surface size — `.beadloom/sync-surface.json`**, committed. It records how
    many pairs and declared docs there were, so a run whose count FELL can say so
-   instead of printing a smaller number. Written only by
+   instead of printing a smaller number. Since BDL-083 S2f it also records the
+   `(doc, file)` pairs it counted, one per line, and a run whose count fell names
+   the recorded pairs it no longer declares (BDL-UX #353: a Windows checkout
+   counted 167 pairs where the macOS checkout of the same commit counted 347).
+   Written only by
    `sync-check --record-surface`: a check that silently re-records the number it
    is checking against re-attests without evidence (BDL-UX #163).
 
@@ -603,6 +607,14 @@ that.
   (`%(trailers:key=<key>,valueonly)`): the message's final paragraph only, the key in any
   case. The ownership report asks for `Bead`, because a commit is a bead's by its `Bead:`
   trailer and by nothing else. A key that could close the placeholder is a `ValueError`.
+- `commits_in(project_root, revisions, *, trailer=None) -> tuple[BranchCommit, ...] | None`
+  — the commits a revision list selects, in the record `commits_since` returns; since BDL-083
+  S2g `commits_since` is its `<ref>..HEAD` case. Added for the landing check, which lists
+  what a push carries the way git says it: `<old>..<new>`, or `<new> --not --remotes` for a
+  branch no remote holds.
+- `text_at(project_root, ref, path) -> str | None` — the text of a repository path at a
+  commit (`git show <ref>:<path>`), `None` when the commit holds no such path or git cannot
+  answer. Added by BDL-083 S2g to read the export a push would land.
 - `merge_base(project_root, first, second) -> str | None`, `is_ancestor(project_root,
   ancestor, descendant) -> bool`, `short_commit(project_root, ref) -> str | None`,
   `commit_distance(project_root, ancestor, descendant) -> int | None`,
@@ -617,10 +629,12 @@ that.
 Module `src/beadloom/doc_sync/surface_ledger.py` — the committed surface record:
 
 - `read_ledger(project_root) -> SurfaceLedger | None`
-- `write_ledger(project_root, *, declared_pairs, declared_docs, recorded_at="")`
-- `compare_surface(ledger, *, declared_pairs, declared_docs) -> SurfaceVerdict`
-  — `recorded` / `shrank` / `message` / `headline`; an absent ledger says "not
-  recorded". The headline rides on the gate's sync-check line even when the step
+- `write_ledger(project_root, *, declared_pairs, declared_docs, recorded_at="", pairs=())`
+- `compare_surface(ledger, *, declared_pairs, declared_docs, pairs=None) -> SurfaceVerdict`
+  — `recorded` / `shrank` / `message` / `headline` / `dropped`; an absent ledger says "not
+  recorded". `dropped` is the recorded pairs the current run does not declare; a
+  shrunken surface's message names them, and `sync-check --json` carries them as
+  `declared_surface.dropped`. The headline rides on the gate's sync-check line even when the step
   FAILS, because the run that deleted a doc is the run whose count fell.
 
 Module `src/beadloom/doc_sync/surface.py`:

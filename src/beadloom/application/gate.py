@@ -431,6 +431,7 @@ def _step_sync_check(project_root: Path) -> GateStep:
         read_ledger(project_root),
         declared_pairs=len(pairs),
         declared_docs=declared_docs,
+        pairs=[(str(r["doc_path"]), str(r["code_path"])) for r in pairs],
     )
 
     findings = [_sync_finding(r) for r in blocking]
@@ -972,7 +973,7 @@ def _step_config_check(project_root: Path) -> GateStep:
     """``config-check`` (AgentConfigAsCode) — generated agent-config freshness."""
     from beadloom.application.mutation_scope import check_mutation_scope
     from beadloom.infrastructure.db import connection
-    from beadloom.onboarding import check_config_drift
+    from beadloom.onboarding import check_config_drift, claude_md_comparison
 
     # The declared mutation SCOPE rides with config-check because it is the same
     # subject — a flow declaration checked against the project it describes —
@@ -1046,6 +1047,12 @@ def _step_config_check(project_root: Path) -> GateStep:
         summary = f"no blocking drift; {warned} artifact(s) reported (warn)"
     else:
         summary = "agent-config in sync"
+    # What the `CLAUDE.md` body was compared against, named in the verdict line on
+    # every run: a room, a worktree and the checkout of the same files give one
+    # verdict, and a reader can see that they compared one thing (BDL-UX #334).
+    comparison = claude_md_comparison(project_root)
+    if comparison is not None:
+        summary += f"; {comparison.describe()}"
     return GateStep("config-check", passed=passed, findings=findings, summary=summary)
 
 

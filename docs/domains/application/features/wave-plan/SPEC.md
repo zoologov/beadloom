@@ -524,6 +524,33 @@ that set holds the neighbour's work, which is #235 by a second route. A room
 under the project root is refused too — it would be untracked work in the tree
 it copies.
 
+#### A carried deletion, and the differences the room leaves out
+
+BDL-083 S2d, RFC D6, BDL-UX #335. Measured on the first outside adopter's monorepo: a room
+for a 51-file `git mv` change had to be finished by hand, twice. The room is built from
+`HEAD`, so the old side of a rename stayed in it — the old package importable, the old
+tests collected as a second set — and naming an old path in `--carry` refused the whole
+room with `file_missing`.
+
+So a carried path that `HEAD` holds as a file and the working tree does not is the bead's
+deletion: the room deletes it, together with every directory that deletion leaves empty,
+and reports it as `RoomBuild.deleted` (`deleted` in `--json` and in the marker, a
+`deleted in the room` line in the text), kept apart from `carried`, which names the files
+copied in. A path neither the tree nor `HEAD` holds is still refused as `file_missing`, and
+a directory `HEAD` holds that the tree does not is refused as `not_a_file`, so a list never
+shrinks without the caller being told. `room_tree.held_at_head` answers what `HEAD` holds
+each absent path as, before the room exists.
+
+The room also NAMES every file where the working tree differs from `HEAD` that it does not
+carry — modified, deleted, added or untracked, ignored files excepted — as
+`RoomBuild.not_carried` (`not_carried` in `--json` and the marker, a list of `{path,
+change}`; the text lists twenty and counts the rest). Those are the differences its verdict
+leaves out: a neighbour's work, or a file of the bead's own that nobody named. Git cannot
+say which, so the room names them instead of guessing. `None` means git could not answer
+and is printed as "not read", never as "no difference". A carried file is still copied
+whole, so a neighbour's edit inside a shared file reaches the room; that is the third entry
+of the room's limits, because the room cannot tell one bead's lines from another's.
+
 #### A rebuild reproduces the request, not the room
 
 Naming every file is the correct path and it was retyped on every rebuild:
@@ -547,8 +574,9 @@ keep that from reopening what it was built on:
 - **An option named beside `--rebuild` REPLACES its remembered counterpart** and
   never adds to it, so the remembered list cannot grow into the mode that
   deliberately does not exist. A remembered path the working tree no longer holds
-  refuses the rebuild by the same `file_missing` route a typed one would, and
-  refuses it while the room and its record are still there.
+  is treated as a typed one would be: deleted in the room and reported when `HEAD`
+  holds it, and refused by the `file_missing` route when it does not, while the
+  room and its record are still there.
 
 The request is recorded beside the outcome rather than read back out of it,
 because the two come apart: a room given no environment records no extras choice
@@ -577,10 +605,16 @@ did. With an editable install, running the suite from inside the room under the
 project's environment imports the TREE's source; the first run that did it was
 caught from a warning path rather than from a failure, which is a green that is
 a measurement of the tree wearing a room's name. `PYTHONPATH` pointing at the
-room's own `src` is the fix, and the `import beadloom` line is the check.
+room's own sources is the fix, and the import line is the check. Both are read from
+the project the room measures (below), never from a template: the sources are that
+project's `src` when it keeps one and its directory otherwise, the import names the
+first package found there, and the suite runs over the `testpaths` the project's
+pytest configuration declares, or over its directory. A project with no importable
+package gets the suite line alone.
 
 The interpreter the invocation names is the ROOM's own when it has one, the
-project's `.venv` when it keeps one, and `sys.executable` otherwise. The room's
+measured project's `.venv` in the tree when it keeps one, the root's `.venv` after
+that, and `sys.executable` otherwise. The room's
 comes first because isolating the files and leaving the interpreter to the
 machine is BDL-UX #256, below. The second distinction was found by running the
 command on this bead: `sys.executable` is the CLI PROCESS's interpreter, and
@@ -672,6 +706,54 @@ decides whether rooms get built at all becomes invisible. A failure is reported
 rather than retried under the other installer: falling back would hide which
 resolver produced the verdict.
 
+### The project the room measures, and the lock it is installed from
+
+BDL-083 S2b, RFC D6, BDL-UX #333 and #311. Measured on the first outside adopter's
+monorepo, anonymised as `tests/fixtures/monorepo`: the Python lives in `backend/` with
+its own `pyproject.toml` and `uv.lock`, the pipeline is `.gitlab-ci.yml`, and
+`clean-room` built no environment — `leg_installs` read `.github/workflows` only — while
+its hint printed `PYTHONPATH=<room>/src`, `-m pytest <room>/tests` and `import beadloom`,
+three things that room does not hold. On this repository the room installed with `uv pip
+install -e`, which resolves afresh: gherkin-official 42 against the lock's 29 failed
+`test_our_own_suite_parses_the_way_the_reference_parser_reads_it` in every room of
+BDL-083 S1 and S2 and in no CI leg, and S2a's room saw mypy 2.4.0 where the lock pins
+2.3.1.
+
+**Which project.** `room_distribution.owning_distribution(project_root, carry)` takes
+the Python projects `infrastructure.python_projects.find_python_projects` finds under
+the scan paths and chooses the DEEPEST one that holds a carried file. When the carried
+files fall into several projects, the one holding the most is chosen and the others are
+named in `notes`, because one room builds one environment. When no carried file falls
+into a project, the room measures the project the room census reads. The choice and its
+reason are printed as `measured project:` and returned as `distribution` in `--json`.
+
+**Which legs.** `leg_installs` reads the pipeline `pipeline_sources` chooses for every
+reader, so a GitLab job whose commands run `uv sync` or `pip install` is a leg as it is a
+room in the census. Where both `.github/workflows` and `.gitlab-ci.yml` exist, the second
+stays set aside, as S2a decided.
+
+**From the lock.** A project that keeps a `uv.lock` beside its packaging is installed
+with `uv sync --frozen`, one `--extra` per chosen extra, in the room's copy of the
+project's directory, with `UV_PROJECT_ENVIRONMENT` pointed at that copy's `.venv` and
+`VIRTUAL_ENV` dropped, so a parent shell cannot redirect the sync into the tree's own
+environment. The interpreter is the measured project's environment in the tree when it
+keeps one, and otherwise `uv` chooses by the project's `requires-python`: a monorepo's
+root keeps no environment, and the CLI process's interpreter may not satisfy the
+project. A project without a lock, or a machine without `uv`, is resolved afresh by the
+installer described above. `environment.lock` is the lock the environment was installed
+from or `null`, and `environment.resolution` says which in words — "installed from
+`backend/uv.lock` with `uv sync --frozen`", or "resolved afresh outside any lock (no
+uv.lock beside …)" — so a room whose versions are not the lock's cannot pass as one
+whose versions are.
+
+**What a room cannot answer** is a list, `RoomBuild.limits` and `limits` in `--json`,
+printed under `What this room cannot answer:`. The first entry names the cost of the
+missing `.git` to a suite, not only to a freshness check: on the adopter's monorepo the
+project's own test that reads a commit hash failed in a room that had named the
+freshness check alone, so the failure read as the bead's. The second is the claim's
+scope — these files, never the combined tree. The third is that a carried file is copied
+whole, a neighbour's edits in it included (BDL-UX #335).
+
 ### What each medium is checked against
 
 One verdict per medium, in `plan.media_checks` and under `media_checks` in
@@ -683,7 +765,7 @@ check — see below.
 |---|---|---|
 | `working-tree` | no path differs from `HEAD` that no bead in the plan owns | `git status` |
 | `commit-gate` | the installed pre-commit hook judges the paths a commit stages | `.git/hooks/pre-commit` |
-| `landing-order` | every instruction of the landing lock names its holder and asks for no queue | the composed flow artifacts |
+| `landing-order` | every instruction of the landing lock names its holder and asks for no queue, and the slot is not held by a bead the tracker lists as closed | the composed flow artifacts, and `bd list --all --json` for the slot |
 | `focus-document` | the document every route writes carries a row for each bead of the plan | the composed `/task-init` routing table and the work item's folder |
 | `graph-files` | the node population the graph files declare is the one the index resolved these scopes from | `.beadloom/_graph/*.yml` through `each_graph_file`, and `get_all_nodes` on the index |
 | `doc-baseline` | no doc pair is stale before the wave starts | the doc index |
@@ -768,6 +850,25 @@ from `.beadloom/flow` — so a tool added to the flow is covered by the same act
 The verdict states the size of the population it judged. A project that has never
 scaffolded a flow instructs the lock nowhere, and a pass over nothing says so
 rather than reading as a pass over something.
+
+**A slot held by a closed bead fails the medium** (BDL-083 S2g, BDL-UX #354, RFC
+D12). The slot is tracker state exported into `.beads/issues.jsonl`, so a release
+made after the push reaches no merged commit, and every later clone imports a slot
+held by a bead that is closed. Its `acquire` is then refused naming a holder nobody
+can wait on, and bd's refusal offers `--wait`, a queue nothing drains. The command
+reads who holds the slot from the same `bd list --all --json` answer its census
+reads (`landing_slot.slot_hold`, handed over as `WaveEnvironment.landing_slot`),
+and a holder the tracker lists as `closed` fails the check whatever the
+instructions say. The detail names the one remedy,
+`bd merge-slot release --holder <closed-bead>`, and then the instructions' own verdict. Measured on a copy of the
+monorepo fixture with bd 1.0.4: a second clone imported the slot held by
+`mono-tba`, and once that bead was closed `beadloom waves` exited 1 with
+``landing-order: failed — the landing slot `mono-merge-slot` is held by `mono-tba`,
+a bead the tracker lists as closed, ...``; the release it named let `acquire` exit
+0. A hold by a bead still open or in progress is a neighbour landing and is not
+judged, and a holder that names no bead the tracker lists has no status and is not
+called stale. When the tracker could not be read the slot is not observed and the
+check judges the instructions alone.
 
 **What this medium cannot check**, stated here rather than discovered later: it
 reads what an agent is TOLD, and cannot know what an agent DID. Nothing in a plan
@@ -868,13 +969,23 @@ not tell them apart.
 | `room_owner(path)` | the bead a room records, or `None` when the directory is not a room |
 | `room_request(path)` | what that room was asked for, or `None` when the directory is not a room |
 | `RoomBuild.reused` | the request parts this build took from the record of the room it replaced |
-| `room_invocation(path)` | how to run a suite in the room, and how to check that you did |
+| `room_invocation(path, *, project_root, distribution)` | how to run the measured project's suite in the room, and how to check that you did — read from that project |
+| `owning_distribution(project_root, carry)` | the Python project that owns the carried files, or the one the room census reads |
+| `RoomDistribution` | that project's directory, packaging, lock and the reason it was chosen |
+| `RoomBuild.distribution` | the project the room measures |
+| `RoomBuild.limits` | what a verdict taken in the room cannot answer, beginning with the missing `.git` |
+| `RoomBuild.deleted` | the carried paths `HEAD` holds and the tree does not, deleted in the room |
+| `RoomBuild.not_carried` | every file where the tree differs from `HEAD` that the room does not carry, or `None` when git could not say |
+| `held_at_head(root, paths)` | what `HEAD` holds each path as, a file or a directory, for the ones it holds |
+| `tree_differences(root)` | every file where the working tree differs from `HEAD`, and how, or `None` |
+| `differences_not_carried(differences, carried)` | the differences no carried path names |
+| `difference_records(differences)` | those differences as the `{path, change}` records the marker and `--json` carry |
 | `RoomBuild.extras` | the optional extras the room's interpreter has, or `None` when nothing could look |
 | `RoomBuild.environment` | the interpreter the room holds, or the reason it holds none |
-| `extras_a_room_installs(project_root, asked)` | what the caller named, or the union of every extra the legs install |
-| `build_environment(*, room, choice, otherwise)` | create the room's interpreter and install its sources, or say why there is none |
-| `room_python(room)` | the interpreter inside a room, or `None` |
-| `site_packages(room)` | where that interpreter keeps its installed metadata |
+| `extras_a_room_installs(project_root, asked, *, distribution_root)` | what the caller named, or the union of every extra the legs install |
+| `build_environment(*, room, choice, otherwise, distribution, interpreter)` | install the measured project's interpreter from its lock with `uv sync --frozen`, or afresh where there is no lock, or say why there is none |
+| `room_python(room, directory)` | the interpreter of the project at that directory in a room, or `None` |
+| `site_packages(room, directory)` | where that interpreter keeps its installed metadata |
 | `check_media(records, *, owned_paths, environment)` | one verdict per medium |
 | `derive_population(asked, census, *, work_item)` | the work item these beads sit under, and the ready ones the plan was not asked about |
 | `beads_under(work_item, beads)` | every bead a work item holds, by the tracker's own parent and blocker edges |
@@ -907,6 +1018,8 @@ every scenario runs without a `bd` binary on the machine.
 | `media.py` | what a wave shares no matter how independent its code is |
 | `clean_room.py` | build the room a bead owns, and refuse a directory this run did not create |
 | `room_env.py` | the interpreter a room's verdict is taken under, and which extras it holds |
+| `room_distribution.py` | the Python project a room measures, and the hint that runs its suite there |
+| `room_tree.py` | what the working tree holds beyond `HEAD`, read before a room is built from `HEAD` |
 | `media_checks.py` | whether each medium's plan-time precondition holds |
 | `population.py` | the beads a plan could have been about, and which of them it was not asked about |
 | `running.py` | the work already running under a plan's work item, and which planned beads wait for it |
@@ -938,7 +1051,16 @@ verdicts, the per-wave gap and the remedies that read the work item's document;
 once-only build as executable scenarios; `tests/acceptance/features/room_environment.feature` states
 the interpreter it holds, over real environments, and `tests/test_room_environment.py` covers what
 those cannot reach — the second installer, a create step that fails, and the install spellings this
-repository's own workflows do not use. `tests/test_cli_clean_room.py` covers `beadloom clean-room`'s
+repository's own workflows do not use.
+`tests/acceptance/application/wave-plan/clean_room_of_a_monorepo.feature` builds a real room on the
+monorepo fixture from its own `uv.lock` and runs the hint as printed, and
+`tests/unit/application/waves/test_room_distribution.py` covers the project choice, the install
+command each arrangement produces and the hint for layouts no scenario builds.
+`tests/acceptance/application/wave-plan/clean_room_carries_a_deletion.feature` builds rooms on the
+monorepo fixture over a rename, a deleted package and a neighbour's changes, and
+`tests/unit/application/waves/test_room_tree.py` covers each kind of difference git reports and
+what `HEAD` holds a path as.
+`tests/test_cli_clean_room.py` covers `beadloom clean-room`'s
 two output shapes and its three exit codes;
 `tests/acceptance/application/verdict-room/room_extras.feature` states that a room records the
 extras its interpreter has, and `tests/integration/application/rooms/test_room_extras.py` covers the

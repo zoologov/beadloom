@@ -70,13 +70,14 @@ The corpus is derived from `config.tools`, one artifact each, and every finding 
 | Tool | The map its reader opens | Where the body comes from |
 |---|---|---|
 | `claude` | `.claude/CLAUDE.md` | the composed core + overlays + the project layer |
-| `cursor` | `.cursor/rules/beadloom-flow.md` | the orchestrator pointer `role-adapters` renders over `ROLE_NAMES` |
+| `cursor` | `.cursor/rules/beadloom-flow.mdc` | the same composition, as the `cursor` kind composes it (BDL-083 S2h) |
 
 Both corpora are the **composition**, never the file on disk — the same choice `role-duties`
 makes, and for the same reason: a verdict about the file an adopter happens to hold is a
 verdict about their edit, while a verdict about the composition is a verdict about the
-release. The cursor artifact's one fragment is labelled with the path the pointer is written
-to, because that is what a reader opens.
+release. Each artifact is named by the path its file is written to, because that is what a
+reader opens. Since BDL-083 S2h the two maps are one text under two names: until then the
+`cursor` map was a pointer whose only content was the roster (BDL-UX #356).
 
 Each map owes the whole role population on its own, so judgement runs per artifact: a role
 named in one tool's map is not thereby named in the other's.
@@ -136,9 +137,10 @@ Measured on 2026-09-10, on the two corpora this release can read:
 | `.claude/CLAUDE.md`, this repository's declaration | 16 | 6 | 5 | 0 |
 | `.cursor/rules/beadloom-flow.md`, a `cursor`-only project | 1 | 1 | 2 | 0 |
 
-The cursor pointer's one designation is its brace expansion `.cursor/agents/{…}.md`, which
-names every composed role; its two unjudged lines are the ` / `-joined roster on line 4 and
-a sentence on line 11 that mentions `review`, `dev` and `test` as ordinary words.
+The second row is the pointer 9.0.0 wrote, measured before BDL-083 S2h retired it: one
+designation, its brace expansion `.cursor/agents/{…}.md`. The `cursor` map is now the
+composed core, so a `cursor`-only project's counts are the first row's for the same
+declaration.
 
 The corpus is the tool's map and nothing else. A role named in a slash command and absent
 from the map is outside this check and inside `role-duties`, which reads every composed
@@ -206,7 +208,7 @@ project takes is about the one corpus that was never wrong.
   that role's composed core
 - `flow-composer` — `compose()`, whose `Composition.fragments` supply the provenance every
   finding's site comes from
-- `role-adapters` — writes the Cursor orchestrator pointer this check reads as the `cursor`
-  map, and states separately that no check compares that file on disk
+- `tool-reach` — names the rule a Cursor agent reads the composed core from, the `cursor`
+  map's artifact name
 - `flow-config` — `config.tools`, the population the corpus is derived from
 - `config-check` — the channel the findings block through

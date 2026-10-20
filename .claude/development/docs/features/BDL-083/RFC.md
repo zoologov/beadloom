@@ -597,6 +597,18 @@ cannot read gets "rooms: not derived — no readable pipeline" as a named skip i
 the files where the tree differs from HEAD by more than this bead's commits (#335). A project
 root below the git root is refused by `init` and `doctor` in words (#325, `beadloom-7pd6`).
 
+Amended 2026-10-19 (owner's ruling on S2a's judgement call): which pipeline files the census
+reads is declared, never guessed. `config.yml` carries `rooms.pipelines`, a list of `github`
+and/or `gitlab`. Unset, the census reads every pipeline file the tree holds, each room carrying
+its source; set, it reads the named ones only and lists a present file the key excludes as set
+aside, naming the key; a name the key gives with no file in the tree is a named line in the
+room block, not an error. The ordering S2a shipped (GitHub first, GitLab set aside when both
+exist) is withdrawn. This repository declares `[github]` because its `.gitlab-ci.yml` is a
+BDL-050 mirror no run takes, so its room set stays 33; the fixture declares nothing and keeps its
+2 rooms. Measured by three tests: both files and no key → both sets; `[github]` → the GitLab file
+set aside with the key named; `[gitlab]` with no `.gitlab-ci.yml` → the named line. A project
+with both files and no key gains the GitLab rooms it never had: a finding-set move, additive.
+
 ### D7 — `config-check` names its inputs and gives one verdict wherever it runs (S2)
 
 The composed `CLAUDE.md` is compared against a composition built from `flow.yml` and the
@@ -680,6 +692,26 @@ with the one remedy (`release --holder <closed-bead>`), because bd's own refusal
 queue nothing drains. One test pushes a tree whose export holds the slot and reads the refusal;
 one plans a wave over a slot held by a closed bead and reads the remedy.
 
+### D13 — The second tool reads the composed flow the first one reads (S2; added 2026-10-19 for #356)
+
+The composer gains a `cursor` artifact kind beside `roles`, `commands`, `claude` and `docs`:
+for a project whose `flow.yml` names Cursor, `setup-agentic-flow` composes the core, the project
+layer and the STACK overlay — the same text `CLAUDE.md` carries — and the four commands into
+`.cursor/rules/` as `alwaysApply` rules, replacing the stub; the role files stay shared. The
+project layer's reach is stated in the flow documentation per kind: `roles` reaches every tool;
+`.beadloom/flow/claude/CLAUDE.md` is the one copy of the project layer and reaches the composed core
+of BOTH tools, so one definition of done is written once; `.beadloom/flow/cursor/` reaches Cursor
+alone (amended 2026-10-20 by the owner's ruling on S2h: one copy, not one per tool); and `config-check` reports a tool whose
+composition lacks a layer the other tool has, and stops naming `.claude/agents/<role>.md` as
+missing on a project composed for Cursor alone. `setup-mcp` and `init --bootstrap` write a
+portable MCP command (`beadloom` on PATH, as the composed instructions assume) and never
+`shutil.which`'s absolute path; the composed `task-init` text names an absolute path outside the
+document folder for the plan file, as the MCP `task_init` already does. Measured by a test that
+byte-compares the rule bodies composed for the two tools, a test over a PATH without `beadloom`,
+and a `config-check` red on a composition that lacks a layer. The refusals of (b) — a bead closed
+with no COMPLETED measurement — are a behaviour rule agreed with the owner before code
+(`beadloom-ujm0`, placed by S3); (c), (d) and (f) are features outside this epic.
+
 ## Public API (MAJOR)
 
 - Exit codes: the pre-push hook without `beadloom` (0 → 1), `issue-number check` on a declared
@@ -689,6 +721,7 @@ one plans a wave over a slot held by a closed bead and reads the remedy.
 - `GateStep` gains the status `ERROR` (additive; consumers that switch on `passed`/`skipped`
   read it as not passed).
 - `rooms` JSON gains `source` per room and a `not_derived` reason (additive).
+- `config.yml` gains `rooms.pipelines` (additive); a project holding both pipeline files and declaring no key gains the GitLab rooms (a finding-set move, additive; D6 amended 2026-10-19).
 - The MCP tool `complete_bead` no longer returns the verdict `unowned`; the ownership shape is the
   `ci` JSON's (`owned` / `unattributed`, S1c) — a vocabulary move (added 2026-10-19 from S1W).
 - `config-check` exits 1 instead of 0 on role files composed before this release, because the
@@ -698,6 +731,26 @@ one plans a wave over a slot held by a closed bead and reads the remedy.
   exit-code move on an input 9.0.0 accepted, D12).
 - `sync-surface.json` gains the pair list beside `declared_pairs` (additive); indexed paths are
   POSIX on every platform (a finding-set move on Windows only, D11).
+- `setup-agentic-flow` writes `.cursor/rules/` rules in place of the stub on a project naming Cursor (a file-set move, D13); `config-check` exits 1 on a composition that lacks a layer the other tool has (an exit-code move on an input 9.0.0 accepted); `setup-mcp` and `init --bootstrap` write `beadloom` instead of an absolute path (a text move in a generated file).
+- `waves` exits 1 on a landing slot held by a bead the tracker lists closed, naming the release (an
+  exit-code move, D12; added 2026-10-20 from S2g).
+- `clean-room --carry <path>` where HEAD holds the path and the tree does not builds the room with
+  the path deleted (2 → 0/1, also for a path `--rebuild` remembers; D6); `--json` gains `deleted`,
+  `not_carried` and a third `limits` entry (additive; added 2026-10-20 from S2d).
+- `clean-room` on a distribution below the root (`backend/pyproject.toml` + `uv.lock`) builds the
+  room's environment and exits 0 where 9.0.0 exited 1 (an exit-code move, D6; #333, S2b; added
+  2026-10-20 from S2W).
+- `config-check` and `ci` in a worktree or a room exit 0 instead of 1 on a project whose root
+  manifest does not name it (an exit-code move, D7); `config.yml` gains `project_name:` (additive);
+  the verdict names the composed-from and compared-against files (additive text; added 2026-10-20
+  from S2c). The owner's ruling 2026-10-20 on S2c's calls: the key stays, the root manifest the second
+  source; a project declaring neither keeps the name its last composition wrote and the verdict reports
+  it as not compared; the directory's name serves the first composition only; `init` writing the key
+  and `prime` reading it are a feature outside this epic.
+- `init`, `doctor` and `sync-check --since` exit 1 on a project root below the git root (an
+  exit-code move on an input 9.0.0 accepted; #325, S2e).
+- `doctor` exits 1 on any `ERROR` row, not only the git-root one (an exit-code move generalised
+  in S2e; accepted by the owner's ruling 2026-10-20, S2R Minor 1).
 - `rules.yml`: no vocabulary change in S1–S2; liveness findings for `forbid_import` change
   level from `warn` to `info` when live with nothing to ban (a finding-set move, named).
 - The issue-log entry format gains `measured_on` (S7, additive); the leg's summary adds the
@@ -715,7 +768,8 @@ one plans a wave over a slot held by a closed bead and reads the remedy.
   distributions (#332); the room's environment and hint (#333, #311); `config-check` (#334);
   carry deletions and the HEAD-difference report (#335); the nested-root refusal (#325); POSIX
   paths in the index and the pair list in the surface ledger (#353, D11); the lock's release
-  landed before the push (#354, D12). Then test, review, tech-writer, PR.
+  landed before the push (#354, D12); the Cursor composition, the portable MCP command and the
+  plan path (#356, D13). Then test, review, tech-writer, PR.
 - **S3 — re-measurement** (D9): measurement beads by area — Gate and CI; doc-sync; rules and
   lint; init and scanning; site and viewer; the rest — each closing, filing or ruling its
   entries; one bead writes the archive and the stubs. Review, PR. No dev bead.

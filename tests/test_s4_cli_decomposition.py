@@ -58,6 +58,9 @@ EXPECTED_COMMANDS = {
     "clean-room",
     "config-check",
     "ctx",
+    # BDL-083 S2g, `beadloom-89gm` (BDL-UX #354): the pre-push hook's check that a push
+    # does not land an export holding the slot for a bead it carries.
+    "landing-check",
     "diff",
     "docs",
     "doctor",

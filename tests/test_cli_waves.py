@@ -553,3 +553,64 @@ class TestThePopulationItWasNotAskedAbout:
         assert payload["unasked"] == ["c"]
         assert payload["work_item"] in human.output
         assert f"{len(payload['unasked'])} ready bead(s)" in human.output
+
+
+def _slot_row(holder: str) -> dict[str, Any]:
+    """The landing slot's record as `bd list --all --json` writes it while it is held.
+
+    The spelling bd 1.0.4 writes, measured in an isolated rig: a held slot reads
+    `status: in_progress`, the label `gt:slot` and its holder in `metadata.holder`.
+    Spelled here rather than imported, so this file collects against a release
+    that has no reader for it and fails there on the exit code it asserts.
+    """
+    return {
+        "id": "rig-merge-slot",
+        "status": "in_progress",
+        "labels": ["gt:slot"],
+        "metadata": {"holder": holder},
+        "dependencies": [],
+    }
+
+
+class TestALandingSlotHeldByAClosedBead:
+    """BDL-UX #354: a slot whose holder is closed refuses the wave's first acquire.
+
+    The tracker answers `bd merge-slot acquire` with `Slot held by: <bead>` and offers
+    `--wait`, a queue nothing drains, and a closed bead cannot be waited on. On 9.0.0
+    the plan read no slot at all and reached exit 0 over that state; the command now
+    exits 1 and names the one release that frees the slot.
+    """
+
+    def _plan(self, tmp_path: Path, bd: Any, holder_status: str) -> Any:
+        project = _measured_project(tmp_path)
+        bd(
+            {"a": _record("a", "billing"), "b": _record("b", "shipping")},
+            census=[
+                {**_census_row("a"), "status": "in_progress"},
+                {**_census_row("b"), "status": "in_progress"},
+                {**_census_row("gamma"), "status": holder_status},
+                _slot_row("gamma"),
+            ],
+            ready=["a", "b"],
+        )
+        return CliRunner().invoke(main, ["waves", "a", "b", "--project", str(project)])
+
+    def test_a_slot_held_by_a_closed_bead_is_exit_one(self, tmp_path: Path, bd: Any) -> None:
+        result = self._plan(tmp_path, bd, holder_status="closed")
+
+        assert result.exit_code == _EXIT_FINDINGS, result.output
+
+    def test_the_finding_names_the_release_that_frees_the_slot(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        result = self._plan(tmp_path, bd, holder_status="closed")
+
+        assert "medium_failed: landing-order" in result.output
+        assert "`bd merge-slot release --holder gamma`" in result.output
+
+    def test_a_slot_held_by_a_bead_in_progress_is_a_neighbours_landing_at_exit_zero(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        result = self._plan(tmp_path, bd, holder_status="in_progress")
+
+        assert result.exit_code == _EXIT_CLEAN, result.output

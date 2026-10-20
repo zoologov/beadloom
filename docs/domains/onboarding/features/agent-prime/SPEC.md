@@ -471,6 +471,14 @@ of the Java fixture: `init` exited 1 with two `domain-needs-parent` findings bef
 after, with the root named after the folder; S3T saw the same exit on the Kotlin and Swift
 fixtures.
 
+Since BDL-083 S2c the manifest half is `project_scan.manifest_project_name`, which returns the
+name with the manifest's file name and no directory fallback. The composition of `CLAUDE.md`
+reads it through `project_name.composition_project_name`, because a composition that takes the
+directory's name differs between the main checkout, a `git worktree` and a clean room of the
+same files (BDL-UX #334). `init` and `prime` keep the fallback. A `package.json` that cannot
+be read or is not UTF-8 now names nothing and the next manifest is read; before, the read
+raised `UnicodeDecodeError` out of `init`.
+
 ### Tests
 
 Unit: `tests/unit/onboarding/test_an_fsd_project_is_detected_before_every_other_preset.py`,
@@ -575,6 +583,15 @@ rendered:
   in another language had to override the shipped default in prose
   (BDL-UX #136).
 
+### `refresh_auto_regions(path, project_root, *, dry_run=False)`
+
+The same refresh for any file holding the markers, and the body `refresh_claude_md` runs
+through. Since BDL-083 S2R pass 1 Major 1 it is how
+`composed_core.refresh_core_regions` reaches both files that carry the composed core,
+`.claude/CLAUDE.md` and the Cursor core rule `.cursor/rules/beadloom-flow.mdc`, so one
+release re-renders `project-info` in both and `setup-rules --refresh` leaves the two tools
+one text. An absent or unreadable file returns `[]` and nothing is written.
+
 ### `project_facts` — what the TARGET project declares about itself
 
 One module, one responsibility: read a fact out of somebody else's project.
@@ -611,9 +628,22 @@ composed part of `CLAUDE.md` against `compose("claude", ...)`; the regions are
 generated per project and are supposed to move, so blanking them keeps the two
 checks from reporting each other's drift.
 
+### `render_auto_regions(text, project_root)`
+
+The renderer `refresh_auto_regions` runs over a file, exposed over a string: returns the text
+with every auto-region rendered for `project_root` and the names of the regions that changed.
+Since BDL-083 S2h it is also what renders the core rule a Cursor agent reads
+(`.cursor/rules/beadloom-flow.mdc`), which is why that rule's body and `.claude/CLAUDE.md`
+are byte-identical (BDL-UX #356).
+
 ### `setup_mcp_auto(project_root)`
 
 Auto-detects editor (claude-code, cursor, windsurf) by marker files and creates MCP config. Returns editor name on success, or `None` if config already exists.
+
+The server's command is `MCP_SERVER_COMMAND`, `beadloom`, the name every clone resolves on
+its own PATH. Up to 9.0.0 it was `shutil.which("beadloom")`, so `init --bootstrap` wrote one
+machine's absolute path into a committed `.mcp.json` (BDL-UX #356 e). `setup-mcp` reads the
+same constant.
 
 ## Data Types
 

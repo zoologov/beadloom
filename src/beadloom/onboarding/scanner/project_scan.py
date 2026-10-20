@@ -386,11 +386,14 @@ def _read_manifest_deps(package_dir: Path) -> list[str]:
     return deps
 
 
-def _detect_project_name(project_root: Path) -> str:
-    """Detect project name from manifest files or directory name.
+def manifest_project_name(project_root: Path) -> tuple[str, str] | None:
+    """The name a root manifest declares, and the manifest's file name; ``None`` if none does.
 
-    Checks (in order): pyproject.toml, package.json, go.mod, Cargo.toml.
-    Falls back to the directory name.
+    Checks (in order): pyproject.toml, package.json, go.mod, Cargo.toml. There
+    is no directory-name fallback here: a caller that must not take the name
+    from where the files happen to sit (a clean room, a worktree, BDL-UX #334)
+    reads this, and one that wants a name in any case reads
+    :func:`_detect_project_name`.
     """
     # pyproject.toml — [project] or [tool.poetry] name.
     pyproject = project_root / "pyproject.toml"
@@ -398,7 +401,7 @@ def _detect_project_name(project_root: Path) -> str:
         text = pyproject.read_text(encoding="utf-8")
         match = re.search(r'^\s*name\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
         if match:
-            return match.group(1)
+            return match.group(1), pyproject.name
 
     # package.json.
     pkg_json = project_root / "package.json"
@@ -408,8 +411,9 @@ def _detect_project_name(project_root: Path) -> str:
             name = data.get("name", "")
             if name:
                 # Handle scoped packages: @org/name → name.
-                return str(name).split("/")[-1]
-        except (json.JSONDecodeError, KeyError):
+                return str(name).split("/")[-1], pkg_json.name
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError):
+            # Unreadable or not JSON: no name here, so the next manifest is read.
             pass
 
     # go.mod.
@@ -419,7 +423,7 @@ def _detect_project_name(project_root: Path) -> str:
         match = re.search(r"^module\s+(\S+)", text, re.MULTILINE)
         if match:
             # Handle full paths: github.com/org/name → name.
-            return match.group(1).split("/")[-1]
+            return match.group(1).split("/")[-1], go_mod.name
 
     # Cargo.toml.
     cargo = project_root / "Cargo.toml"
@@ -427,8 +431,18 @@ def _detect_project_name(project_root: Path) -> str:
         text = cargo.read_text(encoding="utf-8")
         match = re.search(r'^\s*name\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
         if match:
-            return match.group(1)
+            return match.group(1), cargo.name
+    return None
 
+
+def _detect_project_name(project_root: Path) -> str:
+    """Detect project name from manifest files or directory name.
+
+    The manifests :func:`manifest_project_name` reads, then the directory name.
+    """
+    declared = manifest_project_name(project_root)
+    if declared is not None:
+        return declared[0]
     # Fallback: the name of the folder the path names. Resolved first, because
     # `Path('.').name` is '' and `init --project .` wrote a root service named ''
     # that no domain could be part of (BDL-080 S3e).
