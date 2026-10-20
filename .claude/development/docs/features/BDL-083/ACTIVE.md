@@ -7,9 +7,9 @@
 
 ## Current Bead
 
-**Bead:** none — S2 shipped; the S3 PLAN section is put to the owner next
-**Goal:** S3 the re-measurement: every open entry re-run by its own Command on the S2 version (D9), the S3 leftovers placed
-**Done when:** the S3 section approved and its beads created
+**Bead:** S3 wave 1 — the six measure beads `beadloom-k6f1` (S3a), `beadloom-wvcc` (S3b), `beadloom-al1i` (S3c), `beadloom-d9te` (S3d), `beadloom-8pzg` (S3e), `beadloom-3jlv` (S3f)
+**Goal:** every open entry re-run by its own Command on the S2 version (D9), one evidence file per area under `s3/`
+**Done when:** the six evidence files written and their beads closed; then S3z
 
 ## Progress
 
@@ -63,6 +63,15 @@
 | `beadloom-ba9w.24` | S2F2 | done | `6a35a284` + `aa061a0f`; new `onboarding/composed_core.py` (node `composed-core`): one comparison with the rendered sections blanked on every side, one digest, one refresh over both files; a version bump on a both-tools project now gives both files one finding (`auto-managed section(s) stale: project-info`) and one `setup-rules --refresh` repairs both, the rule's body equal to CLAUDE.md byte for byte; 8 of 11 new tests red first by assertion; room 14981 passed over 21 files, tree `ci` rc 0, `sync-check` 845 pairs, mypy 3.10–3.13; suite at `6a35a284` 15026 passed / 1 failed — `test_bead14_s4_binding::...skips_none` (its subprocess over `tests/acceptance` exited 1), did not reproduce alone or over its directories, read as a flake for S2R pass 2 |
 | `beadloom-sc9d` | S2W | done | `9324283b` + `fea70af9` (the eight inline-code spans the site self-check named rewrapped or fenced); 10 files: CHANGELOG (Breaking: the nine S2 exit-code moves with their measurements and a red-on-9.0.0 test each, `doctor` written as the accepted move; Added, Changed, Fixed, eight Known limitations; upgrade steps 6–11), `public-api.md`, `cli.md` (clean-room, config-check, waves, rooms, doctor, init, `sync-check --since`), the ci-gate SPEC, `parallel-waves.md`, `ci-setup.md`, `bdd-scenarios.md`, `getting-started.md` (the monorepo paragraph), `architecture.md`; surface drift 11 → 0, all attested one at a time by path (six edited, five read and attested unedited); 849 pairs; `docs audit` rc 0; `ci` rc 0; the full suite not run |
 | `beadloom-6svu` | S2P | done | the coordinator's combined-tree measurement 2026-10-20: `ci` rc 0 at `4127ca38` and `fea70af9` (0 of 33 rooms entered, the #316 advisory axes warnings); the full suite in five foreground parts — unit 3216, integration 6146, acceptance 893 at `4127ca38`; self-check 1099 and the top-level files 3673 at `fea70af9` after the docs-only fix — 15027 passed, 0 failed; ruff rc 0, mypy 382 files rc 0, `sync-check` rc 0; `landing-check` clean; PR #107 squash-merged into `main` as `41245dc7` on 2026-10-20, nine required checks green, site-e2e advisory still running |
+| `beadloom-k6f1` | S3a | in progress | 28 entries; launched 2026-10-20 |
+| `beadloom-wvcc` | S3b | in progress | 26 entries; launched 2026-10-20; gate owner |
+| `beadloom-al1i` | S3c | in progress | 17 entries; launched 2026-10-20 |
+| `beadloom-d9te` | S3d | in progress | 27 entries; launched 2026-10-20 |
+| `beadloom-8pzg` | S3e | in progress | 3 entries; launched 2026-10-20 |
+| `beadloom-3jlv` | S3f | in progress | 31 entries; launched 2026-10-20 |
+| `beadloom-mhi2` | S3z | blocked | blocked by S3a–S3f |
+| `beadloom-rrz5` | S3R | blocked | blocked by S3z |
+| `beadloom-3me7` | S3P | blocked | blocked by S3R |
 
 ## Notes
 

@@ -110,18 +110,31 @@ Parent: `beadloom-ba9w`.
 | S2F2 | `beadloom-ba9w.24` | dev: S2R pass 1 Major 1 — the Cursor core rule's rendered project-info section blanked on both sides of the drift comparison as the CLAUDE.md check does; `setup-rules --refresh` re-renders it in the Cursor rule (D13) | P0 | S2R (first pass) |
 | S2W | `beadloom-sc9d` | tech-writer: the verdict-room and wave-plan SPECs, `docs/guides/parallel-waves.md` (the room's environment and hint), the monorepo paragraph of `docs/getting-started.md`, CHANGELOG | P0 | S2R, S2F2 |
 | S2P | `beadloom-6svu` | coordinator: S2 PR, merge on green | P0 | S2W |
-| S3a | - | measure: the open entries of the Gate, CI, hooks and rooms area, each re-run by its `Command` on the S2 version; closed with evidence, filed as a bead under `beadloom-ba9w`, or put to the owner for a `Won't fix` ruling (D9) | P0 | S2P |
-| S3b | - | measure: the doc-sync and docs-audit entries, the same protocol | P0 | S2P |
-| S3c | - | measure: the rules, lint and liveness entries | P0 | S2P |
-| S3d | - | measure: the `init`, scanning and `doctor` entries | P0 | S2P |
-| S3e | - | measure: the site, viewer and portal entries | P0 | S2P |
-| S3f | - | measure: every remaining entry (TUI, MCP, federation, release, process) | P0 | S2P |
-| S3z | - | dev: the archive and the stubs written, #196 and #288 accounted for, `measured_on` stamped on every surviving entry, the bead lists of S4–S7 drafted as PLAN sections for the owner | P0 | S3a–S3f |
-| S3R | - | review: S3 — every close carries evidence, every live entry a bead, every ruling a reason; bead id only | P0 | S3z |
-| S3P | - | coordinator: S3 PR, merge on green; the S4–S7 sections put to the owner | P0 | S3R |
+| S3a | `beadloom-k6f1` | measure: the open entries of the Gate, CI, hooks and rooms area, each re-run by its `Command` on the S2 version; closed with evidence, filed as a bead under `beadloom-ba9w`, or put to the owner for a `Won't fix` ruling (D9) | P0 | S2P |
+| S3b | `beadloom-wvcc` | measure: the doc-sync and docs-audit entries, the same protocol | P0 | S2P |
+| S3c | `beadloom-al1i` | measure: the rules, lint and liveness entries | P0 | S2P |
+| S3d | `beadloom-d9te` | measure: the `init`, scanning and `doctor` entries | P0 | S2P |
+| S3e | `beadloom-8pzg` | measure: the site, viewer and portal entries | P0 | S2P |
+| S3f | `beadloom-3jlv` | measure: every remaining entry (TUI, MCP, federation, release, process) | P0 | S2P |
+| S3z | `beadloom-mhi2` | dev: the archive and the stubs written, #196 and #288 accounted for, `measured_on` stamped on every surviving entry, the bead lists of S4–S7 drafted as PLAN sections for the owner | P0 | S3a–S3f |
+| S3R | `beadloom-rrz5` | review: S3 — every close carries evidence, every live entry a bead, every ruling a reason; bead id only | P0 | S3z |
+| S3P | `beadloom-3me7` | coordinator: S3 PR, merge on green; the S4–S7 sections put to the owner | P0 | S3R |
 
 S4–S7 are not in this table yet: their beads are drawn from S3z's result and appended here as
 sections, each approved before its beads are created.
+
+### S3 — the assignment of the open index (132 entries on 2026-10-20)
+
+Each measure bead re-runs its entries by their own `Command` on the S2 version (`main` at `41245dc7`), in a git worktree or a fixture copy under the scratchpad and never on the main checkout's index, and writes one evidence file `s3/<key>.md` in this folder: one section per entry — the command, where it ran, what it printed, the outcome (closed / live / Won't-fix candidate), the bead reused or proposed. S3z writes the archive, the index and `measured_on` from the six files. An entry measured under the wrong area is named in the file under "not this area" and S3z routes it.
+
+| Bead | Area | Entries |
+|---|---|---|
+| S3a | the Gate, CI, hooks, rooms, scope-check, ownership, the issue-log leg | #357, #354, #353, #335, #334, #333, #332, #331, #330, #329, #327, #326, #325, #321, #318, #311, #310, #301, #300, #287, #280, #276, #273, #246, #226, #199, #198, #178 |
+| S3b | doc-sync, docs-audit, doc shape, the README pair | #349, #348, #347, #346, #345, #342, #322, #315, #279, #223, #209, #208, #206, #205, #203, #202, #200, #190, #179, #167, #166, #163, #161, #140, #138, #134 |
+| S3c | rules, lint, liveness, the debt report, FSD | #352, #341, #340, #328, #323, #312, #295, #294, #292, #291, #222, #221, #201, #197, #158, #148, #147 |
+| S3d | `init`, scanning, the index, `doctor`, `ctx`, `impact`, flow setup | #356, #351, #350, #339, #338, #337, #324, #320, #319, #317, #314, #293, #290, #278, #277, #263, #225, #220, #218, #217, #215, #184, #176, #162, #145, #95, #73 |
+| S3e | the site, graph output, snapshot, federation, AsyncAPI | #343, #160, #149 |
+| S3f | waves, review-brief, active-sync, the branch binding, the test suite, external, research | #355, #344, #336, #316, #309, #308, #302, #299, #297, #286, #275, #272, #271, #269, #268, #260, #257, #242, #232, #230, #229, #224, #219, #210, #187, #185, #168, #156, #155, #154, #96 |
 
 ## Bead Details
 
