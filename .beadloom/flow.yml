@@ -73,5 +73,9 @@ mutation:
   - src/beadloom/services/bd_seam/invocations.py
 
 waves:
-  overrides: []
+  overrides:
+  - beads: [beadloom-k6f1, beadloom-wvcc, beadloom-al1i, beadloom-d9te, beadloom-8pzg, beadloom-3jlv]
+    decision: parallel
+    reason: "BDL-083 S3a-S3f are measurement beads: each re-runs its entries' Commands in its own worktree or fixture copy and writes one evidence file of its own under the feature folder's s3/ directory; no bead edits code, the graph or a shared document, so the dependency edges and shared nodes the plan serialised on are media these beads read and never write"
+    until: "2026-11-03"
 
