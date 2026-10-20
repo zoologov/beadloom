@@ -339,7 +339,14 @@ tracker=None)` runs, in order:
    `application.import_aliases.read_import_aliases`): a mistyped alias folder would leave every
    import under the alias unresolved without a word. With any of the three blocks refused the
    summary is ``N unusable `site:` value(s)``, ``N unusable `activity:` value(s)`` and/or
-   ``N unusable `imports:` value(s)``, joined by `+`.
+   ``N unusable `imports:` value(s)``, joined by `+`. Since BDL-083 S2c (RFC D7, BDL-UX
+   #334) every form of the summary ends with the sentence
+   `onboarding.claude_md_comparison(...).describe()` writes whenever the `CLAUDE.md` body
+   is compared. It begins `compared .claude/CLAUDE.md against its composition from` and
+   names the flow configuration, the layers and the project name with its source.
+   The name is the declared one, so the main checkout, a `git worktree` and a clean room of
+   the same files give one verdict. Measured on a copy of the monorepo fixture at
+   `f3d6f293`: the step was PASS, FAIL and FAIL in the three places before.
 11. **doctor** — graph integrity.
 12. **federate** — `federate --fail-on` when hub exports are supplied.
 

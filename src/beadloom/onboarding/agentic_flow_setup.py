@@ -97,9 +97,12 @@ from beadloom.onboarding.flow_manifest import (
     record,
     state_of,
 )
+from beadloom.onboarding.project_name import (
+    PROJECT_NAME_PLACEHOLDER,
+    composition_project_name,
+)
 from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
 from beadloom.onboarding.scanner import (
-    _detect_project_name,
     blank_auto_regions,
     refresh_claude_md,
     render_auto_regions,
@@ -134,9 +137,10 @@ COMMAND_FILES: tuple[str, ...] = COMMAND_NAMES
 #: Asset name for the vendored base ``CLAUDE.md`` (project name templated out).
 _CLAUDE_MD_ASSET = "CLAUDE.md.txt"
 
-#: Placeholder substituted with the target project's detected name in the
+#: Placeholder substituted with the target project's name in the
 #: ``## 0.1 Project: ...`` heading (a per-project fact, not a Beadloom fact).
-_PROJECT_NAME_PLACEHOLDER = "__BEADLOOM_PROJECT_NAME__"
+#: Declared beside the reader of that heading, :mod:`.project_name`.
+_PROJECT_NAME_PLACEHOLDER = PROJECT_NAME_PLACEHOLDER
 
 #: The live heading line in Beadloom's own CLAUDE.md, replaced with the token
 #: when vendoring so the base asset carries no project-specific name.
@@ -204,8 +208,11 @@ def composed_claude_md(
     """The composed ``CLAUDE.md`` body with the project name substituted in.
 
     The shipped CORE carries a neutral ``__BEADLOOM_PROJECT_NAME__`` token in
-    the ``## 0.1 Project:`` heading; the target's detected name is filled in
-    here so the scaffold never hardcodes Beadloom's own name. Since BDL-061 S3
+    the ``## 0.1 Project:`` heading; the target's name is filled in here so the
+    scaffold never hardcodes Beadloom's own name. Callers pass the name
+    :func:`~beadloom.onboarding.project_name.composition_project_name` reads,
+    never the directory's, so a worktree and a clean room compose what the
+    checkout composed (BDL-UX #334, RFC D7). Since BDL-061 S3
     the CORE is **authored package data**, not a snapshot of Beadloom's own live
     file — see :func:`sync_agentic_flow`.
 
@@ -229,7 +236,10 @@ def cursor_rules(config: FlowConfig, project_root: Path) -> dict[str, str]:
     layer of the flow at all (BDL-UX #356, RFC D13).
     """
     core = composed_claude_md(
-        config, project_root, project_name=_detect_project_name(project_root), kind="cursor"
+        config,
+        project_root,
+        project_name=composition_project_name(project_root).value,
+        kind="cursor",
     )
     rules = {
         str(cursor_core_rule_relpath()): cursor_rule_text(
@@ -379,7 +389,7 @@ def _scaffold_claude_md(
     """
     claude_md = project_root / ".claude" / "CLAUDE.md"
     relpath = ".claude/CLAUDE.md"
-    project_name = _detect_project_name(project_root)
+    project_name = composition_project_name(project_root).value
     expected = blank_auto_regions(
         composed_claude_md(config, project_root, project_name=project_name)
     )

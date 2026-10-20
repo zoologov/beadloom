@@ -603,6 +603,7 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         click.echo(f"  ! {scope.target}: {scope.why}", err=True)
         click.echo(f"    -> {scope.remediation}", err=True)
 
+    _echo_claude_comparison(project_root)
     _echo_duty_limits(project_root)
     _echo_role_map_limits(project_root)
 
@@ -693,6 +694,19 @@ def _echo_block_refusals(block: str, refusals: Sequence[Refusal]) -> bool:
         click.echo(f"  - {refusal.where}: {refusal.why}", err=True)
         click.echo(f"    -> {refusal.remediation}", err=True)
     return True
+
+
+def _echo_claude_comparison(project_root: Path) -> None:
+    """Name what the ``CLAUDE.md`` body check composed and compared, on every run.
+
+    A red in a worktree beside a green in the checkout of the same files named
+    neither input on 9.0.0 (BDL-UX #334). Silent only when no body is compared.
+    """
+    from beadloom.onboarding import claude_md_comparison
+
+    comparison = claude_md_comparison(project_root)
+    if comparison is not None:
+        click.echo(f"  CLAUDE.md: {comparison.describe()}.", err=True)
 
 
 def _echo_duty_limits(project_root: Path) -> None:

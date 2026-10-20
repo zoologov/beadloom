@@ -460,6 +460,41 @@ A project that never adopted the flow is still not policed and not mentioned —
 adoption is what separates "no stamp, and this is your file" from "no stamp, and
 this is a file we should be able to account for".
 
+### One verdict in the checkout, a worktree and a clean room (BDL-UX #334)
+
+BDL-083 S2c, RFC D7. The composed body carries the project's name in its
+`## 0.1 Project:` heading. On 9.0.0 that name came from a root manifest or, failing
+one, from the directory the files sat in. Measured at `f3d6f293` over a copy of the
+monorepo fixture, which names itself in no root manifest: `config-check` exited 0 in
+the main checkout, 1 in a `git worktree` of a clean HEAD and 1 in a clean room of the
+same files, each time with `composed body is stale`. `beadloom ci` gave the same three
+exit codes. On this repository the three were already equal, because `pyproject.toml`
+names the project.
+
+The composition now takes the name
+[`composition_project_name`](../../components/project-name/DOC.md) reads, in this
+order: `project_name:` in `.beadloom/config.yml`, a root manifest, the name the
+project's last composition wrote into the heading, and the directory's name only
+for a first composition of a project that declares nothing. `setup-agentic-flow`
+composes with the same name, so a re-run in a worktree keeps the checkout's name
+instead of writing the worktree's.
+
+What the comparison read is named on every run, not only on a finding.
+`claude_md_comparison()` returns a `ClaudeComparison`, and its `describe()` sentence
+names the compared file, the flow configuration the composition was resolved from,
+the layers it read (a project layer with its path) and the name with its source:
+
+    compared .claude/CLAUDE.md against its composition from .beadloom/flow.yml, layers core,
+    stack:python, project (.beadloom/flow/claude/CLAUDE.md), with the project name
+    'beadloom' from pyproject.toml
+
+`config-check` prints it as the `CLAUDE.md:` line, the Gate appends it to the
+`config-check` step's summary, and every finding on the body (`stale`, `hand_edited`,
+`missing`, `unverified`) ends with it. When the name is a record and not a
+declaration, the sentence adds that the heading's name is not compared and names
+`project_name:` as the way to compare it. `sync-check` in a room without `.git` keeps
+the named skip of BDL-UX #273; this section does not change it.
+
 ## Invariants
 
 - User-authored `custom` blocks and prose outside the managed markers are
@@ -506,6 +541,12 @@ Module `src/beadloom/onboarding/config_sync.py`:
 - `_orphaned_adapter_drifts(project_root) -> list[ConfigDrift]` — every
   `role_adapters.orphaned_adapters()` result as a warning, non-fixable drift against the
   adapter's own path; empty for a project with no valid `.beadloom/flow.yml`.
+- `claude_md_comparison(project_root) -> ClaudeComparison | None` — what the body
+  check composes and compares; `None` when no `.claude/CLAUDE.md` is compared (absent,
+  ownership unproved, or a `flow.yml` that does not load). Re-exported from
+  `beadloom.onboarding`.
+- `ClaudeComparison` — `compared`, `composed_from`, `layers`, `name` (a
+  `ProjectName`) and `describe()`, the sentence both surfaces print.
 - `apply_config_fixes(project_root) -> FixReport` — run every `--fix` writer and
   report, by measurement, what changed.
 - `FixReport` — `rewritten`, `created` (measured against the disk) and `declined`;
@@ -531,7 +572,11 @@ Tests: `tests/test_config_sync.py`, `tests/test_flow_composition.py`,
 (the adversarial half), `tests/test_config_check_names_what_it_could_not_verify.py`,
 `tests/acceptance/features/ignore_block_drift.feature` for the ignore block, and
 `tests/acceptance/onboarding/config-check/orphaned_adapters.feature` +
-`tests/test_orphaned_adapters.py` for the adapters of a dropped tool.
+`tests/test_orphaned_adapters.py` for the adapters of a dropped tool, and
+`tests/acceptance/onboarding/config-check/one_verdict_wherever_it_runs.feature`,
+`tests/unit/onboarding/config_sync/test_config_check_gives_one_verdict_wherever_it_runs.py`
+and `tests/integration/onboarding/config_sync/test_the_verdict_names_what_it_compared.py`
+for one verdict in the checkout, a worktree and a clean room.
 
 ## What is still not checked, measured
 

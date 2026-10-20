@@ -1,0 +1,23 @@
+nodes:
+  - ref_id: project-name
+    kind: component
+    summary: "The name a composition of CLAUDE.md takes for the project and what declared it: config.yml project_name:, a root manifest, the heading the last composition wrote, the directory only for a first composition"
+    source: src/beadloom/onboarding/project_name.py
+    docs:
+      - docs/domains/onboarding/components/project-name/DOC.md
+edges:
+  - src: project-name
+    dst: onboarding
+    kind: part_of
+  - src: project-name
+    dst: agent-prime
+    kind: depends_on
+  - src: project-name
+    dst: tool-reach
+    kind: depends_on
+  - src: config-check
+    dst: project-name
+    kind: depends_on
+  - src: agentic-flow-setup
+    dst: project-name
+    kind: depends_on

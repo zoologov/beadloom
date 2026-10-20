@@ -471,6 +471,14 @@ of the Java fixture: `init` exited 1 with two `domain-needs-parent` findings bef
 after, with the root named after the folder; S3T saw the same exit on the Kotlin and Swift
 fixtures.
 
+Since BDL-083 S2c the manifest half is `project_scan.manifest_project_name`, which returns the
+name with the manifest's file name and no directory fallback. The composition of `CLAUDE.md`
+reads it through `project_name.composition_project_name`, because a composition that takes the
+directory's name differs between the main checkout, a `git worktree` and a clean room of the
+same files (BDL-UX #334). `init` and `prime` keep the fallback. A `package.json` that cannot
+be read or is not UTF-8 now names nothing and the next manifest is read; before, the read
+raised `UnicodeDecodeError` out of `init`.
+
 ### Tests
 
 Unit: `tests/unit/onboarding/test_an_fsd_project_is_detected_before_every_other_preset.py`,

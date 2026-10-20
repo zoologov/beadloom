@@ -214,7 +214,11 @@ Module `src/beadloom/onboarding/agentic_flow_setup.py`:
   flags); omitting it re-resolves from disk
 - `composed_command(name, config, project_root) -> str`
 - `composed_claude_md(config, project_root, *, project_name, kind="claude") -> str` —
-  `kind="cursor"` composes the core a Cursor agent reads
+  `kind="cursor"` composes the core a Cursor agent reads. The scaffold, `cursor_rules`
+  and `config-check` pass the name
+  [`composition_project_name`](../../components/project-name/DOC.md) reads, never the
+  directory's, so a worktree or a clean room composes what the checkout composed
+  (BDL-UX #334, RFC D7)
 - `cursor_rules(config, project_root) -> dict[str, str]` — `{relpath: text}` of the
   Cursor rules
 - `orphaned_flow_files(project_root) -> list[str]`

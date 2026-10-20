@@ -1,6 +1,6 @@
 {
-  "declared_docs": 141,
-  "declared_pairs": 841,
+  "declared_docs": 142,
+  "declared_pairs": 843,
   "pairs": [
     ["architecture.md", "src/beadloom/__init__.py"],
     ["architecture.md", "src/beadloom/services/__init__.py"],
@@ -505,6 +505,7 @@
     ["domains/onboarding/README.md", "src/beadloom/onboarding/guard_hooks.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/ignore_block.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/presets.py"],
+    ["domains/onboarding/README.md", "src/beadloom/onboarding/project_name.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/role_adapters.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/role_composer.py"],
     ["domains/onboarding/README.md", "src/beadloom/onboarding/role_duties.py"],
@@ -542,6 +543,7 @@
     ["domains/onboarding/components/graph-layout/DOC.md", "src/beadloom/onboarding/graph_layout.py"],
     ["domains/onboarding/components/guard-hooks/DOC.md", "src/beadloom/onboarding/guard_hooks.py"],
     ["domains/onboarding/components/ignore-block/DOC.md", "src/beadloom/onboarding/ignore_block.py"],
+    ["domains/onboarding/components/project-name/DOC.md", "src/beadloom/onboarding/project_name.py"],
     ["domains/onboarding/features/agent-prime/SPEC.md", "src/beadloom/onboarding/scanner/agents_md.py"],
     ["domains/onboarding/features/agent-prime/SPEC.md", "src/beadloom/onboarding/scanner/alias_scan.py"],
     ["domains/onboarding/features/agent-prime/SPEC.md", "src/beadloom/onboarding/scanner/bootstrap.py"],
@@ -844,5 +846,5 @@
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/lib/queryState.js"],
     ["services/vitepress-site/url-state.md", "src/beadloom/site_scaffold/.vitepress/theme/features/url-state/model/useUrlState.js"]
   ],
-  "recorded_at": "2026-10-19T22:39:39.880456+00:00"
+  "recorded_at": "2026-10-20T00:13:40.467766+00:00"
 }

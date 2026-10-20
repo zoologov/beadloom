@@ -22,7 +22,7 @@ regions so editing user-authored prose can never trip it (avoids the
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from beadloom.infrastructure.exit_condition import exit_condition_deadline
@@ -37,6 +37,7 @@ from beadloom.onboarding.composer import (
     CLAUDE_ARTIFACT_NAME,
     COMPOSED_MARKER,
     PROJECT_FLOW_DIRNAME,
+    compose,
     project_fragment_path,
 )
 from beadloom.onboarding.flow_config import (
@@ -62,6 +63,11 @@ from beadloom.onboarding.ignore_block import (
     IGNORE_RELPATH,
     ignore_block_findings,
 )
+from beadloom.onboarding.project_name import (
+    PROJECT_NAME_KEY,
+    ProjectName,
+    composition_project_name,
+)
 from beadloom.onboarding.role_adapters import (
     TOOL_AGENT_DIRS,
     generate_adapters,
@@ -73,7 +79,6 @@ from beadloom.onboarding.role_map import role_map_report
 from beadloom.onboarding.scanner import (
     _RULES_ADAPTER_TEMPLATE,
     _RULES_CONFIGS,
-    _detect_project_name,
     _is_beadloom_adapter,
     blank_auto_regions,
     build_agents_md_content,
@@ -188,6 +193,9 @@ class FixReport:
 _AGENTS_CUSTOM_START = "<!-- beadloom:custom-start -->"
 _AGENTS_CUSTOM_END = "<!-- beadloom:custom-end -->"
 
+#: The composed core Claude reads, the file the body check compares.
+_CLAUDE_MD_RELPATH = ".claude/CLAUDE.md"
+
 
 def _agents_auto_region(text: str) -> str:
     """Return everything in AGENTS.md OUTSIDE the user ``custom`` block.
@@ -271,6 +279,85 @@ def _claude_md_drift(project_root: Path) -> ConfigDrift | None:
     )
 
 
+@dataclass(frozen=True)
+class ClaudeComparison:
+    """What the ``CLAUDE.md`` body check composed from and what it compared (BDL-UX #334).
+
+    ``compared`` is the file on disk; ``composed_from`` the flow configuration the
+    composition was resolved from; ``layers`` the label of every layer it read,
+    a project layer with its path; ``name`` the project's name and its source.
+    Named on every run, because a verdict that does not say what it compared
+    cannot be told apart from one that compared something else.
+    """
+
+    compared: str
+    composed_from: str
+    layers: tuple[str, ...]
+    name: ProjectName
+
+    def describe(self) -> str:
+        """One sentence naming both files, the layers and the name's source."""
+        text = (
+            f"compared {self.compared} against its composition from {self.composed_from}, "
+            f"layers {', '.join(self.layers)}, with the project name "
+            f"'{self.name.value}' from {self.name.source}"
+        )
+        if self.name.declared:
+            return text
+        return (
+            f"{text}; no file declares the name, so the heading's name is not compared "
+            f"— declare `{PROJECT_NAME_KEY}:` in .beadloom/config.yml to compare it"
+        )
+
+
+def _comparison(project_root: Path, config: FlowConfig) -> ClaudeComparison:
+    """The inputs of the ``CLAUDE.md`` body comparison for a resolved *config*."""
+    composition = compose("claude", CLAUDE_ARTIFACT_NAME, config=config, project_root=project_root)
+    layers = tuple(
+        f"{fragment.layer} ({fragment.source})"
+        if fragment.layer.startswith("project")
+        else fragment.layer
+        for fragment in composition.fragments
+    )
+    flow = FLOW_CONFIG_RELPATH.as_posix()
+    composed_from = (
+        flow
+        if (project_root / FLOW_CONFIG_RELPATH).is_file()
+        else f"the default flow configuration (no {flow})"
+    )
+    return ClaudeComparison(
+        compared=_CLAUDE_MD_RELPATH,
+        composed_from=composed_from,
+        layers=layers,
+        name=composition_project_name(project_root),
+    )
+
+
+def claude_md_comparison(project_root: Path) -> ClaudeComparison | None:
+    """What the ``CLAUDE.md`` body check compares, or ``None`` when it compares nothing.
+
+    ``None`` for a project with no ``.claude/CLAUDE.md``, for a body whose
+    ownership neither the manifest nor the stamp proves (reported as unverified
+    by the drift check, not compared) and for a flow configuration that does
+    not load (reported by the flow-config drift).
+    """
+    claude_md_path = project_root / _CLAUDE_MD_RELPATH
+    if not claude_md_path.is_file():
+        return None
+    try:
+        raw = claude_md_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    manifest, _ = read_manifest(project_root)
+    if manifest.get(_CLAUDE_MD_RELPATH) is None and COMPOSED_MARKER not in raw:
+        return None
+    try:
+        config = resolve_flow_config(project_root)
+    except FlowConfigError:
+        return None
+    return _comparison(project_root, config)
+
+
 def _claude_md_body_drift(project_root: Path) -> ConfigDrift | None:
     """Drift for the COMPOSED body of ``.claude/CLAUDE.md`` (BDL-UX #177).
 
@@ -316,7 +403,8 @@ def _claude_md_body_drift(project_root: Path) -> ConfigDrift | None:
     except FlowConfigError:
         # Reported by :func:`_flow_config_drift`; don't double-report.
         return None
-    project_name = _detect_project_name(project_root)
+    comparison = _comparison(project_root, config)
+    project_name = comparison.name.value
     expected = blank_auto_regions(
         composed_claude_md(config, project_root, project_name=project_name)
     )
@@ -334,7 +422,13 @@ def _claude_md_body_drift(project_root: Path) -> ConfigDrift | None:
         # manifest accounts for was edited, not inherited (BDL-061 `.57`).
         accounted=manifest_usable or stamped,
     )
-    return _state_drift(relpath, state, kind="claude", name=CLAUDE_ARTIFACT_NAME)
+    return _state_drift(
+        relpath,
+        state,
+        kind="claude",
+        name=CLAUDE_ARTIFACT_NAME,
+        compared=comparison.describe(),
+    )
 
 
 def _unverifiable_body_drift(
@@ -392,8 +486,27 @@ def _state_drift(
     *,
     kind: str,
     name: str,
+    compared: str | None = None,
 ) -> ConfigDrift | None:
-    """Project an :class:`ArtifactState` onto a :class:`ConfigDrift` (or ``None``)."""
+    """Project an :class:`ArtifactState` onto a :class:`ConfigDrift` (or ``None``).
+
+    ``compared`` names what the comparison read (:meth:`ClaudeComparison.describe`)
+    and is appended to the reason, so the finding names both files (#334).
+    """
+    drift = _state_finding(relpath, state, kind=kind, name=name)
+    if drift is None or compared is None:
+        return drift
+    return replace(drift, reason=f"{drift.reason}; {compared}")
+
+
+def _state_finding(
+    relpath: str,
+    state: ArtifactState,
+    *,
+    kind: str,
+    name: str,
+) -> ConfigDrift | None:
+    """The finding one :class:`ArtifactState` reads as, before its inputs are named."""
     if state is ArtifactState.CLEAN:
         return None
     overlay = PROJECT_FLOW_DIRNAME / kind / f"{name}.md"
@@ -1095,7 +1208,7 @@ def _composed_corpus(config: FlowConfig, project_root: Path) -> tuple[str, ...]:
     texts.extend(compose_all_roles(config, project_root).values())
     texts.append(
         composed_claude_md(
-            config, project_root, project_name=_detect_project_name(project_root)
+            config, project_root, project_name=composition_project_name(project_root).value
         )
     )
     return tuple(texts)

@@ -506,16 +506,6 @@ JUDGED_NARROW_DECODES: dict[str, NarrowDecode] = {
         ),
         until=_JUDGED_BY_67,
     ),
-    "onboarding/scanner/project_scan.py::_detect_project_name#1": NarrowDecode(
-        reads="an adopter's package.json, read for the project name",
-        catches="json.JSONDecodeError, KeyError",
-        reason=(
-            "falls back to the directory name, so a missing name is not fatal; the caught set "
-            "names no OSError at all, and only an is_file() check ahead of it keeps that second "
-            "narrowness unreachable"
-        ),
-        until=_JUDGED_BY_67,
-    ),
     "onboarding/scanner/project_scan.py::_read_manifest_deps#1": NarrowDecode(
         reads="the same package.json, read for `workspace:` and `file:` dependency links",
         catches="json.JSONDecodeError, KeyError",

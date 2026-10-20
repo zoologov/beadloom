@@ -102,6 +102,12 @@ through `git rev-parse --show-prefix`. Tested in
 
 `status --debt-report --category` narrows the Rich report with `dataclasses.replace(report, categories=...)`. The hand-built `DebtReport` it replaced named five fields and dropped every later one, `layer_populations` included; `replace` keeps `layer_populations` and `test_population`.
 
+`config-check` prints a `CLAUDE.md:` line on every run in which the body of
+`.claude/CLAUDE.md` is compared (`_echo_claude_comparison`, BDL-083 S2c, BDL-UX #334): the
+compared file, the flow configuration the composition was resolved from, its layers and the
+project name with its source, from `onboarding.claude_md_comparison`. The Gate's step summary
+ends with the same sentence.
+
 `config-check` prints three derivations beside the drift list, because none has a Gate
 step of its own: the declared mutation scope (`check_mutation_scope`, warn-only — Beadloom
 owns no runner to hang a step on); whenever a project declares at least one duty, the

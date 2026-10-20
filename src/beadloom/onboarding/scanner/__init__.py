@@ -56,6 +56,7 @@ from beadloom.onboarding.scanner.project_scan import (
     _cluster_with_children,
     _detect_project_name,
     _read_manifest_deps,
+    manifest_project_name,
     scan_project,
 )
 from beadloom.onboarding.scanner.readme import (
@@ -123,6 +124,7 @@ __all__ = [
     "generate_rules",
     "import_docs",
     "interactive_init",
+    "manifest_project_name",
     "non_interactive_init",
     "prime_context",
     "refresh_claude_md",
